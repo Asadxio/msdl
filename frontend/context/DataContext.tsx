@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COURSES as LOCAL_COURSES, TEACHERS as LOCAL_TEACHERS } from '@/constants/theme';
 
@@ -19,27 +19,41 @@ export type Teacher = {
   courses: string[];
 };
 
+export type Book = {
+  id: string;
+  title: string;
+  pdf_url: string;
+  category: string;
+};
+
 type DataContextType = {
   courses: Course[];
   teachers: Teacher[];
+  books: Book[];
   loading: boolean;
+  booksLoading: boolean;
   error: string | null;
   refetch: () => void;
+  refetchBooks: () => Promise<void>;
+  addBook: (title: string, pdf_url: string, category: string) => Promise<boolean>;
 };
 
 const DataContext = createContext<DataContextType>({
   courses: [],
   teachers: [],
+  books: [],
   loading: true,
+  booksLoading: true,
   error: null,
   refetch: () => {},
+  refetchBooks: async () => {},
+  addBook: async () => false,
 });
 
 export function useData() {
   return useContext(DataContext);
 }
 
-// Convert local data to Firebase format as fallback
 function getLocalCourses(): Course[] {
   return LOCAL_COURSES.map((c) => ({
     id: c.id,
@@ -66,14 +80,38 @@ function getLocalTeachers(): Teacher[] {
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  const [booksLoading, setBooksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchBooks = useCallback(async () => {
+    setBooksLoading(true);
+    try {
+      const booksSnap = await getDocs(collection(db, 'library'));
+      const booksData: Book[] = [];
+      booksSnap.forEach((doc) => {
+        const data = doc.data();
+        booksData.push({
+          id: doc.id,
+          title: data.title || '',
+          pdf_url: data.pdf_url || data.pdfUrl || '',
+          category: data.category || '',
+        });
+      });
+      setBooks(booksData);
+    } catch (err: any) {
+      console.warn('Failed to fetch books:', err?.message);
+      setBooks([]);
+    } finally {
+      setBooksLoading(false);
+    }
+  }, []);
 
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch courses
       const coursesSnap = await getDocs(collection(db, 'courses'));
       const coursesData: Course[] = [];
       coursesSnap.forEach((doc) => {
@@ -81,14 +119,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         coursesData.push({
           id: doc.id,
           name: data.name || '',
-          teacher_name: data.teacherName || data.teacher_name || '',  // Firebase uses teacherName (camelCase)
+          teacher_name: data.teacherName || data.teacher_name || '',
           schedule: data.schedule || '',
           description: data.description || '',
-          class_link: data.classLink || data.class_link || '',  // Firebase might use classLink (camelCase)
+          class_link: data.classLink || data.class_link || '',
         });
       });
 
-      // Fetch teachers
       const teachersSnap = await getDocs(collection(db, 'teachers'));
       const teachersData: Teacher[] = [];
       teachersSnap.forEach((doc) => {
@@ -101,13 +138,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       });
 
-      // Use Firebase data if available, otherwise fallback to local
       setCourses(coursesData.length > 0 ? coursesData : getLocalCourses());
       setTeachers(teachersData.length > 0 ? teachersData : getLocalTeachers());
     } catch (err: any) {
       console.warn('Firebase fetch failed, using local data:', err?.message);
       setError(err?.message || 'Failed to fetch data');
-      // Fallback to local data
       setCourses(getLocalCourses());
       setTeachers(getLocalTeachers());
     } finally {
@@ -115,12 +150,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const addBook = async (title: string, pdf_url: string, category: string): Promise<boolean> => {
+    try {
+      await addDoc(collection(db, 'library'), {
+        title,
+        pdf_url,
+        category,
+        created_at: serverTimestamp(),
+      });
+      await fetchBooks();
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to add book:', err?.message);
+      return false;
+    }
+  };
+
   useEffect(() => {
     fetchData();
-  }, []);
+    fetchBooks();
+  }, [fetchBooks]);
 
   return (
-    <DataContext.Provider value={{ courses, teachers, loading, error, refetch: fetchData }}>
+    <DataContext.Provider value={{
+      courses, teachers, books, loading, booksLoading, error,
+      refetch: fetchData, refetchBooks: fetchBooks, addBook,
+    }}>
       {children}
     </DataContext.Provider>
   );
