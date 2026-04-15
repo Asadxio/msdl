@@ -8,12 +8,14 @@ import {
   TouchableOpacity,
   Dimensions,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { COLORS, SPACING, RADIUS, SHADOWS, COURSES, TEACHERS, MEDIA, getTeacherAvatar, getCourseImage } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS, MEDIA, getCourseImage, getTeacherAvatar } from '@/constants/theme';
+import { useData } from '@/context/DataContext';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.72;
@@ -21,7 +23,8 @@ const CARD_WIDTH = width * 0.72;
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const featuredCourses = COURSES.slice(0, 5);
+  const { courses, teachers, loading } = useData();
+  const featuredCourses = courses.slice(0, 5);
 
   return (
     <View style={styles.container}>
@@ -49,6 +52,14 @@ export default function HomeScreen() {
             </View>
           </LinearGradient>
         </View>
+
+        {/* Loading State */}
+        {loading && (
+          <View style={styles.loadingRow} testID="home-loading">
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Loading data...</Text>
+          </View>
+        )}
 
         {/* Featured Courses */}
         <View style={styles.section}>
@@ -79,7 +90,7 @@ export default function HomeScreen() {
                 >
                   <View style={styles.courseCardContent}>
                     <Text style={styles.courseCardName} numberOfLines={2}>{course.name}</Text>
-                    <Text style={styles.courseCardTeacher} numberOfLines={1}>{course.teacher}</Text>
+                    <Text style={styles.courseCardTeacher} numberOfLines={1}>{course.teacher_name}</Text>
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
@@ -101,7 +112,7 @@ export default function HomeScreen() {
             contentContainerStyle={styles.horizontalList}
             testID="teachers-preview-scroll"
           >
-            {TEACHERS.map((teacher) => (
+            {teachers.map((teacher) => (
               <TouchableOpacity
                 key={teacher.id}
                 style={styles.teacherPreviewCard}
@@ -149,11 +160,11 @@ export default function HomeScreen() {
         <View style={[styles.section, { paddingHorizontal: SPACING.lg }]}>
           <View style={styles.statsRow}>
             <View style={styles.statCard} testID="stat-courses">
-              <Text style={styles.statNumber}>14</Text>
+              <Text style={styles.statNumber}>{courses.length}</Text>
               <Text style={styles.statLabel}>Courses</Text>
             </View>
             <View style={styles.statCard} testID="stat-teachers">
-              <Text style={styles.statNumber}>3</Text>
+              <Text style={styles.statNumber}>{teachers.length}</Text>
               <Text style={styles.statLabel}>Teachers</Text>
             </View>
             <View style={styles.statCard} testID="stat-students">
@@ -178,6 +189,8 @@ const styles = StyleSheet.create({
   taglineRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 10 },
   goldLine: { width: 30, height: 1.5, backgroundColor: COLORS.secondary },
   tagline: { color: COLORS.secondary, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: SPACING.md },
+  loadingText: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500' },
   section: { marginTop: SPACING.lg },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, marginBottom: SPACING.md },
   sectionTitle: { fontSize: 20, fontWeight: '700', color: COLORS.textMain },

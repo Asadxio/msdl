@@ -7,13 +7,15 @@ import {
   Image,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { COLORS, SPACING, RADIUS, SHADOWS, TEACHERS, getTeacherAvatar } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS, getTeacherAvatar } from '@/constants/theme';
+import { useData, Teacher } from '@/context/DataContext';
 
-function TeacherCard({ teacher, index }: { teacher: typeof TEACHERS[0]; index: number }) {
+function TeacherCard({ teacher }: { teacher: Teacher }) {
   const router = useRouter();
 
   return (
@@ -33,11 +35,13 @@ function TeacherCard({ teacher, index }: { teacher: typeof TEACHERS[0]; index: n
       <View style={styles.cardBody}>
         <Text style={styles.teacherName}>{teacher.name}</Text>
         <View style={styles.divider} />
-        <Text style={styles.bio} numberOfLines={3}>{teacher.bio}</Text>
+        <Text style={styles.coursesText} numberOfLines={2}>
+          Teaches: {teacher.courses.join(', ')}
+        </Text>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Ionicons name="book-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.statText}>{teacher.courseIds.length} Courses</Text>
+            <Text style={styles.statText}>{teacher.courses.length} Courses</Text>
           </View>
           <View style={styles.statItem}>
             <Ionicons name="people-outline" size={16} color={COLORS.primary} />
@@ -55,6 +59,7 @@ function TeacherCard({ teacher, index }: { teacher: typeof TEACHERS[0]; index: n
 
 export default function TeachersScreen() {
   const insets = useSafeAreaInsets();
+  const { teachers, loading } = useData();
 
   return (
     <View style={styles.container}>
@@ -63,15 +68,27 @@ export default function TeachersScreen() {
         <Text style={styles.headerTitle}>Our Teachers</Text>
         <Text style={styles.headerSubtitle}>Guiding with knowledge & wisdom</Text>
       </View>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        testID="teachers-list"
-      >
-        {TEACHERS.map((teacher, index) => (
-          <TeacherCard key={teacher.id} teacher={teacher} index={index} />
-        ))}
-      </ScrollView>
+      {loading ? (
+        <View style={styles.loadingContainer} testID="teachers-loading">
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading teachers...</Text>
+        </View>
+      ) : teachers.length === 0 ? (
+        <View style={styles.emptyContainer} testID="teachers-empty">
+          <Ionicons name="people-outline" size={48} color={COLORS.border} />
+          <Text style={styles.emptyText}>No teachers available</Text>
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          testID="teachers-list"
+        >
+          {teachers.map((teacher) => (
+            <TeacherCard key={teacher.id} teacher={teacher} />
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -79,27 +96,19 @@ export default function TeachersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    ...SHADOWS.header,
+    backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header,
   },
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
+  loadingText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500' },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
+  emptyText: { fontSize: 16, color: COLORS.textMuted, fontWeight: '500' },
   listContent: { padding: SPACING.lg, gap: SPACING.lg, paddingBottom: 30 },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xxl,
-    overflow: 'hidden',
-    ...SHADOWS.card,
-  },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, overflow: 'hidden', ...SHADOWS.card },
   cardTop: {
-    alignItems: 'center',
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.md,
-    backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center', paddingTop: SPACING.lg, paddingBottom: SPACING.md, backgroundColor: COLORS.surfaceAlt,
   },
   avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: COLORS.secondary, marginBottom: SPACING.sm },
   titleBadge: {
@@ -110,12 +119,13 @@ const styles = StyleSheet.create({
   cardBody: { padding: SPACING.lg },
   teacherName: { fontSize: 20, fontWeight: '700', color: COLORS.textMain, textAlign: 'center' },
   divider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.md },
-  bio: { fontSize: 14, color: COLORS.textMuted, lineHeight: 22, textAlign: 'center' },
+  coursesText: { fontSize: 14, color: COLORS.textMuted, lineHeight: 22, textAlign: 'center' },
   statsRow: { flexDirection: 'row', justifyContent: 'center', gap: SPACING.xl, marginTop: SPACING.md },
   statItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
   viewProfileRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border,
   },
   viewProfileText: { fontSize: 14, fontWeight: '600', color: COLORS.secondary },
 });

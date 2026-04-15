@@ -7,33 +7,62 @@ import {
   Image,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, RADIUS, SHADOWS, TEACHERS, COURSES, getTeacherAvatar, getCourseImage } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS, getTeacherAvatar, getCourseImage } from '@/constants/theme';
+import { useData } from '@/context/DataContext';
 
 export default function TeacherDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { courses, teachers, loading } = useData();
 
-  const teacher = TEACHERS.find((t) => t.id === id);
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading teacher...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const teacher = teachers.find((t) => t.id === id);
   if (!teacher) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
+        <TouchableOpacity style={styles.errorBackBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
+          <Text style={styles.errorBackText}>Go Back</Text>
+        </TouchableOpacity>
         <Text style={styles.errorText}>Teacher not found</Text>
       </View>
     );
   }
 
-  const teacherCourses = COURSES.filter((c) => teacher.courseIds.includes(c.id));
+  // Find courses taught by this teacher (match by teacher_name containing teacher's last name parts)
+  const teacherCourses = courses.filter((c) => {
+    // Match by course names in teacher.courses array
+    return teacher.courses.some((tCourse) =>
+      tCourse.toLowerCase() === c.name.toLowerCase()
+    );
+  });
+
+  // Fallback: if no match by course name, match by teacher_name
+  const matchedCourses = teacherCourses.length > 0
+    ? teacherCourses
+    : courses.filter((c) => c.teacher_name.includes(teacher.name.split(' ').slice(-2).join(' ')));
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* Header with Back Button */}
+        {/* Header */}
         <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
           <TouchableOpacity
             style={styles.backBtn}
@@ -47,7 +76,7 @@ export default function TeacherDetailScreen() {
           <View style={{ width: 42 }} />
         </View>
 
-        {/* Profile Section */}
+        {/* Profile */}
         <View style={styles.profileSection}>
           <Image source={{ uri: getTeacherAvatar(teacher.id) }} style={styles.avatar} />
           <View style={styles.titleBadge}>
@@ -60,7 +89,7 @@ export default function TeacherDetailScreen() {
         {/* Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{teacherCourses.length}</Text>
+            <Text style={styles.statNumber}>{matchedCourses.length}</Text>
             <Text style={styles.statLabel}>Courses</Text>
           </View>
           <View style={styles.statCard}>
@@ -73,46 +102,46 @@ export default function TeacherDetailScreen() {
           </View>
         </View>
 
-        {/* Bio */}
-        <View style={styles.sectionCard} testID="teacher-detail-bio">
-          <View style={styles.sectionHeader}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="person-outline" size={18} color={COLORS.primary} />
-            </View>
-            <Text style={styles.sectionTitle}>About</Text>
-          </View>
-          <Text style={styles.bioText}>{teacher.bio}</Text>
-        </View>
-
         {/* Courses Taught */}
         <View style={styles.sectionCard} testID="teacher-detail-courses">
           <View style={styles.sectionHeader}>
             <View style={styles.iconCircle}>
               <Ionicons name="book-outline" size={18} color={COLORS.primary} />
             </View>
-            <Text style={styles.sectionTitle}>Courses ({teacherCourses.length})</Text>
+            <Text style={styles.sectionTitle}>Courses ({matchedCourses.length})</Text>
           </View>
-          <View style={styles.coursesList}>
-            {teacherCourses.map((course) => {
-              const courseIndex = COURSES.findIndex((c) => c.id === course.id);
-              return (
-                <TouchableOpacity
-                  key={course.id}
-                  style={styles.courseItem}
-                  testID={`teacher-course-${course.id}`}
-                  activeOpacity={0.85}
-                  onPress={() => router.push(`/course/${course.id}`)}
-                >
-                  <Image source={{ uri: getCourseImage(courseIndex) }} style={styles.courseThumb} />
-                  <View style={styles.courseItemInfo}>
-                    <Text style={styles.courseItemName} numberOfLines={1}>{course.name}</Text>
-                    <Text style={styles.courseItemSchedule} numberOfLines={1}>{course.schedule}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {matchedCourses.length > 0 ? (
+            <View style={styles.coursesList}>
+              {matchedCourses.map((course) => {
+                const courseIndex = courses.findIndex((c) => c.id === course.id);
+                return (
+                  <TouchableOpacity
+                    key={course.id}
+                    style={styles.courseItem}
+                    testID={`teacher-course-${course.id}`}
+                    activeOpacity={0.85}
+                    onPress={() => router.push(`/course/${course.id}`)}
+                  >
+                    <Image source={{ uri: getCourseImage(courseIndex) }} style={styles.courseThumb} />
+                    <View style={styles.courseItemInfo}>
+                      <Text style={styles.courseItemName} numberOfLines={1}>{course.name}</Text>
+                      <Text style={styles.courseItemSchedule} numberOfLines={1}>{course.schedule}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.courseNamesList}>
+              {teacher.courses.map((name, idx) => (
+                <View key={idx} style={styles.courseNameItem}>
+                  <Ionicons name="book" size={16} color={COLORS.secondary} />
+                  <Text style={styles.courseNameText}>{name}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -121,6 +150,10 @@ export default function TeacherDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
+  loadingText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500' },
+  errorBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: SPACING.lg },
+  errorBackText: { fontSize: 15, fontWeight: '600', color: COLORS.textMain },
   errorText: { fontSize: 16, color: COLORS.textMuted, textAlign: 'center', marginTop: 40 },
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -159,7 +192,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
-  bioText: { fontSize: 15, color: COLORS.textMuted, lineHeight: 24 },
   coursesList: { gap: SPACING.sm },
   courseItem: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -169,4 +201,7 @@ const styles = StyleSheet.create({
   courseItemInfo: { flex: 1 },
   courseItemName: { fontSize: 14, fontWeight: '600', color: COLORS.textMain },
   courseItemSchedule: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  courseNamesList: { gap: SPACING.sm },
+  courseNameItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  courseNameText: { fontSize: 14, fontWeight: '500', color: COLORS.textMain },
 });

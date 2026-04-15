@@ -8,36 +8,62 @@ import {
   TouchableOpacity,
   Alert,
   StatusBar,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, RADIUS, SHADOWS, COURSES, TEACHERS, getCourseImage, getTeacherAvatar } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS, getCourseImage, getTeacherAvatar } from '@/constants/theme';
+import { useData } from '@/context/DataContext';
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { courses, teachers, loading } = useData();
 
-  const course = COURSES.find((c) => c.id === id);
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading course...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const course = courses.find((c) => c.id === id);
   if (!course) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
+        <TouchableOpacity style={styles.errorBackBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
+          <Text style={styles.errorBackText}>Go Back</Text>
+        </TouchableOpacity>
         <Text style={styles.errorText}>Course not found</Text>
       </View>
     );
   }
 
-  const teacher = TEACHERS.find((t) => t.id === course.teacherId);
-  const courseIndex = COURSES.findIndex((c) => c.id === id);
+  // Find teacher by matching teacher_name
+  const teacher = teachers.find((t) => course.teacher_name.includes(t.name.split(' ').slice(-2).join(' ')));
+  const courseIndex = courses.findIndex((c) => c.id === id);
 
   const handleJoinClass = () => {
-    Alert.alert(
-      'Join Class',
-      'Class link will be shared by teacher',
-      [{ text: 'OK', style: 'default' }]
-    );
+    if (course.class_link && course.class_link.trim().length > 0) {
+      Linking.openURL(course.class_link).catch(() => {
+        Alert.alert('Error', 'Unable to open the class link');
+      });
+    } else {
+      Alert.alert(
+        'Join Class',
+        'Class link will be shared by teacher',
+        [{ text: 'OK', style: 'default' }]
+      );
+    }
   };
 
   return (
@@ -51,7 +77,6 @@ export default function CourseDetailScreen() {
             colors={['rgba(15,56,34,0.3)', 'rgba(15,56,34,0.95)']}
             style={styles.heroGradient}
           />
-          {/* Back Button */}
           <TouchableOpacity
             style={[styles.backBtn, { top: insets.top + 10 }]}
             onPress={() => router.back()}
@@ -60,13 +85,11 @@ export default function CourseDetailScreen() {
           >
             <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
-          {/* Course Title on Hero */}
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>{course.name}</Text>
           </View>
         </View>
 
-        {/* Course Info */}
         <View style={styles.body}>
           {/* Teacher Info Row */}
           <TouchableOpacity
@@ -80,9 +103,9 @@ export default function CourseDetailScreen() {
             )}
             <View style={styles.teacherInfo}>
               <Text style={styles.teacherLabel}>Instructor</Text>
-              <Text style={styles.teacherNameText}>{course.teacher}</Text>
+              <Text style={styles.teacherNameText}>{course.teacher_name}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+            {teacher && <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />}
           </TouchableOpacity>
 
           {/* Schedule */}
@@ -93,7 +116,7 @@ export default function CourseDetailScreen() {
               </View>
               <Text style={styles.infoCardTitle}>Schedule</Text>
             </View>
-            <Text style={styles.infoCardValue}>{course.schedule}</Text>
+            <Text style={styles.infoCardValue}>{course.schedule || 'Schedule to be announced'}</Text>
           </View>
 
           {/* Description */}
@@ -104,7 +127,7 @@ export default function CourseDetailScreen() {
               </View>
               <Text style={styles.infoCardTitle}>About this Course</Text>
             </View>
-            <Text style={styles.descriptionText}>{course.description}</Text>
+            <Text style={styles.descriptionText}>{course.description || 'Course details coming soon.'}</Text>
           </View>
 
           {/* Join Class Button */}
@@ -125,6 +148,10 @@ export default function CourseDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
+  loadingText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500' },
+  errorBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: SPACING.lg },
+  errorBackText: { fontSize: 15, fontWeight: '600', color: COLORS.textMain },
   errorText: { fontSize: 16, color: COLORS.textMuted, textAlign: 'center', marginTop: 40 },
   heroWrapper: { height: 260, position: 'relative' },
   heroImage: { width: '100%', height: '100%' },
@@ -133,9 +160,7 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 16, width: 42, height: 42, borderRadius: 21,
     backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', zIndex: 10,
   },
-  heroContent: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, padding: SPACING.lg,
-  },
+  heroContent: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: SPACING.lg },
   heroTitle: { fontSize: 26, fontWeight: '800', color: '#FFFFFF', lineHeight: 34 },
   body: { padding: SPACING.lg, gap: SPACING.md },
   teacherCard: {
@@ -146,9 +171,7 @@ const styles = StyleSheet.create({
   teacherInfo: { flex: 1 },
   teacherLabel: { fontSize: 11, color: COLORS.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   teacherNameText: { fontSize: 15, fontWeight: '700', color: COLORS.textMain, marginTop: 2 },
-  infoCard: {
-    backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, ...SHADOWS.card,
-  },
+  infoCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, ...SHADOWS.card },
   infoCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   iconCircle: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.surfaceAlt,
