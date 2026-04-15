@@ -5,10 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 
 function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
@@ -25,6 +28,9 @@ function SectionCard({ title, icon, children }: { title: string; icon: string; c
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
+  const { profile, signOut } = useAuth();
+  const router = useRouter();
+  const isAdmin = profile?.role === 'admin';
 
   return (
     <View style={styles.container}>
@@ -38,6 +44,48 @@ export default function AboutScreen() {
         contentContainerStyle={styles.scrollContent}
         testID="about-scroll"
       >
+        {/* User Profile Card */}
+        {profile && (
+          <View style={styles.profileCard} testID="user-profile-card">
+            <View style={styles.profileIconCircle}>
+              <Ionicons name="person" size={24} color={COLORS.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.profileName}>{profile.name}</Text>
+              <Text style={styles.profileEmail}>{profile.email}</Text>
+              <Text style={styles.profileRole}>{profile.role}</Text>
+            </View>
+            <TouchableOpacity style={styles.signOutBtn} onPress={signOut} testID="signout-btn">
+              <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Admin Controls */}
+        {isAdmin && (
+          <View style={styles.adminCard} testID="admin-controls">
+            <Text style={styles.adminTitle}>Admin Controls</Text>
+            <TouchableOpacity
+              style={styles.adminItem}
+              onPress={() => router.push('/admin/users')}
+              testID="manage-users-btn"
+            >
+              <Ionicons name="people-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Manage Users</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.adminItem}
+              onPress={() => router.push('/admin/add-book')}
+              testID="admin-add-book-link"
+            >
+              <Ionicons name="book-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Add Library Book</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Bismillah */}
         <View style={styles.bismillahCard} testID="bismillah-section">
           <Text style={styles.bismillah}>بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</Text>
@@ -232,4 +280,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  profileCard: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12,
+    ...SHADOWS.card,
+  },
+  profileIconCircle: {
+    width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  profileName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
+  profileEmail: { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
+  profileRole: { fontSize: 11, fontWeight: '700', color: COLORS.secondary, textTransform: 'capitalize', marginTop: 2 },
+  signOutBtn: { padding: 10 },
+  adminCard: {
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md,
+    ...SHADOWS.card, gap: 8,
+  },
+  adminTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 },
+  adminItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  adminItemText: { flex: 1, fontSize: 15, fontWeight: '500', color: COLORS.textMain },
 });
