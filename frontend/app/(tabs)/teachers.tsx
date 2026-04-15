@@ -5,19 +5,26 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  TouchableOpacity,
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, RADIUS, SHADOWS, TEACHERS, MEDIA } from '@/constants/theme';
-
-const AVATAR_MAP = [MEDIA.teacherAvatar1, MEDIA.teacherAvatar2, MEDIA.teacherAvatar1];
+import { useRouter } from 'expo-router';
+import { COLORS, SPACING, RADIUS, SHADOWS, TEACHERS, getTeacherAvatar } from '@/constants/theme';
 
 function TeacherCard({ teacher, index }: { teacher: typeof TEACHERS[0]; index: number }) {
+  const router = useRouter();
+
   return (
-    <View style={styles.card} testID={`teacher-card-${teacher.id}`}>
+    <TouchableOpacity
+      style={styles.card}
+      testID={`teacher-card-${teacher.id}`}
+      activeOpacity={0.85}
+      onPress={() => router.push(`/teacher/${teacher.id}`)}
+    >
       <View style={styles.cardTop}>
-        <Image source={{ uri: AVATAR_MAP[index] }} style={styles.avatar} />
+        <Image source={{ uri: getTeacherAvatar(teacher.id) }} style={styles.avatar} />
         <View style={styles.titleBadge}>
           <Ionicons name="star" size={12} color={COLORS.secondary} />
           <Text style={styles.titleBadgeText}>{teacher.title}</Text>
@@ -26,19 +33,23 @@ function TeacherCard({ teacher, index }: { teacher: typeof TEACHERS[0]; index: n
       <View style={styles.cardBody}>
         <Text style={styles.teacherName}>{teacher.name}</Text>
         <View style={styles.divider} />
-        <Text style={styles.bio}>{teacher.bio}</Text>
+        <Text style={styles.bio} numberOfLines={3}>{teacher.bio}</Text>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Ionicons name="book-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.statText}>5 Courses</Text>
+            <Text style={styles.statText}>{teacher.courseIds.length} Courses</Text>
           </View>
           <View style={styles.statItem}>
             <Ionicons name="people-outline" size={16} color={COLORS.primary} />
             <Text style={styles.statText}>30+ Students</Text>
           </View>
         </View>
+        <View style={styles.viewProfileRow}>
+          <Text style={styles.viewProfileText}>View Profile</Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.secondary} />
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -66,10 +77,7 @@ export default function TeachersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: {
     backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.lg,
@@ -78,21 +86,9 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     ...SHADOWS.header,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  listContent: {
-    padding: SPACING.lg,
-    gap: SPACING.lg,
-    paddingBottom: 30,
-  },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
+  headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  listContent: { padding: SPACING.lg, gap: SPACING.lg, paddingBottom: 30 },
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xxl,
@@ -105,63 +101,21 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     backgroundColor: COLORS.surfaceAlt,
   },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: COLORS.secondary,
-    marginBottom: SPACING.sm,
-  },
+  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: COLORS.secondary, marginBottom: SPACING.sm },
   titleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: COLORS.goldBg,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: RADIUS.full,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: COLORS.goldBg, paddingHorizontal: 14, paddingVertical: 6, borderRadius: RADIUS.full,
   },
-  titleBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.goldText,
-    letterSpacing: 0.5,
+  titleBadgeText: { fontSize: 12, fontWeight: '700', color: COLORS.goldText, letterSpacing: 0.5 },
+  cardBody: { padding: SPACING.lg },
+  teacherName: { fontSize: 20, fontWeight: '700', color: COLORS.textMain, textAlign: 'center' },
+  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.md },
+  bio: { fontSize: 14, color: COLORS.textMuted, lineHeight: 22, textAlign: 'center' },
+  statsRow: { flexDirection: 'row', justifyContent: 'center', gap: SPACING.xl, marginTop: SPACING.md },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
+  viewProfileRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border,
   },
-  cardBody: {
-    padding: SPACING.lg,
-  },
-  teacherName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.textMain,
-    textAlign: 'center',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: SPACING.md,
-  },
-  bio: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: SPACING.xl,
-    marginTop: SPACING.md,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
+  viewProfileText: { fontSize: 14, fontWeight: '600', color: COLORS.secondary },
 });
