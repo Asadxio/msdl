@@ -1,55 +1,37 @@
 # Madrasa Tus Salikat Lil Banat - Islamic Learning App
 
 ## Overview
-A clean, premium, mobile-first Islamic Learning App with green, white, and gold theme. UI-only app with interactive navigation and local data.
+A premium, mobile-first Islamic Learning App with Firebase Firestore backend. Green, white, and gold Islamic theme.
+
+## Architecture
+- **Frontend**: Expo SDK 54, Expo Router (file-based navigation), Firebase JS SDK
+- **Data Source**: Firebase Firestore (with local fallback)
+- **Firebase Project**: madrasa-app-50d6c
+
+## Firebase Collections
+- **courses**: name, teacher_name, schedule, description, class_link
+- **teachers**: name, title, courses (array of course names)
 
 ## App Structure
-**Bottom Tab Navigation (5 tabs):** Home, Courses, Teachers, Library, About
+**Tab Navigation:** Home, Courses, Teachers, Library, About
 **Detail Screens (Stack):** Course Detail, Teacher Detail
 
-## Course-Teacher Mapping
-
-### Sumra Fatma Qadri (Teacher 1):
-- Darse Nizami (Alima Course), Chahal Hadith, Bahare Shariat Course, Tafseer Course, Sahabiyat wa Sahliyat ke Ala Ausaf
-
-### Firdos Fatma (Teacher 2):
-- Tajweed Course, Nazra Course, Madni Qaida Course, Qirat Course
-
-### Afnaz Razvi (Teacher 3):
-- Deeniyat Course, Farze Uloom, Muballigah Course, Urdu Course, Kids Deeniyat Course
+## Key Features
+- Firebase Firestore integration with long polling for compatibility
+- Loading states while fetching data
+- Graceful fallback to local data if Firebase unavailable
+- Join Class button opens class_link URL or shows alert
+- Dynamic stats from live data
 
 ## Screens
-
-### Home Screen
-- Arabic greeting, Madrasa name, Featured Courses (horizontal scroll, tappable), Teachers Preview (tappable), Announcements, Quick Stats
-
-### Courses Screen
-14 course cards - each tappable to open Course Detail. "Attend Class" button also opens detail.
-
-### Course Detail Screen (/course/[id])
-- Hero image with course name
-- Teacher info (tappable to teacher detail)
-- Schedule, Description
-- "Join Class" button → alert: "Class link will be shared by teacher"
-
-### Teachers Screen
-3 teacher cards (tappable to Teacher Detail)
-
-### Teacher Detail Screen (/teacher/[id])
-- Profile avatar, Alima Fazila title badge
-- Stats (courses, students, years)
-- Full bio
-- List of courses taught (tappable to course detail)
-
-### Library Screen
-8 books in 2-column grid with category badges
-
-### About Screen
-Bismillah, Introduction, Vision, Mission, Contact placeholder
-
-## Tech Stack
-- Expo SDK 54, Expo Router (file-based), expo-linear-gradient, @expo/vector-icons
+- **Home**: Greeting, featured courses (horizontal), teachers preview, announcements, dynamic stats
+- **Courses**: FlatList of courses from Firestore with teacher names and Attend Class buttons
+- **Course Detail**: Hero image, teacher link, schedule, description, Join Class button
+- **Teachers**: Teacher cards with courses taught, clickable to detail
+- **Teacher Detail**: Profile, stats, list of courses they teach
+- **Library**: 8 books in 2-column grid (static)
+- **About**: Bismillah, Introduction, Vision, Mission (static)
 
 ## Design
 - Primary: #0F3822, Secondary: #D4AF37, Background: #FDFBF7
-- No backend, no auth - all local data
+- No authentication (yet)
