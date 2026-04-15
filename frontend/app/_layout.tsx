@@ -6,7 +6,7 @@ import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, profile, authLoading } = useAuth();
+  const { user, profile, authLoading, emailVerified } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -14,18 +14,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (authLoading) return;
 
     const inAuth = segments[0] === 'auth';
+    const isAdmin = profile?.role === 'admin';
 
     if (!user) {
-      // Not logged in -> go to login
       if (!inAuth) router.replace('/auth/login');
-    } else if (profile && profile.status === 'pending' && profile.role !== 'admin') {
-      // Pending approval -> go to pending screen
+    } else if (profile?.status === 'deactivated') {
+      // Deactivated users -> pending screen shows deactivated state
       if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
-    } else if (user && (profile?.status === 'approved' || profile?.role === 'admin')) {
-      // Approved or admin -> go to main app
+    } else if (!emailVerified && !isAdmin) {
+      // Email not verified (non-admin) -> pending screen for verification
+      if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
+    } else if (profile && profile.status === 'pending' && !isAdmin) {
+      if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
+    } else if (user && (profile?.status === 'approved' || isAdmin)) {
       if (inAuth) router.replace('/');
     }
-  }, [user, profile, authLoading, segments]);
+  }, [user, profile, authLoading, emailVerified, segments]);
 
   if (authLoading) {
     return (
@@ -59,6 +63,7 @@ export default function RootLayout() {
             <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />
+            <Stack.Screen name="auth/forgot-password" options={{ animation: 'slide_from_right' }} />
           </Stack>
         </AuthGate>
       </DataProvider>

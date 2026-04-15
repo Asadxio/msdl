@@ -55,6 +55,20 @@ export default function AdminUsersScreen() {
     ]);
   };
 
+  const handleDeactivate = (u: UserWithId) => {
+    Alert.alert('Deactivate User', `Deactivate ${u.name}? They will lose access.`, [
+      { text: 'Cancel' },
+      { text: 'Deactivate', style: 'destructive', onPress: () => updateUser(u.id, { status: 'deactivated' as any }) },
+    ]);
+  };
+
+  const handleReactivate = (u: UserWithId) => {
+    Alert.alert('Reactivate User', `Reactivate ${u.name}?`, [
+      { text: 'Cancel' },
+      { text: 'Reactivate', onPress: () => updateUser(u.id, { status: 'pending' }) },
+    ]);
+  };
+
   const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
     admin: { bg: '#FEF3C7', text: '#92400E' },
     teacher: { bg: '#E3F2FD', text: '#1565C0' },
@@ -75,8 +89,8 @@ export default function AdminUsersScreen() {
           </View>
         </View>
         <View style={styles.userBottom}>
-          <View style={[styles.statusBadge, item.status === 'approved' ? styles.approvedBadge : styles.pendingBadge]}>
-            <Text style={[styles.statusText, item.status === 'approved' ? styles.approvedText : styles.pendingText]}>
+          <View style={[styles.statusBadge, item.status === 'approved' ? styles.approvedBadge : item.status === 'deactivated' ? styles.deactivatedBadge : styles.pendingBadge]}>
+            <Text style={[styles.statusText, item.status === 'approved' ? styles.approvedText : item.status === 'deactivated' ? styles.deactivatedText : styles.pendingText]}>
               {item.status}
             </Text>
           </View>
@@ -87,8 +101,15 @@ export default function AdminUsersScreen() {
             </TouchableOpacity>
           )}
           {item.status === 'approved' && item.role !== 'admin' && (
-            <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item)} testID={`revoke-btn-${item.id}`}>
-              <Text style={styles.rejectBtnText}>Revoke</Text>
+            <View style={{ flexDirection: 'row', gap: 6, marginLeft: 'auto' }}>
+              <TouchableOpacity style={styles.deactivateBtn} onPress={() => handleDeactivate(item)} testID={`deactivate-btn-${item.id}`}>
+                <Text style={styles.deactivateBtnText}>Deactivate</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {item.status === 'deactivated' && item.role !== 'admin' && (
+            <TouchableOpacity style={styles.reactivateBtn} onPress={() => handleReactivate(item)} testID={`reactivate-btn-${item.id}`}>
+              <Text style={styles.reactivateBtnText}>Reactivate</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -149,11 +170,17 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: RADIUS.full },
   pendingBadge: { backgroundColor: '#FEF3C7' },
   approvedBadge: { backgroundColor: '#D1FAE5' },
+  deactivatedBadge: { backgroundColor: '#FEF2F2' },
   statusText: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
   pendingText: { color: '#92400E' },
   approvedText: { color: '#065F46' },
+  deactivatedText: { color: COLORS.error },
   approveBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.success, paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.lg, marginLeft: 'auto' },
   approveBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   rejectBtn: { borderWidth: 1, borderColor: COLORS.error, paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.lg, marginLeft: 'auto' },
   rejectBtnText: { color: COLORS.error, fontSize: 13, fontWeight: '600' },
+  deactivateBtn: { borderWidth: 1, borderColor: COLORS.error, paddingHorizontal: 12, paddingVertical: 7, borderRadius: RADIUS.lg },
+  deactivateBtnText: { color: COLORS.error, fontSize: 12, fontWeight: '600' },
+  reactivateBtn: { backgroundColor: '#E3F2FD', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.lg, marginLeft: 'auto' },
+  reactivateBtnText: { color: '#1565C0', fontSize: 13, fontWeight: '700' },
 });
