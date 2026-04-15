@@ -1,0 +1,108 @@
+{
+  "theme": "LIGHT",
+  "archetype": "5 (Jewel & Luxury) mixed with 1 (Organic & Earthy)",
+  "colors": {
+    "primary": "#0F3822",
+    "primary_content": "#FFFFFF",
+    "secondary": "#D4AF37",
+    "secondary_content": "#111827",
+    "background": "#FDFBF7",
+    "surface": "#FFFFFF",
+    "surface_alt": "#F2F6F4",
+    "text_main": "#111827",
+    "text_muted": "#4B5563",
+    "border": "#E5E7EB",
+    "error": "#991B1B",
+    "success": "#166534"
+  },
+  "typography": {
+    "headings": "Playfair Display",
+    "body": "Outfit",
+    "arabic": "Amiri",
+    "rules": {
+      "h1": "text-3xl tracking-tight font-bold text-[#0F3822]",
+      "h2": "text-2xl tracking-tight font-semibold text-[#111827]",
+      "h3": "text-lg font-medium text-[#111827]",
+      "body": "text-base leading-relaxed text-[#4B5563]",
+      "caption": "text-sm text-[#6B7280] uppercase tracking-wider"
+    }
+  },
+  "spacing_and_layout": {
+    "container_padding": "p-4 md:p-6",
+    "card_radius": "rounded-2xl",
+    "button_radius": "rounded-xl",
+    "shadows": {
+      "card": "shadow-[0_4px_20px_rgba(15,56,34,0.08)]",
+      "header": "shadow-[0_2px_10px_rgba(0,0,0,0.05)]"
+    }
+  },
+  "components": {
+    "primary_button": "bg-[#0F3822] text-white rounded-xl py-4 px-6 flex-row items-center justify-center font-medium",
+    "secondary_button": "border-2 border-[#0F3822] text-[#0F3822] rounded-xl py-4 px-6 flex-row items-center justify-center font-medium bg-transparent",
+    "card": "bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(15,56,34,0.08)] overflow-hidden",
+    "bottom_nav": "bg-white border-t border-gray-100 flex-row justify-around pb-6 pt-3 px-2 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]",
+    "chip_tag": "bg-[#FDF8E7] text-[#B8860B] px-3 py-1 rounded-full text-xs font-semibold overflow-hidden"
+  },
+  "screens": {
+    "home": {
+      "header": "Rich dark green (#0F3822) header overlapping the content. Display the large 'السلام عليكم' greeting in gold/white and highlight 'Madrasa Tus Salikat Lil Banat'. Use 'home_header_bg' as image background.",
+      "featured_courses": "Horizontal ScrollView with 2-3 featured course cards. Cards should peek from the right to indicate scrolling.",
+      "teachers_preview": "A compact horizontal list or 2x2 grid of circular teacher avatars with names beneath.",
+      "announcements": "A solid dark green banner card with a subtle gold lantern icon ('lantern_icon') and text."
+    },
+    "courses": {
+      "layout": "Vertical ScrollView or FlatList displaying 14 courses.",
+      "card_design": "Image banner on top, course name in H3, teacher name with a small circular avatar, and a prominent 'Attend Class' full-width primary button."
+    },
+    "teachers": {
+      "layout": "Vertical list displaying 3 teacher profiles.",
+      "card_design": "Large rounded card. Top section contains the profile image ('teacher_avatar_1') and a golden 'Alima Fazila' title tag. Followed by name and short bio."
+    },
+    "library": {
+      "layout": "2-column grid utilizing FlatList with numColumns={2}.",
+      "card_design": "Vertical book card. Book cover image filling the top half, bold title, and muted category at the bottom."
+    },
+    "about": {
+      "layout": "Clean, text-heavy layout wrapped in a ScrollView.",
+      "sections": "Islamic Introduction starting with 'Bismillah'. Vision & Mission presented inside gold-accented cards (border-l-4 border-[#D4AF37])."
+    }
+  },
+  "media": {
+    "home_header_bg": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/36a7bbf8-4a30-4199-91bf-2bd5ed2b328a/images/903e0b1c37fb16d675cdf7dd4e2625b8c6101fda8a82b16836b0ca6e261601b7.png",
+      "description": "Luxury dark green and gold abstract flowing silk background for the home screen top section."
+    },
+    "teacher_avatar_1": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/36a7bbf8-4a30-4199-91bf-2bd5ed2b328a/images/3d6c675cea0fd1e796a9b9c887130c6304fab0bf46817bb073faffc774a7b191.png",
+      "description": "Elegant abstract floral geometric avatar for female teachers (Alima Fazila)."
+    },
+    "teacher_avatar_2": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/36a7bbf8-4a30-4199-91bf-2bd5ed2b328a/images/17e500d46e33c4a4953841eb2e3678c065896907cec6f145604db4f1e488e42a.png",
+      "description": "Alternative elegant minimalist islamic arch silhouette avatar for teachers."
+    },
+    "lantern_icon": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/36a7bbf8-4a30-4199-91bf-2bd5ed2b328a/images/3d7ca5f6b18e8f18adea6822ba0ef258edebebcf6023d79b04822052edd2aa5d.png",
+      "description": "Minimalist golden lantern with deep emerald background, good for announcements or icons."
+    },
+    "course_placeholder_1": {
+      "url": "https://images.unsplash.com/photo-1720701574998-d68020bce2bd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODR8MHwxfHNlYXJjaHwyfHxxdXJhbiUyMG1hbnVzY3JpcHR8ZW58MHx8fHwxNzc2MjQyNjA0fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Ancient arabic calligraphy on parchment, used for Course/Library cards."
+    },
+    "course_placeholder_2": {
+      "url": "https://images.unsplash.com/photo-1772368872233-4539a0b63f2a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODR8MHwxfHNlYXJjaHw0fHxxdXJhbiUyMG1hbnVzY3JpcHR8ZW58MHx8fHwxNzc2MjQyNjA0fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Open ancient manuscript, used for Course/Library cards."
+    }
+  },
+  "icons": "Phosphor Icons or Lucide (React Native compatible). Focus on thin, elegant stroke weights to match the classic theme.",
+  "instructions_to_main_agent": [
+    "This is a React Native Expo app. Apply styles using NativeWind or standard React Native StyleSheet focusing on mobile-first responsive design.",
+    "Do not use transparent headers over images. Ensure contrast ratios for accessibility. The dark green (#0F3822) overlay should be fully opaque or slightly gradient.",
+    "Include 'testID' props on all interactive React Native components (buttons, tab items, cards) for automated testing. Example: testID='attend-class-button'.",
+    "The Home screen should have a distinct, visually rich upper section using the 'home_header_bg' image, overlapping with the Featured Courses horizontal list to create depth.",
+    "Primary CTAs must be solid green with rounded corners (rounded-xl) and clear text contrast.",
+    "For the 14 courses, use FlatList with the provided course placeholder images.",
+    "Do not use purely geometric rectangles. Soften everything with 'rounded-2xl'.",
+    "If custom fonts are not configured, fallback to standard elegant serifs (like Georgia/Times) for headings and system sans-serif for body. The Arabic greeting should use an Arabic/system font.",
+    "Ensure the bottom tab navigation is clean, with the active tab highlighted in gold (#D4AF37) or deep green (#0F3822)."
+  ]
+}
