@@ -9,6 +9,10 @@ from pydantic import BaseModel, Field
 from typing import List
 import uuid
 from datetime import datetime
+import json
+from fastapi import HTTPException, Header
+from firebase_admin import auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
+import firebase_admin
 
 
 ROOT_DIR = Path(__file__).parent
@@ -69,6 +73,126 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _init_firebase_admin():
+    if firebase_admin._apps:
+        return
+
+    service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+    if service_account_json:
+        cred = credentials.Certificate(json.loads(service_account_json))
+        initialize_app(cred)
+        return
+
+    service_account_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if service_account_path:
+        cred = credentials.Certificate(service_account_path)
+        initialize_app(cred)
+        return
+
+    raise RuntimeError("Firebase admin credentials not configured")
+
+
+try:
+    _init_firebase_admin()
+    firebase_db = admin_firestore.client()
+except Exception as exc:
+    firebase_db = None
+    logger.warning("Firebase Admin not initialized: %s", exc)
+
+
+class PushSendRequest(BaseModel):
+    title: str
+    body: str
+    data: dict | None = None
+    user_ids: list[str] | None = None
+    send_to_all: bool = False
+
+
+def _bearer_token(authorization: str | None) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing authorization token")
+    return authorization.split(" ", 1)[1].strip()
+
+
+def _fetch_user_role(uid: str) -> str:
+    if firebase_db is None:
+        return ""
+    snap = firebase_db.collection("users").document(uid).get()
+    if not snap.exists:
+        return ""
+    data = snap.to_dict() or {}
+    return str(data.get("role", ""))
+
+
+def _collect_tokens(user_ids: list[str]) -> list[str]:
+    if firebase_db is None or not user_ids:
+        return []
+    tokens: list[str] = []
+    for uid in user_ids:
+        snap = firebase_db.collection("users").document(uid).get()
+        if not snap.exists:
+            continue
+        data = snap.to_dict() or {}
+        for token in (data.get("fcm_tokens") or []):
+            if isinstance(token, str) and token.strip():
+                tokens.append(token.strip())
+    return list(set(tokens))
+
+
+@api_router.post("/push/send")
+async def send_push(payload: PushSendRequest, authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Push service not configured")
+
+    try:
+        decoded = firebase_auth.verify_id_token(_bearer_token(authorization))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    requester_uid = decoded.get("uid", "")
+    requester_role = _fetch_user_role(requester_uid)
+    is_admin = requester_role == "admin"
+
+    if payload.send_to_all and not is_admin:
+        raise HTTPException(status_code=403, detail="Admin required for broadcast push")
+
+    target_user_ids = list(set(payload.user_ids or []))
+    if payload.send_to_all:
+        user_docs = firebase_db.collection("users").stream()
+        target_user_ids = [d.id for d in user_docs]
+
+    if not target_user_ids:
+        return {"ok": True, "sent": 0}
+
+    # Non-admin chat push guard: user can notify only participants of their own chat.
+    if not is_admin:
+        chat_id = str((payload.data or {}).get("chat_id", "")).strip()
+        if not chat_id:
+            raise HTTPException(status_code=403, detail="Non-admin push requires chat context")
+        chat_snap = firebase_db.collection("chats").document(chat_id).get()
+        if not chat_snap.exists:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        chat_data = chat_snap.to_dict() or {}
+        participants = chat_data.get("participants") or []
+        if requester_uid not in participants:
+            raise HTTPException(status_code=403, detail="Not allowed to push for this chat")
+        for uid in target_user_ids:
+            if uid not in participants:
+                raise HTTPException(status_code=403, detail="Recipient outside chat participants")
+
+    tokens = _collect_tokens(target_user_ids)
+    if not tokens:
+        return {"ok": True, "sent": 0}
+
+    message = messaging.MulticastMessage(
+        notification=messaging.Notification(title=payload.title, body=payload.body),
+        data={k: str(v) for k, v in (payload.data or {}).items()},
+        tokens=tokens,
+    )
+    result = messaging.send_each_for_multicast(message)
+    return {"ok": True, "sent": result.success_count, "failed": result.failure_count}
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

@@ -1,21 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  StatusBar, ActivityIndicator, Alert,
+  StatusBar, ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
-import { UserProfile } from '@/context/AuthContext';
+import { UserProfile, useAuth } from '@/context/AuthContext';
 
 type UserWithId = UserProfile & { id: string };
 
 export default function AdminUsersScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
   const [users, setUsers] = useState<UserWithId[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,7 +32,13 @@ export default function AdminUsersScreen() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => {
+    if (profile && !isAdmin) {
+      router.replace('/');
+      return;
+    }
+    if (isAdmin) fetchUsers();
+  }, [profile, isAdmin, router]);
 
   const updateUser = async (uid: string, updates: Partial<UserProfile>) => {
     try {
@@ -51,7 +59,7 @@ export default function AdminUsersScreen() {
   const handleReject = (u: UserWithId) => {
     Alert.alert('Reject User', `Reject ${u.name}?`, [
       { text: 'Cancel' },
-      { text: 'Reject', style: 'destructive', onPress: () => updateUser(u.id, { status: 'pending' }) },
+      { text: 'Reject', style: 'destructive', onPress: () => updateUser(u.id, { status: 'rejected' as any }) },
     ]);
   };
 
@@ -66,6 +74,48 @@ export default function AdminUsersScreen() {
     Alert.alert('Reactivate User', `Reactivate ${u.name}?`, [
       { text: 'Cancel' },
       { text: 'Reactivate', onPress: () => updateUser(u.id, { status: 'pending' }) },
+    ]);
+  };
+
+  const handleDelete = (u: UserWithId) => {
+    Alert.alert('User Safety Action', `Choose how to remove ${u.name}.`, [
+      { text: 'Cancel' },
+      {
+        text: 'Soft Delete',
+        onPress: () => updateUser(u.id, { status: 'deactivated' as any }),
+      },
+      {
+        text: 'Permanent Delete',
+        style: 'destructive',
+        onPress: () => Alert.alert(
+          'Confirm Permanent Delete',
+          `This will permanently remove ${u.name}'s Firestore profile. This cannot be undone.`,
+          [
+            { text: 'Cancel' },
+            {
+              text: 'Delete Forever',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await deleteDoc(doc(db, 'users', u.id));
+                  await fetchUsers();
+                } catch (err: any) {
+                  Alert.alert('Error', err?.message || 'Failed to delete user');
+                }
+              },
+            },
+          ],
+        ),
+      },
+    ]);
+  };
+
+  const handleToggleRole = (u: UserWithId) => {
+    if (u.role === 'admin') return;
+    const nextRole = u.role === 'student' ? 'teacher' : 'student';
+    Alert.alert('Change Role', `Change ${u.name} to ${nextRole}?`, [
+      { text: 'Cancel' },
+      { text: 'Update', onPress: () => updateUser(u.id, { role: nextRole as any }) },
     ]);
   };
 
@@ -89,33 +139,64 @@ export default function AdminUsersScreen() {
           </View>
         </View>
         <View style={styles.userBottom}>
-          <View style={[styles.statusBadge, item.status === 'approved' ? styles.approvedBadge : item.status === 'deactivated' ? styles.deactivatedBadge : styles.pendingBadge]}>
-            <Text style={[styles.statusText, item.status === 'approved' ? styles.approvedText : item.status === 'deactivated' ? styles.deactivatedText : styles.pendingText]}>
+          <View style={[
+            styles.statusBadge,
+            item.status === 'approved'
+              ? styles.approvedBadge
+              : item.status === 'deactivated' || item.status === 'rejected'
+                ? styles.deactivatedBadge
+                : styles.pendingBadge,
+          ]}>
+            <Text style={[
+              styles.statusText,
+              item.status === 'approved'
+                ? styles.approvedText
+                : item.status === 'deactivated' || item.status === 'rejected'
+                  ? styles.deactivatedText
+                  : styles.pendingText,
+            ]}>
               {item.status}
             </Text>
           </View>
-          {item.status === 'pending' && item.role !== 'admin' && (
-            <TouchableOpacity style={styles.approveBtn} onPress={() => handleApprove(item)} testID={`approve-btn-${item.id}`}>
-              <Ionicons name="checkmark-circle" size={16} color="#FFF" />
-              <Text style={styles.approveBtnText}>Approve</Text>
-            </TouchableOpacity>
-          )}
-          {item.status === 'approved' && item.role !== 'admin' && (
-            <View style={{ flexDirection: 'row', gap: 6, marginLeft: 'auto' }}>
-              <TouchableOpacity style={styles.deactivateBtn} onPress={() => handleDeactivate(item)} testID={`deactivate-btn-${item.id}`}>
-                <Text style={styles.deactivateBtnText}>Deactivate</Text>
+          {item.role !== 'admin' && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionRow}>
+              {item.status === 'pending' && (
+                <>
+                  <TouchableOpacity style={styles.approveBtn} onPress={() => handleApprove(item)} testID={`approve-btn-${item.id}`}>
+                    <Ionicons name="checkmark-circle" size={16} color="#FFF" />
+                    <Text style={styles.approveBtnText}>Approve</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item)} testID={`reject-btn-${item.id}`}>
+                    <Text style={styles.rejectBtnText}>Reject</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {item.status === 'approved' && (
+                <TouchableOpacity style={styles.deactivateBtn} onPress={() => handleDeactivate(item)} testID={`deactivate-btn-${item.id}`}>
+                  <Text style={styles.deactivateBtnText}>Deactivate</Text>
+                </TouchableOpacity>
+              )}
+              {(item.status === 'deactivated' || item.status === 'rejected') && (
+                <TouchableOpacity style={styles.reactivateBtn} onPress={() => handleReactivate(item)} testID={`reactivate-btn-${item.id}`}>
+                  <Text style={styles.reactivateBtnText}>Set Pending</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.roleBtn} onPress={() => handleToggleRole(item)} testID={`toggle-role-btn-${item.id}`}>
+                <Text style={styles.roleBtnText}>
+                  {item.role === 'student' ? 'Make Teacher' : 'Make Student'}
+                </Text>
               </TouchableOpacity>
-            </View>
-          )}
-          {item.status === 'deactivated' && item.role !== 'admin' && (
-            <TouchableOpacity style={styles.reactivateBtn} onPress={() => handleReactivate(item)} testID={`reactivate-btn-${item.id}`}>
-              <Text style={styles.reactivateBtnText}>Reactivate</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} testID={`delete-user-btn-${item.id}`}>
+                <Text style={styles.deleteBtnText}>Delete</Text>
+              </TouchableOpacity>
+            </ScrollView>
           )}
         </View>
       </View>
     );
   };
+
+  if (profile && !isAdmin) return null;
 
   return (
     <View style={styles.container}>
@@ -166,7 +247,8 @@ const styles = StyleSheet.create({
   userEmail: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
   roleBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full },
   roleBadgeText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
-  userBottom: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  userBottom: { gap: SPACING.sm },
+  actionRow: { gap: 8, paddingRight: 8 },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: RADIUS.full },
   pendingBadge: { backgroundColor: '#FEF3C7' },
   approvedBadge: { backgroundColor: '#D1FAE5' },
@@ -183,4 +265,8 @@ const styles = StyleSheet.create({
   deactivateBtnText: { color: COLORS.error, fontSize: 12, fontWeight: '600' },
   reactivateBtn: { backgroundColor: '#E3F2FD', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.lg, marginLeft: 'auto' },
   reactivateBtnText: { color: '#1565C0', fontSize: 13, fontWeight: '700' },
+  roleBtn: { backgroundColor: '#EEF2FF', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.lg },
+  roleBtnText: { color: '#3730A3', fontSize: 13, fontWeight: '700' },
+  deleteBtn: { backgroundColor: '#FEF2F2', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.error },
+  deleteBtnText: { color: COLORS.error, fontSize: 13, fontWeight: '700' },
 });

@@ -1,0 +1,360 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function hasOnlyAllowedKeys(data, allowed) {
+      return data.keys().hasOnly(allowed);
+    }
+
+    function isValidUserCreate(uid) {
+      return isSelf(uid)
+        && hasOnlyAllowedKeys(
+          request.resource.data,
+          ['name', 'email', 'role', 'status', 'created_at']
+        )
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.email is string
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['student', 'teacher']
+        && request.resource.data.status == 'pending'
+        && request.resource.data.created_at is timestamp;
+    }
+
+    function isValidUserUpdateByAdmin() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'fcm_token_updated_at']
+        )
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.email is string
+        && request.resource.data.role in ['student', 'teacher', 'admin']
+        && request.resource.data.status in ['pending', 'approved', 'deactivated', 'rejected'];
+    }
+
+    function isValidSelfFcmTokenUpdate(uid) {
+      return isSelf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcm_tokens', 'fcm_token_updated_at'])
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.created_at == resource.data.created_at
+        && (!('updated_at' in resource.data) || !('updated_at' in request.resource.data) || request.resource.data.updated_at == resource.data.updated_at)
+        && request.resource.data.fcm_tokens is list
+        && request.resource.data.fcm_tokens.size() <= 10
+        && request.resource.data.fcm_token_updated_at is timestamp;
+    }
+
+    function isValidCourseWrite() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['name', 'teacher_name', 'teacherName', 'schedule', 'time', 'description', 'class_link', 'classLink', 'created_at', 'updated_at']
+        )
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && (!('teacher_name' in request.resource.data) || request.resource.data.teacher_name is string)
+        && (!('teacherName' in request.resource.data) || request.resource.data.teacherName is string)
+        && (!('schedule' in request.resource.data) || request.resource.data.schedule is string)
+        && (!('time' in request.resource.data) || request.resource.data.time is string)
+        && (!('description' in request.resource.data) || request.resource.data.description is string)
+        && (!('class_link' in request.resource.data) || request.resource.data.class_link is string)
+        && (!('classLink' in request.resource.data) || request.resource.data.classLink is string);
+    }
+
+    function isValidTeacherWrite() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['name', 'title', 'courses', 'created_at', 'updated_at']
+        )
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && (!('title' in request.resource.data) || request.resource.data.title is string)
+        && (!('courses' in request.resource.data) || request.resource.data.courses is list);
+    }
+
+    function isValidLibraryWrite() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['title', 'pdf_url', 'pdfUrl', 'category', 'deleted', 'deleted_at', 'created_at', 'updated_at']
+        )
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && (('pdf_url' in request.resource.data && request.resource.data.pdf_url is string)
+            || ('pdfUrl' in request.resource.data && request.resource.data.pdfUrl is string))
+        && (!('category' in request.resource.data) || request.resource.data.category is string)
+        && (!('deleted' in request.resource.data) || request.resource.data.deleted is bool)
+        && (!('deleted_at' in request.resource.data) || request.resource.data.deleted_at is timestamp);
+    }
+
+    function isValidNotificationWrite() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['title', 'message', 'user_id', 'read', 'created_at']
+        )
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.user_id is string
+        && request.resource.data.user_id.size() > 0
+        && (!('read' in request.resource.data) || request.resource.data.read is map)
+        && request.resource.data.created_at is timestamp;
+    }
+
+    function isValidNotificationReadUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.message == resource.data.message
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.read is map
+        && request.resource.data.read[request.auth.uid] == true;
+    }
+
+    function isValidPaymentCreate() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at']
+        )
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.user_name is string
+        && request.resource.data.user_name.size() > 0
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 0
+        && request.resource.data.status in ['pending']
+        && request.resource.data.provider == 'razorpay'
+        && request.resource.data.created_at is timestamp;
+    }
+
+    function isValidUserPaymentSubmit() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'submitted_at']
+        )
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.user_name == resource.data.user_name
+        && request.resource.data.amount == resource.data.amount
+        && request.resource.data.provider == resource.data.provider
+        && request.resource.data.created_at == resource.data.created_at
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'submitted'
+        && (!('payment_ref' in request.resource.data) || request.resource.data.payment_ref == null || request.resource.data.payment_ref is string);
+    }
+
+    function isValidFeedbackCreate() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['user_id', 'user_name', 'message', 'rating', 'created_at']
+        )
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.user_name is string
+        && request.resource.data.user_name.size() > 0
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && (!('rating' in request.resource.data) || request.resource.data.rating == null || (request.resource.data.rating is number && request.resource.data.rating >= 1 && request.resource.data.rating <= 5))
+        && request.resource.data.created_at is timestamp;
+    }
+
+    function isChatParticipant() {
+      return isSignedIn() && request.auth.uid in resource.data.participants;
+    }
+
+    function isChatParticipantByData() {
+      return isSignedIn() && request.auth.uid in request.resource.data.participants;
+    }
+
+    function isBroadcastChat() {
+      return resource.data.type == 'broadcast';
+    }
+
+    function isValidChatCreate() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['type', 'name', 'participants', 'participant_names', 'last_message', 'created_by', 'created_at', 'updated_at', 'typing', 'unread_counts']
+        )
+        && request.resource.data.type in ['direct', 'group', 'broadcast']
+        && request.resource.data.created_by is string
+        && request.resource.data.created_by == request.auth.uid
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.updated_at is timestamp
+        && request.resource.data.participants is list
+        && request.resource.data.participants.size() <= 200
+        && (
+          // direct chat: any signed-in user can create only if self included and exactly 2 participants
+          (request.resource.data.type == 'direct'
+            && request.auth.uid in request.resource.data.participants
+            && request.resource.data.participants.size() == 2)
+          // group/broadcast: admin only
+          || ((request.resource.data.type == 'group' || request.resource.data.type == 'broadcast') && isAdmin())
+        );
+    }
+
+    function isValidChatUpdate() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['type', 'name', 'participants', 'participant_names', 'last_message', 'created_by', 'created_at', 'updated_at', 'typing', 'unread_counts']
+        )
+        && request.resource.data.type in ['direct', 'group', 'broadcast']
+        && request.resource.data.created_by == resource.data.created_by
+        && request.resource.data.created_at == resource.data.created_at
+        // Participants cannot be modified except by admin.
+        && (isAdmin() || request.resource.data.participants == resource.data.participants);
+    }
+
+    function canReadChat() {
+      return isSignedIn() && (isBroadcastChat() || isChatParticipant());
+    }
+
+    function canWriteMessage() {
+      return isSignedIn()
+        && (
+          // regular chats require participation
+          (exists(/databases/$(database)/documents/chats/$(request.resource.data.chat_id))
+            && (
+              get(/databases/$(database)/documents/chats/$(request.resource.data.chat_id)).data.type == 'broadcast'
+              || request.auth.uid in get(/databases/$(database)/documents/chats/$(request.resource.data.chat_id)).data.participants
+            )
+          )
+        );
+    }
+
+    // users collection
+    match /users/{uid} {
+      // Admin can read all users. Users can read only their own profile.
+      allow get: if isAdmin() || isSelf(uid);
+      allow list: if isAdmin();
+
+      // Self-signup profile creation.
+      allow create: if isValidUserCreate(uid);
+
+      // Admin can fully update users; users can update own push token fields.
+      allow update: if (isAdmin() && isValidUserUpdateByAdmin()) || isValidSelfFcmTokenUpdate(uid);
+      allow delete: if isAdmin();
+    }
+
+    // courses collection
+    match /courses/{courseId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidCourseWrite();
+      allow delete: if isAdmin();
+    }
+
+    // teachers collection
+    match /teachers/{teacherId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidTeacherWrite();
+      allow delete: if isAdmin();
+    }
+
+    // library collection
+    match /library/{bookId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidLibraryWrite();
+      allow delete: if isAdmin();
+    }
+
+    // notifications collection
+    match /notifications/{notificationId} {
+      // Signed-in users can read only broadcast + their own notifications.
+      allow read: if isSignedIn()
+        && (resource.data.user_id == 'all' || resource.data.user_id == request.auth.uid);
+
+      // Admin can create/modify; recipients can only update their own read state.
+      allow create: if isAdmin() && isValidNotificationWrite();
+      allow update: if (isAdmin() && isValidNotificationWrite())
+        || (
+          isSignedIn()
+          && (resource.data.user_id == 'all' || resource.data.user_id == request.auth.uid)
+          && isValidNotificationReadUpdate()
+        );
+      allow delete: if isAdmin();
+    }
+
+    // chats collection
+    match /chats/{chatId} {
+      allow read: if canReadChat();
+      allow create: if isSignedIn() && isValidChatCreate();
+      allow update: if canReadChat() && isValidChatUpdate();
+      allow delete: if isAdmin();
+    }
+
+    // messages collection
+    match /messages/{messageId} {
+      allow read: if isSignedIn()
+        && exists(/databases/$(database)/documents/chats/$(resource.data.chat_id))
+        && (
+          get(/databases/$(database)/documents/chats/$(resource.data.chat_id)).data.type == 'broadcast'
+          || request.auth.uid in get(/databases/$(database)/documents/chats/$(resource.data.chat_id)).data.participants
+        );
+
+      allow create: if canWriteMessage()
+        && hasOnlyAllowedKeys(request.resource.data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.sender_id == request.auth.uid
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.read_by is list
+        && request.auth.uid in request.resource.data.read_by;
+
+      // Allow participants to append read receipts only.
+      allow update: if isSignedIn()
+        && hasOnlyAllowedKeys(request.resource.data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by'])
+        && request.resource.data.chat_id == resource.data.chat_id
+        && request.resource.data.text == resource.data.text
+        && request.resource.data.sender_id == resource.data.sender_id
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.read_by is list
+        && request.auth.uid in request.resource.data.read_by
+        && exists(/databases/$(database)/documents/chats/$(resource.data.chat_id))
+        && (
+          get(/databases/$(database)/documents/chats/$(resource.data.chat_id)).data.type == 'broadcast'
+          || request.auth.uid in get(/databases/$(database)/documents/chats/$(resource.data.chat_id)).data.participants
+        );
+      allow delete: if false;
+    }
+
+    // payments collection
+    match /payments/{paymentId} {
+      allow get: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidPaymentCreate();
+      allow update: if isAdmin()
+        || (isSignedIn() && resource.data.user_id == request.auth.uid && isValidUserPaymentSubmit());
+      allow delete: if isAdmin();
+    }
+
+    // feedback collection
+    match /feedback/{feedbackId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidFeedbackCreate();
+      allow update, delete: if isAdmin();
+    }
+
+    // editable app settings (fees/social links)
+    match /app_settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Deny all other document access by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
