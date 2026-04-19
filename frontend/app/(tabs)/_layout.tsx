@@ -3,7 +3,7 @@ import { StyleSheet, View, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants/theme';
 
-type TabIconName = 'home' | 'home-outline' | 'book' | 'book-outline' | 'people' | 'people-outline' | 'library' | 'library-outline' | 'information-circle' | 'information-circle-outline';
+type TabIconName = 'home' | 'home-outline' | 'book' | 'book-outline' | 'people' | 'people-outline' | 'library' | 'library-outline' | 'information-circle' | 'information-circle-outline' | 'notifications' | 'notifications-outline' | 'chatbubbles' | 'chatbubbles-outline';
 
 function TabIcon({ name, color, focused }: { name: TabIconName; color: string; focused: boolean }) {
   return (
@@ -58,6 +58,24 @@ export default function TabLayout() {
           title: 'Library',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name={focused ? 'library' : 'library-outline'} color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Notifications',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? 'notifications' : 'notifications-outline'} color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="chats"
+        options={{
+          title: 'Chats',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} color={color} focused={focused} />
           ),
         }}
       />

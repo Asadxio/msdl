@@ -1,17 +1,73 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   StyleSheet,
   ScrollView,
   StatusBar,
   TouchableOpacity,
+  TextInput,
+  Alert,
+  Linking,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { db } from '@/lib/firebase';
+
+type AppSettings = {
+  fees_amount: number;
+  razorpay_link: string;
+  whatsapp_channel: string;
+  whatsapp_contact: string;
+  instagram: string;
+  youtube_telegram: string;
+};
+
+type FeedbackItem = {
+  id: string;
+  user_name: string;
+  message: string;
+  rating?: number;
+  user_id?: string;
+};
+
+type PaymentItem = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  amount: number;
+  payment_ref?: string | null;
+  status: 'pending' | 'submitted' | 'verified' | 'rejected';
+};
+
+const DEFAULT_SETTINGS: AppSettings = {
+  fees_amount: 0,
+  razorpay_link: '',
+  whatsapp_channel: '',
+  whatsapp_contact: '',
+  instagram: '',
+  youtube_telegram: '',
+};
 
 function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
@@ -28,9 +84,213 @@ function SectionCard({ title, icon, children }: { title: string; icon: string; c
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
-  const { profile, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const router = useRouter();
   const isAdmin = profile?.role === 'admin';
+
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
+  const [fbMessage, setFbMessage] = useState('');
+  const [fbRating, setFbRating] = useState('');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [myPayments, setMyPayments] = useState<PaymentItem[]>([]);
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
+  const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null);
+  const [editingFeedbackMsg, setEditingFeedbackMsg] = useState('');
+  const [exportingCollection, setExportingCollection] = useState<string | null>(null);
+  const testimonials = useMemo(() => feedback.slice(0, 6), [feedback]);
+
+  const serialize = (value: any): any => {
+    if (value?.toDate && typeof value.toDate === 'function') {
+      try {
+        return value.toDate().toISOString();
+      } catch {
+        return value;
+      }
+    }
+    if (Array.isArray(value)) return value.map((v) => serialize(v));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, serialize(v)]));
+    }
+    return value;
+  };
+
+  const exportCollection = async (collectionName: 'users' | 'courses' | 'payments' | 'feedback') => {
+    if (!isAdmin) return;
+    setExportingCollection(collectionName);
+    try {
+      const snap = await getDocs(collection(db, collectionName));
+      const data = snap.docs.map((d) => ({ id: d.id, ...serialize(d.data()) }));
+      await Share.share({
+        message: JSON.stringify(
+          {
+            exported_at: new Date().toISOString(),
+            collection: collectionName,
+            count: data.length,
+            data,
+          },
+          null,
+          2,
+        ),
+      });
+    } catch (err: any) {
+      Alert.alert('Export Failed', err?.message || `Could not export ${collectionName}.`);
+    } finally {
+      setExportingCollection(null);
+    }
+  };
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      const snap = await getDoc(doc(db, 'app_settings', 'platform'));
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        setSettings((prev) => ({
+          ...prev,
+          fees_amount: Number(data.fees_amount || 0),
+          razorpay_link: data.razorpay_link || '',
+          whatsapp_channel: data.whatsapp_channel || '',
+          whatsapp_contact: data.whatsapp_contact || '',
+          instagram: data.instagram || '',
+          youtube_telegram: data.youtube_telegram || '',
+        }));
+      }
+    };
+    loadSettings().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'feedback'), orderBy('created_at', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const arr: FeedbackItem[] = [];
+      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+      setFeedback(arr);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'payments'),
+      where('user_id', '==', user.uid),
+      orderBy('created_at', 'desc')
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const arr: PaymentItem[] = [];
+      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+      setMyPayments(arr);
+    });
+    return unsub;
+  }, [user, user?.uid]);
+
+  const saveSettings = async () => {
+    if (!isAdmin) return;
+    await setDoc(doc(db, 'app_settings', 'platform'), {
+      ...settings,
+      updated_at: serverTimestamp(),
+    }, { merge: true });
+    Alert.alert('Saved', 'Settings updated successfully.');
+  };
+
+  const submitFeedback = async () => {
+    if (!user || !profile) return;
+    if (!fbMessage.trim()) {
+      Alert.alert('Missing', 'Please write feedback message.');
+      return;
+    }
+    const parsed = Number(fbRating || 0);
+    await addDoc(collection(db, 'feedback'), {
+      user_id: user.uid,
+      user_name: profile.name,
+      message: fbMessage.trim(),
+      rating: Number.isFinite(parsed) && parsed > 0 ? Math.min(5, Math.max(1, parsed)) : null,
+      created_at: serverTimestamp(),
+    });
+    setFbMessage('');
+    setFbRating('');
+    Alert.alert('Thanks!', 'Your feedback has been submitted.');
+  };
+
+  const saveFeedbackEdit = async () => {
+    if (!isAdmin || !editingFeedbackId) return;
+    await updateDoc(doc(db, 'feedback', editingFeedbackId), {
+      message: editingFeedbackMsg.trim(),
+      updated_at: serverTimestamp(),
+    });
+    setEditingFeedbackId(null);
+    setEditingFeedbackMsg('');
+  };
+
+  const deleteFeedback = async (id: string) => {
+    if (!isAdmin) return;
+    await deleteDoc(doc(db, 'feedback', id));
+  };
+
+  const openSocial = async (value: string) => {
+    if (!value.trim()) return;
+    await Linking.openURL(value.trim());
+  };
+
+  const openHelp = async () => {
+    const contact = settings.whatsapp_contact.trim();
+    if (!contact) {
+      Alert.alert('Missing', 'WhatsApp contact not set yet.');
+      return;
+    }
+    const url = contact.startsWith('http')
+      ? contact
+      : `https://wa.me/${contact.replace(/[^0-9]/g, '')}`;
+    await Linking.openURL(url);
+  };
+
+  const shareApp = async () => {
+    await Share.share({
+      message: 'Join Madrasa Tus Salikat Lil Banat app for courses, library and updates.',
+    });
+  };
+
+  const payFees = async () => {
+    if (!user || !profile) return;
+    const link = settings.razorpay_link.trim();
+    if (!link) {
+      Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
+      return;
+    }
+
+    const pendingRef = await addDoc(collection(db, 'payments'), {
+      user_id: user.uid,
+      user_name: profile.name,
+      amount: Number(settings.fees_amount || 0),
+      payment_ref: null,
+      status: 'pending',
+      provider: 'razorpay',
+      created_at: serverTimestamp(),
+    });
+    setPendingPaymentId(pendingRef.id);
+
+    await Linking.openURL(link);
+    Alert.alert(
+      'Payment Status',
+      'After payment completion, tap "Submit Payment".',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Submit Payment',
+          onPress: async () => {
+            await updateDoc(doc(db, 'payments', pendingPaymentId || pendingRef.id), {
+              payment_ref: paymentRef.trim() || null,
+              status: 'submitted',
+              submitted_at: serverTimestamp(),
+            });
+            setPaymentRef('');
+            setPendingPaymentId(null);
+            Alert.alert('Submitted', 'Payment submitted for admin verification.');
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -39,12 +299,7 @@ export default function AboutScreen() {
         <Text style={styles.headerTitle}>About Us</Text>
         <Text style={styles.headerSubtitle}>Madrasa Tus Salikat Lil Banat</Text>
       </View>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        testID="about-scroll"
-      >
-        {/* User Profile Card */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
         {profile && (
           <View style={styles.profileCard} testID="user-profile-card">
             <View style={styles.profileIconCircle}>
@@ -61,32 +316,186 @@ export default function AboutScreen() {
           </View>
         )}
 
-        {/* Admin Controls */}
         {isAdmin && (
           <View style={styles.adminCard} testID="admin-controls">
             <Text style={styles.adminTitle}>Admin Controls</Text>
-            <TouchableOpacity
-              style={styles.adminItem}
-              onPress={() => router.push('/admin/users')}
-              testID="manage-users-btn"
-            >
+            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/users')} testID="manage-users-btn">
               <Ionicons name="people-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Manage Users</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.adminItem}
-              onPress={() => router.push('/admin/add-book')}
-              testID="admin-add-book-link"
-            >
+            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/add-book')} testID="admin-add-book-link">
               <Ionicons name="book-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Add Library Book</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/manage-academics')} testID="manage-academics-btn">
+              <Ionicons name="school-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Manage Teachers & Courses</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/payments')} testID="manage-payments-btn">
+              <Ionicons name="card-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Manage Payments</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+
+            <View style={styles.exportBlock}>
+              <Text style={styles.subTitle}>Data Safety</Text>
+              <Text style={styles.bodyText}>
+                Recommended backup: schedule daily Firestore exports to Cloud Storage and keep a 30-day retention.
+              </Text>
+              <Text style={styles.bodyText}>Manual JSON export:</Text>
+              <View style={styles.exportRow}>
+                {(['users', 'courses', 'payments', 'feedback'] as const).map((name) => (
+                  <TouchableOpacity
+                    key={name}
+                    style={[styles.secondaryBtn, styles.exportBtn]}
+                    onPress={() => exportCollection(name)}
+                    disabled={!!exportingCollection}
+                  >
+                    {exportingCollection === name ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <Text style={styles.secondaryBtnText}>Export {name}</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
         )}
 
-        {/* Bismillah */}
+        <SectionCard title="Pay Fees (Razorpay)" icon="card-outline">
+          <Text style={styles.bodyText}>Current Fees: ₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
+          {myPayments[0] && (
+            <View style={styles.statusCard}>
+              <Text style={styles.statusLabel}>Latest Payment Status</Text>
+              <Text style={styles.statusValue}>{myPayments[0].status}</Text>
+              {myPayments[0].payment_ref ? <Text style={styles.statusRef}>Ref: {myPayments[0].payment_ref}</Text> : null}
+            </View>
+          )}
+          <TextInput
+            style={styles.input}
+            placeholder="Payment reference (optional)"
+            placeholderTextColor={COLORS.border}
+            value={paymentRef}
+            onChangeText={setPaymentRef}
+          />
+          <TouchableOpacity style={styles.primaryBtn} onPress={payFees} testID="pay-fees-btn">
+            <Text style={styles.primaryBtnText}>Pay Fees</Text>
+          </TouchableOpacity>
+          {isAdmin && (
+            <View style={{ marginTop: 12, gap: 8 }}>
+              <Text style={styles.subTitle}>Admin Fee Settings</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Fees amount (e.g. 1500)"
+                placeholderTextColor={COLORS.border}
+                keyboardType="numeric"
+                value={String(settings.fees_amount || '')}
+                onChangeText={(v) => setSettings((p) => ({ ...p, fees_amount: Number(v || 0) }))}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Razorpay Payment Link"
+                placeholderTextColor={COLORS.border}
+                value={settings.razorpay_link}
+                onChangeText={(v) => setSettings((p) => ({ ...p, razorpay_link: v }))}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
+                <Text style={styles.secondaryBtnText}>Save Payment Settings</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Feedback & Testimonials" icon="chatbox-ellipses-outline">
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Write your feedback"
+            placeholderTextColor={COLORS.border}
+            value={fbMessage}
+            onChangeText={setFbMessage}
+            multiline
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Rating 1-5 (optional)"
+            placeholderTextColor={COLORS.border}
+            keyboardType="numeric"
+            value={fbRating}
+            onChangeText={setFbRating}
+          />
+          <TouchableOpacity style={styles.primaryBtn} onPress={submitFeedback} testID="submit-feedback-btn">
+            <Text style={styles.primaryBtnText}>Submit Feedback</Text>
+          </TouchableOpacity>
+
+          <Text style={[styles.subTitle, { marginTop: 12 }]}>Testimonials</Text>
+          {testimonials.length === 0 ? <Text style={styles.bodyText}>No feedback yet.</Text> : null}
+          {testimonials.map((item) => (
+            <View key={item.id} style={styles.feedbackCard}>
+              <Text style={styles.feedbackName}>{item.user_name}</Text>
+              {editingFeedbackId === item.id ? (
+                <>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={editingFeedbackMsg}
+                    onChangeText={setEditingFeedbackMsg}
+                    multiline
+                  />
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={saveFeedbackEdit}>
+                    <Text style={styles.secondaryBtnText}>Save</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <Text style={styles.feedbackMsg}>{item.message}</Text>
+              )}
+              {item.rating ? <Text style={styles.feedbackRating}>Rating: {item.rating}/5</Text> : null}
+              {isAdmin && editingFeedbackId !== item.id && (
+                <View style={styles.feedbackActions}>
+                  <TouchableOpacity onPress={() => { setEditingFeedbackId(item.id); setEditingFeedbackMsg(item.message); }}>
+                    <Text style={styles.actionLink}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteFeedback(item.id)}>
+                    <Text style={[styles.actionLink, { color: COLORS.error }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          ))}
+        </SectionCard>
+
+        <SectionCard title="Social & Help" icon="globe-outline">
+          {isAdmin ? (
+            <>
+              <TextInput style={styles.input} placeholder="WhatsApp Channel Link" placeholderTextColor={COLORS.border} value={settings.whatsapp_channel} onChangeText={(v) => setSettings((p) => ({ ...p, whatsapp_channel: v }))} />
+              <TextInput style={styles.input} placeholder="WhatsApp Contact (URL or number)" placeholderTextColor={COLORS.border} value={settings.whatsapp_contact} onChangeText={(v) => setSettings((p) => ({ ...p, whatsapp_contact: v }))} />
+              <TextInput style={styles.input} placeholder="Instagram Link" placeholderTextColor={COLORS.border} value={settings.instagram} onChangeText={(v) => setSettings((p) => ({ ...p, instagram: v }))} />
+              <TextInput style={styles.input} placeholder="YouTube / Telegram Link" placeholderTextColor={COLORS.border} value={settings.youtube_telegram} onChangeText={(v) => setSettings((p) => ({ ...p, youtube_telegram: v }))} />
+              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
+                <Text style={styles.secondaryBtnText}>Save Social Links</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              {!!settings.whatsapp_channel && <TouchableOpacity style={styles.linkBtn} onPress={() => openSocial(settings.whatsapp_channel)}><Text style={styles.linkBtnText}>WhatsApp Channel</Text></TouchableOpacity>}
+              {!!settings.instagram && <TouchableOpacity style={styles.linkBtn} onPress={() => openSocial(settings.instagram)}><Text style={styles.linkBtnText}>Instagram</Text></TouchableOpacity>}
+              {!!settings.youtube_telegram && <TouchableOpacity style={styles.linkBtn} onPress={() => openSocial(settings.youtube_telegram)}><Text style={styles.linkBtnText}>YouTube / Telegram</Text></TouchableOpacity>}
+            </>
+          )}
+
+          <View style={styles.row}>
+            <TouchableOpacity style={styles.primaryBtnSmall} onPress={shareApp} testID="share-app-btn">
+              <Text style={styles.primaryBtnText}>Share App</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.primaryBtnSmall} onPress={openHelp} testID="help-btn">
+              <Text style={styles.primaryBtnText}>Help (WhatsApp)</Text>
+            </TouchableOpacity>
+          </View>
+        </SectionCard>
+
         <View style={styles.bismillahCard} testID="bismillah-section">
           <Text style={styles.bismillah}>بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</Text>
           <Text style={styles.bismillahTranslation}>
@@ -94,213 +503,78 @@ export default function AboutScreen() {
           </Text>
         </View>
 
-        {/* Introduction */}
         <SectionCard title="Introduction" icon="sparkles">
-          <Text style={styles.bodyText} testID="introduction-text">
-            Madrasa Tus Salikat Lil Banat is a distinguished institution dedicated to providing comprehensive Islamic education for women. Founded on the principles of the Quran and Sunnah, our Madrasa strives to cultivate knowledgeable, pious, and empowered Muslim women who can contribute positively to their families and communities.
+          <Text style={styles.bodyText}>
+            Madrasa Tus Salikat Lil Banat is dedicated to providing comprehensive Islamic education for women.
           </Text>
           <Text style={styles.bodyText}>
-            Our curriculum encompasses a wide range of Islamic sciences, from Quranic studies and Hadith to Islamic jurisprudence and Arabic language, ensuring a holistic and enriching learning experience.
+            Our curriculum covers Quran, Hadith, Fiqh, Arabic, and practical Islamic lifestyle learning.
           </Text>
         </SectionCard>
-
-        {/* Vision */}
-        <SectionCard title="Our Vision" icon="eye-outline">
-          <Text style={styles.bodyText} testID="vision-text">
-            To be a leading center of Islamic learning for women, producing scholars and educators who embody the teachings of Islam and inspire positive change in society. We envision a community where every Muslim woman has access to authentic Islamic knowledge and the tools to live a life of purpose and faith.
-          </Text>
-        </SectionCard>
-
-        {/* Mission */}
-        <SectionCard title="Our Mission" icon="flag-outline">
-          <View style={styles.missionList} testID="mission-text">
-            <View style={styles.missionItem}>
-              <View style={styles.bullet} />
-              <Text style={styles.missionText}>
-                Provide authentic and comprehensive Islamic education rooted in the Quran and Sunnah
-              </Text>
-            </View>
-            <View style={styles.missionItem}>
-              <View style={styles.bullet} />
-              <Text style={styles.missionText}>
-                Nurture a love for learning and a deep connection with the Creator
-              </Text>
-            </View>
-            <View style={styles.missionItem}>
-              <View style={styles.bullet} />
-              <Text style={styles.missionText}>
-                Empower women with knowledge to become role models in their communities
-              </Text>
-            </View>
-            <View style={styles.missionItem}>
-              <View style={styles.bullet} />
-              <Text style={styles.missionText}>
-                Foster an environment of spiritual growth, discipline, and excellence
-              </Text>
-            </View>
-            <View style={styles.missionItem}>
-              <View style={styles.bullet} />
-              <Text style={styles.missionText}>
-                Preserve and transmit Islamic heritage to future generations
-              </Text>
-            </View>
-          </View>
-        </SectionCard>
-
-        {/* Contact Info Placeholder */}
-        <View style={styles.contactCard} testID="contact-section">
-          <Ionicons name="mail-outline" size={24} color={COLORS.secondary} />
-          <Text style={styles.contactTitle}>Get in Touch</Text>
-          <Text style={styles.contactText}>
-            For admissions and inquiries, please reach out to us through our official channels.
-          </Text>
-        </View>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    ...SHADOWS.header,
+    backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  scrollContent: {
-    padding: SPACING.lg,
-    paddingBottom: 40,
-    gap: SPACING.lg,
-  },
-  bismillahCard: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.xxl,
-    padding: SPACING.lg,
-    alignItems: 'center',
-    ...SHADOWS.card,
-  },
-  bismillah: {
-    fontSize: 28,
-    color: COLORS.secondary,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  bismillahTranslation: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
+  headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  scrollContent: { padding: SPACING.lg, paddingBottom: 40, gap: SPACING.lg },
   sectionCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xxl,
-    padding: SPACING.lg,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.secondary,
-    ...SHADOWS.card,
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg,
+    borderLeftWidth: 4, borderLeftColor: COLORS.secondary, ...SHADOWS.card,
   },
-  sectionCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
+  sectionCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
+  sectionCardTitle: { fontSize: 20, fontWeight: '700', color: COLORS.textMain },
+  goldAccent: { height: 2, backgroundColor: COLORS.secondary, width: 40, borderRadius: 1, marginBottom: SPACING.md, marginTop: 8 },
+  bodyText: { fontSize: 14, color: COLORS.textMuted, lineHeight: 22 },
+  subTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textMain },
+  input: {
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: 12,
+    paddingVertical: 10, backgroundColor: COLORS.surfaceAlt, color: COLORS.textMain, marginBottom: 8,
   },
-  sectionCardTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.textMain,
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
+  primaryBtnSmall: { flex: 1, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
+  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  secondaryBtn: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center' },
+  secondaryBtnText: { color: COLORS.primary, fontWeight: '700' },
+  linkBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center', marginBottom: 8 },
+  linkBtnText: { color: COLORS.textMain, fontWeight: '600' },
+  row: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  statusCard: { backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: 10, marginVertical: 8 },
+  statusLabel: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
+  statusValue: { fontSize: 14, color: COLORS.primary, fontWeight: '800', textTransform: 'capitalize', marginTop: 3 },
+  statusRef: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  feedbackCard: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: 10, marginTop: 8, gap: 4, backgroundColor: COLORS.surfaceAlt },
+  feedbackName: { fontSize: 13, fontWeight: '700', color: COLORS.textMain },
+  feedbackMsg: { fontSize: 13, color: COLORS.textMuted },
+  feedbackRating: { fontSize: 12, color: COLORS.goldText, fontWeight: '700' },
+  feedbackActions: { flexDirection: 'row', gap: 14, marginTop: 4 },
+  actionLink: { fontSize: 12, color: COLORS.primary, fontWeight: '700' },
+  bismillahCard: {
+    backgroundColor: COLORS.primary, borderRadius: RADIUS.xxl, padding: SPACING.lg, alignItems: 'center', ...SHADOWS.card,
   },
-  goldAccent: {
-    height: 2,
-    backgroundColor: COLORS.secondary,
-    width: 40,
-    borderRadius: 1,
-    marginBottom: SPACING.md,
-    marginTop: 8,
-  },
-  bodyText: {
-    fontSize: 15,
-    color: COLORS.textMuted,
-    lineHeight: 24,
-    marginBottom: SPACING.sm,
-  },
-  missionList: {
-    gap: SPACING.md,
-  },
-  missionItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  bullet: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.secondary,
-    marginTop: 7,
-  },
-  missionText: {
-    flex: 1,
-    fontSize: 15,
-    color: COLORS.textMuted,
-    lineHeight: 24,
-  },
-  contactCard: {
-    backgroundColor: COLORS.surfaceAlt,
-    borderRadius: RADIUS.xxl,
-    padding: SPACING.lg,
-    alignItems: 'center',
-    gap: 8,
-  },
-  contactTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.textMain,
-  },
-  contactText: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  bismillah: { fontSize: 28, color: COLORS.secondary, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
+  bismillahTranslation: { fontSize: 13, color: 'rgba(255,255,255,0.8)', textAlign: 'center', fontStyle: 'italic' },
   profileCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12,
-    ...SHADOWS.card,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12, ...SHADOWS.card,
   },
-  profileIconCircle: {
-    width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  profileIconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   profileName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
   profileEmail: { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
   profileRole: { fontSize: 11, fontWeight: '700', color: COLORS.secondary, textTransform: 'capitalize', marginTop: 2 },
   signOutBtn: { padding: 10 },
-  adminCard: {
-    backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md,
-    ...SHADOWS.card, gap: 8,
-  },
+  adminCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, ...SHADOWS.card, gap: 8 },
   adminTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 },
-  adminItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12,
-    borderTopWidth: 1, borderTopColor: COLORS.border,
-  },
+  adminItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
   adminItemText: { flex: 1, fontSize: 15, fontWeight: '500', color: COLORS.textMain },
+  exportBlock: { marginTop: 8, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 12, gap: 8 },
+  exportRow: { gap: 8 },
+  exportBtn: { paddingHorizontal: 10 },
 });

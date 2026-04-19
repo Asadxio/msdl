@@ -1,0 +1,289 @@
+import React, { useEffect, useState } from 'react';
+import {
+  View, Text, StyleSheet, FlatList, StatusBar, TouchableOpacity,
+  TextInput, Alert, ActivityIndicator,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where,
+} from 'firebase/firestore';
+import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/context/AuthContext';
+import { createNotificationAsAdmin } from '@/lib/notifications';
+
+type NotificationItem = {
+  id: string;
+  title: string;
+  message: string;
+  user_id: string;
+  read?: Record<string, boolean>;
+  created_at?: { toDate?: () => Date };
+};
+
+function formatDate(item: NotificationItem): string {
+  try {
+    const dt = item.created_at?.toDate ? item.created_at.toDate() : null;
+    if (!dt) return 'Just now';
+    return dt.toLocaleString();
+  } catch {
+    return 'Just now';
+  }
+}
+
+export default function NotificationsScreen() {
+  const insets = useSafeAreaInsets();
+  const { user, profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
+
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [userId, setUserId] = useState('all');
+  const [sending, setSending] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    setLoadError('');
+    setLoading(true);
+    const q = query(
+      collection(db, 'notifications'),
+      where('user_id', 'in', [user.uid, 'all']),
+      orderBy('created_at', 'desc'),
+      limit(100),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const next: NotificationItem[] = [];
+      snap.forEach((d) => next.push({ id: d.id, ...(d.data() as any) }));
+      setItems(next);
+      setLoading(false);
+    }, (err) => {
+      setLoadError(err?.message || 'Failed to load notifications.');
+      setLoading(false);
+    });
+    return unsub;
+  }, [user, user?.uid, reloadKey]);
+
+  const markAsRead = async (item: NotificationItem) => {
+    if (!user?.uid) return;
+    if (item.read?.[user.uid]) return;
+    try {
+      await updateDoc(doc(db, 'notifications', item.id), {
+        [`read.${user.uid}`]: true,
+      });
+    } catch {
+      // no-op
+    }
+  };
+
+  const unreadCount = user?.uid
+    ? items.filter((item) => !item.read?.[user.uid]).length
+    : 0;
+
+  const sendNotification = async () => {
+    setSending(true);
+    try {
+      const ok = await createNotificationAsAdmin(profile, {
+        title,
+        message,
+        user_id: userId.trim() || 'all',
+      });
+      if (!ok) {
+        Alert.alert('Unauthorized', 'Only admin can create notifications.');
+      } else {
+        setTitle('');
+        setMessage('');
+        setUserId('all');
+        Alert.alert('Success', 'Notification sent.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to send notification');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          {unreadCount > 0 ? (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.headerSubtitle}>Latest updates and class reminders</Text>
+      </View>
+      {loadError ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{loadError}</Text>
+          <TouchableOpacity onPress={() => setReloadKey((v) => v + 1)}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {isAdmin && (
+        <View style={styles.composerCard}>
+          <Text style={styles.composerTitle}>Admin: Post Notification</Text>
+          <TextInput
+            style={styles.input}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Title (e.g. New Class Scheduled)"
+            placeholderTextColor={COLORS.border}
+          />
+          <TextInput
+            style={[styles.input, styles.messageInput]}
+            value={message}
+            onChangeText={setMessage}
+            placeholder="Message"
+            placeholderTextColor={COLORS.border}
+            multiline
+          />
+          <TextInput
+            style={styles.input}
+            value={userId}
+            onChangeText={setUserId}
+            placeholder='Recipient user ID or "all"'
+            placeholderTextColor={COLORS.border}
+            autoCapitalize="none"
+          />
+          <View style={styles.quickRow}>
+            <TouchableOpacity
+              style={styles.quickBtn}
+              onPress={() => {
+                setTitle('New Announcement');
+                setMessage('A new announcement has been posted. Please check the app for details.');
+                setUserId('all');
+              }}
+            >
+              <Text style={styles.quickBtnText}>Announcement</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickBtn}
+              onPress={() => {
+                setTitle('Class Reminder');
+                setMessage('Your class starts in 10 minutes. Please join on time.');
+                setUserId('all');
+              }}
+            >
+              <Text style={styles.quickBtnText}>10-min Reminder</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[styles.sendBtn, sending && { opacity: 0.6 }]}
+            onPress={sendNotification}
+            disabled={sending || !title.trim() || !message.trim()}
+          >
+            {sending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Send</Text>}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={(
+            <View style={styles.center}>
+              <Ionicons name="notifications-off-outline" size={44} color={COLORS.border} />
+              <Text style={styles.emptyText}>No notifications yet. You’re all caught up.</Text>
+            </View>
+          )}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.card, !item.read?.[user?.uid || ''] && styles.cardUnread]}
+              testID={`notification-${item.id}`}
+              onPress={() => markAsRead(item)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.cardTop}>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <View style={styles.badgesRow}>
+                  {!item.read?.[user?.uid || ''] ? <View style={styles.newDot} /> : null}
+                  {item.user_id === 'all' ? (
+                    <View style={styles.badge}><Text style={styles.badgeText}>Broadcast</Text></View>
+                  ) : (
+                    <View style={styles.badge}><Text style={styles.badgeText}>Private</Text></View>
+                  )}
+                </View>
+              </View>
+              <Text style={styles.cardMsg}>{item.message}</Text>
+              <Text style={styles.cardTime}>{formatDate(item)}</Text>
+            </TouchableOpacity>
+          )}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+  header: {
+    backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header,
+  },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  unreadBadge: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  unreadBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  errorBanner: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: '#F2B8B5',
+    backgroundColor: '#FDECEC',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  errorText: { color: '#B3261E', fontSize: 12, flex: 1 },
+  retryText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
+  composerCard: {
+    margin: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.surface, ...SHADOWS.card, gap: 8,
+  },
+  composerTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
+  input: {
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg,
+    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: COLORS.surfaceAlt, color: COLORS.textMain,
+  },
+  messageInput: { minHeight: 72, textAlignVertical: 'top' },
+  quickRow: { flexDirection: 'row', gap: 8 },
+  quickBtn: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center' },
+  quickBtnText: { color: COLORS.textMain, fontSize: 12, fontWeight: '600' },
+  sendBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
+  sendBtnText: { color: '#fff', fontWeight: '700' },
+  list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 24 },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card },
+  cardUnread: { borderWidth: 1, borderColor: COLORS.secondary },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  newDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
+  cardTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.textMain },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.goldBg },
+  badgeText: { color: COLORS.goldText, fontSize: 10, fontWeight: '700' },
+  cardMsg: { fontSize: 14, color: COLORS.textMuted, marginTop: 8, lineHeight: 20 },
+  cardTime: { fontSize: 11, color: COLORS.textMuted, marginTop: 8 },
+  center: { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, gap: 8 },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
+});

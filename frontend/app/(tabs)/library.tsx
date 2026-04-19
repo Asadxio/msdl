@@ -7,12 +7,14 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData, Book } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   Islamic: { bg: '#E8F5E9', text: '#2E7D32' },
@@ -32,7 +34,7 @@ const BOOK_ICONS: Record<string, string> = {
   Tafseer: 'reader',
 };
 
-function BookCard({ book }: { book: Book }) {
+function BookCard({ book, isAdmin, onDelete }: { book: Book; isAdmin: boolean; onDelete: (book: Book) => void }) {
   const router = useRouter();
   const catColor = CATEGORY_COLORS[book.category] || { bg: COLORS.surfaceAlt, text: COLORS.textMuted };
   const iconName = BOOK_ICONS[book.category] || 'book';
@@ -49,8 +51,20 @@ function BookCard({ book }: { book: Book }) {
       </View>
       <View style={styles.cardBody}>
         <Text style={styles.bookTitle} numberOfLines={2}>{book.title}</Text>
-        <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
-          <Text style={[styles.categoryText, { color: catColor.text }]}>{book.category}</Text>
+        <View style={styles.bookMetaRow}>
+          <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
+            <Text style={[styles.categoryText, { color: catColor.text }]}>{book.category}</Text>
+          </View>
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => onDelete(book)}
+              testID={`delete-book-btn-${book.id}`}
+              hitSlop={8}
+            >
+              <Ionicons name="trash-outline" size={16} color={COLORS.error} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -60,22 +74,22 @@ function BookCard({ book }: { book: Book }) {
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, booksLoading } = useData();
-  let adminTapCount = 0;
-  let lastTap = 0;
+  const { books, booksLoading, deleteBook } = useData();
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
 
-  const handleAdminAccess = () => {
-    const now = Date.now();
-    if (now - lastTap < 500) {
-      adminTapCount++;
-    } else {
-      adminTapCount = 1;
-    }
-    lastTap = now;
-    if (adminTapCount >= 5) {
-      adminTapCount = 0;
-      router.push('/admin/add-book');
-    }
+  const handleDeleteBook = (book: Book) => {
+    Alert.alert('Archive Book', `Move "${book.title}" to archive? You can restore later from Firestore backups.`, [
+      { text: 'Cancel' },
+      {
+        text: 'Archive',
+        style: 'destructive',
+        onPress: async () => {
+          const success = await deleteBook(book.id);
+          if (!success) Alert.alert('Error', 'Only admin can archive books or request failed.');
+        },
+      },
+    ]);
   };
 
   return (
@@ -84,21 +98,21 @@ export default function LibraryScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerRow}>
           <View>
-            <TouchableOpacity activeOpacity={1} onPress={handleAdminAccess}>
-              <Text style={styles.headerTitle} testID="library-title">Library</Text>
-            </TouchableOpacity>
+            <Text style={styles.headerTitle} testID="library-title">Library</Text>
             <Text style={styles.headerSubtitle}>
               {booksLoading ? 'Loading...' : `${books.length} books available`}
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.addBtn}
-            testID="admin-add-book-btn"
-            onPress={() => router.push('/admin/add-book')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="add-circle" size={28} color={COLORS.primary} />
-          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.addBtn}
+              testID="admin-add-book-btn"
+              onPress={() => router.push('/admin/add-book')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add-circle" size={28} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -112,21 +126,23 @@ export default function LibraryScreen() {
           <Ionicons name="library-outline" size={56} color={COLORS.border} />
           <Text style={styles.centerTitle}>No books yet</Text>
           <Text style={styles.centerText}>Books will appear here once added</Text>
-          <TouchableOpacity
-            style={styles.addFirstBtn}
-            testID="add-first-book-btn"
-            onPress={() => router.push('/admin/add-book')}
-          >
-            <Ionicons name="add" size={20} color="#FFFFFF" />
-            <Text style={styles.addFirstBtnText}>Add First Book</Text>
-          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.addFirstBtn}
+              testID="add-first-book-btn"
+              onPress={() => router.push('/admin/add-book')}
+            >
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+              <Text style={styles.addFirstBtnText}>Add First Book</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <FlatList
           data={books}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          renderItem={({ item }) => <BookCard book={item} />}
+          renderItem={({ item }) => <BookCard book={item} isAdmin={isAdmin} onDelete={handleDeleteBook} />}
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
@@ -165,7 +181,12 @@ const styles = StyleSheet.create({
     width: '100%', height: 110, alignItems: 'center', justifyContent: 'center',
   },
   cardBody: { padding: SPACING.sm + 4 },
+  bookMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   bookTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain, marginBottom: 8 },
   categoryBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full },
   categoryText: { fontSize: 11, fontWeight: '700' },
+  deleteBtn: {
+    width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+  },
 });

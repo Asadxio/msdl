@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/context/AuthContext';
 
 const INITIAL_BOOKS = [
   {
@@ -47,13 +48,25 @@ export default function AddBookScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { books, addBook, refetchBooks } = useData();
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
   const [title, setTitle] = useState('');
   const [pdfUrl, setPdfUrl] = useState('');
   const [category, setCategory] = useState('');
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
+  useEffect(() => {
+    if (profile && !isAdmin) {
+      router.replace('/');
+    }
+  }, [profile, isAdmin, router]);
+
   const handleSave = async () => {
+    if (!isAdmin) {
+      Alert.alert('Unauthorized', 'Only admin can add books.');
+      return;
+    }
     if (!title.trim() || !pdfUrl.trim() || !category.trim()) {
       Alert.alert('Missing Fields', 'Please fill in all fields');
       return;
@@ -71,6 +84,10 @@ export default function AddBookScreen() {
   };
 
   const handleSeedBooks = async () => {
+    if (!isAdmin) {
+      Alert.alert('Unauthorized', 'Only admin can add books.');
+      return;
+    }
     setSeeding(true);
     try {
       let added = 0;
@@ -95,6 +112,8 @@ export default function AddBookScreen() {
   };
 
   const CATEGORIES = ['Islamic', 'Urdu', 'Qirat', 'Hadith', 'Fiqh', 'Tafseer'];
+
+  if (profile && !isAdmin) return null;
 
   return (
     <View style={styles.container}>

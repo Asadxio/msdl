@@ -1,13 +1,17 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  collection, getDocs, addDoc, serverTimestamp, doc, updateDoc,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COURSES as LOCAL_COURSES, TEACHERS as LOCAL_TEACHERS } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 
 export type Course = {
   id: string;
   name: string;
   teacher_name: string;
   schedule: string;
+  time?: string;
   description: string;
   class_link: string;
 };
@@ -24,6 +28,7 @@ export type Book = {
   title: string;
   pdf_url: string;
   category: string;
+  deleted?: boolean;
 };
 
 type DataContextType = {
@@ -36,6 +41,7 @@ type DataContextType = {
   refetch: () => void;
   refetchBooks: () => Promise<void>;
   addBook: (title: string, pdf_url: string, category: string) => Promise<boolean>;
+  deleteBook: (bookId: string) => Promise<boolean>;
 };
 
 const DataContext = createContext<DataContextType>({
@@ -48,6 +54,7 @@ const DataContext = createContext<DataContextType>({
   refetch: () => {},
   refetchBooks: async () => {},
   addBook: async () => false,
+  deleteBook: async () => false,
 });
 
 export function useData() {
@@ -60,6 +67,7 @@ function getLocalCourses(): Course[] {
     name: c.name,
     teacher_name: c.teacher,
     schedule: c.schedule,
+    time: '',
     description: c.description,
     class_link: '',
   }));
@@ -78,6 +86,7 @@ function getLocalTeachers(): Teacher[] {
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
+  const { profile } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
@@ -92,6 +101,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const booksData: Book[] = [];
       booksSnap.forEach((doc) => {
         const data = doc.data();
+        if (data.deleted) return;
         booksData.push({
           id: doc.id,
           title: data.title || '',
@@ -121,6 +131,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           name: data.name || '',
           teacher_name: data.teacherName || data.teacher_name || '',
           schedule: data.schedule || '',
+          time: data.time || '',
           description: data.description || '',
           class_link: data.classLink || data.class_link || '',
         });
@@ -151,6 +162,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addBook = async (title: string, pdf_url: string, category: string): Promise<boolean> => {
+    if (profile?.role !== 'admin') {
+      console.warn('Unauthorized: only admin can add books');
+      return false;
+    }
     try {
       await addDoc(collection(db, 'library'), {
         title,
@@ -166,6 +181,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteBook = async (bookId: string): Promise<boolean> => {
+    if (profile?.role !== 'admin') {
+      console.warn('Unauthorized: only admin can delete books');
+      return false;
+    }
+    try {
+      await updateDoc(doc(db, 'library', bookId), {
+        deleted: true,
+        deleted_at: serverTimestamp(),
+      });
+      await fetchBooks();
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to delete book:', err?.message);
+      return false;
+    }
+  };
+
   useEffect(() => {
     fetchData();
     fetchBooks();
@@ -174,7 +207,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   return (
     <DataContext.Provider value={{
       courses, teachers, books, loading, booksLoading, error,
-      refetch: fetchData, refetchBooks: fetchBooks, addBook,
+      refetch: fetchData, refetchBooks: fetchBooks, addBook, deleteBook,
     }}>
       {children}
     </DataContext.Provider>

@@ -12,8 +12,8 @@ export default function PendingScreen() {
   const [resending, setResending] = useState(false);
 
   const isDeactivated = profile?.status === 'deactivated';
+  const isRejected = profile?.status === 'rejected';
   const needsVerification = !emailVerified && profile?.role !== 'admin';
-  const isPending = profile?.status === 'pending' && !isDeactivated;
 
   const handleCheck = async () => {
     setChecking(true);
@@ -34,7 +34,7 @@ export default function PendingScreen() {
   };
 
   // Deactivated state
-  if (isDeactivated) {
+  if (isDeactivated || isRejected) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle="dark-content" />
@@ -42,9 +42,11 @@ export default function PendingScreen() {
           <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
             <Ionicons name="close-circle-outline" size={48} color={COLORS.error} />
           </View>
-          <Text style={styles.title}>Account Deactivated</Text>
+          <Text style={styles.title}>{isRejected ? 'Account Rejected' : 'Account Deactivated'}</Text>
           <Text style={styles.subtitle}>
-            Your account has been deactivated by an administrator.{'\n'}Please contact support for assistance.
+            {isRejected
+              ? `Your signup request was rejected by an administrator.${'\n'}Please contact support for details.`
+              : `Your account has been deactivated by an administrator.${'\n'}Please contact support for assistance.`}
           </Text>
           <TouchableOpacity style={styles.logoutBtn} onPress={signOut} testID="deactivated-logout-btn">
             <Ionicons name="log-out-outline" size={18} color={COLORS.error} />

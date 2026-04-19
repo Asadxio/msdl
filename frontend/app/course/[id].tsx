@@ -117,6 +117,19 @@ export default function CourseDetailScreen() {
               <Text style={styles.infoCardTitle}>Schedule</Text>
             </View>
             <Text style={styles.infoCardValue}>{course.schedule || 'Schedule to be announced'}</Text>
+            <Text style={styles.infoCardSubValue}>{course.time || 'Time to be announced'}</Text>
+          </View>
+
+          <View style={styles.infoCard} testID="course-detail-meet-link">
+            <View style={styles.infoCardHeader}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="videocam-outline" size={20} color={COLORS.primary} />
+              </View>
+              <Text style={styles.infoCardTitle}>Google Meet Link</Text>
+            </View>
+            <Text style={styles.infoCardValue} numberOfLines={2}>
+              {course.class_link || 'Meet link will be shared by teacher'}
+            </Text>
           </View>
 
           {/* Description */}
@@ -179,6 +192,7 @@ const styles = StyleSheet.create({
   },
   infoCardTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
   infoCardValue: { fontSize: 15, color: COLORS.primary, fontWeight: '600' },
+  infoCardSubValue: { fontSize: 13, color: COLORS.textMuted, marginTop: 4 },
   descriptionText: { fontSize: 15, color: COLORS.textMuted, lineHeight: 24 },
   joinBtn: {
     backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 18,
