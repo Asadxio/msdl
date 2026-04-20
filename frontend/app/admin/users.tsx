@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  StatusBar, ActivityIndicator, Alert, ScrollView,
+  StatusBar, ActivityIndicator, Alert, ScrollView, TextInput, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,13 @@ export default function AdminUsersScreen() {
   const isAdmin = profile?.role === 'admin';
   const [users, setUsers] = useState<UserWithId[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -130,6 +137,13 @@ export default function AdminUsersScreen() {
     return (
       <View style={styles.userCard} testID={`user-card-${item.id}`}>
         <View style={styles.userTop}>
+          {item.photo_url ? (
+            <Image source={{ uri: item.photo_url }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatarFallback}>
+              <Ionicons name={(item.avatar as any) || 'person'} size={18} color={COLORS.primary} />
+            </View>
+          )}
           <View style={{ flex: 1 }}>
             <Text style={styles.userName}>{item.name}</Text>
             <Text style={styles.userEmail}>{item.email}</Text>
@@ -197,6 +211,11 @@ export default function AdminUsersScreen() {
   };
 
   if (profile && !isAdmin) return null;
+  const filteredUsers = users.filter((item) => (
+    !debouncedSearch
+      || item.name.toLowerCase().includes(debouncedSearch)
+      || item.email.toLowerCase().includes(debouncedSearch)
+  ));
 
   return (
     <View style={styles.container}>
@@ -214,7 +233,16 @@ export default function AdminUsersScreen() {
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
         <FlatList
-          data={users}
+          ListHeaderComponent={(
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search users by name or email"
+              placeholderTextColor={COLORS.textMuted}
+              value={search}
+              onChangeText={setSearch}
+            />
+          )}
+          data={filteredUsers}
           keyExtractor={(item) => item.id}
           renderItem={renderUser}
           contentContainerStyle={styles.list}
@@ -242,7 +270,16 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 15, color: COLORS.textMuted },
   list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 30 },
   userCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card },
-  userTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+  userTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 10 },
+  searchInput: {
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10, color: COLORS.textMain,
+  },
+  avatar: { width: 38, height: 38, borderRadius: 19 },
+  avatarFallback: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center', justifyContent: 'center',
+  },
   userName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
   userEmail: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
   roleBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full },

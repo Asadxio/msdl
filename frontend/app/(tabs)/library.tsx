@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +17,8 @@ import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData, Book } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   Islamic: { bg: '#E8F5E9', text: '#2E7D32' },
@@ -74,9 +78,36 @@ function BookCard({ book, isAdmin, onDelete }: { book: Book; isAdmin: boolean; o
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, booksLoading, deleteBook } = useData();
+  const { books, booksLoading, deleteBook, refetchBooks, error } = useData();
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'categories'), orderBy('name'));
+    const unsub = onSnapshot(q, (snap) => {
+      const arr: { id: string; name: string }[] = [];
+      snap.forEach((d) => arr.push({ id: d.id, name: String((d.data() as any).name || '') }));
+      setCategories(arr.filter((c) => c.name.trim()));
+    });
+    return unsub;
+  }, []);
+
+  const filteredBooks = useMemo(() => books.filter((book) => {
+    const matchSearch = !debouncedSearch
+      || book.title.toLowerCase().includes(debouncedSearch)
+      || book.category.toLowerCase().includes(debouncedSearch);
+    const matchCategory = !selectedCategoryId || book.category_id === selectedCategoryId;
+    return matchSearch && matchCategory;
+  }), [books, debouncedSearch, selectedCategoryId]);
 
   const handleDeleteBook = (book: Book) => {
     Alert.alert('Archive Book', `Move "${book.title}" to archive? You can restore later from Firestore backups.`, [
@@ -115,17 +146,43 @@ export default function LibraryScreen() {
           )}
         </View>
       </View>
+      <View style={styles.searchWrap}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search books by title or category"
+          placeholderTextColor={COLORS.textMuted}
+          value={search}
+          onChangeText={setSearch}
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          <TouchableOpacity style={[styles.filterChip, !selectedCategoryId && styles.filterChipActive]} onPress={() => setSelectedCategoryId('')}>
+            <Text style={[styles.filterChipText, !selectedCategoryId && styles.filterChipTextActive]}>All</Text>
+          </TouchableOpacity>
+          {categories.map((cat) => (
+            <TouchableOpacity key={cat.id} style={[styles.filterChip, selectedCategoryId === cat.id && styles.filterChipActive]} onPress={() => setSelectedCategoryId(cat.id)}>
+              <Text style={[styles.filterChipText, selectedCategoryId === cat.id && styles.filterChipTextActive]}>{cat.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={refetchBooks}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
+        </View>
+      ) : null}
 
       {booksLoading ? (
         <View style={styles.centerContainer} testID="library-loading">
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.centerText}>Loading books...</Text>
         </View>
-      ) : books.length === 0 ? (
+      ) : filteredBooks.length === 0 ? (
         <View style={styles.centerContainer} testID="library-empty">
           <Ionicons name="library-outline" size={56} color={COLORS.border} />
-          <Text style={styles.centerTitle}>No books yet</Text>
-          <Text style={styles.centerText}>Books will appear here once added</Text>
+          <Text style={styles.centerTitle}>No books found</Text>
+          <Text style={styles.centerText}>Try another search or category filter</Text>
           {isAdmin && (
             <TouchableOpacity
               style={styles.addFirstBtn}
@@ -139,7 +196,7 @@ export default function LibraryScreen() {
         </View>
       ) : (
         <FlatList
-          data={books}
+          data={filteredBooks}
           keyExtractor={(item) => item.id}
           numColumns={2}
           renderItem={({ item }) => <BookCard book={item} isAdmin={isAdmin} onDelete={handleDeleteBook} />}
@@ -162,6 +219,26 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  searchWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, gap: 8 },
+  searchInput: {
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.lg, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.textMain,
+  },
+  filterRow: { gap: 8, paddingVertical: 2 },
+  filterChip: {
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.full, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  filterChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceAlt },
+  filterChipText: { color: COLORS.textMuted, fontSize: 12, fontWeight: '600' },
+  filterChipTextActive: { color: COLORS.primary },
+  errorBanner: {
+    marginHorizontal: SPACING.md, marginTop: SPACING.sm, borderRadius: RADIUS.lg,
+    borderWidth: 1, borderColor: '#F2B8B5', backgroundColor: '#FDECEC',
+    paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  errorText: { color: '#B3261E', fontSize: 12, flex: 1 },
+  retryText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
   addBtn: { padding: 4 },
   centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, padding: SPACING.lg },
   centerTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },

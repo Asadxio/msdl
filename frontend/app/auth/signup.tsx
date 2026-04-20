@@ -16,16 +16,19 @@ export default function SignupScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<'name' | 'email' | 'password' | 'referral' | null>(null);
 
   const handleSignup = async () => {
     if (!name.trim() || !email.trim() || !password) { setError('Please fill in all fields'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('Please enter a valid email address'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true); setError('');
-    const err = await signUp(name.trim(), email.trim(), password, role);
+    const err = await signUp(name.trim(), email.trim(), password, role, referralCode.trim());
     setLoading(false);
     if (err) setError(err);
   };
@@ -51,22 +54,24 @@ export default function SignupScreen() {
 
             <View style={styles.field}>
               <Text style={styles.label}>Full Name</Text>
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, focusedField === 'name' && styles.inputRowFocused]}>
                 <Ionicons name="person-outline" size={20} color={COLORS.textMuted} />
                 <TextInput
-                  style={styles.input} placeholder="Enter your name" placeholderTextColor={COLORS.border}
+                  style={styles.input} placeholder="Enter your name" placeholderTextColor={COLORS.textMuted}
                   value={name} onChangeText={setName} testID="signup-name-input"
+                  onFocus={() => setFocusedField('name')} onBlur={() => setFocusedField(null)}
                 />
               </View>
             </View>
 
             <View style={styles.field}>
               <Text style={styles.label}>Email</Text>
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, focusedField === 'email' && styles.inputRowFocused]}>
                 <Ionicons name="mail-outline" size={20} color={COLORS.textMuted} />
                 <TextInput
-                  style={styles.input} placeholder="Enter your email" placeholderTextColor={COLORS.border}
+                  style={styles.input} placeholder="Enter your email" placeholderTextColor={COLORS.textMuted}
                   value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address"
+                  onFocus={() => setFocusedField('email')} onBlur={() => setFocusedField(null)}
                   testID="signup-email-input"
                 />
               </View>
@@ -74,11 +79,12 @@ export default function SignupScreen() {
 
             <View style={styles.field}>
               <Text style={styles.label}>Password</Text>
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, focusedField === 'password' && styles.inputRowFocused]}>
                 <Ionicons name="lock-closed-outline" size={20} color={COLORS.textMuted} />
                 <TextInput
-                  style={styles.input} placeholder="Min 6 characters" placeholderTextColor={COLORS.border}
+                  style={styles.input} placeholder="Min 6 characters" placeholderTextColor={COLORS.textMuted}
                   value={password} onChangeText={setPassword} secureTextEntry={!showPass}
+                  onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)}
                   testID="signup-password-input"
                 />
                 <TouchableOpacity onPress={() => setShowPass(!showPass)}>
@@ -104,6 +110,22 @@ export default function SignupScreen() {
                   <Ionicons name="people-outline" size={20} color={role === 'teacher' ? '#FFF' : COLORS.textMuted} />
                   <Text style={[styles.roleBtnText, role === 'teacher' && styles.roleBtnTextActive]}>Teacher</Text>
                 </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Referral Code (optional)</Text>
+              <View style={[styles.inputRow, focusedField === 'referral' && styles.inputRowFocused]}>
+                <Ionicons name="gift-outline" size={20} color={COLORS.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter referral code"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={referralCode}
+                  onChangeText={setReferralCode}
+                  autoCapitalize="characters"
+                  onFocus={() => setFocusedField('referral')} onBlur={() => setFocusedField(null)}
+                />
               </View>
             </View>
 
@@ -142,6 +164,7 @@ const styles = StyleSheet.create({
   field: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.textMain },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.lg, paddingHorizontal: 14, borderWidth: 1, borderColor: COLORS.border },
+  inputRowFocused: { borderColor: COLORS.primary, shadowColor: COLORS.primary, shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: COLORS.textMain },
   roleRow: { flexDirection: 'row', gap: SPACING.sm },
   roleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: RADIUS.lg, borderWidth: 2, borderColor: COLORS.border },
