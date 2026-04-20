@@ -1,129 +1,127 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, View, Platform } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants/theme';
+import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
+import { useEffect, useState } from 'react';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-type TabIconName = 'home' | 'home-outline' | 'book' | 'book-outline' | 'people' | 'people-outline' | 'library' | 'library-outline' | 'information-circle' | 'information-circle-outline' | 'notifications' | 'notifications-outline' | 'chatbubbles' | 'chatbubbles-outline' | 'help-circle' | 'help-circle-outline' | 'calendar' | 'calendar-outline' | 'stats-chart' | 'stats-chart-outline' | 'ribbon' | 'ribbon-outline';
+type TabIconName =
+  | 'home'
+  | 'home-outline'
+  | 'book'
+  | 'book-outline'
+  | 'people'
+  | 'people-outline'
+  | 'library'
+  | 'library-outline'
+  | 'information-circle'
+  | 'information-circle-outline'
+  | 'person'
+  | 'person-outline'
+  | 'notifications'
+  | 'notifications-outline'
+  | 'chatbubbles'
+  | 'chatbubbles-outline'
+  | 'help-circle'
+  | 'help-circle-outline'
+  | 'calendar'
+  | 'calendar-outline'
+  | 'stats-chart'
+  | 'stats-chart-outline'
+  | 'ribbon'
+  | 'ribbon-outline';
 
 function TabIcon({ name, color, focused }: { name: TabIconName; color: string; focused: boolean }) {
   return (
     <View style={styles.tabIconContainer}>
-      <Ionicons name={name} size={24} color={color} />
-      {focused && <View style={[styles.activeIndicator, { backgroundColor: color }]} />}
+      <Ionicons name={name} size={20} color={color} />
+      {focused ? <View style={styles.activeIndicator} /> : null}
     </View>
   );
 }
 
 export default function TabLayout() {
+  const { user } = useAuth();
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [unreadChats, setUnreadChats] = useState(0);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setUnreadNotifications(0);
+      setUnreadChats(0);
+      return;
+    }
+
+    const notifQ = query(
+      collection(db, 'notifications'),
+      where('user_id', 'in', [user.uid, 'all']),
+      orderBy('created_at', 'desc'),
+    );
+    const unsubNotif = onSnapshot(notifQ, (snap) => {
+      let count = 0;
+      snap.forEach((d) => {
+        const data = d.data() as any;
+        if (!data.read?.[user.uid]) count += 1;
+      });
+      setUnreadNotifications(count);
+    }, () => setUnreadNotifications(0));
+
+    const chatsQ = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
+    const unsubChats = onSnapshot(chatsQ, (snap) => {
+      let count = 0;
+      snap.forEach((d) => {
+        const data = d.data() as any;
+        count += Number(data.unread_counts?.[user.uid] || 0);
+      });
+      setUnreadChats(count);
+    }, () => setUnreadChats(0));
+
+    return () => {
+      unsubNotif();
+      unsubChats();
+    };
+  }, [user?.uid]);
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.secondary,
+        tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
+        tabBarHideOnKeyboard: true,
+        lazy: true,
+        freezeOnBlur: true,
       }}
     >
+      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'home' : 'home-outline'} color={color} focused={focused} /> }} />
+      <Tabs.Screen name="courses" options={{ title: 'Courses', tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'book' : 'book-outline'} color={color} focused={focused} /> }} />
       <Tabs.Screen
-        name="index"
+        name="chats"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'home' : 'home-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="courses"
-        options={{
-          title: 'Courses',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'book' : 'book-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="teachers"
-        options={{
-          title: 'Teachers',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'people' : 'people-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: 'Library',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'library' : 'library-outline'} color={color} focused={focused} />
-          ),
+          title: 'Chat',
+          tabBarBadge: unreadChats > 0 ? (unreadChats > 99 ? '99+' : unreadChats) : undefined,
+          tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="notifications"
         options={{
           title: 'Notifications',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'notifications' : 'notifications-outline'} color={color} focused={focused} />
-          ),
+          tabBarBadge: unreadNotifications > 0 ? (unreadNotifications > 99 ? '99+' : unreadNotifications) : undefined,
+          tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'notifications' : 'notifications-outline'} color={color} focused={focused} />,
         }}
       />
-      <Tabs.Screen
-        name="chats"
-        options={{
-          title: 'Chats',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="quiz"
-        options={{
-          title: 'Quiz',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'help-circle' : 'help-circle-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="attendance"
-        options={{
-          title: 'Attendance',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'calendar' : 'calendar-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="progress"
-        options={{
-          title: 'Progress',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'stats-chart' : 'stats-chart-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="certificate"
-        options={{
-          title: 'Certificate',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'ribbon' : 'ribbon-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="about"
-        options={{
-          title: 'About',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'information-circle' : 'information-circle-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="about" options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'person' : 'person-outline'} color={color} focused={focused} /> }} />
+      <Tabs.Screen name="teachers" options={{ href: null }} />
+      <Tabs.Screen name="library" options={{ href: null }} />
+      <Tabs.Screen name="quiz" options={{ href: null }} />
+      <Tabs.Screen name="attendance" options={{ href: null }} />
+      <Tabs.Screen name="progress" options={{ href: null }} />
+      <Tabs.Screen name="certificate" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -133,14 +131,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
-    height: Platform.OS === 'ios' ? 88 : 68,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
-    elevation: 8,
+    borderTopLeftRadius: RADIUS.lg,
+    borderTopRightRadius: RADIUS.lg,
+    paddingTop: SPACING.xs,
+    paddingBottom: Platform.OS === 'ios' ? SPACING.lg : SPACING.sm,
+    height: Platform.OS === 'ios' ? 84 : 66,
   },
   tabLabel: {
     fontSize: 11,
@@ -150,11 +145,13 @@ const styles = StyleSheet.create({
   tabIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 48,
   },
   activeIndicator: {
-    width: 4,
-    height: 4,
+    width: 14,
+    height: 3,
     borderRadius: 2,
+    backgroundColor: COLORS.primary,
     marginTop: 4,
   },
 });

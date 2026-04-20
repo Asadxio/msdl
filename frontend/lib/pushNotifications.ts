@@ -4,12 +4,15 @@ import {
   arrayUnion, doc, serverTimestamp, updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { withTimeout } from '@/lib/errors';
 
 const PUSH_API_URL = process.env.EXPO_PUBLIC_PUSH_API_URL || '';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
@@ -42,10 +45,10 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
   const token = String(tokenResponse?.data || '');
   if (!token) return null;
 
-  await updateDoc(doc(db, 'users', userId), {
+  await withTimeout(updateDoc(doc(db, 'users', userId), {
     fcm_tokens: arrayUnion(token),
     fcm_token_updated_at: serverTimestamp(),
-  });
+  }));
 
   return token;
 }
@@ -65,14 +68,17 @@ async function requestBackendPush(payload: {
 }): Promise<void> {
   if (!PUSH_API_URL || !auth.currentUser) return;
   const idToken = await auth.currentUser.getIdToken();
-  await fetch(`${PUSH_API_URL.replace(/\/$/, '')}/api/push/send`, {
+  const response = await withTimeout(fetch(`${PUSH_API_URL.replace(/\/$/, '')}/api/push/send`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${idToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
-  }).catch(() => {});
+  }), 15000).catch(() => null);
+  if (response && !response.ok) {
+    throw new Error(`Push request failed with status ${response.status}`);
+  }
 }
 
 export async function sendPushToUserIds(userIds: string[], payload: PushPayload): Promise<void> {

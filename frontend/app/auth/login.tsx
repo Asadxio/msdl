@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { COLORS, SPACING, RADIUS } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -18,7 +19,6 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) { setError('Please fill in all fields'); return; }
@@ -31,69 +31,58 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[styles.body, { paddingTop: insets.top + 40 }]} keyboardShouldPersistTaps="handled">
-          <View style={styles.headerSection}>
-            <Text style={styles.greeting}>السلام عليكم</Text>
+        <ScrollView contentContainerStyle={[styles.body, { paddingTop: insets.top + SPACING.lg }]} keyboardShouldPersistTaps="handled">
+          <FadeInView style={styles.headerSection}>
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue learning</Text>
-          </View>
+          </FadeInView>
 
-          <View style={styles.formCard}>
-            {error ? (
-              <View style={styles.errorBox} testID="login-error">
-                <Ionicons name="alert-circle" size={18} color={COLORS.error} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
+          <FadeInView delay={60}>
+            <AppCard style={styles.formCard}>
+              {error ? (
+                <View style={styles.errorBox} testID="login-error">
+                  <Ionicons name="alert-circle" size={18} color={COLORS.error} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Email</Text>
-              <View style={[styles.inputRow, focusedField === 'email' && styles.inputRowFocused]}>
-                <Ionicons name="mail-outline" size={20} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input} placeholder="Enter your email" placeholderTextColor={COLORS.textMuted}
-                  value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address"
-                  onFocus={() => setFocusedField('email')} onBlur={() => setFocusedField(null)}
-                  testID="login-email-input"
-                />
-              </View>
-            </View>
+              <AppInput
+                label="Email"
+                leftIcon="mail-outline"
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                testID="login-email-input"
+              />
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
-              <View style={[styles.inputRow, focusedField === 'password' && styles.inputRowFocused]}>
-                <Ionicons name="lock-closed-outline" size={20} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input} placeholder="Enter your password" placeholderTextColor={COLORS.textMuted}
-                  value={password} onChangeText={setPassword} secureTextEntry={!showPass}
-                  onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)}
+              <View>
+                <AppInput
+                  label="Password"
+                  leftIcon="lock-closed-outline"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPass}
                   testID="login-password-input"
                 />
-                <TouchableOpacity onPress={() => setShowPass(!showPass)} testID="toggle-password">
-                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textMuted} />
+                <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeBtn} testID="toggle-password">
+                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.textMuted} />
                 </TouchableOpacity>
               </View>
-            </View>
 
-            <TouchableOpacity
-              style={styles.forgotRow}
-              onPress={() => router.push('/auth/forgot-password')}
-              testID="forgot-password-btn"
-            >
-              <Text style={styles.forgotText}>Forgot Password?</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.forgotRow} onPress={() => router.push('/auth/forgot-password')} testID="forgot-password-btn">
+                <Text style={styles.forgotText}>Forgot Password?</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.primaryBtn, loading && styles.btnDisabled]}
-              onPress={handleLogin} disabled={loading} testID="login-submit-btn"
-            >
-              {loading ? <ActivityIndicator color="#FFF" /> : (
-                <Text style={styles.primaryBtnText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+              <ScalePressable style={[styles.primaryBtn, loading && styles.btnDisabled]} onPress={handleLogin} disabled={loading} testID="login-submit-btn">
+                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryBtnText}>Sign In</Text>}
+              </ScalePressable>
+            </AppCard>
+          </FadeInView>
 
           <View style={styles.footerRow}>
             <Text style={styles.footerText}>Don&apos;t have an account? </Text>
@@ -108,26 +97,21 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.primary },
-  body: { flexGrow: 1, paddingHorizontal: SPACING.lg, paddingBottom: 40 },
-  headerSection: { alignItems: 'center', marginBottom: SPACING.xl },
-  greeting: { fontSize: 28, color: COLORS.secondary, fontWeight: '700', marginBottom: 8 },
-  title: { fontSize: 28, fontWeight: '800', color: '#FFFFFF' },
-  subtitle: { fontSize: 15, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
-  formCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, gap: SPACING.md },
-  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF2F2', padding: 12, borderRadius: RADIUS.lg },
-  errorText: { fontSize: 13, color: COLORS.error, fontWeight: '500', flex: 1 },
-  field: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.textMain },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.lg, paddingHorizontal: 14, borderWidth: 1, borderColor: COLORS.border },
-  inputRowFocused: { borderColor: COLORS.primary, shadowColor: COLORS.primary, shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: COLORS.textMain },
-  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  body: { flexGrow: 1, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg },
+  headerSection: { marginBottom: SPACING.md },
+  title: { ...TYPOGRAPHY.title, color: COLORS.text },
+  subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, marginTop: SPACING.xs },
+  formCard: { gap: SPACING.md },
+  errorBox: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: '#FEE4E2', padding: SPACING.sm, borderRadius: RADIUS.md },
+  errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1 },
+  eyeBtn: { position: 'absolute', right: SPACING.sm, top: 34, height: 40, justifyContent: 'center' },
+  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 14, alignItems: 'center', marginTop: SPACING.xs },
   btnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  forgotRow: { alignSelf: 'flex-end', marginTop: -4, marginBottom: 4 },
-  forgotText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg },
-  footerText: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
-  footerLink: { fontSize: 14, fontWeight: '700', color: COLORS.secondary },
+  forgotRow: { alignSelf: 'flex-end', marginTop: -4 },
+  forgotText: { ...TYPOGRAPHY.label, color: COLORS.primary },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.md },
+  footerText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  footerLink: { ...TYPOGRAPHY.label, color: COLORS.primary },
 });

@@ -76,7 +76,8 @@ export default function RootLayout() {
           <Stack
             screenOptions={{
               headerShown: false,
-              animation: 'slide_from_right',
+              animation: 'fade_from_bottom',
+              animationDuration: 220,
               contentStyle: { backgroundColor: COLORS.background },
             }}
           >
@@ -85,6 +86,8 @@ export default function RootLayout() {
             <Stack.Screen name="teacher/[id]" />
             <Stack.Screen name="book/[id]" />
             <Stack.Screen name="chat/[id]" />
+            <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/payments" options={{ animation: 'slide_from_bottom' }} />

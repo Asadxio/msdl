@@ -1,52 +1,77 @@
 export const COLORS = {
-  primary: '#0F3822',
-  primaryLight: '#1A5C3A',
-  secondary: '#D4AF37',
-  secondaryLight: '#F0D98D',
-  background: '#FDFBF7',
+  primary: '#0FA958',
+  background: '#F6FAF8',
   surface: '#FFFFFF',
-  surfaceAlt: '#F2F6F4',
-  textMain: '#111827',
-  textMuted: '#4B5563',
-  border: '#E5E7EB',
-  error: '#991B1B',
-  success: '#166534',
-  goldBg: '#FDF8E7',
-  goldText: '#B8860B',
+  text: '#132018',
+  textMain: '#132018',
+  textMuted: '#5F7065',
+  border: '#D8E4DC',
+  error: '#B42318',
+  success: '#0FA958',
+  // Backward-compat aliases to keep existing screens functional.
+  primaryLight: '#3ABB7A',
+  secondary: '#0FA958',
+  secondaryLight: '#E6F7EE',
+  surfaceAlt: '#F1F6F3',
+  goldBg: '#E6F7EE',
+  goldText: '#0C8A49',
 };
 
 export const SPACING = {
-  xs: 4,
+  xs: 8,
   sm: 8,
   md: 16,
   lg: 24,
-  xl: 32,
-  xxl: 48,
+  xl: 24,
+  xxl: 32,
 };
 
 export const RADIUS = {
-  sm: 8,
+  sm: 12,
   md: 12,
   lg: 16,
-  xl: 20,
-  xxl: 24,
+  xl: 16,
+  xxl: 16,
   full: 999,
+};
+
+export const TYPOGRAPHY = {
+  title: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    lineHeight: 30,
+  },
+  heading: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    lineHeight: 26,
+  },
+  body: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    lineHeight: 20,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    lineHeight: 18,
+  },
 };
 
 export const SHADOWS = {
   card: {
-    shadowColor: '#0F3822',
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 4,
+    shadowRadius: 14,
+    elevation: 2,
   },
   header: {
-    shadowColor: '#000',
+    shadowColor: COLORS.text,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 1,
   },
 };
 

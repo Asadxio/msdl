@@ -13,6 +13,7 @@ import {
   collection, doc, getDoc, getDocs, increment, limit, query, serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 
 export type UserProfile = {
   name: string;
@@ -110,8 +111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
+    const safeEmail = email.trim().toLowerCase();
+    if (!safeEmail || !password) return 'Please enter email and password';
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const cred = await withTimeout(signInWithEmailAndPassword(auth, safeEmail, password));
       await updateDoc(doc(db, 'users', cred.user.uid), { last_login_at: serverTimestamp() }).catch(() => {});
       await fetchProfile(cred.user.uid);
       return null;
@@ -123,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code === 'auth/too-many-requests') return 'Too many attempts. Please try again later';
       if (code === 'auth/network-request-failed') return 'Network error. Check your internet connection';
       if (code === 'auth/user-disabled') return 'This account has been disabled';
-      return err?.message || 'Login failed. Please try again';
+      return normalizeFirebaseError(err, 'Login failed. Please try again');
     }
   };
 
@@ -132,11 +135,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ): Promise<string | null> => {
     // Role protection - only student or teacher allowed
     const safeRole = role === 'teacher' ? 'teacher' : 'student';
+    const safeName = name.trim();
+    const safeEmail = email.trim().toLowerCase();
+    if (!safeName || !safeEmail || !password) return 'Please fill in all required fields';
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, password));
       // Send verification email
       try {
-        await sendEmailVerification(cred.user);
+        await withTimeout(sendEmailVerification(cred.user));
       } catch { /* non-blocking */ }
 
       let referrerId: string | null = null;
@@ -147,8 +153,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       await setDoc(doc(db, 'users', cred.user.uid), {
-        name,
-        email,
+        name: safeName,
+        email: safeEmail,
         role: safeRole,
         status: 'pending',
         referral_code: generateReferralCode(name),
@@ -171,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code === 'auth/weak-password') return 'Password must be at least 6 characters';
       if (code === 'auth/invalid-email') return 'Invalid email format';
       if (code === 'auth/network-request-failed') return 'Network error. Check your internet connection';
-      return err?.message || 'Signup failed. Please try again';
+      return normalizeFirebaseError(err, 'Signup failed. Please try again');
     }
   };
 
@@ -187,8 +193,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string): Promise<string | null> => {
+    const safeEmail = email.trim().toLowerCase();
+    if (!safeEmail) return 'Please enter your email';
     try {
-      await sendPasswordResetEmail(auth, email);
+      await withTimeout(sendPasswordResetEmail(auth, safeEmail));
       return null;
     } catch (err: any) {
       const code = err?.code || '';
@@ -196,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code === 'auth/invalid-email') return 'Invalid email format';
       if (code === 'auth/too-many-requests') return 'Please wait before requesting another email';
       if (code === 'auth/network-request-failed') return 'Network error. Check your internet connection';
-      return err?.message || 'Failed to send reset email';
+      return normalizeFirebaseError(err, 'Failed to send reset email');
     }
   };
 
