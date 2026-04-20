@@ -19,24 +19,26 @@ export async function createNotificationAsAdmin(
   const userId = (payload.user_id || 'all').trim() || 'all';
   if (!title || !message) return false;
 
-  await addDoc(collection(db, 'notifications'), {
-    title,
-    message,
-    user_id: userId,
-    read: {},
-    created_at: serverTimestamp(),
-  });
-
   const titleLower = title.toLowerCase();
   const isAnnouncement = titleLower.includes('announcement');
   const isClassReminder = titleLower.includes('class reminder') || titleLower.includes('reminder');
   const pushBody = isClassReminder ? 'Class reminder received. Open app for details.' : message;
+  const category = isClassReminder ? 'class_reminder' : (isAnnouncement ? 'announcement' : 'notification');
+
+  await addDoc(collection(db, 'notifications'), {
+    title,
+    message,
+    user_id: userId,
+    category,
+    read: {},
+    created_at: serverTimestamp(),
+  });
 
   if (userId === 'all') {
     await sendPushToAllUsers({
       title: isAnnouncement ? 'New Announcement' : title,
       body: pushBody,
-      data: { type: isClassReminder ? 'class_reminder' : 'announcement' },
+      data: { type: category },
     }).catch(() => {});
   } else {
     await sendPushToUserIds([userId], {

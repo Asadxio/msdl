@@ -17,6 +17,8 @@ export type UserProfile = {
   email: string;
   role: 'student' | 'teacher' | 'admin';
   status: 'pending' | 'approved' | 'deactivated' | 'rejected';
+  photo_url?: string;
+  avatar?: string;
 };
 
 type AuthContextType = {

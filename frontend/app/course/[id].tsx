@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,12 +17,39 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, RADIUS, SHADOWS, getCourseImage, getTeacherAvatar } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { courses, teachers, loading } = useData();
+  const [recordings, setRecordings] = useState<{ id: string; title: string; description: string; file_url: string }[]>([]);
+  const course = courses.find((c) => c.id === id);
+  const classTimeLabel = course?.class_time || course?.time || '';
+  const meetLink = course?.meet_link || course?.class_link || '';
+
+  useEffect(() => {
+    if (!id) return;
+    const q = query(collection(db, 'recordings'), where('course_id', '==', id));
+    const unsub = onSnapshot(q, (snap) => {
+      const arr: { id: string; title: string; description: string; file_url: string }[] = [];
+      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+      setRecordings(arr);
+    });
+    return unsub;
+  }, [id]);
+
+  const showJoinNow = useMemo(() => {
+    if (!classTimeLabel) return true;
+    const [hh, mm] = classTimeLabel.split(':').map((n) => Number(n));
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return true;
+    const now = new Date();
+    const slot = new Date();
+    slot.setHours(hh, mm, 0, 0);
+    return Math.abs(now.getTime() - slot.getTime()) <= 60 * 60 * 1000;
+  }, [classTimeLabel]);
 
   if (loading) {
     return (
@@ -35,7 +62,6 @@ export default function CourseDetailScreen() {
     );
   }
 
-  const course = courses.find((c) => c.id === id);
   if (!course) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -53,8 +79,8 @@ export default function CourseDetailScreen() {
   const courseIndex = courses.findIndex((c) => c.id === id);
 
   const handleJoinClass = () => {
-    if (course.class_link && course.class_link.trim().length > 0) {
-      Linking.openURL(course.class_link).catch(() => {
+    if (meetLink && meetLink.trim().length > 0) {
+      Linking.openURL(meetLink).catch(() => {
         Alert.alert('Error', 'Unable to open the class link');
       });
     } else {
@@ -117,7 +143,7 @@ export default function CourseDetailScreen() {
               <Text style={styles.infoCardTitle}>Schedule</Text>
             </View>
             <Text style={styles.infoCardValue}>{course.schedule || 'Schedule to be announced'}</Text>
-            <Text style={styles.infoCardSubValue}>{course.time || 'Time to be announced'}</Text>
+            <Text style={styles.infoCardSubValue}>{classTimeLabel || 'Time to be announced'}</Text>
           </View>
 
           <View style={styles.infoCard} testID="course-detail-meet-link">
@@ -128,8 +154,28 @@ export default function CourseDetailScreen() {
               <Text style={styles.infoCardTitle}>Google Meet Link</Text>
             </View>
             <Text style={styles.infoCardValue} numberOfLines={2}>
-              {course.class_link || 'Meet link will be shared by teacher'}
+              {meetLink || 'Meet link will be shared by teacher'}
             </Text>
+          </View>
+
+          <View style={styles.infoCard}>
+            <View style={styles.infoCardHeader}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="mic-outline" size={20} color={COLORS.primary} />
+              </View>
+              <Text style={styles.infoCardTitle}>Recordings</Text>
+            </View>
+            {recordings.length === 0 ? (
+              <Text style={styles.infoCardSubValue}>No recordings yet.</Text>
+            ) : recordings.map((rec) => (
+              <TouchableOpacity key={rec.id} style={styles.recordingRow} onPress={() => Linking.openURL(rec.file_url)}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.recordingTitle}>{rec.title || 'Recording'}</Text>
+                  <Text style={styles.recordingDesc}>{rec.description || 'Tap to play'}</Text>
+                </View>
+                <Ionicons name="play-circle-outline" size={22} color={COLORS.primary} />
+              </TouchableOpacity>
+            ))}
           </View>
 
           {/* Description */}
@@ -144,15 +190,21 @@ export default function CourseDetailScreen() {
           </View>
 
           {/* Join Class Button */}
-          <TouchableOpacity
-            style={styles.joinBtn}
-            testID="join-class-btn"
-            activeOpacity={0.8}
-            onPress={handleJoinClass}
-          >
-            <Ionicons name="videocam" size={20} color="#FFFFFF" />
-            <Text style={styles.joinBtnText}>Join Class</Text>
-          </TouchableOpacity>
+          {showJoinNow ? (
+            <TouchableOpacity
+              style={styles.joinBtn}
+              testID="join-class-btn"
+              activeOpacity={0.8}
+              onPress={handleJoinClass}
+            >
+              <Ionicons name="videocam" size={20} color="#FFFFFF" />
+              <Text style={styles.joinBtnText}>Join Class</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.joinLaterCard}>
+              <Text style={styles.infoCardSubValue}>Next class at {classTimeLabel}. Join button appears 1 hour before class.</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -200,4 +252,8 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm, ...SHADOWS.card,
   },
   joinBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+  recordingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 10, marginTop: 10 },
+  recordingTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
+  recordingDesc: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  joinLaterCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md },
 });

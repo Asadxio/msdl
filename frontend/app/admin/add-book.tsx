@@ -17,7 +17,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  collection, addDoc, serverTimestamp, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 
@@ -55,12 +57,26 @@ export default function AddBookScreen() {
   const [category, setCategory] = useState('');
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [newCategory, setNewCategory] = useState('');
+  const [editingCategoryId, setEditingCategoryId] = useState('');
+  const [editingCategoryName, setEditingCategoryName] = useState('');
 
   useEffect(() => {
     if (profile && !isAdmin) {
       router.replace('/');
     }
   }, [profile, isAdmin, router]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'categories'), orderBy('name'));
+    const unsub = onSnapshot(q, (snap) => {
+      const arr: { id: string; name: string }[] = [];
+      snap.forEach((d) => arr.push({ id: d.id, name: String((d.data() as any).name || '') }));
+      setCategories(arr.filter((c) => c.name.trim()));
+    });
+    return unsub;
+  }, []);
 
   const handleSave = async () => {
     if (!isAdmin) {
@@ -72,7 +88,8 @@ export default function AddBookScreen() {
       return;
     }
     setSaving(true);
-    const success = await addBook(title.trim(), pdfUrl.trim(), category.trim());
+    const selected = categories.find((c) => c.id === category);
+    const success = await addBook(title.trim(), pdfUrl.trim(), selected?.name?.trim() || '', selected?.id);
     setSaving(false);
     if (success) {
       Alert.alert('Success', 'Book added successfully', [
@@ -111,7 +128,40 @@ export default function AddBookScreen() {
     }
   };
 
-  const CATEGORIES = ['Islamic', 'Urdu', 'Qirat', 'Hadith', 'Fiqh', 'Tafseer'];
+  const addCategory = async () => {
+    const name = newCategory.trim();
+    if (!name) {
+      Alert.alert('Missing', 'Category name is required.');
+      return;
+    }
+    await addDoc(collection(db, 'categories'), { name, created_at: serverTimestamp() });
+    setNewCategory('');
+  };
+
+  const saveEditedCategory = async () => {
+    const name = editingCategoryName.trim();
+    if (!editingCategoryId || !name) {
+      Alert.alert('Missing', 'Category name is required.');
+      return;
+    }
+    await updateDoc(doc(db, 'categories', editingCategoryId), { name });
+    setEditingCategoryId('');
+    setEditingCategoryName('');
+  };
+
+  const deleteCategory = (item: { id: string; name: string }) => {
+    Alert.alert('Delete Category', `Delete "${item.name}" category?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteDoc(doc(db, 'categories', item.id));
+          if (category === item.id) setCategory('');
+        },
+      },
+    ]);
+  };
 
   if (profile && !isAdmin) return null;
 
@@ -190,20 +240,53 @@ export default function AddBookScreen() {
           {/* Category */}
           <View style={styles.field}>
             <Text style={styles.label}>Category</Text>
+            <View style={styles.rowInline}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Add category name"
+                placeholderTextColor={COLORS.border}
+                value={newCategory}
+                onChangeText={setNewCategory}
+              />
+              <TouchableOpacity style={styles.smallBtn} onPress={addCategory}>
+                <Text style={styles.smallBtnText}>Add</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.categoryGrid}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.categoryChip, category === cat && styles.categoryChipActive]}
-                  onPress={() => setCategory(cat)}
-                  testID={`category-chip-${cat}`}
-                >
-                  <Text style={[styles.categoryChipText, category === cat && styles.categoryChipTextActive]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
+              {categories.map((cat) => (
+                <View key={cat.id} style={styles.categoryRow}>
+                  <TouchableOpacity
+                    style={[styles.categoryChip, category === cat.id && styles.categoryChipActive]}
+                    onPress={() => setCategory(cat.id)}
+                    testID={`category-chip-${cat.name}`}
+                  >
+                    <Text style={[styles.categoryChipText, category === cat.id && styles.categoryChipTextActive]}>
+                      {cat.name}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }}>
+                    <Ionicons name="create-outline" size={16} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteCategory(cat)}>
+                    <Ionicons name="trash-outline" size={16} color={COLORS.error} />
+                  </TouchableOpacity>
+                </View>
               ))}
             </View>
+            {editingCategoryId ? (
+              <View style={styles.rowInline}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Edit category name"
+                  placeholderTextColor={COLORS.border}
+                  value={editingCategoryName}
+                  onChangeText={setEditingCategoryName}
+                />
+                <TouchableOpacity style={styles.smallBtn} onPress={saveEditedCategory}>
+                  <Text style={styles.smallBtnText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
 
           {/* Save Button */}
@@ -263,6 +346,7 @@ const styles = StyleSheet.create({
     fontSize: 15, color: COLORS.textMain,
   },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   categoryChip: {
     paddingHorizontal: 16, paddingVertical: 10, borderRadius: RADIUS.full,
     borderWidth: 2, borderColor: COLORS.border, backgroundColor: COLORS.surface,
@@ -270,6 +354,9 @@ const styles = StyleSheet.create({
   categoryChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceAlt },
   categoryChipText: { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
   categoryChipTextActive: { color: COLORS.primary },
+  rowInline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  smallBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 12 },
+  smallBtnText: { color: '#fff', fontWeight: '700' },
   saveBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: COLORS.primary, paddingVertical: 16, borderRadius: RADIUS.lg,

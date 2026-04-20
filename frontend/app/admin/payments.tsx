@@ -12,10 +12,12 @@ import { useAuth } from '@/context/AuthContext';
 
 type PaymentItem = {
   id: string;
+  user_id: string;
   user_name: string;
   amount: number;
-  payment_ref?: string | null;
-  status: 'pending' | 'submitted' | 'verified' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'verified' | 'submitted';
+  provider?: 'razorpay';
+  type?: 'fees' | 'sadqa' | 'zakat' | 'fitra';
   created_at?: { toDate?: () => Date };
 };
 
@@ -59,7 +61,7 @@ export default function AdminPaymentsScreen() {
     return unsub;
   }, [profile, isAdmin, router]);
 
-  const setStatus = async (id: string, status: 'verified' | 'rejected') => {
+  const setStatus = async (id: string, status: 'approved' | 'rejected') => {
     setUpdatingId(id);
     try {
       await updateDoc(doc(db, 'payments', id), { status, reviewed_at: new Date() });
@@ -70,8 +72,8 @@ export default function AdminPaymentsScreen() {
     }
   };
 
-  const confirmStatusChange = (id: string, status: 'verified' | 'rejected') => {
-    const label = status === 'verified' ? 'Verify' : 'Reject';
+  const confirmStatusChange = (id: string, status: 'approved' | 'rejected') => {
+    const label = status === 'approved' ? 'Approve' : 'Reject';
     Alert.alert(`${label} Payment`, `Are you sure you want to ${label.toLowerCase()} this payment?`, [
       { text: 'Cancel' },
       { text: label, style: status === 'rejected' ? 'destructive' : 'default', onPress: () => setStatus(id, status) },
@@ -104,15 +106,17 @@ export default function AdminPaymentsScreen() {
           renderItem={({ item }) => (
             <View style={styles.card} testID={`payment-${item.id}`}>
               <Text style={styles.name}>{item.user_name}</Text>
+              <Text style={styles.meta}>User ID: {item.user_id}</Text>
               <Text style={styles.meta}>Amount: ₹{Number(item.amount || 0).toFixed(2)}</Text>
+              <Text style={styles.meta}>Type: {item.type || 'fees'}</Text>
+              <Text style={styles.meta}>Provider: {item.provider || 'razorpay'}</Text>
               <Text style={styles.meta}>Status: {item.status}</Text>
-              {item.payment_ref ? <Text style={styles.meta}>Ref: {item.payment_ref}</Text> : null}
               <Text style={styles.time}>{formatDate(item)}</Text>
 
-              {(item.status === 'submitted' || item.status === 'pending') && (
+              {(item.status === 'submitted' || item.status === 'pending' || item.status === 'verified') && (
                 <View style={styles.actions}>
-                  <TouchableOpacity style={[styles.verifyBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'verified')} disabled={updatingId === item.id}>
-                    {updatingId === item.id ? <ActivityIndicator size="small" color="#166534" /> : <Text style={styles.verifyText}>Verify</Text>}
+                  <TouchableOpacity style={[styles.verifyBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'approved')} disabled={updatingId === item.id}>
+                    {updatingId === item.id ? <ActivityIndicator size="small" color="#166534" /> : <Text style={styles.verifyText}>Approve</Text>}
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'rejected')} disabled={updatingId === item.id}>
                     {updatingId === item.id ? <ActivityIndicator size="small" color={COLORS.error} /> : <Text style={styles.rejectText}>Reject</Text>}

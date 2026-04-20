@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, StatusBar, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator,
+  TextInput, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where,
+  deleteDoc,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -18,6 +19,7 @@ type NotificationItem = {
   title: string;
   message: string;
   user_id: string;
+  category?: 'announcement' | 'notification' | 'class_reminder';
   read?: Record<string, boolean>;
   created_at?: { toDate?: () => Date };
 };
@@ -43,8 +45,17 @@ export default function NotificationsScreen() {
   const [message, setMessage] = useState('');
   const [userId, setUserId] = useState('all');
   const [sending, setSending] = useState(false);
+  const [editingId, setEditingId] = useState('');
+  const [editingTitle, setEditingTitle] = useState('');
+  const [editingMessage, setEditingMessage] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+
+  const isAnnouncement = (item: NotificationItem): boolean => (
+    item.category === 'announcement' || item.title.toLowerCase().includes('announcement')
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -105,6 +116,57 @@ export default function NotificationsScreen() {
     } finally {
       setSending(false);
     }
+  };
+
+  const startEditAnnouncement = (item: NotificationItem) => {
+    setEditingId(item.id);
+    setEditingTitle(item.title);
+    setEditingMessage(item.message);
+    setShowEditModal(true);
+  };
+
+  const saveAnnouncementEdit = async () => {
+    if (!isAdmin || !editingId || !editingTitle.trim() || !editingMessage.trim()) return;
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, 'notifications', editingId), {
+        title: editingTitle.trim(),
+        message: editingMessage.trim(),
+        category: 'announcement',
+      });
+      Alert.alert('Updated', 'Announcement was updated successfully.');
+      setEditingId('');
+      setEditingTitle('');
+      setEditingMessage('');
+      setShowEditModal(false);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to update announcement.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const deleteAnnouncement = (item: NotificationItem) => {
+    Alert.alert('Delete Announcement', 'Are you sure you want to delete this announcement?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, 'notifications', item.id));
+            if (editingId === item.id) {
+              setEditingId('');
+              setEditingTitle('');
+              setEditingMessage('');
+              setShowEditModal(false);
+            }
+          } catch (err: any) {
+            Alert.alert('Error', err?.message || 'Failed to delete announcement.');
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -185,6 +247,7 @@ export default function NotificationsScreen() {
           >
             {sending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Send</Text>}
           </TouchableOpacity>
+
         </View>
       )}
 
@@ -223,10 +286,60 @@ export default function NotificationsScreen() {
               </View>
               <Text style={styles.cardMsg}>{item.message}</Text>
               <Text style={styles.cardTime}>{formatDate(item)}</Text>
+              {isAdmin && isAnnouncement(item) ? (
+                <View style={styles.adminActions}>
+                  <TouchableOpacity onPress={() => startEditAnnouncement(item)}>
+                    <Text style={styles.editActionText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteAnnouncement(item)}>
+                    <Text style={styles.deleteActionText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </TouchableOpacity>
           )}
         />
       )}
+      <Modal visible={showEditModal} transparent animationType="fade" onRequestClose={() => setShowEditModal(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Announcement</Text>
+            <TextInput
+              style={styles.input}
+              value={editingTitle}
+              onChangeText={setEditingTitle}
+              placeholder="Announcement title"
+              placeholderTextColor={COLORS.border}
+            />
+            <TextInput
+              style={[styles.input, styles.messageInput]}
+              value={editingMessage}
+              onChangeText={setEditingMessage}
+              placeholder="Announcement message"
+              placeholderTextColor={COLORS.border}
+              multiline
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                style={styles.editCancelBtn}
+                onPress={() => {
+                  setShowEditModal(false);
+                  setEditingId('');
+                }}
+              >
+                <Text style={styles.editCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sendBtn, styles.editSaveBtn, updating && { opacity: 0.6 }]}
+                onPress={saveAnnouncementEdit}
+                disabled={updating || !editingTitle.trim() || !editingMessage.trim()}
+              >
+                {updating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Update</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -268,11 +381,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10, backgroundColor: COLORS.surfaceAlt, color: COLORS.textMain,
   },
   messageInput: { minHeight: 72, textAlignVertical: 'top' },
-  quickRow: { flexDirection: 'row', gap: 8 },
-  quickBtn: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center' },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  quickBtn: { flexGrow: 1, minWidth: 140, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center' },
   quickBtnText: { color: COLORS.textMain, fontSize: 12, fontWeight: '600' },
   sendBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
   sendBtnText: { color: '#fff', fontWeight: '700' },
+  editActions: { flexDirection: 'row', gap: 10 },
+  editCancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  editCancelText: { color: COLORS.textMuted, fontWeight: '700' },
+  editSaveBtn: { flex: 1 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.md,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 460,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    ...SHADOWS.card,
+    gap: 8,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
   list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 24 },
   card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card },
   cardUnread: { borderWidth: 1, borderColor: COLORS.secondary },
@@ -284,6 +426,17 @@ const styles = StyleSheet.create({
   badgeText: { color: COLORS.goldText, fontSize: 10, fontWeight: '700' },
   cardMsg: { fontSize: 14, color: COLORS.textMuted, marginTop: 8, lineHeight: 20 },
   cardTime: { fontSize: 11, color: COLORS.textMuted, marginTop: 8 },
+  adminActions: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+  },
+  editActionText: { color: COLORS.primary, fontWeight: '700' },
+  deleteActionText: { color: COLORS.error, fontWeight: '700' },
   center: { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, gap: 8 },
   emptyText: { fontSize: 14, color: COLORS.textMuted },
 });
