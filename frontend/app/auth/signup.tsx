@@ -99,13 +99,11 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
-  body: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: SPACING.lg, justifyContent: 'center', alignItems: 'center' },
+  body: { flexGrow: 1, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg },
   headerSection: { marginBottom: SPACING.lg },
   title: { ...TYPOGRAPHY.title, color: COLORS.text, fontWeight: '800' },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, marginTop: SPACING.xs },
   formCard: {
-    width: '100%',
-    maxWidth: 400,
     gap: SPACING.md,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
