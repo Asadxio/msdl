@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar,
@@ -19,6 +19,8 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const handleEmailChange = useCallback((text: string) => setEmail(text), []);
+  const handlePasswordChange = useCallback((text: string) => setPassword(text), []);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) { setError('Please fill in all fields'); return; }
@@ -53,7 +55,7 @@ export default function LoginScreen() {
                 leftIcon="mail-outline"
                 placeholder="Enter your email"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={handleEmailChange}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 testID="login-email-input"
@@ -65,7 +67,7 @@ export default function LoginScreen() {
                   leftIcon="lock-closed-outline"
                   placeholder="Enter your password"
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={handlePasswordChange}
                   secureTextEntry={!showPass}
                   testID="login-password-input"
                 />
@@ -97,21 +99,31 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
   body: { flexGrow: 1, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg },
-  headerSection: { marginBottom: SPACING.md },
-  title: { ...TYPOGRAPHY.title, color: COLORS.text },
+  headerSection: { marginBottom: SPACING.lg },
+  title: { ...TYPOGRAPHY.title, color: COLORS.text, fontWeight: '800' },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, marginTop: SPACING.xs },
-  formCard: { gap: SPACING.md },
+  formCard: {
+    gap: SPACING.md,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 4,
+  },
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: '#FEE4E2', padding: SPACING.sm, borderRadius: RADIUS.md },
   errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1 },
   eyeBtn: { position: 'absolute', right: SPACING.sm, top: 34, height: 40, justifyContent: 'center' },
-  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 14, alignItems: 'center', marginTop: SPACING.xs },
+  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, minHeight: 54, width: '100%', justifyContent: 'center', alignItems: 'center', marginTop: SPACING.md },
   btnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  forgotRow: { alignSelf: 'flex-end', marginTop: -4 },
+  forgotRow: { alignSelf: 'flex-end', marginTop: SPACING.xs },
   forgotText: { ...TYPOGRAPHY.label, color: COLORS.primary },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.md },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg },
   footerText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
   footerLink: { ...TYPOGRAPHY.label, color: COLORS.primary },
 });
