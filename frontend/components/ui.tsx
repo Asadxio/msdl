@@ -96,38 +96,69 @@ export function FeedbackBanner({ type, message }: { type: 'success' | 'error'; m
   );
 }
 
-export function AppInput({
+type AppInputProps = TextInputProps & { label: string; leftIcon?: keyof typeof Ionicons.glyphMap; style?: StyleProp<ViewStyle> };
+
+export const AppInput = React.memo(function AppInput({
   label,
-  focused,
   leftIcon,
   style,
   ...props
-}: TextInputProps & { label: string; focused?: boolean; leftIcon?: keyof typeof Ionicons.glyphMap; style?: StyleProp<ViewStyle> }) {
-  const [internalFocused, setInternalFocused] = React.useState(false);
-  const isFocused = focused ?? internalFocused;
+}: AppInputProps) {
+  const focusAnim = useRef(new Animated.Value(0)).current;
+
+  const animateFocus = React.useCallback((toValue: 0 | 1) => {
+    Animated.timing(focusAnim, {
+      toValue,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
+  }, [focusAnim]);
+
+  const handleFocus = React.useCallback((e: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
+    animateFocus(1);
+    props.onFocus?.(e);
+  }, [animateFocus, props.onFocus]);
+
+  const handleBlur = React.useCallback((e: Parameters<NonNullable<TextInputProps['onBlur']>>[0]) => {
+    animateFocus(0);
+    props.onBlur?.(e);
+  }, [animateFocus, props.onBlur]);
+
+  const animatedInputStyle = React.useMemo(() => ({
+    borderColor: focusAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['#E5E5E5', COLORS.primary],
+    }),
+    shadowOpacity: focusAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 0.14],
+    }),
+    shadowRadius: focusAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 10],
+    }),
+    elevation: focusAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 2],
+    }),
+  }), [focusAnim]);
 
   return (
     <View style={[styles.field, style]}>
       <Text style={styles.label}>{label}</Text>
-      <View style={[styles.inputRow, isFocused && styles.inputFocused]}>
+      <Animated.View style={[styles.inputRow, animatedInputStyle]}>
         {leftIcon ? <Ionicons name={leftIcon} size={18} color={COLORS.textMuted} /> : null}
         <TextInput
           {...props}
           style={styles.input}
           placeholderTextColor={COLORS.textMuted}
-          onFocus={(e) => {
-            setInternalFocused(true);
-            props.onFocus?.(e);
-          }}
-          onBlur={(e) => {
-            setInternalFocused(false);
-            props.onBlur?.(e);
-          }}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
         />
-      </View>
+      </Animated.View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
@@ -150,27 +181,23 @@ const styles = StyleSheet.create({
   },
   field: { gap: SPACING.xs },
   label: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6A6A6A',
+    lineHeight: 16,
   },
   inputRow: {
-    minHeight: 48,
+    minHeight: 52,
     borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
+    borderColor: '#E5E5E5',
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SPACING.sm,
     gap: SPACING.sm,
-  },
-  inputFocused: {
-    borderColor: COLORS.primary,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 8,
-    elevation: 2,
   },
   input: {
     flex: 1,

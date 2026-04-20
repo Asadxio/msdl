@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar,
@@ -18,6 +18,7 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const handleEmailChange = useCallback((text: string) => setEmail(text), []);
 
   const handleReset = async () => {
     if (!email.trim()) { setError('Please enter your email'); return; }
@@ -64,7 +65,7 @@ export default function ForgotPasswordScreen() {
                 leftIcon="mail-outline"
                 placeholder="Enter your email"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={handleEmailChange}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 testID="forgot-email-input"
@@ -82,19 +83,29 @@ export default function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
   body: { flexGrow: 1, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: SPACING.md },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: SPACING.lg },
   backText: { ...TYPOGRAPHY.label, color: COLORS.textMuted },
-  headerSection: { marginBottom: SPACING.md },
-  title: { ...TYPOGRAPHY.title, color: COLORS.text },
+  headerSection: { marginBottom: SPACING.lg },
+  title: { ...TYPOGRAPHY.title, color: COLORS.text, fontWeight: '800' },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, marginTop: SPACING.xs },
-  formCard: { gap: SPACING.md },
+  formCard: {
+    gap: SPACING.md,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 4,
+  },
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: '#FEE4E2', padding: SPACING.sm, borderRadius: RADIUS.md },
   errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1 },
   successBox: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.xs, backgroundColor: '#E6F7EE', padding: SPACING.sm, borderRadius: RADIUS.md },
   successText: { ...TYPOGRAPHY.body, color: COLORS.text, flex: 1 },
-  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 14, alignItems: 'center' },
+  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, minHeight: 54, width: '100%', justifyContent: 'center', alignItems: 'center', marginTop: SPACING.md },
   btnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });
