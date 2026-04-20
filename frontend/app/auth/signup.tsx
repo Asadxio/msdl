@@ -16,6 +16,7 @@ export default function SignupScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +26,7 @@ export default function SignupScreen() {
     if (!name.trim() || !email.trim() || !password) { setError('Please fill in all fields'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true); setError('');
-    const err = await signUp(name.trim(), email.trim(), password, role);
+    const err = await signUp(name.trim(), email.trim(), password, role, referralCode.trim());
     setLoading(false);
     if (err) setError(err);
   };
@@ -104,6 +105,21 @@ export default function SignupScreen() {
                   <Ionicons name="people-outline" size={20} color={role === 'teacher' ? '#FFF' : COLORS.textMuted} />
                   <Text style={[styles.roleBtnText, role === 'teacher' && styles.roleBtnTextActive]}>Teacher</Text>
                 </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Referral Code (optional)</Text>
+              <View style={styles.inputRow}>
+                <Ionicons name="gift-outline" size={20} color={COLORS.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter referral code"
+                  placeholderTextColor={COLORS.border}
+                  value={referralCode}
+                  onChangeText={setReferralCode}
+                  autoCapitalize="characters"
+                />
               </View>
             </View>
 

@@ -3,7 +3,7 @@ import { StyleSheet, View, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants/theme';
 
-type TabIconName = 'home' | 'home-outline' | 'book' | 'book-outline' | 'people' | 'people-outline' | 'library' | 'library-outline' | 'information-circle' | 'information-circle-outline' | 'notifications' | 'notifications-outline' | 'chatbubbles' | 'chatbubbles-outline' | 'help-circle' | 'help-circle-outline' | 'calendar' | 'calendar-outline' | 'stats-chart' | 'stats-chart-outline';
+type TabIconName = 'home' | 'home-outline' | 'book' | 'book-outline' | 'people' | 'people-outline' | 'library' | 'library-outline' | 'information-circle' | 'information-circle-outline' | 'notifications' | 'notifications-outline' | 'chatbubbles' | 'chatbubbles-outline' | 'help-circle' | 'help-circle-outline' | 'calendar' | 'calendar-outline' | 'stats-chart' | 'stats-chart-outline' | 'ribbon' | 'ribbon-outline';
 
 function TabIcon({ name, color, focused }: { name: TabIconName; color: string; focused: boolean }) {
   return (
@@ -103,6 +103,15 @@ export default function TabLayout() {
           title: 'Progress',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name={focused ? 'stats-chart' : 'stats-chart-outline'} color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="certificate"
+        options={{
+          title: 'Certificate',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? 'ribbon' : 'ribbon-outline'} color={color} focused={focused} />
           ),
         }}
       />

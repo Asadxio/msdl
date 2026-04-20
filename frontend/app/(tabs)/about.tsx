@@ -416,6 +416,8 @@ export default function AboutScreen() {
               <Text style={styles.profileName}>{profile.name}</Text>
               <Text style={styles.profileEmail}>{profile.email}</Text>
               <Text style={styles.profileRole}>{profile.role}</Text>
+              {!!profile.referral_code && <Text style={styles.profileEmail}>Referral Code: {profile.referral_code}</Text>}
+              <Text style={styles.profileEmail}>Referrals: {profile.referral_count || 0}</Text>
               <View style={styles.profileActionRow}>
                 <TouchableOpacity style={styles.profileMiniBtn} onPress={() => pickProfileImage('gallery')}>
                   <Text style={styles.profileMiniBtnText}>Gallery</Text>
@@ -464,6 +466,11 @@ export default function AboutScreen() {
             <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/payments')} testID="manage-payments-btn">
               <Ionicons name="card-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Manage Payments</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/analytics')}>
+              <Ionicons name="stats-chart-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Analytics Dashboard</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
 
