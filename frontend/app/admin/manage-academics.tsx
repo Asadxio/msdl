@@ -376,12 +376,12 @@ export default function ManageAcademicsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Courses</Text>
-          <TextInput style={styles.input} placeholder="Course name" value={courseForm.name} onChangeText={(v) => setCourseForm((p) => ({ ...p, name: v }))} />
-          <TextInput style={styles.input} placeholder="Teacher name" value={courseForm.teacher_name} onChangeText={(v) => setCourseForm((p) => ({ ...p, teacher_name: v }))} />
-          <TextInput style={styles.input} placeholder="Schedule (days)" value={courseForm.schedule} onChangeText={(v) => setCourseForm((p) => ({ ...p, schedule: v }))} />
-          <TextInput style={styles.input} placeholder="Class time (HH:mm)" value={courseForm.class_time} onChangeText={(v) => setCourseForm((p) => ({ ...p, class_time: v }))} />
-          <TextInput style={styles.input} placeholder="Google Meet link" value={courseForm.meet_link} onChangeText={(v) => setCourseForm((p) => ({ ...p, meet_link: v }))} autoCapitalize="none" />
-          <TextInput style={[styles.input, styles.textArea]} placeholder="Description" value={courseForm.description} onChangeText={(v) => setCourseForm((p) => ({ ...p, description: v }))} multiline />
+          <TextInput style={styles.input} placeholder="Course name" placeholderTextColor={COLORS.textMuted} value={courseForm.name} onChangeText={(v) => setCourseForm((p) => ({ ...p, name: v }))} />
+          <TextInput style={styles.input} placeholder="Teacher name" placeholderTextColor={COLORS.textMuted} value={courseForm.teacher_name} onChangeText={(v) => setCourseForm((p) => ({ ...p, teacher_name: v }))} />
+          <TextInput style={styles.input} placeholder="Schedule (days)" placeholderTextColor={COLORS.textMuted} value={courseForm.schedule} onChangeText={(v) => setCourseForm((p) => ({ ...p, schedule: v }))} />
+          <TextInput style={styles.input} placeholder="Class time (HH:mm)" placeholderTextColor={COLORS.textMuted} value={courseForm.class_time} onChangeText={(v) => setCourseForm((p) => ({ ...p, class_time: v }))} />
+          <TextInput style={styles.input} placeholder="Google Meet link" placeholderTextColor={COLORS.textMuted} value={courseForm.meet_link} onChangeText={(v) => setCourseForm((p) => ({ ...p, meet_link: v }))} autoCapitalize="none" />
+          <TextInput style={[styles.input, styles.textArea]} placeholder="Description" placeholderTextColor={COLORS.textMuted} value={courseForm.description} onChangeText={(v) => setCourseForm((p) => ({ ...p, description: v }))} multiline />
 
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={saveCourse} disabled={actionLoading}>
             {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>{editingCourseId ? 'Update Course' : 'Add Course'}</Text>}
@@ -406,9 +406,9 @@ export default function ManageAcademicsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Teachers</Text>
-          <TextInput style={styles.input} placeholder="Teacher name" value={teacherName} onChangeText={setTeacherName} />
-          <TextInput style={styles.input} placeholder="Title (e.g. Alima Fazila)" value={teacherTitle} onChangeText={setTeacherTitle} />
-          <TextInput style={styles.input} placeholder="Photo URL (optional)" value={teacherPhoto} onChangeText={setTeacherPhoto} autoCapitalize="none" />
+          <TextInput style={styles.input} placeholder="Teacher name" placeholderTextColor={COLORS.textMuted} value={teacherName} onChangeText={setTeacherName} />
+          <TextInput style={styles.input} placeholder="Title (e.g. Alima Fazila)" placeholderTextColor={COLORS.textMuted} value={teacherTitle} onChangeText={setTeacherTitle} />
+          <TextInput style={styles.input} placeholder="Photo URL (optional)" placeholderTextColor={COLORS.textMuted} value={teacherPhoto} onChangeText={setTeacherPhoto} autoCapitalize="none" />
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={addTeacher} disabled={actionLoading}>
             {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Add Teacher</Text>}
           </TouchableOpacity>
@@ -462,9 +462,9 @@ export default function ManageAcademicsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recordings</Text>
-          <TextInput style={styles.input} placeholder="Recording title" value={recordingTitle} onChangeText={setRecordingTitle} />
-          <TextInput style={styles.input} placeholder="Description" value={recordingDescription} onChangeText={setRecordingDescription} />
-          <TextInput style={styles.input} placeholder="Google Drive / media URL" value={recordingUrl} onChangeText={setRecordingUrl} autoCapitalize="none" />
+          <TextInput style={styles.input} placeholder="Recording title" placeholderTextColor={COLORS.textMuted} value={recordingTitle} onChangeText={setRecordingTitle} />
+          <TextInput style={styles.input} placeholder="Description" placeholderTextColor={COLORS.textMuted} value={recordingDescription} onChangeText={setRecordingDescription} />
+          <TextInput style={styles.input} placeholder="Google Drive / media URL" placeholderTextColor={COLORS.textMuted} value={recordingUrl} onChangeText={setRecordingUrl} autoCapitalize="none" />
           <Text style={styles.helper}>Select course:</Text>
           {courses.length === 0 ? <Text style={styles.helper}>No courses available.</Text> : courses.map((course) => (
             <TouchableOpacity key={course.id} style={[styles.courseChip, recordingCourseId === course.id && styles.courseChipSelected]} onPress={() => setRecordingCourseId(course.id)}>
