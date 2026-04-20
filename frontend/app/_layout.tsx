@@ -89,6 +89,7 @@ export default function RootLayout() {
             <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/payments" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/manage-academics" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="admin/analytics" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />

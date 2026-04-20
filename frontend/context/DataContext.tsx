@@ -12,8 +12,10 @@ export type Course = {
   teacher_name: string;
   schedule: string;
   time?: string;
+  class_time?: string;
   description: string;
   class_link: string;
+  meet_link?: string;
 };
 
 export type Teacher = {
@@ -28,6 +30,7 @@ export type Book = {
   title: string;
   pdf_url: string;
   category: string;
+  category_id?: string;
   deleted?: boolean;
 };
 
@@ -40,7 +43,7 @@ type DataContextType = {
   error: string | null;
   refetch: () => void;
   refetchBooks: () => Promise<void>;
-  addBook: (title: string, pdf_url: string, category: string) => Promise<boolean>;
+  addBook: (title: string, pdf_url: string, category: string, category_id?: string) => Promise<boolean>;
   deleteBook: (bookId: string) => Promise<boolean>;
 };
 
@@ -68,8 +71,10 @@ function getLocalCourses(): Course[] {
     teacher_name: c.teacher,
     schedule: c.schedule,
     time: '',
+    class_time: '',
     description: c.description,
     class_link: '',
+    meet_link: '',
   }));
 }
 
@@ -107,6 +112,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           title: data.title || '',
           pdf_url: data.pdf_url || data.pdfUrl || '',
           category: data.category || '',
+          category_id: data.category_id || '',
         });
       });
       setBooks(booksData);
@@ -132,8 +138,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           teacher_name: data.teacherName || data.teacher_name || '',
           schedule: data.schedule || '',
           time: data.time || '',
+          class_time: data.class_time || data.time || '',
           description: data.description || '',
-          class_link: data.classLink || data.class_link || '',
+          class_link: data.classLink || data.class_link || data.meet_link || '',
+          meet_link: data.meet_link || data.class_link || data.classLink || '',
         });
       });
 
@@ -161,7 +169,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addBook = async (title: string, pdf_url: string, category: string): Promise<boolean> => {
+  const addBook = async (title: string, pdf_url: string, category: string, category_id?: string): Promise<boolean> => {
     if (profile?.role !== 'admin') {
       console.warn('Unauthorized: only admin can add books');
       return false;
@@ -171,6 +179,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         title,
         pdf_url,
         category,
+        category_id: category_id || '',
         created_at: serverTimestamp(),
       });
       await fetchBooks();

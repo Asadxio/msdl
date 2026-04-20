@@ -11,6 +11,7 @@ import {
   Alert,
   Linking,
   Share,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,8 +57,9 @@ type PaymentItem = {
   user_id: string;
   user_name: string;
   amount: number;
-  payment_ref?: string | null;
-  status: 'pending' | 'submitted' | 'verified' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'verified' | 'submitted';
+  provider?: 'razorpay';
+  type?: 'fees' | 'sadqa' | 'zakat' | 'fitra';
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -68,6 +70,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   instagram: '',
   youtube_telegram: '',
 };
+const HELP_WHATSAPP_URL = 'https://wa.link/s82kj2';
+const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
 
 function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
@@ -84,7 +88,7 @@ function SectionCard({ title, icon, children }: { title: string; icon: string; c
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshProfile } = useAuth();
   const router = useRouter();
   const isAdmin = profile?.role === 'admin';
 
@@ -92,12 +96,12 @@ export default function AboutScreen() {
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
   const [fbMessage, setFbMessage] = useState('');
   const [fbRating, setFbRating] = useState('');
-  const [paymentRef, setPaymentRef] = useState('');
   const [myPayments, setMyPayments] = useState<PaymentItem[]>([]);
-  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
+  const [donationAmount, setDonationAmount] = useState('');
   const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null);
   const [editingFeedbackMsg, setEditingFeedbackMsg] = useState('');
   const [exportingCollection, setExportingCollection] = useState<string | null>(null);
+  const [savingProfileMedia, setSavingProfileMedia] = useState(false);
   const testimonials = useMemo(() => feedback.slice(0, 6), [feedback]);
 
   const serialize = (value: any): any => {
@@ -233,15 +237,12 @@ export default function AboutScreen() {
   };
 
   const openHelp = async () => {
-    const contact = settings.whatsapp_contact.trim();
-    if (!contact) {
-      Alert.alert('Missing', 'WhatsApp contact not set yet.');
+    const canOpen = await Linking.canOpenURL(HELP_WHATSAPP_URL);
+    if (!canOpen) {
+      Alert.alert('Unavailable', 'Could not open WhatsApp right now.');
       return;
     }
-    const url = contact.startsWith('http')
-      ? contact
-      : `https://wa.me/${contact.replace(/[^0-9]/g, '')}`;
-    await Linking.openURL(url);
+    await Linking.openURL(HELP_WHATSAPP_URL);
   };
 
   const shareApp = async () => {
@@ -250,46 +251,148 @@ export default function AboutScreen() {
     });
   };
 
+  const getLatestPaymentSettings = async () => {
+    const snap = await getDoc(doc(db, 'app_settings', 'platform'));
+    const data = snap.exists() ? (snap.data() as any) : {};
+    return {
+      razorpay_link: String(data.razorpay_link || settings.razorpay_link || '').trim(),
+      fees_amount: Number(data.fees_amount ?? settings.fees_amount ?? 0),
+    };
+  };
+
+  const createPaymentNotification = async (name: string, amount: number, type: string) => {
+    await addDoc(collection(db, 'notifications'), {
+      title: 'Payment Submitted',
+      message: `${name} submitted ${type} payment of ₹${Number(amount || 0).toFixed(2)}.`,
+      user_id: 'all',
+      category: 'notification',
+      created_at: serverTimestamp(),
+    });
+  };
+
   const payFees = async () => {
     if (!user || !profile) return;
-    const link = settings.razorpay_link.trim();
+    const paymentSettings = await getLatestPaymentSettings();
+    const link = paymentSettings.razorpay_link;
+    const amount = Number(paymentSettings.fees_amount || 0);
     if (!link) {
       Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
       return;
     }
+    if (!link.startsWith('http')) {
+      Alert.alert('Invalid Link', 'Payment link must be a valid URL.');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert('Invalid Fees', 'Fees amount must be greater than 0.');
+      return;
+    }
 
-    const pendingRef = await addDoc(collection(db, 'payments'), {
+    await addDoc(collection(db, 'payments'), {
       user_id: user.uid,
       user_name: profile.name,
-      amount: Number(settings.fees_amount || 0),
-      payment_ref: null,
+      amount,
       status: 'pending',
       provider: 'razorpay',
+      type: 'fees',
       created_at: serverTimestamp(),
     });
-    setPendingPaymentId(pendingRef.id);
-
+    await createPaymentNotification(profile.name, amount, 'fees');
     await Linking.openURL(link);
-    Alert.alert(
-      'Payment Status',
-      'After payment completion, tap "Submit Payment".',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Submit Payment',
-          onPress: async () => {
-            await updateDoc(doc(db, 'payments', pendingPaymentId || pendingRef.id), {
-              payment_ref: paymentRef.trim() || null,
-              status: 'submitted',
-              submitted_at: serverTimestamp(),
-            });
-            setPaymentRef('');
-            setPendingPaymentId(null);
-            Alert.alert('Submitted', 'Payment submitted for admin verification.');
-          },
-        },
-      ]
-    );
+    Alert.alert('Recorded', 'Your payment attempt was recorded and is pending admin approval.');
+  };
+
+  const donate = async (donationType: 'sadqa' | 'zakat' | 'fitra') => {
+    if (!user || !profile) return;
+    const paymentSettings = await getLatestPaymentSettings();
+    const link = paymentSettings.razorpay_link;
+    const amount = Number(donationAmount || 0);
+    if (!link) {
+      Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
+      return;
+    }
+    if (!link.startsWith('http')) {
+      Alert.alert('Invalid Link', 'Payment link must be a valid URL.');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Enter a valid donation amount.');
+      return;
+    }
+    await addDoc(collection(db, 'payments'), {
+      user_id: user.uid,
+      user_name: profile.name,
+      amount,
+      status: 'pending',
+      provider: 'razorpay',
+      type: donationType,
+      created_at: serverTimestamp(),
+    });
+    await createPaymentNotification(profile.name, amount, donationType);
+    await Linking.openURL(link);
+    Alert.alert('Donation Initiated', `${donationType.toUpperCase()} donation recorded and pending admin approval.`);
+  };
+
+  const savePaymentSettings = async () => {
+    if (!isAdmin) return;
+    const link = settings.razorpay_link.trim();
+    const feeAmount = Number(settings.fees_amount || 0);
+    if (!link) {
+      Alert.alert('Missing Link', 'Please set the Razorpay payment link.');
+      return;
+    }
+    if (!link.startsWith('http')) {
+      Alert.alert('Invalid Link', 'Please enter a valid payment link URL.');
+      return;
+    }
+    if (!Number.isFinite(feeAmount) || feeAmount <= 0) {
+      Alert.alert('Invalid Fees', 'Fees amount must be greater than 0.');
+      return;
+    }
+    await saveSettings();
+  };
+
+  const updateProfileMedia = async (updates: { photo_url?: string; avatar?: string }) => {
+    if (!user) return;
+    setSavingProfileMedia(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), updates);
+      await refreshProfile();
+      Alert.alert('Saved', 'Profile updated successfully.');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to update profile.');
+    } finally {
+      setSavingProfileMedia(false);
+    }
+  };
+
+  const validatePickedAsset = (asset: any): string | null => {
+    const mime = asset.mimeType || '';
+    if (mime && !mime.startsWith('image/')) return 'Only image files are allowed.';
+    if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) return 'Image size must be below 5MB.';
+    return null;
+  };
+
+  const pickProfileImage = async (source: 'camera' | 'gallery') => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ImagePicker: any = require('expo-image-picker');
+    const perm = source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', `Please allow ${source} access to upload profile image.`);
+      return;
+    }
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+    if (result.canceled || !result.assets[0]) return;
+    const errorMessage = validatePickedAsset(result.assets[0]);
+    if (errorMessage) {
+      Alert.alert('Invalid Image', errorMessage);
+      return;
+    }
+    await updateProfileMedia({ photo_url: result.assets[0].uri, avatar: profile?.avatar || 'person' });
   };
 
   return (
@@ -303,12 +406,38 @@ export default function AboutScreen() {
         {profile && (
           <View style={styles.profileCard} testID="user-profile-card">
             <View style={styles.profileIconCircle}>
-              <Ionicons name="person" size={24} color={COLORS.primary} />
+              {profile.photo_url ? (
+                <Image source={{ uri: profile.photo_url }} style={styles.profilePhoto} />
+              ) : (
+                <Ionicons name={(profile.avatar as any) || 'person'} size={24} color={COLORS.primary} />
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.profileName}>{profile.name}</Text>
               <Text style={styles.profileEmail}>{profile.email}</Text>
               <Text style={styles.profileRole}>{profile.role}</Text>
+              {!!profile.referral_code && <Text style={styles.profileEmail}>Referral Code: {profile.referral_code}</Text>}
+              <Text style={styles.profileEmail}>Referrals: {profile.referral_count || 0}</Text>
+              <View style={styles.profileActionRow}>
+                <TouchableOpacity style={styles.profileMiniBtn} onPress={() => pickProfileImage('gallery')}>
+                  <Text style={styles.profileMiniBtnText}>Gallery</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.profileMiniBtn} onPress={() => pickProfileImage('camera')}>
+                  <Text style={styles.profileMiniBtnText}>Camera</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.avatarPickerRow}>
+                {AVATAR_OPTIONS.map((avatarName) => (
+                  <TouchableOpacity
+                    key={avatarName}
+                    style={[styles.avatarBtn, profile.avatar === avatarName && styles.avatarBtnActive]}
+                    onPress={() => updateProfileMedia({ avatar: avatarName })}
+                    disabled={savingProfileMedia}
+                  >
+                    <Ionicons name={avatarName as any} size={15} color={profile.avatar === avatarName ? '#fff' : COLORS.primary} />
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
             <TouchableOpacity style={styles.signOutBtn} onPress={signOut} testID="signout-btn">
               <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
@@ -339,6 +468,11 @@ export default function AboutScreen() {
               <Text style={styles.adminItemText}>Manage Payments</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/analytics')}>
+              <Ionicons name="stats-chart-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Analytics Dashboard</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
 
             <View style={styles.exportBlock}>
               <Text style={styles.subTitle}>Data Safety</Text>
@@ -366,22 +500,14 @@ export default function AboutScreen() {
           </View>
         )}
 
-        <SectionCard title="Pay Fees (Razorpay)" icon="card-outline">
+        <SectionCard title="Pay Fees (Razorpay Link)" icon="card-outline">
           <Text style={styles.bodyText}>Current Fees: ₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
           {myPayments[0] && (
             <View style={styles.statusCard}>
               <Text style={styles.statusLabel}>Latest Payment Status</Text>
               <Text style={styles.statusValue}>{myPayments[0].status}</Text>
-              {myPayments[0].payment_ref ? <Text style={styles.statusRef}>Ref: {myPayments[0].payment_ref}</Text> : null}
             </View>
           )}
-          <TextInput
-            style={styles.input}
-            placeholder="Payment reference (optional)"
-            placeholderTextColor={COLORS.border}
-            value={paymentRef}
-            onChangeText={setPaymentRef}
-          />
           <TouchableOpacity style={styles.primaryBtn} onPress={payFees} testID="pay-fees-btn">
             <Text style={styles.primaryBtnText}>Pay Fees</Text>
           </TouchableOpacity>
@@ -404,11 +530,37 @@ export default function AboutScreen() {
                 onChangeText={(v) => setSettings((p) => ({ ...p, razorpay_link: v }))}
                 autoCapitalize="none"
               />
-              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={savePaymentSettings}>
                 <Text style={styles.secondaryBtnText}>Save Payment Settings</Text>
               </TouchableOpacity>
             </View>
           )}
+        </SectionCard>
+
+        <SectionCard title="Donations (Razorpay Link)" icon="heart-outline">
+          <Text style={styles.bodyText}>Support the madrasa through Sadqa, Zakat, or Fitra.</Text>
+          <TextInput
+            style={[styles.input, { marginTop: 10 }]}
+            placeholder="Donation Amount"
+            placeholderTextColor={COLORS.border}
+            keyboardType="numeric"
+            value={donationAmount}
+            onChangeText={setDonationAmount}
+          />
+          <View style={styles.row}>
+            <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('sadqa')}>
+              <Text style={styles.primaryBtnText}>Donate Sadqa</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('zakat')}>
+              <Text style={styles.primaryBtnText}>Donate Zakat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('fitra')}>
+              <Text style={styles.primaryBtnText}>Donate Fitra</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.bodyText, { marginTop: 10, fontSize: 12 }]}>
+            Need Help? Contact us on WhatsApp
+          </Text>
         </SectionCard>
 
         <SectionCard title="Feedback & Testimonials" icon="chatbox-ellipses-outline">
@@ -494,6 +646,9 @@ export default function AboutScreen() {
               <Text style={styles.primaryBtnText}>Help (WhatsApp)</Text>
             </TouchableOpacity>
           </View>
+          <Text style={[styles.bodyText, { marginTop: 10, fontSize: 12 }]}>
+            Need Help? Contact us on WhatsApp
+          </Text>
         </SectionCard>
 
         <View style={styles.bismillahCard} testID="bismillah-section">
@@ -540,13 +695,13 @@ const styles = StyleSheet.create({
   },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
-  primaryBtnSmall: { flex: 1, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
+  primaryBtnSmall: { flexGrow: 1, minWidth: 150, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   secondaryBtn: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center' },
   secondaryBtnText: { color: COLORS.primary, fontWeight: '700' },
   linkBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center', marginBottom: 8 },
   linkBtnText: { color: COLORS.textMain, fontWeight: '600' },
-  row: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   statusCard: { backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: 10, marginVertical: 8 },
   statusLabel: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
   statusValue: { fontSize: 14, color: COLORS.primary, fontWeight: '800', textTransform: 'capitalize', marginTop: 3 },
@@ -566,9 +721,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12, ...SHADOWS.card,
   },
   profileIconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  profilePhoto: { width: 48, height: 48, borderRadius: 24 },
   profileName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
   profileEmail: { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
   profileRole: { fontSize: 11, fontWeight: '700', color: COLORS.secondary, textTransform: 'capitalize', marginTop: 2 },
+  profileActionRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  profileMiniBtn: { borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
+  profileMiniBtnText: { color: COLORS.textMain, fontSize: 11, fontWeight: '600' },
+  avatarPickerRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  avatarBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt },
+  avatarBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   signOutBtn: { padding: 10 },
   adminCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, ...SHADOWS.card, gap: 8 },
   adminTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 },

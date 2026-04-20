@@ -9,7 +9,9 @@ import {
   reload,
   User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  collection, doc, getDoc, getDocs, increment, limit, query, serverTimestamp, setDoc, updateDoc, where,
+} from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 export type UserProfile = {
@@ -17,6 +19,10 @@ export type UserProfile = {
   email: string;
   role: 'student' | 'teacher' | 'admin';
   status: 'pending' | 'approved' | 'deactivated' | 'rejected';
+  photo_url?: string;
+  avatar?: string;
+  referral_code?: string;
+  referral_count?: number;
 };
 
 type AuthContextType = {
@@ -25,7 +31,7 @@ type AuthContextType = {
   authLoading: boolean;
   emailVerified: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (name: string, email: string, password: string, role: 'student' | 'teacher') => Promise<string | null>;
+  signUp: (name: string, email: string, password: string, role: 'student' | 'teacher', referralCode?: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   resendVerification: () => Promise<string | null>;
@@ -49,6 +55,11 @@ const AuthContext = createContext<AuthContextType>({
 
 export function useAuth() {
   return useContext(AuthContext);
+}
+
+function generateReferralCode(name: string): string {
+  const prefix = name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'USER';
+  return `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -101,6 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string): Promise<string | null> => {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
+      await updateDoc(doc(db, 'users', cred.user.uid), { last_login_at: serverTimestamp() }).catch(() => {});
       await fetchProfile(cred.user.uid);
       return null;
     } catch (err: any) {
@@ -116,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (
-    name: string, email: string, password: string, role: 'student' | 'teacher'
+    name: string, email: string, password: string, role: 'student' | 'teacher', referralCode?: string
   ): Promise<string | null> => {
     // Role protection - only student or teacher allowed
     const safeRole = role === 'teacher' ? 'teacher' : 'student';
@@ -126,13 +138,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         await sendEmailVerification(cred.user);
       } catch { /* non-blocking */ }
+
+      let referrerId: string | null = null;
+      const normalizedCode = (referralCode || '').trim().toUpperCase();
+      if (normalizedCode) {
+        const refSnap = await getDocs(query(collection(db, 'users'), where('referral_code', '==', normalizedCode), limit(1)));
+        referrerId = refSnap.empty ? null : refSnap.docs[0].id;
+      }
+
       await setDoc(doc(db, 'users', cred.user.uid), {
         name,
         email,
         role: safeRole,
         status: 'pending',
+        referral_code: generateReferralCode(name),
+        referred_by: referrerId,
+        referral_count: 0,
+        last_login_at: serverTimestamp(),
         created_at: serverTimestamp(),
       });
+      if (referrerId) {
+        await updateDoc(doc(db, 'users', referrerId), {
+          referral_count: increment(1),
+          updated_at: serverTimestamp(),
+        }).catch(() => {});
+      }
       await fetchProfile(cred.user.uid);
       return null;
     } catch (err: any) {

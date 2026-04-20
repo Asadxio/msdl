@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,17 +14,48 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS, MEDIA, getCourseImage, getTeacherAvatar } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
+import { db } from '@/lib/firebase';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.72;
+const DEFAULT_ANNOUNCEMENT_TITLE = 'Enrollment Open for 2025';
+const DEFAULT_ANNOUNCEMENT_DESC = 'Admissions are now open for all courses. Register today and begin your journey of Islamic knowledge.';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { courses, teachers, loading } = useData();
   const featuredCourses = courses.slice(0, 5);
+  const [announcementTitle, setAnnouncementTitle] = useState(DEFAULT_ANNOUNCEMENT_TITLE);
+  const [announcementMessage, setAnnouncementMessage] = useState(DEFAULT_ANNOUNCEMENT_DESC);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'notifications'),
+      where('user_id', '==', 'all'),
+      orderBy('created_at', 'desc'),
+      limit(20),
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const latestAnnouncement = snapshot.docs
+        .map((docItem) => docItem.data() as { title?: string; message?: string; category?: string })
+        .find((item) => (
+          item.category === 'announcement' || item.title?.toLowerCase().includes('announcement')
+        ));
+
+      setAnnouncementTitle(latestAnnouncement?.title?.trim() || DEFAULT_ANNOUNCEMENT_TITLE);
+      setAnnouncementMessage(latestAnnouncement?.message?.trim() || DEFAULT_ANNOUNCEMENT_DESC);
+    });
+    return unsub;
+  }, []);
+
+  const isDefaultAnnouncement = useMemo(
+    () => announcementTitle === DEFAULT_ANNOUNCEMENT_TITLE && announcementMessage === DEFAULT_ANNOUNCEMENT_DESC,
+    [announcementMessage, announcementTitle]
+  );
 
   return (
     <View style={styles.container}>
@@ -141,14 +172,12 @@ export default function HomeScreen() {
               <View style={styles.announcementContent}>
                 <View style={styles.announcementBadge}>
                   <Ionicons name="megaphone" size={14} color={COLORS.secondary} />
-                  <Text style={styles.announcementBadgeText}>New</Text>
+                  <Text style={styles.announcementBadgeText}>{isDefaultAnnouncement ? 'New' : 'Live'}</Text>
                 </View>
-                <Text style={styles.announcementTitle}>Enrollment Open for 2025</Text>
-                <Text style={styles.announcementDesc}>
-                  Admissions are now open for all courses. Register today and begin your journey of Islamic knowledge.
-                </Text>
-                <TouchableOpacity style={styles.announcementBtn} testID="learn-more-btn">
-                  <Text style={styles.announcementBtnText}>Learn More</Text>
+                <Text style={styles.announcementTitle}>{announcementTitle}</Text>
+                <Text style={styles.announcementDesc}>{announcementMessage}</Text>
+                <TouchableOpacity style={styles.announcementBtn} testID="learn-more-btn" onPress={() => router.push('/notifications')}>
+                  <Text style={styles.announcementBtnText}>Open Announcements</Text>
                   <Ionicons name="arrow-forward" size={16} color={COLORS.secondary} />
                 </TouchableOpacity>
               </View>

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, FlatList,
-  ActivityIndicator, TextInput, Alert, ScrollView,
+  ActivityIndicator, TextInput, Alert, ScrollView, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,7 @@ import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 
-type AppUser = { id: string; name: string; role: string; status: string };
+type AppUser = { id: string; name: string; email?: string; role: string; status: string; photo_url?: string; avatar?: string };
 type ChatItem = {
   id: string;
   type: 'direct' | 'group' | 'broadcast';
@@ -60,7 +60,14 @@ export default function ChatsScreen() {
   const [creatingDirectFor, setCreatingDirectFor] = useState<string | null>(null);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [openingBroadcast, setOpeningBroadcast] = useState(false);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const usersMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.name])), [users]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     if (!user) return;
@@ -107,7 +114,10 @@ export default function ChatsScreen() {
         snap.forEach((d) => {
           const data = d.data() as any;
           if (data.status !== 'approved') return;
-          list.push({ id: d.id, name: data.name || 'User', role: data.role || 'student', status: data.status });
+          list.push({
+            id: d.id, name: data.name || 'User', email: data.email || '', role: data.role || 'student', status: data.status,
+            photo_url: data.photo_url || '', avatar: data.avatar || 'person',
+          });
         });
         setUsers(list);
       } catch {
@@ -237,6 +247,20 @@ export default function ChatsScreen() {
     }
   };
 
+  const filteredUsers = users.filter((u) => (
+    u.id !== user?.uid && (
+      !debouncedSearch
+      || u.name.toLowerCase().includes(debouncedSearch)
+      || (u.email || '').toLowerCase().includes(debouncedSearch)
+    )
+  ));
+
+  const filteredChats = chats.filter((c) => (
+    !debouncedSearch || chatTitle(c, usersMap, user?.uid || '').toLowerCase().includes(debouncedSearch)
+  ));
+
+  const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -263,13 +287,22 @@ export default function ChatsScreen() {
           </>
         )}
       </View>
+      <View style={styles.searchWrap}>
+        <TextInput
+          style={styles.input}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search chats or users"
+          placeholderTextColor={COLORS.border}
+        />
+      </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {showUsers && (
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Start direct chat</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {users.filter((u) => u.id !== user?.uid).map((u) => (
+            {filteredUsers.map((u) => (
               <TouchableOpacity key={u.id} style={styles.userChip} onPress={() => getOrCreateDirectChat(u)}>
                 <Text style={styles.userChipText}>
                   {creatingDirectFor === u.id ? 'Starting...' : u.name}
@@ -291,7 +324,7 @@ export default function ChatsScreen() {
             placeholderTextColor={COLORS.border}
           />
           <View style={styles.groupUsers}>
-            {users.filter((u) => u.id !== user?.uid).map((u) => {
+            {filteredUsers.map((u) => {
               const active = selected.includes(u.id);
               return (
                 <TouchableOpacity key={u.id} style={[styles.userChip, active && styles.userChipActive]} onPress={() => toggleParticipant(u.id)}>
@@ -314,11 +347,22 @@ export default function ChatsScreen() {
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
         <FlatList
-          data={chats}
+          data={filteredChats}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
+          renderItem={({ item }) => {
+            const otherId = item.participants.find((p) => p !== user?.uid);
+            const avatarUser = otherId ? userById[otherId] : undefined;
+            return (
             <TouchableOpacity style={styles.chatCard} onPress={() => router.push(`/chat/${item.id}`)}>
+              {avatarUser?.photo_url ? (
+                <Image source={{ uri: avatarUser.photo_url }} style={styles.chatAvatar} />
+              ) : (
+                <View style={styles.chatAvatarFallback}>
+                  <Ionicons name={(avatarUser?.avatar as any) || 'person'} size={16} color={COLORS.primary} />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
               <View style={styles.chatTitleRow}>
                 <Text style={styles.chatName}>{chatTitle(item, usersMap, user?.uid || '')}</Text>
                 <Text style={styles.chatType}>{item.type}</Text>
@@ -334,8 +378,9 @@ export default function ChatsScreen() {
                   ) : null}
                 </View>
               </View>
+              </View>
             </TouchableOpacity>
-          )}
+          )}}
           ListEmptyComponent={(
             <View style={styles.center}>
               <Ionicons name="chatbubbles-outline" size={42} color={COLORS.border} />
@@ -362,6 +407,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, backgroundColor: COLORS.surface,
   },
   toolBtnText: { color: COLORS.primary, fontWeight: '600', fontSize: 12 },
+  searchWrap: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm },
   errorText: { color: '#B3261E', fontSize: 12, paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm },
   panel: { marginHorizontal: SPACING.md, marginBottom: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, ...SHADOWS.card },
   panelTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textMain, marginBottom: 8 },
@@ -374,7 +420,9 @@ const styles = StyleSheet.create({
   createBtn: { marginTop: 12, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
   createBtnText: { color: '#fff', fontWeight: '700' },
   list: { padding: SPACING.md, gap: 8, paddingBottom: 24 },
-  chatCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card },
+  chatCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card, flexDirection: 'row', gap: 10 },
+  chatAvatar: { width: 32, height: 32, borderRadius: 16, marginTop: 2 },
+  chatAvatarFallback: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   chatTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   chatName: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.textMain },
   chatType: { fontSize: 10, color: COLORS.goldText, backgroundColor: COLORS.goldBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, textTransform: 'uppercase' },
