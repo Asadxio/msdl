@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 
 export type UserProfile = {
   name: string;
@@ -79,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null);
       }
     } catch (err) {
-      console.warn('Failed to fetch profile:', err);
+      logger.warn('Failed to fetch profile:', err);
       setProfile(null);
     }
   };
@@ -137,9 +138,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const safeRole = role === 'teacher' ? 'teacher' : 'student';
     const safeName = name.trim();
     const safeEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
     if (!safeName || !safeEmail || !password) return 'Please fill in all required fields';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return 'Invalid email format';
+    if (normalizedPassword.length < 6) return 'Password must be at least 6 characters';
     try {
-      const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, password));
+      const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
       // Send verification email
       try {
         await withTimeout(sendEmailVerification(cred.user));

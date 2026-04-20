@@ -4,14 +4,13 @@ import {
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SignupScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signUp } = useAuth();
   const [name, setName] = useState('');
@@ -38,10 +37,10 @@ export default function SignupScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[styles.body, { paddingTop: insets.top + SPACING.md }]} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <FadeInView style={styles.headerSection}>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Join our learning community</Text>
@@ -94,7 +93,7 @@ export default function SignupScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 

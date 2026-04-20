@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import { WebView } from 'react-native-webview';
 import { COLORS, SPACING, RADIUS, SHADOWS, getCourseImage, getTeacherAvatar } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -36,8 +37,10 @@ export default function CourseDetailScreen() {
     getSubmissionsForAssignment, submitAssignment, reviewSubmission,
   } = useData();
   const { user, profile } = useAuth();
-  const [recordings, setRecordings] = useState<{ id: string; title: string; description: string; file_url: string }[]>([]);
+  const [recordings, setRecordings] = useState<{ id: string; title: string; description: string; file_url: string; lesson_id?: string }[]>([]);
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
+  const [playerVisible, setPlayerVisible] = useState(false);
+  const [playerUrl, setPlayerUrl] = useState('');
 
   const [activeAssignmentId, setActiveAssignmentId] = useState<string>('');
   const [submissionModalVisible, setSubmissionModalVisible] = useState(false);
@@ -61,7 +64,7 @@ export default function CourseDetailScreen() {
     if (!id) return;
     const q = query(collection(db, 'recordings'), where('course_id', '==', id));
     const unsub = onSnapshot(q, (snap) => {
-      const arr: { id: string; title: string; description: string; file_url: string }[] = [];
+      const arr: { id: string; title: string; description: string; file_url: string; lesson_id?: string }[] = [];
       snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
       setRecordings(arr);
     });
@@ -78,6 +81,26 @@ export default function CourseDetailScreen() {
     return Math.abs(now.getTime() - slot.getTime()) <= 60 * 60 * 1000;
   }, [classTimeLabel]);
   const modules = useMemo(() => (course ? getModulesForCourse(course.id) : []), [course, getModulesForCourse]);
+  const generalRecordings = useMemo(() => recordings.filter((r) => !r.lesson_id), [recordings]);
+
+  const toEmbeddableUrl = (url: string): string => {
+    const clean = url.trim();
+    if (!clean) return clean;
+    const youtubeWatchMatch = clean.match(/youtube\.com\/watch\?v=([^&]+)/i);
+    if (youtubeWatchMatch?.[1]) return `https://www.youtube.com/embed/${youtubeWatchMatch[1]}`;
+    const youtubeShortMatch = clean.match(/youtu\.be\/([^?&]+)/i);
+    if (youtubeShortMatch?.[1]) return `https://www.youtube.com/embed/${youtubeShortMatch[1]}`;
+    const driveMatch = clean.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
+    if (driveMatch?.[1]) return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
+    return clean;
+  };
+
+  const openRecordingPlayer = (url: string) => {
+    const embedUrl = toEmbeddableUrl(url);
+    if (!embedUrl) return;
+    setPlayerUrl(embedUrl);
+    setPlayerVisible(true);
+  };
 
   if (loading) {
     return (
@@ -281,10 +304,10 @@ export default function CourseDetailScreen() {
               </View>
               <Text style={styles.infoCardTitle}>Recordings</Text>
             </View>
-            {recordings.length === 0 ? (
+            {generalRecordings.length === 0 ? (
               <Text style={styles.infoCardSubValue}>No recordings yet.</Text>
-            ) : recordings.map((rec) => (
-              <TouchableOpacity key={rec.id} style={styles.recordingRow} onPress={() => Linking.openURL(rec.file_url)}>
+            ) : generalRecordings.map((rec) => (
+              <TouchableOpacity key={rec.id} style={styles.recordingRow} onPress={() => openRecordingPlayer(rec.file_url)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.recordingTitle}>{rec.title || 'Recording'}</Text>
                   <Text style={styles.recordingDesc}>{rec.description || 'Tap to play'}</Text>
@@ -314,6 +337,7 @@ export default function CourseDetailScreen() {
                     const done = !!lessonProgress[lesson.id]?.completed;
                     const lessonAssignments = getAssignmentsForLesson(lesson.id);
                     const isExpanded = expandedLessonId === lesson.id;
+                    const lessonRecordings = recordings.filter((rec) => rec.lesson_id === lesson.id);
                     return (
                       <View key={lesson.id}>
                         <ScalePressable
@@ -340,6 +364,20 @@ export default function CourseDetailScreen() {
                               <Ionicons name="checkmark-done" size={16} color="#fff" />
                               <Text style={styles.completeBtnText}>{done ? 'Completed' : 'Mark lesson complete'}</Text>
                             </TouchableOpacity>
+                            <View style={styles.lessonRecordingBlock}>
+                              <Text style={styles.lessonRecordingTitle}>Class Recordings</Text>
+                              {lessonRecordings.length === 0 ? (
+                                <Text style={styles.infoCardSubValue}>No recording attached to this lesson yet.</Text>
+                              ) : lessonRecordings.map((rec) => (
+                                <TouchableOpacity key={rec.id} style={styles.recordingRow} onPress={() => openRecordingPlayer(rec.file_url)}>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.recordingTitle}>{rec.title || 'Recording'}</Text>
+                                    <Text style={styles.recordingDesc}>{rec.description || 'Tap to play'}</Text>
+                                  </View>
+                                  <Ionicons name="play-circle-outline" size={22} color={COLORS.primary} />
+                                </TouchableOpacity>
+                              ))}
+                            </View>
                             {lessonAssignments.length === 0 ? (
                               <Text style={styles.infoCardSubValue}>No assignments in this lesson yet.</Text>
                             ) : lessonAssignments.map((assignment) => {
@@ -496,6 +534,25 @@ export default function CourseDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={playerVisible} animationType="slide" onRequestClose={() => setPlayerVisible(false)}>
+        <View style={styles.playerContainer}>
+          <View style={[styles.playerTopBar, { paddingTop: insets.top + 8 }]}>
+            <TouchableOpacity style={styles.playerCloseBtn} onPress={() => setPlayerVisible(false)}>
+              <Ionicons name="close" size={20} color={COLORS.textMain} />
+            </TouchableOpacity>
+            <Text style={styles.playerTitle}>Class Recording</Text>
+            <View style={{ width: 36 }} />
+          </View>
+          {playerUrl ? (
+            <WebView source={{ uri: playerUrl }} style={styles.playerWebView} allowsFullscreenVideo />
+          ) : (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Unable to load recording.</Text>
+            </View>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -581,6 +638,8 @@ const styles = StyleSheet.create({
   lessonDetailCard: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, backgroundColor: COLORS.surface, marginTop: 8, padding: 10, gap: 8 },
   completeBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 9, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
   completeBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  lessonRecordingBlock: { marginTop: 4, gap: 4 },
+  lessonRecordingTitle: { color: COLORS.textMain, fontSize: 13, fontWeight: '700' },
 
   assignmentCard: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: 10, backgroundColor: COLORS.surfaceAlt, gap: 4 },
   assignmentTitle: { color: COLORS.textMain, fontWeight: '700', fontSize: 14 },
@@ -642,4 +701,23 @@ const styles = StyleSheet.create({
   modalCancelText: { color: COLORS.textMain, fontWeight: '700' },
   modalSubmitBtn: { flex: 1, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 11, alignItems: 'center' },
   modalSubmitText: { color: '#fff', fontWeight: '700' },
+  playerContainer: { flex: 1, backgroundColor: '#000' },
+  playerTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingBottom: 8,
+    backgroundColor: COLORS.surface,
+  },
+  playerCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  playerTitle: { color: COLORS.textMain, fontWeight: '700', fontSize: 15 },
+  playerWebView: { flex: 1, backgroundColor: '#000' },
 });

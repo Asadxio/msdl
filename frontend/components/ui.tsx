@@ -102,6 +102,8 @@ export const AppInput = React.memo(function AppInput({
   label,
   leftIcon,
   style,
+  onFocus,
+  onBlur,
   ...props
 }: AppInputProps) {
   const focusAnim = useRef(new Animated.Value(0)).current;

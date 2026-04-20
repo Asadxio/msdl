@@ -4,14 +4,13 @@ import {
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ForgotPasswordScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { resetPassword } = useAuth();
   const [email, setEmail] = useState('');
@@ -30,10 +29,10 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[styles.body, { paddingTop: insets.top + SPACING.md }]} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <TouchableOpacity style={styles.backRow} onPress={() => router.back()} testID="forgot-back-btn">
             <Ionicons name="arrow-back" size={20} color={COLORS.text} />
             <Text style={styles.backText}>Back to Sign In</Text>
@@ -78,7 +77,7 @@ export default function ForgotPasswordScreen() {
           </FadeInView>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -12,6 +12,13 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
+    function isTeacherOrAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin']
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
     function isSelf(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
@@ -24,7 +31,7 @@ service cloud.firestore {
       return isSelf(uid)
         && hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at']
+          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -32,19 +39,29 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.role in ['student', 'teacher']
         && request.resource.data.status == 'pending'
-        && request.resource.data.created_at is timestamp;
+        && request.resource.data.created_at is timestamp
+        && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
+        && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
+        && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
+        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp);
     }
 
     function isValidUserUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'fcm_token_updated_at']
+          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.email is string
         && request.resource.data.role in ['student', 'teacher', 'admin']
-        && request.resource.data.status in ['pending', 'approved', 'deactivated', 'rejected'];
+        && request.resource.data.status in ['pending', 'approved', 'deactivated', 'rejected']
+        && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string)
+        && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
+        && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
+        && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
+        && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
+        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp);
     }
 
     function isValidSelfFcmTokenUpdate(uid) {
@@ -64,7 +81,7 @@ service cloud.firestore {
     function isValidCourseWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'teacher_name', 'teacherName', 'schedule', 'time', 'description', 'class_link', 'classLink', 'created_at', 'updated_at']
+          ['name', 'teacher_name', 'teacherName', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'created_at', 'updated_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -72,32 +89,37 @@ service cloud.firestore {
         && (!('teacherName' in request.resource.data) || request.resource.data.teacherName is string)
         && (!('schedule' in request.resource.data) || request.resource.data.schedule is string)
         && (!('time' in request.resource.data) || request.resource.data.time is string)
+        && (!('class_time' in request.resource.data) || request.resource.data.class_time is string)
         && (!('description' in request.resource.data) || request.resource.data.description is string)
         && (!('class_link' in request.resource.data) || request.resource.data.class_link is string)
-        && (!('classLink' in request.resource.data) || request.resource.data.classLink is string);
+        && (!('classLink' in request.resource.data) || request.resource.data.classLink is string)
+        && (!('meet_link' in request.resource.data) || request.resource.data.meet_link is string);
     }
 
     function isValidTeacherWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'title', 'courses', 'created_at', 'updated_at']
+          ['name', 'title', 'courses', 'assigned_courses', 'photo_url', 'created_at', 'updated_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && (!('title' in request.resource.data) || request.resource.data.title is string)
-        && (!('courses' in request.resource.data) || request.resource.data.courses is list);
+        && (!('courses' in request.resource.data) || request.resource.data.courses is list)
+        && (!('assigned_courses' in request.resource.data) || request.resource.data.assigned_courses is list)
+        && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string);
     }
 
     function isValidLibraryWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['title', 'pdf_url', 'pdfUrl', 'category', 'deleted', 'deleted_at', 'created_at', 'updated_at']
+          ['title', 'pdf_url', 'pdfUrl', 'category', 'category_id', 'deleted', 'deleted_at', 'created_at', 'updated_at']
         )
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && (('pdf_url' in request.resource.data && request.resource.data.pdf_url is string)
             || ('pdfUrl' in request.resource.data && request.resource.data.pdfUrl is string))
         && (!('category' in request.resource.data) || request.resource.data.category is string)
+        && (!('category_id' in request.resource.data) || request.resource.data.category_id is string)
         && (!('deleted' in request.resource.data) || request.resource.data.deleted is bool)
         && (!('deleted_at' in request.resource.data) || request.resource.data.deleted_at is timestamp);
     }
@@ -130,7 +152,7 @@ service cloud.firestore {
     function isValidPaymentCreate() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at']
+          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'type', 'transaction_ref']
         )
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.user_name is string
@@ -139,22 +161,26 @@ service cloud.firestore {
         && request.resource.data.amount >= 0
         && request.resource.data.status in ['pending']
         && request.resource.data.provider == 'razorpay'
+        && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra'])
+        && (!('transaction_ref' in request.resource.data) || request.resource.data.transaction_ref is string)
         && request.resource.data.created_at is timestamp;
     }
 
     function isValidUserPaymentSubmit() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'submitted_at']
+          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'submitted_at', 'type', 'transaction_ref']
         )
         && request.resource.data.user_id == resource.data.user_id
         && request.resource.data.user_name == resource.data.user_name
         && request.resource.data.amount == resource.data.amount
         && request.resource.data.provider == resource.data.provider
+        && request.resource.data.type == resource.data.type
         && request.resource.data.created_at == resource.data.created_at
         && resource.data.status == 'pending'
         && request.resource.data.status == 'submitted'
-        && (!('payment_ref' in request.resource.data) || request.resource.data.payment_ref == null || request.resource.data.payment_ref is string);
+        && (!('payment_ref' in request.resource.data) || request.resource.data.payment_ref == null || request.resource.data.payment_ref is string)
+        && (!('transaction_ref' in request.resource.data) || request.resource.data.transaction_ref == null || request.resource.data.transaction_ref is string);
     }
 
     function isValidFeedbackCreate() {
@@ -304,22 +330,24 @@ service cloud.firestore {
         );
 
       allow create: if canWriteMessage()
-        && hasOnlyAllowedKeys(request.resource.data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by'])
+        && hasOnlyAllowedKeys(request.resource.data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by', 'client_id'])
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
         && request.resource.data.sender_id == request.auth.uid
         && request.resource.data.created_at is timestamp
         && request.resource.data.read_by is list
-        && request.auth.uid in request.resource.data.read_by;
+        && request.auth.uid in request.resource.data.read_by
+        && (!('client_id' in request.resource.data) || request.resource.data.client_id is string);
 
       // Allow participants to append read receipts only.
       allow update: if isSignedIn()
-        && hasOnlyAllowedKeys(request.resource.data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by'])
+        && hasOnlyAllowedKeys(request.resource.data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by', 'client_id'])
         && request.resource.data.chat_id == resource.data.chat_id
         && request.resource.data.text == resource.data.text
         && request.resource.data.sender_id == resource.data.sender_id
         && request.resource.data.created_at == resource.data.created_at
         && request.resource.data.read_by is list
+        && (!('client_id' in request.resource.data) || request.resource.data.client_id == resource.data.client_id)
         && request.auth.uid in request.resource.data.read_by
         && exists(/databases/$(database)/documents/chats/$(resource.data.chat_id))
         && (
@@ -337,6 +365,49 @@ service cloud.firestore {
       allow update: if isAdmin()
         || (isSignedIn() && resource.data.user_id == request.auth.uid && isValidUserPaymentSubmit());
       allow delete: if isAdmin();
+    }
+
+    // modules/lessons/assignments and related learning data
+    match /modules/{moduleId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /lessons/{lessonId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /lesson_progress/{progressId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create, update: if isAdmin()
+        || (isSignedIn()
+          && request.resource.data.user_id == request.auth.uid
+          && request.resource.data.lesson_id is string);
+      allow delete: if isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create, update: if isTeacherOrAdmin()
+        || (isSignedIn() && request.resource.data.user_id == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /learning_state/{stateId} {
+      allow read: if isAdmin() || isSelf(stateId);
+      allow create, update: if isAdmin() || isSelf(stateId);
+      allow delete: if isAdmin();
+    }
+
+    match /recordings/{recordingId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     // feedback collection
