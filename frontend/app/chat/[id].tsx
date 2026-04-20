@@ -288,7 +288,7 @@ export default function ChatDetailScreen() {
             value={text}
             onChangeText={onType}
             placeholder="Type a message..."
-            placeholderTextColor={COLORS.border}
+            placeholderTextColor={COLORS.textMuted}
             multiline
           />
           <TouchableOpacity style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending}>

@@ -18,8 +18,8 @@ type CourseItem = {
   name: string;
   teacher_name: string;
   schedule: string;
-  time?: string;
-  class_link: string;
+  class_time?: string;
+  meet_link: string;
   description: string;
 };
 
@@ -27,15 +27,16 @@ type TeacherItem = {
   id: string;
   name: string;
   title: string;
-  courses: string[];
+  photo_url?: string;
+  assigned_courses: string[];
 };
 
 const INITIAL_COURSE: Omit<CourseItem, 'id'> = {
   name: '',
   teacher_name: '',
   schedule: '',
-  time: '',
-  class_link: '',
+  class_time: '',
+  meet_link: '',
   description: '',
 };
 
@@ -52,8 +53,13 @@ export default function ManageAcademicsScreen() {
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
   const [teacherName, setTeacherName] = useState('');
   const [teacherTitle, setTeacherTitle] = useState('');
+  const [teacherPhoto, setTeacherPhoto] = useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
+  const [recordingTitle, setRecordingTitle] = useState('');
+  const [recordingDescription, setRecordingDescription] = useState('');
+  const [recordingUrl, setRecordingUrl] = useState('');
+  const [recordingCourseId, setRecordingCourseId] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
@@ -75,8 +81,8 @@ export default function ManageAcademicsScreen() {
           name: data.name || '',
           teacher_name: data.teacher_name || data.teacherName || '',
           schedule: data.schedule || '',
-          time: data.time || '',
-          class_link: data.class_link || data.classLink || '',
+          class_time: data.class_time || data.time || '',
+          meet_link: data.meet_link || data.class_link || data.classLink || '',
           description: data.description || '',
         });
       });
@@ -88,7 +94,8 @@ export default function ManageAcademicsScreen() {
           id: d.id,
           name: data.name || '',
           title: data.title || '',
-          courses: Array.isArray(data.courses) ? data.courses : [],
+          photo_url: data.photo_url || '',
+          assigned_courses: Array.isArray(data.assigned_courses) ? data.assigned_courses : (Array.isArray(data.courses) ? data.courses : []),
         });
       });
 
@@ -116,7 +123,12 @@ export default function ManageAcademicsScreen() {
       return;
     }
     const teacher = teachers.find((t) => t.id === selectedTeacherId);
-    setSelectedCourses(teacher?.courses || []);
+    setSelectedCourses(teacher?.assigned_courses || []);
+    if (teacher) {
+      setTeacherName(teacher.name);
+      setTeacherTitle(teacher.title);
+      setTeacherPhoto(teacher.photo_url || '');
+    }
   }, [selectedTeacherId, teachers]);
 
   const saveCourse = async () => {
@@ -125,13 +137,17 @@ export default function ManageAcademicsScreen() {
       Alert.alert('Missing', 'Course name is required');
       return;
     }
+    if (!courseForm.meet_link.trim() || !courseForm.meet_link.trim().startsWith('http')) {
+      Alert.alert('Invalid Meet Link', 'Please add a valid Google Meet link.');
+      return;
+    }
 
     const payload = {
       name: courseForm.name.trim(),
       teacher_name: courseForm.teacher_name.trim(),
       schedule: courseForm.schedule.trim(),
-      time: (courseForm.time || '').trim(),
-      class_link: courseForm.class_link.trim(),
+      class_time: (courseForm.class_time || '').trim(),
+      meet_link: courseForm.meet_link.trim(),
       description: courseForm.description.trim(),
       updated_at: serverTimestamp(),
     };
@@ -150,7 +166,7 @@ export default function ManageAcademicsScreen() {
       setEditingCourseId(null);
       await createNotificationAsAdmin(profile, {
         title: editingCourseId ? 'Class Schedule Updated' : 'New Class Scheduled',
-        message: `${payload.name} - ${payload.schedule}${payload.time ? ` at ${payload.time}` : ''}`,
+        message: `${payload.name} - ${payload.schedule}${payload.class_time ? ` at ${payload.class_time}` : ''}`,
         user_id: 'all',
       });
       await fetchData();
@@ -167,8 +183,8 @@ export default function ManageAcademicsScreen() {
       name: course.name,
       teacher_name: course.teacher_name,
       schedule: course.schedule,
-      time: course.time || '',
-      class_link: course.class_link,
+      class_time: course.class_time || '',
+      meet_link: course.meet_link,
       description: course.description,
     });
   };
@@ -202,11 +218,14 @@ export default function ManageAcademicsScreen() {
       await addDoc(collection(db, 'teachers'), {
         name: teacherName.trim(),
         title: teacherTitle.trim() || 'Teacher',
+        photo_url: teacherPhoto.trim(),
+        assigned_courses: [],
         courses: [],
         created_at: serverTimestamp(),
       });
       setTeacherName('');
       setTeacherTitle('');
+      setTeacherPhoto('');
       await fetchData();
     } catch {
       Alert.alert('Add Failed', 'Could not add teacher. Please try again.');
@@ -253,6 +272,7 @@ export default function ManageAcademicsScreen() {
           try {
             setActionLoading(true);
             await updateDoc(doc(db, 'teachers', selectedTeacherId), {
+              assigned_courses: selectedCourses,
               courses: selectedCourses,
               updated_at: serverTimestamp(),
             });
@@ -266,6 +286,68 @@ export default function ManageAcademicsScreen() {
         },
       },
     ]);
+  };
+
+  const saveTeacherProfile = async () => {
+    if (!selectedTeacherId) {
+      Alert.alert('Select teacher', 'Choose a teacher first.');
+      return;
+    }
+    if (!teacherName.trim()) {
+      Alert.alert('Missing', 'Teacher name is required.');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      await updateDoc(doc(db, 'teachers', selectedTeacherId), {
+        name: teacherName.trim(),
+        title: teacherTitle.trim(),
+        photo_url: teacherPhoto.trim(),
+        updated_at: serverTimestamp(),
+      });
+      await fetchData();
+      Alert.alert('Saved', 'Teacher profile updated.');
+    } catch {
+      Alert.alert('Update Failed', 'Could not update teacher profile.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const addRecording = async () => {
+    if (!recordingTitle.trim() || !recordingUrl.trim() || !recordingCourseId) {
+      Alert.alert('Missing', 'Recording title, link and course are required.');
+      return;
+    }
+    if (!recordingUrl.trim().startsWith('http')) {
+      Alert.alert('Invalid URL', 'Please enter a valid recording URL.');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      await addDoc(collection(db, 'recordings'), {
+        title: recordingTitle.trim(),
+        description: recordingDescription.trim(),
+        file_url: recordingUrl.trim(),
+        course_id: recordingCourseId,
+        created_by: profile?.name || 'admin',
+        created_at: serverTimestamp(),
+      });
+      await createNotificationAsAdmin(profile, {
+        title: 'New Recording Added',
+        message: `${recordingTitle.trim()} is available now.`,
+        user_id: 'all',
+      });
+      setRecordingTitle('');
+      setRecordingDescription('');
+      setRecordingUrl('');
+      setRecordingCourseId('');
+      Alert.alert('Saved', 'Recording added successfully.');
+    } catch {
+      Alert.alert('Save Failed', 'Could not add recording.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   if (profile && !isAdmin) return null;
@@ -294,12 +376,12 @@ export default function ManageAcademicsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Courses</Text>
-          <TextInput style={styles.input} placeholder="Course name" value={courseForm.name} onChangeText={(v) => setCourseForm((p) => ({ ...p, name: v }))} />
-          <TextInput style={styles.input} placeholder="Teacher name" value={courseForm.teacher_name} onChangeText={(v) => setCourseForm((p) => ({ ...p, teacher_name: v }))} />
-          <TextInput style={styles.input} placeholder="Schedule (days)" value={courseForm.schedule} onChangeText={(v) => setCourseForm((p) => ({ ...p, schedule: v }))} />
-          <TextInput style={styles.input} placeholder="Time" value={courseForm.time} onChangeText={(v) => setCourseForm((p) => ({ ...p, time: v }))} />
-          <TextInput style={styles.input} placeholder="Google Meet link" value={courseForm.class_link} onChangeText={(v) => setCourseForm((p) => ({ ...p, class_link: v }))} autoCapitalize="none" />
-          <TextInput style={[styles.input, styles.textArea]} placeholder="Description" value={courseForm.description} onChangeText={(v) => setCourseForm((p) => ({ ...p, description: v }))} multiline />
+          <TextInput style={styles.input} placeholder="Course name" placeholderTextColor={COLORS.textMuted} value={courseForm.name} onChangeText={(v) => setCourseForm((p) => ({ ...p, name: v }))} />
+          <TextInput style={styles.input} placeholder="Teacher name" placeholderTextColor={COLORS.textMuted} value={courseForm.teacher_name} onChangeText={(v) => setCourseForm((p) => ({ ...p, teacher_name: v }))} />
+          <TextInput style={styles.input} placeholder="Schedule (days)" placeholderTextColor={COLORS.textMuted} value={courseForm.schedule} onChangeText={(v) => setCourseForm((p) => ({ ...p, schedule: v }))} />
+          <TextInput style={styles.input} placeholder="Class time (HH:mm)" placeholderTextColor={COLORS.textMuted} value={courseForm.class_time} onChangeText={(v) => setCourseForm((p) => ({ ...p, class_time: v }))} />
+          <TextInput style={styles.input} placeholder="Google Meet link" placeholderTextColor={COLORS.textMuted} value={courseForm.meet_link} onChangeText={(v) => setCourseForm((p) => ({ ...p, meet_link: v }))} autoCapitalize="none" />
+          <TextInput style={[styles.input, styles.textArea]} placeholder="Description" placeholderTextColor={COLORS.textMuted} value={courseForm.description} onChangeText={(v) => setCourseForm((p) => ({ ...p, description: v }))} multiline />
 
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={saveCourse} disabled={actionLoading}>
             {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>{editingCourseId ? 'Update Course' : 'Add Course'}</Text>}
@@ -314,7 +396,7 @@ export default function ManageAcademicsScreen() {
             <View key={course.id} style={styles.itemRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.itemTitle}>{course.name}</Text>
-                <Text style={styles.itemMeta}>{course.schedule} {course.time ? `• ${course.time}` : ''}</Text>
+                <Text style={styles.itemMeta}>{course.schedule} {course.class_time ? `• ${course.class_time}` : ''}</Text>
               </View>
               <TouchableOpacity onPress={() => editCourse(course)} style={styles.smallBtn}><Text style={styles.smallBtnText}>Edit</Text></TouchableOpacity>
               <TouchableOpacity onPress={() => removeCourse(course)} style={[styles.smallBtn, styles.deleteSmallBtn]}><Text style={[styles.smallBtnText, { color: COLORS.error }]}>Delete</Text></TouchableOpacity>
@@ -324,11 +406,17 @@ export default function ManageAcademicsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Teachers</Text>
-          <TextInput style={styles.input} placeholder="Teacher name" value={teacherName} onChangeText={setTeacherName} />
-          <TextInput style={styles.input} placeholder="Title (e.g. Alima Fazila)" value={teacherTitle} onChangeText={setTeacherTitle} />
+          <TextInput style={styles.input} placeholder="Teacher name" placeholderTextColor={COLORS.textMuted} value={teacherName} onChangeText={setTeacherName} />
+          <TextInput style={styles.input} placeholder="Title (e.g. Alima Fazila)" placeholderTextColor={COLORS.textMuted} value={teacherTitle} onChangeText={setTeacherTitle} />
+          <TextInput style={styles.input} placeholder="Photo URL (optional)" placeholderTextColor={COLORS.textMuted} value={teacherPhoto} onChangeText={setTeacherPhoto} autoCapitalize="none" />
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={addTeacher} disabled={actionLoading}>
             {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Add Teacher</Text>}
           </TouchableOpacity>
+          {selectedTeacherId ? (
+            <TouchableOpacity style={styles.secondaryBtn} onPress={saveTeacherProfile}>
+              <Text style={styles.secondaryBtnText}>Save Selected Teacher Profile</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {teachers.length === 0 ? <Text style={styles.helper}>No teachers added yet.</Text> : teachers.map((teacher) => (
             <TouchableOpacity
@@ -369,6 +457,22 @@ export default function ManageAcademicsScreen() {
 
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={assignCourses} disabled={actionLoading}>
             {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Save Assignment</Text>}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recordings</Text>
+          <TextInput style={styles.input} placeholder="Recording title" placeholderTextColor={COLORS.textMuted} value={recordingTitle} onChangeText={setRecordingTitle} />
+          <TextInput style={styles.input} placeholder="Description" placeholderTextColor={COLORS.textMuted} value={recordingDescription} onChangeText={setRecordingDescription} />
+          <TextInput style={styles.input} placeholder="Google Drive / media URL" placeholderTextColor={COLORS.textMuted} value={recordingUrl} onChangeText={setRecordingUrl} autoCapitalize="none" />
+          <Text style={styles.helper}>Select course:</Text>
+          {courses.length === 0 ? <Text style={styles.helper}>No courses available.</Text> : courses.map((course) => (
+            <TouchableOpacity key={course.id} style={[styles.courseChip, recordingCourseId === course.id && styles.courseChipSelected]} onPress={() => setRecordingCourseId(course.id)}>
+              <Text style={[styles.courseChipText, recordingCourseId === course.id && styles.courseChipTextSelected]}>{course.name}</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={addRecording} disabled={actionLoading}>
+            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Add Recording</Text>}
           </TouchableOpacity>
         </View>
       </ScrollView>

@@ -18,9 +18,11 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) { setError('Please fill in all fields'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('Please enter a valid email address'); return; }
     setLoading(true); setError('');
     const err = await signIn(email.trim(), password);
     setLoading(false);
@@ -48,11 +50,12 @@ export default function LoginScreen() {
 
             <View style={styles.field}>
               <Text style={styles.label}>Email</Text>
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, focusedField === 'email' && styles.inputRowFocused]}>
                 <Ionicons name="mail-outline" size={20} color={COLORS.textMuted} />
                 <TextInput
-                  style={styles.input} placeholder="Enter your email" placeholderTextColor={COLORS.border}
+                  style={styles.input} placeholder="Enter your email" placeholderTextColor={COLORS.textMuted}
                   value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address"
+                  onFocus={() => setFocusedField('email')} onBlur={() => setFocusedField(null)}
                   testID="login-email-input"
                 />
               </View>
@@ -60,11 +63,12 @@ export default function LoginScreen() {
 
             <View style={styles.field}>
               <Text style={styles.label}>Password</Text>
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, focusedField === 'password' && styles.inputRowFocused]}>
                 <Ionicons name="lock-closed-outline" size={20} color={COLORS.textMuted} />
                 <TextInput
-                  style={styles.input} placeholder="Enter your password" placeholderTextColor={COLORS.border}
+                  style={styles.input} placeholder="Enter your password" placeholderTextColor={COLORS.textMuted}
                   value={password} onChangeText={setPassword} secureTextEntry={!showPass}
+                  onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)}
                   testID="login-password-input"
                 />
                 <TouchableOpacity onPress={() => setShowPass(!showPass)} testID="toggle-password">
@@ -116,6 +120,7 @@ const styles = StyleSheet.create({
   field: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.textMain },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.lg, paddingHorizontal: 14, borderWidth: 1, borderColor: COLORS.border },
+  inputRowFocused: { borderColor: COLORS.primary, shadowColor: COLORS.primary, shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: COLORS.textMain },
   primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   btnDisabled: { opacity: 0.6 },
