@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import {
-  collection, getDocs, getDoc, addDoc, serverTimestamp, doc, updateDoc, setDoc,
+  collection, getDocs, getDoc, addDoc, serverTimestamp, doc, updateDoc, setDoc, query, where,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COURSES as LOCAL_COURSES, TEACHERS as LOCAL_TEACHERS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 
 export type Course = {
   id: string;
@@ -241,7 +242,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       setBooks(booksData);
     } catch (err: any) {
-      console.warn('Failed to fetch books:', normalizeFirebaseError(err, 'Failed to fetch books'));
+      logger.warn('Failed to fetch books:', normalizeFirebaseError(err, 'Failed to fetch books'));
       setBooks([]);
     } finally {
       setBooksLoading(false);
@@ -284,7 +285,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setCourses(coursesData.length > 0 ? coursesData : getLocalCourses());
       setTeachers(teachersData.length > 0 ? teachersData : getLocalTeachers());
     } catch (err: any) {
-      console.warn('Firebase fetch failed, using local data:', normalizeFirebaseError(err, 'Failed to fetch data'));
+      logger.warn('Firebase fetch failed, using local data:', normalizeFirebaseError(err, 'Failed to fetch data'));
       setError(normalizeFirebaseError(err, 'Failed to fetch data'));
       setCourses(getLocalCourses());
       setTeachers(getLocalTeachers());
@@ -323,12 +324,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      const progressQuery = query(collection(db, 'lesson_progress'), where('user_id', '==', user.uid));
+      const canReviewSubmissions = profile?.role === 'teacher' || profile?.role === 'admin';
+      const submissionsQuery = canReviewSubmissions
+        ? collection(db, 'submissions')
+        : query(collection(db, 'submissions'), where('user_id', '==', user.uid));
+
       const [moduleSnap, lessonSnap, assignmentSnap, progressSnap, submissionSnap, learningStateSnap] = await Promise.all([
         withTimeout(getDocs(collection(db, 'modules'))),
         withTimeout(getDocs(collection(db, 'lessons'))),
         withTimeout(getDocs(collection(db, 'assignments'))),
-        withTimeout(getDocs(collection(db, 'lesson_progress'))),
-        withTimeout(getDocs(collection(db, 'submissions'))),
+        withTimeout(getDocs(progressQuery)),
+        withTimeout(getDocs(submissionsQuery)),
         withTimeout(getDoc(doc(db, 'learning_state', user.uid))),
       ]);
 
@@ -379,7 +386,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const nextProgress: Record<string, LessonProgressState> = {};
       progressSnap.forEach((d) => {
         const data = d.data() as any;
-        if (data.user_id === user.uid && data.completed) {
+        if (data.completed) {
           nextProgress[String(data.lesson_id)] = {
             completed: !!data.completed,
             quizCompleted: !!data.quiz_completed,
@@ -423,7 +430,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setLessonProgress(nextProgress);
       setSubmissions(nextSubmissions);
     } catch (err: any) {
-      console.warn('Failed to fetch structured learning:', normalizeFirebaseError(err, 'Failed to fetch learning'));
+      logger.warn('Failed to fetch structured learning:', normalizeFirebaseError(err, 'Failed to fetch learning'));
       const local = getLocalModulesAndLessons(courses.length ? courses : getLocalCourses());
       setModules(local.nextModules);
       setLessons(local.nextLessons);
@@ -432,15 +439,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setLessonProgress({});
       setLastOpenedLessonId(null);
     }
-  }, [courses, user?.uid]);
+  }, [courses, profile?.role, user?.uid]);
 
   const addBook = async (title: string, pdf_url: string, category: string, category_id?: string): Promise<boolean> => {
     if (profile?.role !== 'admin') {
-      console.warn('Unauthorized: only admin can add books');
+      logger.warn('Unauthorized: only admin can add books');
       return false;
     }
     if (!title.trim() || !pdf_url.trim() || !category.trim()) {
-      console.warn('Invalid book payload: missing required fields');
+      logger.warn('Invalid book payload: missing required fields');
       return false;
     }
     try {
@@ -454,14 +461,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await fetchBooks();
       return true;
     } catch (err: any) {
-      console.warn('Failed to add book:', normalizeFirebaseError(err, 'Failed to add book'));
+      logger.warn('Failed to add book:', normalizeFirebaseError(err, 'Failed to add book'));
       return false;
     }
   };
 
   const deleteBook = async (bookId: string): Promise<boolean> => {
     if (profile?.role !== 'admin') {
-      console.warn('Unauthorized: only admin can delete books');
+      logger.warn('Unauthorized: only admin can delete books');
       return false;
     }
     try {
@@ -472,7 +479,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await fetchBooks();
       return true;
     } catch (err: any) {
-      console.warn('Failed to delete book:', normalizeFirebaseError(err, 'Failed to delete book'));
+      logger.warn('Failed to delete book:', normalizeFirebaseError(err, 'Failed to delete book'));
       return false;
     }
   };
@@ -546,7 +553,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }));
       return true;
     } catch (err: any) {
-      console.warn('Failed to mark lesson complete:', normalizeFirebaseError(err, 'Failed to save progress'));
+      logger.warn('Failed to mark lesson complete:', normalizeFirebaseError(err, 'Failed to save progress'));
       return false;
     }
   }, [user?.uid]);
@@ -573,7 +580,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }));
       return true;
     } catch (err: any) {
-      console.warn('Failed to save lesson quiz:', normalizeFirebaseError(err, 'Failed to save lesson quiz'));
+      logger.warn('Failed to save lesson quiz:', normalizeFirebaseError(err, 'Failed to save lesson quiz'));
       return false;
     }
   }, [user?.uid]);
@@ -603,7 +610,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await fetchLearning();
       return true;
     } catch (err: any) {
-      console.warn('Failed to submit assignment:', normalizeFirebaseError(err, 'Failed to submit assignment'));
+      logger.warn('Failed to submit assignment:', normalizeFirebaseError(err, 'Failed to submit assignment'));
       return false;
     }
   }, [fetchLearning, user?.uid]);
@@ -633,7 +640,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await fetchLearning();
       return true;
     } catch (err: any) {
-      console.warn('Failed to review submission:', normalizeFirebaseError(err, 'Failed to review submission'));
+      logger.warn('Failed to review submission:', normalizeFirebaseError(err, 'Failed to review submission'));
       return false;
     }
   }, [fetchLearning, submissions, user?.uid]);

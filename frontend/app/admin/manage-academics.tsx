@@ -31,6 +31,22 @@ type TeacherItem = {
   assigned_courses: string[];
 };
 
+type LessonItem = {
+  id: string;
+  title: string;
+  course_id: string;
+  module_id: string;
+};
+
+type RecordingItem = {
+  id: string;
+  title: string;
+  description: string;
+  file_url: string;
+  course_id: string;
+  lesson_id?: string;
+};
+
 const INITIAL_COURSE: Omit<CourseItem, 'id'> = {
   name: '',
   teacher_name: '',
@@ -60,17 +76,27 @@ export default function ManageAcademicsScreen() {
   const [recordingDescription, setRecordingDescription] = useState('');
   const [recordingUrl, setRecordingUrl] = useState('');
   const [recordingCourseId, setRecordingCourseId] = useState('');
+  const [recordingLessonId, setRecordingLessonId] = useState('');
+  const [recordings, setRecordings] = useState<RecordingItem[]>([]);
+  const [lessons, setLessons] = useState<LessonItem[]>([]);
+  const [editingRecordingId, setEditingRecordingId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
   const courseNames = useMemo(() => courses.map((c) => c.name).filter(Boolean), [courses]);
+  const lessonOptions = useMemo(
+    () => lessons.filter((lesson) => lesson.course_id === recordingCourseId),
+    [lessons, recordingCourseId],
+  );
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [courseSnap, teacherSnap] = await Promise.all([
+      const [courseSnap, teacherSnap, lessonSnap, recordingSnap] = await Promise.all([
         getDocs(collection(db, 'courses')),
         getDocs(collection(db, 'teachers')),
+        getDocs(collection(db, 'lessons')),
+        getDocs(collection(db, 'recordings')),
       ]);
 
       const nextCourses: CourseItem[] = [];
@@ -99,8 +125,34 @@ export default function ManageAcademicsScreen() {
         });
       });
 
+      const nextLessons: LessonItem[] = [];
+      lessonSnap.forEach((d) => {
+        const data = d.data();
+        nextLessons.push({
+          id: d.id,
+          title: data.title || 'Lesson',
+          course_id: data.course_id || '',
+          module_id: data.module_id || '',
+        });
+      });
+
+      const nextRecordings: RecordingItem[] = [];
+      recordingSnap.forEach((d) => {
+        const data = d.data();
+        nextRecordings.push({
+          id: d.id,
+          title: data.title || '',
+          description: data.description || '',
+          file_url: data.file_url || '',
+          course_id: data.course_id || '',
+          lesson_id: data.lesson_id || '',
+        });
+      });
+
       setCourses(nextCourses);
       setTeachers(nextTeachers);
+      setLessons(nextLessons);
+      setRecordings(nextRecordings);
       setLoadError('');
     } catch {
       setLoadError('Could not load academic data. Please refresh.');
@@ -130,6 +182,12 @@ export default function ManageAcademicsScreen() {
       setTeacherPhoto(teacher.photo_url || '');
     }
   }, [selectedTeacherId, teachers]);
+
+  useEffect(() => {
+    if (!recordingLessonId) return;
+    const belongsToCourse = lessons.some((lesson) => lesson.id === recordingLessonId && lesson.course_id === recordingCourseId);
+    if (!belongsToCourse) setRecordingLessonId('');
+  }, [lessons, recordingCourseId, recordingLessonId]);
 
   const saveCourse = async () => {
     if (!isAdmin) return;
@@ -325,16 +383,25 @@ export default function ManageAcademicsScreen() {
     }
     try {
       setActionLoading(true);
-      await addDoc(collection(db, 'recordings'), {
+      const payload = {
         title: recordingTitle.trim(),
         description: recordingDescription.trim(),
         file_url: recordingUrl.trim(),
         course_id: recordingCourseId,
-        created_by: profile?.name || 'admin',
-        created_at: serverTimestamp(),
-      });
+        lesson_id: recordingLessonId || '',
+        updated_at: serverTimestamp(),
+      };
+      if (editingRecordingId) {
+        await updateDoc(doc(db, 'recordings', editingRecordingId), payload);
+      } else {
+        await addDoc(collection(db, 'recordings'), {
+          ...payload,
+          created_by: profile?.name || 'admin',
+          created_at: serverTimestamp(),
+        });
+      }
       await createNotificationAsAdmin(profile, {
-        title: 'New Recording Added',
+        title: editingRecordingId ? 'Recording Updated' : 'New Recording Added',
         message: `${recordingTitle.trim()} is available now.`,
         user_id: 'all',
       });
@@ -342,12 +409,55 @@ export default function ManageAcademicsScreen() {
       setRecordingDescription('');
       setRecordingUrl('');
       setRecordingCourseId('');
-      Alert.alert('Saved', 'Recording added successfully.');
+      setRecordingLessonId('');
+      setEditingRecordingId(null);
+      Alert.alert('Saved', editingRecordingId ? 'Recording updated successfully.' : 'Recording added successfully.');
+      await fetchData();
     } catch {
-      Alert.alert('Save Failed', 'Could not add recording.');
+      Alert.alert('Save Failed', 'Could not save recording.');
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const startEditRecording = (recording: RecordingItem) => {
+    setEditingRecordingId(recording.id);
+    setRecordingTitle(recording.title || '');
+    setRecordingDescription(recording.description || '');
+    setRecordingUrl(recording.file_url || '');
+    setRecordingCourseId(recording.course_id || '');
+    setRecordingLessonId(recording.lesson_id || '');
+  };
+
+  const clearRecordingForm = () => {
+    setEditingRecordingId(null);
+    setRecordingTitle('');
+    setRecordingDescription('');
+    setRecordingUrl('');
+    setRecordingCourseId('');
+    setRecordingLessonId('');
+  };
+
+  const deleteRecording = (recording: RecordingItem) => {
+    Alert.alert('Delete Recording', `Delete "${recording.title || 'recording'}"?`, [
+      { text: 'Cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setActionLoading(true);
+            await deleteDoc(doc(db, 'recordings', recording.id));
+            if (editingRecordingId === recording.id) clearRecordingForm();
+            await fetchData();
+          } catch {
+            Alert.alert('Delete Failed', 'Could not delete recording.');
+          } finally {
+            setActionLoading(false);
+          }
+        },
+      },
+    ]);
   };
 
   if (profile && !isAdmin) return null;
@@ -471,9 +581,36 @@ export default function ManageAcademicsScreen() {
               <Text style={[styles.courseChipText, recordingCourseId === course.id && styles.courseChipTextSelected]}>{course.name}</Text>
             </TouchableOpacity>
           ))}
+          <Text style={styles.helper}>Attach to lesson (optional):</Text>
+          {lessonOptions.length === 0 ? (
+            <Text style={styles.helper}>Select a course to view lessons.</Text>
+          ) : lessonOptions.map((lesson) => (
+            <TouchableOpacity key={lesson.id} style={[styles.courseChip, recordingLessonId === lesson.id && styles.courseChipSelected]} onPress={() => setRecordingLessonId((prev) => (prev === lesson.id ? '' : lesson.id))}>
+              <Text style={[styles.courseChipText, recordingLessonId === lesson.id && styles.courseChipTextSelected]}>{lesson.title}</Text>
+            </TouchableOpacity>
+          ))}
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={addRecording} disabled={actionLoading}>
-            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Add Recording</Text>}
+            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>{editingRecordingId ? 'Update Recording' : 'Add Recording'}</Text>}
           </TouchableOpacity>
+          {editingRecordingId ? (
+            <TouchableOpacity style={styles.secondaryBtn} onPress={clearRecordingForm}>
+              <Text style={styles.secondaryBtnText}>Cancel Recording Edit</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {recordings.length === 0 ? <Text style={styles.helper}>No recordings added yet.</Text> : recordings.map((recording) => (
+            <View key={recording.id} style={styles.itemRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemTitle}>{recording.title || 'Recording'}</Text>
+                <Text style={styles.itemMeta}>{courses.find((c) => c.id === recording.course_id)?.name || 'Unknown course'}</Text>
+                {recording.lesson_id ? (
+                  <Text style={styles.itemMeta}>Lesson: {lessons.find((l) => l.id === recording.lesson_id)?.title || 'Unknown lesson'}</Text>
+                ) : null}
+              </View>
+              <TouchableOpacity onPress={() => startEditRecording(recording)} style={styles.smallBtn}><Text style={styles.smallBtnText}>Edit</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => deleteRecording(recording)} style={[styles.smallBtn, styles.deleteSmallBtn]}><Text style={[styles.smallBtnText, { color: COLORS.error }]}>Delete</Text></TouchableOpacity>
+            </View>
+          ))}
         </View>
       </ScrollView>
     </View>
