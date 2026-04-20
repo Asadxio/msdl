@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, StatusBar, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, Modal,
@@ -13,6 +13,7 @@ import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { createNotificationAsAdmin } from '@/lib/notifications';
+import { FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
 
 type NotificationItem = {
   id: string;
@@ -53,6 +54,7 @@ export default function NotificationsScreen() {
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [composerError, setComposerError] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [focusedField, setFocusedField] = useState<'title' | 'message' | 'recipient' | null>(null);
   const [focusedEditField, setFocusedEditField] = useState<'editTitle' | 'editMessage' | null>(null);
 
@@ -97,6 +99,7 @@ export default function NotificationsScreen() {
   const unreadCount = user?.uid
     ? items.filter((item) => !item.read?.[user.uid]).length
     : 0;
+  const skeletonRows = useMemo(() => Array.from({ length: 5 }), []);
 
   const sendNotification = async () => {
     if (!title.trim() || !message.trim()) {
@@ -117,9 +120,11 @@ export default function NotificationsScreen() {
         setTitle('');
         setMessage('');
         setUserId('all');
+        setFeedback({ type: 'success', text: 'Notification sent successfully.' });
         Alert.alert('Success', 'Notification sent.');
       }
     } catch (err: any) {
+      setFeedback({ type: 'error', text: err?.message || 'Failed to send notification.' });
       Alert.alert('Error', err?.message || 'Failed to send notification');
     } finally {
       setSending(false);
@@ -191,6 +196,11 @@ export default function NotificationsScreen() {
         </View>
         <Text style={styles.headerSubtitle}>Latest updates and class reminders</Text>
       </View>
+      {feedback ? (
+        <View style={styles.feedbackWrap}>
+          <FeedbackBanner type={feedback.type} message={feedback.text} />
+        </View>
+      ) : null}
       {loadError ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{loadError}</Text>
@@ -258,26 +268,30 @@ export default function NotificationsScreen() {
               <Text style={styles.quickBtnText}>10-min Reminder</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.sendBtn, sending && { opacity: 0.6 }]}
-            onPress={sendNotification}
-            disabled={sending || !title.trim() || !message.trim()}
-          >
-            {sending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Send</Text>}
-          </TouchableOpacity>
+            <ScalePressable
+              style={[styles.sendBtn, sending && { opacity: 0.6 }]}
+              onPress={sendNotification}
+              disabled={sending || !title.trim() || !message.trim()}
+            >
+              {sending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Send</Text>}
+            </ScalePressable>
 
         </View>
       )}
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+        <View style={styles.loadingList}>
+          {skeletonRows.map((_, idx) => <SkeletonCard key={`notification-skeleton-${idx}`} lines={3} />)}
         </View>
       ) : (
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          initialNumToRender={10}
+          maxToRenderPerBatch={12}
+          windowSize={8}
+          removeClippedSubviews
           ListEmptyComponent={(
             <View style={styles.center}>
               <Ionicons name="notifications-off-outline" size={44} color={COLORS.border} />
@@ -285,11 +299,10 @@ export default function NotificationsScreen() {
             </View>
           )}
           renderItem={({ item }) => (
-            <TouchableOpacity
+            <ScalePressable
               style={[styles.card, !item.read?.[user?.uid || ''] && styles.cardUnread]}
               testID={`notification-${item.id}`}
               onPress={() => markAsRead(item)}
-              activeOpacity={0.85}
             >
               <View style={styles.cardTop}>
                 <Text style={styles.cardTitle}>{item.title}</Text>
@@ -314,7 +327,7 @@ export default function NotificationsScreen() {
                   </TouchableOpacity>
                 </View>
               ) : null}
-            </TouchableOpacity>
+            </ScalePressable>
           )}
         />
       )}
@@ -377,6 +390,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   unreadBadge: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   unreadBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   errorBanner: {
@@ -443,6 +457,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 16, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
   list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 24 },
+  loadingList: { padding: SPACING.md, gap: SPACING.sm },
   card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card },
   cardUnread: { borderWidth: 1, borderColor: COLORS.secondary },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },

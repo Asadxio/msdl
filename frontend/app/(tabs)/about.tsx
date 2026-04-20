@@ -417,8 +417,16 @@ export default function AboutScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.headerTitle}>About Us</Text>
-        <Text style={styles.headerSubtitle}>Madrasa Tus Salikat Lil Banat</Text>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Profile</Text>
+            <Text style={styles.headerSubtitle}>Madrasa Tus Salikat Lil Banat</Text>
+          </View>
+          <TouchableOpacity style={styles.moreBtn} onPress={() => router.push('/more')} testID="goto-more-btn">
+            <Ionicons name="grid-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.moreBtnText}>More</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
         {profile && (
@@ -518,6 +526,22 @@ export default function AboutScreen() {
           </View>
         )}
 
+        {!isAdmin ? (
+          <SectionCard title="Payments" icon="wallet-outline">
+            <Text style={styles.bodyText}>Use a single guided flow for fees and donations.</Text>
+            <Text style={[styles.bodyText, { marginTop: 8 }]}>Current Fees: ₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
+            {myPayments[0] ? (
+              <View style={styles.statusCard}>
+                <Text style={styles.statusLabel}>Latest Payment Status</Text>
+                <Text style={styles.statusValue}>{myPayments[0].status}</Text>
+              </View>
+            ) : null}
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/payment')} testID="open-unified-payment-btn">
+              <Text style={styles.primaryBtnText}>Open Payment Flow</Text>
+            </TouchableOpacity>
+          </SectionCard>
+        ) : (
+        <>
         <SectionCard title="Pay Fees (Razorpay Link)" icon="card-outline">
           <Text style={styles.bodyText}>Current Fees: ₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
           {myPayments[0] && (
@@ -592,6 +616,8 @@ export default function AboutScreen() {
             Need Help? Contact us on WhatsApp
           </Text>
         </SectionCard>
+        </>
+        )}
 
         <SectionCard title="Feedback & Testimonials" icon="chatbox-ellipses-outline">
           <Text style={styles.inputLabel}>Feedback Message</Text>
@@ -722,8 +748,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md,
     borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header,
   },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  moreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  moreBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   scrollContent: { padding: SPACING.lg, paddingBottom: 40, gap: SPACING.lg },
   sectionCard: {
     backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg,

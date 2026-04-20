@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, StatusBar, FlatList,
   ActivityIndicator, TextInput, Alert, ScrollView, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import {
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
 
 type AppUser = { id: string; name: string; email?: string; role: string; status: string; photo_url?: string; avatar?: string };
 type ChatItem = {
@@ -62,6 +63,7 @@ export default function ChatsScreen() {
   const [openingBroadcast, setOpeningBroadcast] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const usersMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.name])), [users]);
 
   useEffect(() => {
@@ -159,6 +161,7 @@ export default function ChatsScreen() {
       setShowUsers(false);
       router.push(`/chat/${ref.id}`);
     } catch (e: any) {
+      setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
       Alert.alert('Could not start chat', e?.message || 'Please try again.');
     } finally {
       setCreatingDirectFor(null);
@@ -212,6 +215,7 @@ export default function ChatsScreen() {
       setSelected([]);
       router.push(`/chat/${ref.id}`);
     } catch (e: any) {
+      setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
       Alert.alert('Could not create group', e?.message || 'Please try again.');
     } finally {
       setCreatingGroup(false);
@@ -241,6 +245,7 @@ export default function ChatsScreen() {
       });
       router.push(`/chat/${ref.id}`);
     } catch (e: any) {
+      setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
       Alert.alert('Could not open broadcast', e?.message || 'Please try again.');
     } finally {
       setOpeningBroadcast(false);
@@ -268,22 +273,27 @@ export default function ChatsScreen() {
         <Text style={styles.title}>Chats</Text>
         <Text style={styles.subtitle}>1-to-1, groups, and broadcast</Text>
       </View>
+      {feedback ? (
+        <View style={styles.feedbackWrap}>
+          <FeedbackBanner type={feedback.type} message={feedback.text} />
+        </View>
+      ) : null}
 
       <View style={styles.toolbar}>
-        <TouchableOpacity style={styles.toolBtn} onPress={() => setShowUsers((v) => !v)}>
+        <ScalePressable style={styles.toolBtn} onPress={() => setShowUsers((v) => !v)}>
           <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.primary} />
           <Text style={styles.toolBtnText}>New Chat</Text>
-        </TouchableOpacity>
+        </ScalePressable>
         {isAdmin && (
           <>
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setShowGroupCreator((v) => !v)}>
+            <ScalePressable style={styles.toolBtn} onPress={() => setShowGroupCreator((v) => !v)}>
               <Ionicons name="people-outline" size={16} color={COLORS.primary} />
               <Text style={styles.toolBtnText}>Create Group</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.toolBtn} onPress={openBroadcastChat}>
+            </ScalePressable>
+            <ScalePressable style={styles.toolBtn} onPress={openBroadcastChat}>
               <Ionicons name="megaphone-outline" size={16} color={COLORS.primary} />
               <Text style={styles.toolBtnText}>{openingBroadcast ? 'Opening...' : 'Broadcast'}</Text>
-            </TouchableOpacity>
+            </ScalePressable>
           </>
         )}
       </View>
@@ -303,11 +313,11 @@ export default function ChatsScreen() {
           <Text style={styles.panelTitle}>Start direct chat</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {filteredUsers.map((u) => (
-              <TouchableOpacity key={u.id} style={styles.userChip} onPress={() => getOrCreateDirectChat(u)}>
+              <ScalePressable key={u.id} style={styles.userChip} onPress={() => getOrCreateDirectChat(u)}>
                 <Text style={styles.userChipText}>
                   {creatingDirectFor === u.id ? 'Starting...' : u.name}
                 </Text>
-              </TouchableOpacity>
+              </ScalePressable>
             ))}
           </ScrollView>
         </View>
@@ -327,34 +337,42 @@ export default function ChatsScreen() {
             {filteredUsers.map((u) => {
               const active = selected.includes(u.id);
               return (
-                <TouchableOpacity key={u.id} style={[styles.userChip, active && styles.userChipActive]} onPress={() => toggleParticipant(u.id)}>
+                <ScalePressable key={u.id} style={[styles.userChip, active && styles.userChipActive]} onPress={() => toggleParticipant(u.id)}>
                   <Text style={[styles.userChipText, active && styles.userChipTextActive]}>{u.name}</Text>
-                </TouchableOpacity>
+                </ScalePressable>
               );
             })}
           </View>
-          <TouchableOpacity style={[styles.createBtn, creatingGroup && { opacity: 0.7 }]} onPress={createGroup} disabled={creatingGroup}>
+          <ScalePressable style={[styles.createBtn, creatingGroup && { opacity: 0.7 }]} onPress={createGroup} disabled={creatingGroup}>
             {creatingGroup ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Text style={styles.createBtnText}>Create Group ({selected.length + 1})</Text>
             )}
-          </TouchableOpacity>
+          </ScalePressable>
         </View>
       )}
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
+        <View style={styles.loadingList}>
+          <SkeletonCard lines={3} />
+          <SkeletonCard lines={3} />
+          <SkeletonCard lines={3} />
+        </View>
       ) : (
         <FlatList
           data={filteredChats}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={8}
+          removeClippedSubviews
           renderItem={({ item }) => {
             const otherId = item.participants.find((p) => p !== user?.uid);
             const avatarUser = otherId ? userById[otherId] : undefined;
             return (
-            <TouchableOpacity style={styles.chatCard} onPress={() => router.push(`/chat/${item.id}`)}>
+            <ScalePressable style={styles.chatCard} onPress={() => router.push(`/chat/${item.id}`)}>
               {avatarUser?.photo_url ? (
                 <Image source={{ uri: avatarUser.photo_url }} style={styles.chatAvatar} />
               ) : (
@@ -379,13 +397,10 @@ export default function ChatsScreen() {
                 </View>
               </View>
               </View>
-            </TouchableOpacity>
+            </ScalePressable>
           )}}
           ListEmptyComponent={(
-            <View style={styles.center}>
-              <Ionicons name="chatbubbles-outline" size={42} color={COLORS.border} />
-              <Text style={styles.emptyText}>No chats yet. Start one from “New Chat”.</Text>
-            </View>
+            <EmptyState icon="chatbubbles-outline" message="No chats yet. Start one from New Chat." />
           )}
         />
       )}
@@ -401,6 +416,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: SPACING.md },
   toolBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8,
@@ -420,6 +436,7 @@ const styles = StyleSheet.create({
   createBtn: { marginTop: 12, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: 'center' },
   createBtnText: { color: '#fff', fontWeight: '700' },
   list: { padding: SPACING.md, gap: 8, paddingBottom: 24 },
+  loadingList: { padding: SPACING.md, gap: SPACING.sm },
   chatCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card, flexDirection: 'row', gap: 10 },
   chatAvatar: { width: 32, height: 32, borderRadius: 16, marginTop: 2 },
   chatAvatarFallback: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginTop: 2 },

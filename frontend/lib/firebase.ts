@@ -1,6 +1,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, initializeFirestore } from 'firebase/firestore';
-import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
+import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+import * as FirebaseAuth from 'firebase/auth';
+import type { Auth, Persistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
@@ -12,14 +14,8 @@ const firebaseConfig = {
   appId: "1:675123731963:web:2b892063276a7c452cbf5e",
 };
 
-let app;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
-}
-
-let db;
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+let db: Firestore;
 try {
   db = initializeFirestore(app, {
     experimentalForceLongPolling: true,
@@ -28,13 +24,17 @@ try {
   db = getFirestore(app);
 }
 
-let auth;
+let auth: Auth;
 try {
-  auth = initializeAuth(app, {
+  const getReactNativePersistence = (FirebaseAuth as any).getReactNativePersistence as
+    | ((storage: typeof AsyncStorage) => Persistence)
+    | undefined;
+  auth = FirebaseAuth.initializeAuth(app, getReactNativePersistence ? {
     persistence: getReactNativePersistence(AsyncStorage),
-  });
+  } : undefined);
 } catch {
-  auth = getAuth(app);
+  auth = FirebaseAuth.getAuth(app);
 }
 
 export { db, auth };
+export const storage = getStorage(app);

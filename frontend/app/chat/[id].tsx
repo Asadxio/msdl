@@ -13,6 +13,7 @@ import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { sendPushToUserIds } from '@/lib/pushNotifications';
+import { EmptyState, ScalePressable, SkeletonCard } from '@/components/ui';
 
 type ChatMeta = {
   id: string;
@@ -220,7 +221,13 @@ export default function ChatDetailScreen() {
   }, [id, user?.uid]);
 
   if (loading) {
-    return <View style={[styles.center, { paddingTop: insets.top }]}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+    return (
+      <View style={[styles.skeletonWrap, { paddingTop: insets.top + SPACING.md }]}>
+        <SkeletonCard lines={3} />
+        <SkeletonCard lines={2} />
+        <SkeletonCard lines={3} />
+      </View>
+    );
   }
 
   if (!chat || !canAccess) {
@@ -240,9 +247,9 @@ export default function ChatDetailScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <ScalePressable style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={20} color={COLORS.textMain} />
-        </TouchableOpacity>
+        </ScalePressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.topTitle}>{title}</Text>
           {othersTyping ? <Text style={styles.typingText}>Typing...</Text> : null}
@@ -256,12 +263,13 @@ export default function ChatDetailScreen() {
         contentContainerStyle={styles.list}
         onEndReached={loadMore}
         onEndReachedThreshold={0.2}
+        initialNumToRender={20}
+        maxToRenderPerBatch={20}
+        windowSize={8}
+        removeClippedSubviews
         ListFooterComponent={loadingMore ? <ActivityIndicator size="small" color={COLORS.primary} /> : null}
         ListEmptyComponent={(
-          <View style={styles.emptyState}>
-            <Ionicons name="chatbubble-ellipses-outline" size={36} color={COLORS.border} />
-            <Text style={styles.emptyText}>No messages yet. Start the conversation.</Text>
-          </View>
+          <EmptyState icon="chatbubble-ellipses-outline" message="No messages yet. Start the conversation." />
         )}
         renderItem={({ item }) => {
           const mine = item.sender_id === user?.uid;
@@ -291,9 +299,9 @@ export default function ChatDetailScreen() {
             placeholderTextColor={COLORS.textMuted}
             multiline
           />
-          <TouchableOpacity style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending}>
+          <ScalePressable style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending}>
             {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={18} color="#fff" />}
-          </TouchableOpacity>
+          </ScalePressable>
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -303,6 +311,7 @@ export default function ChatDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  skeletonWrap: { flex: 1, paddingHorizontal: SPACING.md, gap: SPACING.sm },
   blockedText: { fontSize: 15, color: COLORS.textMuted, marginBottom: 10 },
   backPlainBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
   backPlainText: { color: COLORS.textMain, fontWeight: '600' },

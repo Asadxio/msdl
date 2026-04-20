@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   StatusBar,
-  ActivityIndicator,
   Alert,
   TextInput,
   ScrollView,
@@ -19,6 +18,7 @@ import { useData, Book } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   Islamic: { bg: '#E8F5E9', text: '#2E7D32' },
@@ -44,10 +44,9 @@ function BookCard({ book, isAdmin, onDelete }: { book: Book; isAdmin: boolean; o
   const iconName = BOOK_ICONS[book.category] || 'book';
 
   return (
-    <TouchableOpacity
+    <ScalePressable
       style={styles.card}
       testID={`book-card-${book.id}`}
-      activeOpacity={0.85}
       onPress={() => router.push(`/book/${book.id}`)}
     >
       <View style={[styles.coverArea, { backgroundColor: catColor.bg }]}>
@@ -71,7 +70,7 @@ function BookCard({ book, isAdmin, onDelete }: { book: Book; isAdmin: boolean; o
           )}
         </View>
       </View>
-    </TouchableOpacity>
+    </ScalePressable>
   );
 }
 
@@ -85,6 +84,7 @@ export default function LibraryScreen() {
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -117,7 +117,12 @@ export default function LibraryScreen() {
         style: 'destructive',
         onPress: async () => {
           const success = await deleteBook(book.id);
-          if (!success) Alert.alert('Error', 'Only admin can archive books or request failed.');
+          if (!success) {
+            setFeedback({ type: 'error', text: 'Only admin can archive books or request failed.' });
+            Alert.alert('Error', 'Only admin can archive books or request failed.');
+            return;
+          }
+          setFeedback({ type: 'success', text: `"${book.title}" archived.` });
         },
       },
     ]);
@@ -146,6 +151,11 @@ export default function LibraryScreen() {
           )}
         </View>
       </View>
+      {feedback ? (
+        <View style={styles.feedbackWrap}>
+          <FeedbackBanner type={feedback.type} message={feedback.text} />
+        </View>
+      ) : null}
       <View style={styles.searchWrap}>
         <TextInput
           style={styles.searchInput}
@@ -174,24 +184,23 @@ export default function LibraryScreen() {
       ) : null}
 
       {booksLoading ? (
-        <View style={styles.centerContainer} testID="library-loading">
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.centerText}>Loading books...</Text>
+        <View style={styles.loadingList} testID="library-loading">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
         </View>
       ) : filteredBooks.length === 0 ? (
         <View style={styles.centerContainer} testID="library-empty">
-          <Ionicons name="library-outline" size={56} color={COLORS.border} />
-          <Text style={styles.centerTitle}>No books found</Text>
-          <Text style={styles.centerText}>Try another search or category filter</Text>
+          <EmptyState icon="library-outline" message="No books found. Try another search or category." />
           {isAdmin && (
-            <TouchableOpacity
+            <ScalePressable
               style={styles.addFirstBtn}
               testID="add-first-book-btn"
               onPress={() => router.push('/admin/add-book')}
             >
               <Ionicons name="add" size={20} color="#FFFFFF" />
               <Text style={styles.addFirstBtnText}>Add First Book</Text>
-            </TouchableOpacity>
+            </ScalePressable>
           )}
         </View>
       ) : (
@@ -203,6 +212,10 @@ export default function LibraryScreen() {
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={8}
+          removeClippedSubviews
           testID="library-grid"
         />
       )}
@@ -219,6 +232,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   searchWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, gap: 8 },
   searchInput: {
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
@@ -240,6 +254,7 @@ const styles = StyleSheet.create({
   errorText: { color: '#B3261E', fontSize: 12, flex: 1 },
   retryText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
   addBtn: { padding: 4 },
+  loadingList: { padding: SPACING.md, gap: SPACING.sm },
   centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, padding: SPACING.lg },
   centerTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
   centerText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500', textAlign: 'center' },

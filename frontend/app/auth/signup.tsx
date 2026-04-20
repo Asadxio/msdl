@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { COLORS, SPACING, RADIUS } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
 
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
@@ -21,7 +22,6 @@ export default function SignupScreen() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [focusedField, setFocusedField] = useState<'name' | 'email' | 'password' | 'referral' | null>(null);
 
   const handleSignup = async () => {
     if (!name.trim() || !email.trim() || !password) { setError('Please fill in all fields'); return; }
@@ -35,109 +35,52 @@ export default function SignupScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[styles.body, { paddingTop: insets.top + 30 }]} keyboardShouldPersistTaps="handled">
-          <View style={styles.headerSection}>
-            <Text style={styles.greeting}>بِسْمِ ٱللَّهِ</Text>
+        <ScrollView contentContainerStyle={[styles.body, { paddingTop: insets.top + SPACING.md }]} keyboardShouldPersistTaps="handled">
+          <FadeInView style={styles.headerSection}>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Join our learning community</Text>
-          </View>
+          </FadeInView>
 
-          <View style={styles.formCard}>
-            {error ? (
-              <View style={styles.errorBox} testID="signup-error">
-                <Ionicons name="alert-circle" size={18} color={COLORS.error} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
+          <FadeInView delay={60}>
+            <AppCard style={styles.formCard}>
+              {error ? (
+                <View style={styles.errorBox} testID="signup-error">
+                  <Ionicons name="alert-circle" size={18} color={COLORS.error} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Full Name</Text>
-              <View style={[styles.inputRow, focusedField === 'name' && styles.inputRowFocused]}>
-                <Ionicons name="person-outline" size={20} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input} placeholder="Enter your name" placeholderTextColor={COLORS.textMuted}
-                  value={name} onChangeText={setName} testID="signup-name-input"
-                  onFocus={() => setFocusedField('name')} onBlur={() => setFocusedField(null)}
-                />
-              </View>
-            </View>
+              <AppInput label="Full Name" leftIcon="person-outline" placeholder="Enter your name" value={name} onChangeText={setName} testID="signup-name-input" />
+              <AppInput label="Email" leftIcon="mail-outline" placeholder="Enter your email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" testID="signup-email-input" />
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Email</Text>
-              <View style={[styles.inputRow, focusedField === 'email' && styles.inputRowFocused]}>
-                <Ionicons name="mail-outline" size={20} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input} placeholder="Enter your email" placeholderTextColor={COLORS.textMuted}
-                  value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address"
-                  onFocus={() => setFocusedField('email')} onBlur={() => setFocusedField(null)}
-                  testID="signup-email-input"
-                />
-              </View>
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
-              <View style={[styles.inputRow, focusedField === 'password' && styles.inputRowFocused]}>
-                <Ionicons name="lock-closed-outline" size={20} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input} placeholder="Min 6 characters" placeholderTextColor={COLORS.textMuted}
-                  value={password} onChangeText={setPassword} secureTextEntry={!showPass}
-                  onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)}
-                  testID="signup-password-input"
-                />
-                <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textMuted} />
+              <View>
+                <AppInput label="Password" leftIcon="lock-closed-outline" placeholder="Min 6 characters" value={password} onChangeText={setPassword} secureTextEntry={!showPass} testID="signup-password-input" />
+                <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeBtn}>
+                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.textMuted} />
                 </TouchableOpacity>
               </View>
-            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>I am a</Text>
-              <View style={styles.roleRow}>
-                <TouchableOpacity
-                  style={[styles.roleBtn, role === 'student' && styles.roleBtnActive]}
-                  onPress={() => setRole('student')} testID="role-student-btn"
-                >
-                  <Ionicons name="school-outline" size={20} color={role === 'student' ? '#FFF' : COLORS.textMuted} />
-                  <Text style={[styles.roleBtnText, role === 'student' && styles.roleBtnTextActive]}>Student</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.roleBtn, role === 'teacher' && styles.roleBtnActive]}
-                  onPress={() => setRole('teacher')} testID="role-teacher-btn"
-                >
-                  <Ionicons name="people-outline" size={20} color={role === 'teacher' ? '#FFF' : COLORS.textMuted} />
-                  <Text style={[styles.roleBtnText, role === 'teacher' && styles.roleBtnTextActive]}>Teacher</Text>
-                </TouchableOpacity>
+              <View style={styles.field}>
+                <Text style={styles.label}>I am a</Text>
+                <View style={styles.roleRow}>
+                  <ScalePressable style={[styles.roleBtn, role === 'student' && styles.roleBtnActive]} onPress={() => setRole('student')} testID="role-student-btn">
+                    <Text style={[styles.roleBtnText, role === 'student' && styles.roleBtnTextActive]}>Student</Text>
+                  </ScalePressable>
+                  <ScalePressable style={[styles.roleBtn, role === 'teacher' && styles.roleBtnActive]} onPress={() => setRole('teacher')} testID="role-teacher-btn">
+                    <Text style={[styles.roleBtnText, role === 'teacher' && styles.roleBtnTextActive]}>Teacher</Text>
+                  </ScalePressable>
+                </View>
               </View>
-            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Referral Code (optional)</Text>
-              <View style={[styles.inputRow, focusedField === 'referral' && styles.inputRowFocused]}>
-                <Ionicons name="gift-outline" size={20} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter referral code"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={referralCode}
-                  onChangeText={setReferralCode}
-                  autoCapitalize="characters"
-                  onFocus={() => setFocusedField('referral')} onBlur={() => setFocusedField(null)}
-                />
-              </View>
-            </View>
+              <AppInput label="Referral Code (optional)" leftIcon="gift-outline" placeholder="Enter referral code" value={referralCode} onChangeText={setReferralCode} autoCapitalize="characters" />
 
-            <TouchableOpacity
-              style={[styles.primaryBtn, loading && styles.btnDisabled]}
-              onPress={handleSignup} disabled={loading} testID="signup-submit-btn"
-            >
-              {loading ? <ActivityIndicator color="#FFF" /> : (
-                <Text style={styles.primaryBtnText}>Create Account</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+              <ScalePressable style={[styles.primaryBtn, loading && styles.btnDisabled]} onPress={handleSignup} disabled={loading} testID="signup-submit-btn">
+                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryBtnText}>Create Account</Text>}
+              </ScalePressable>
+            </AppCard>
+          </FadeInView>
 
           <View style={styles.footerRow}>
             <Text style={styles.footerText}>Already have an account? </Text>
@@ -152,29 +95,26 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.primary },
-  body: { flexGrow: 1, paddingHorizontal: SPACING.lg, paddingBottom: 40 },
-  headerSection: { alignItems: 'center', marginBottom: SPACING.lg },
-  greeting: { fontSize: 24, color: COLORS.secondary, fontWeight: '700', marginBottom: 6 },
-  title: { fontSize: 26, fontWeight: '800', color: '#FFFFFF' },
-  subtitle: { fontSize: 15, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
-  formCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, gap: SPACING.md },
-  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF2F2', padding: 12, borderRadius: RADIUS.lg },
-  errorText: { fontSize: 13, color: COLORS.error, fontWeight: '500', flex: 1 },
-  field: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.textMain },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.lg, paddingHorizontal: 14, borderWidth: 1, borderColor: COLORS.border },
-  inputRowFocused: { borderColor: COLORS.primary, shadowColor: COLORS.primary, shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: COLORS.textMain },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  body: { flexGrow: 1, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg },
+  headerSection: { marginBottom: SPACING.md },
+  title: { ...TYPOGRAPHY.title, color: COLORS.text },
+  subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, marginTop: SPACING.xs },
+  formCard: { gap: SPACING.md },
+  errorBox: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: '#FEE4E2', padding: SPACING.sm, borderRadius: RADIUS.md },
+  errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1 },
+  eyeBtn: { position: 'absolute', right: SPACING.sm, top: 34, height: 40, justifyContent: 'center' },
+  field: { gap: SPACING.xs },
+  label: { ...TYPOGRAPHY.label, color: COLORS.text },
   roleRow: { flexDirection: 'row', gap: SPACING.sm },
-  roleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: RADIUS.lg, borderWidth: 2, borderColor: COLORS.border },
+  roleBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background },
   roleBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  roleBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
+  roleBtnText: { ...TYPOGRAPHY.label, color: COLORS.textMuted },
   roleBtnTextActive: { color: '#FFFFFF' },
-  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 14, alignItems: 'center' },
   btnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg },
-  footerText: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
-  footerLink: { fontSize: 14, fontWeight: '700', color: COLORS.secondary },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.md },
+  footerText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  footerLink: { ...TYPOGRAPHY.label, color: COLORS.primary },
 });

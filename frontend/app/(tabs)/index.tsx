@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   Dimensions,
   StatusBar,
-  ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,7 @@ import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/f
 import { COLORS, SPACING, RADIUS, SHADOWS, MEDIA, getCourseImage, getTeacherAvatar } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
 import { db } from '@/lib/firebase';
+import { EmptyState, ScalePressable, SkeletonCard } from '@/components/ui';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.72;
@@ -27,7 +28,7 @@ const DEFAULT_ANNOUNCEMENT_DESC = 'Admissions are now open for all courses. Regi
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { courses, teachers, loading } = useData();
+  const { courses, teachers, loading, getResumeLearning } = useData();
   const featuredCourses = courses.slice(0, 5);
   const [announcementTitle, setAnnouncementTitle] = useState(DEFAULT_ANNOUNCEMENT_TITLE);
   const [announcementMessage, setAnnouncementMessage] = useState(DEFAULT_ANNOUNCEMENT_DESC);
@@ -56,6 +57,7 @@ export default function HomeScreen() {
     () => announcementTitle === DEFAULT_ANNOUNCEMENT_TITLE && announcementMessage === DEFAULT_ANNOUNCEMENT_DESC,
     [announcementMessage, announcementTitle]
   );
+  const resumeLearning = useMemo(() => getResumeLearning(), [getResumeLearning]);
 
   return (
     <View style={styles.container}>
@@ -85,12 +87,32 @@ export default function HomeScreen() {
         </View>
 
         {/* Loading State */}
-        {loading && (
-          <View style={styles.loadingRow} testID="home-loading">
-            <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading data...</Text>
+        {loading ? (
+          <View style={styles.loadingBlock} testID="home-loading">
+            <SkeletonCard lines={2} />
           </View>
-        )}
+        ) : null}
+
+        {/* Featured Courses */}
+        {resumeLearning ? (
+          <View style={[styles.section, { paddingHorizontal: SPACING.lg }]}>
+            <Text style={[styles.sectionTitle, { marginBottom: SPACING.md }]}>Resume Learning</Text>
+            <ScalePressable
+              style={styles.resumeCard}
+              onPress={() => router.push(`/course/${resumeLearning.courseId}`)}
+              testID="resume-learning-card"
+            >
+              <Ionicons name="play-circle-outline" size={26} color={COLORS.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resumeCourse}>{resumeLearning.courseName}</Text>
+                <Text style={styles.resumeLesson}>
+                  {resumeLearning.moduleTitle} • {resumeLearning.lessonTitle}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </ScalePressable>
+          </View>
+        ) : null}
 
         {/* Featured Courses */}
         <View style={styles.section}>
@@ -100,33 +122,39 @@ export default function HomeScreen() {
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-            testID="featured-courses-scroll"
-          >
-            {featuredCourses.map((course, index) => (
-              <TouchableOpacity
-                key={course.id}
-                style={styles.courseCard}
-                testID={`featured-course-card-${course.id}`}
-                activeOpacity={0.8}
-                onPress={() => router.push(`/course/${course.id}`)}
-              >
-                <Image source={{ uri: getCourseImage(index) }} style={styles.courseCardImage} />
-                <LinearGradient
-                  colors={['transparent', 'rgba(15,56,34,0.9)']}
-                  style={styles.courseCardGradient}
+          {featuredCourses.length === 0 ? (
+            <EmptyState icon="book-outline" message="No featured courses available." />
+          ) : (
+            <FlatList
+              horizontal
+              data={featuredCourses}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+              testID="featured-courses-scroll"
+              initialNumToRender={4}
+              maxToRenderPerBatch={6}
+              windowSize={5}
+              renderItem={({ item, index }) => (
+                <ScalePressable
+                  style={styles.courseCard}
+                  testID={`featured-course-card-${item.id}`}
+                  onPress={() => router.push(`/course/${item.id}`)}
                 >
-                  <View style={styles.courseCardContent}>
-                    <Text style={styles.courseCardName} numberOfLines={2}>{course.name}</Text>
-                    <Text style={styles.courseCardTeacher} numberOfLines={1}>{course.teacher_name}</Text>
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <Image source={{ uri: getCourseImage(index) }} style={styles.courseCardImage} />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(15,56,34,0.9)']}
+                    style={styles.courseCardGradient}
+                  >
+                    <View style={styles.courseCardContent}>
+                      <Text style={styles.courseCardName} numberOfLines={2}>{item.name}</Text>
+                      <Text style={styles.courseCardTeacher} numberOfLines={1}>{item.teacher_name}</Text>
+                    </View>
+                  </LinearGradient>
+                </ScalePressable>
+              )}
+            />
+          )}
         </View>
 
         {/* Teachers Preview */}
@@ -137,30 +165,36 @@ export default function HomeScreen() {
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-            testID="teachers-preview-scroll"
-          >
-            {teachers.map((teacher) => (
-              <TouchableOpacity
-                key={teacher.id}
-                style={styles.teacherPreviewCard}
-                testID={`teacher-preview-${teacher.id}`}
-                activeOpacity={0.8}
-                onPress={() => router.push(`/teacher/${teacher.id}`)}
-              >
-                <Image source={{ uri: getTeacherAvatar(teacher.id) }} style={styles.teacherAvatar} />
-                <Text style={styles.teacherPreviewName} numberOfLines={1}>
-                  {teacher.name.split(' ').slice(-2).join(' ')}
-                </Text>
-                <View style={styles.teacherTitleBadge}>
-                  <Text style={styles.teacherTitleText}>{teacher.title}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {teachers.length === 0 ? (
+            <EmptyState icon="people-outline" message="No teachers available." />
+          ) : (
+            <FlatList
+              horizontal
+              data={teachers}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+              testID="teachers-preview-scroll"
+              initialNumToRender={6}
+              maxToRenderPerBatch={8}
+              windowSize={5}
+              renderItem={({ item }) => (
+                <ScalePressable
+                  style={styles.teacherPreviewCard}
+                  testID={`teacher-preview-${item.id}`}
+                  onPress={() => router.push(`/teacher/${item.id}`)}
+                >
+                  <Image source={{ uri: getTeacherAvatar(item.id) }} style={styles.teacherAvatar} />
+                  <Text style={styles.teacherPreviewName} numberOfLines={1}>
+                    {item.name.split(' ').slice(-2).join(' ')}
+                  </Text>
+                  <View style={styles.teacherTitleBadge}>
+                    <Text style={styles.teacherTitleText}>{item.title}</Text>
+                  </View>
+                </ScalePressable>
+              )}
+            />
+          )}
         </View>
 
         {/* Announcements */}
@@ -219,6 +253,7 @@ const styles = StyleSheet.create({
   goldLine: { width: 30, height: 1.5, backgroundColor: COLORS.secondary },
   tagline: { color: COLORS.secondary, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: SPACING.md },
+  loadingBlock: { paddingHorizontal: SPACING.lg },
   loadingText: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500' },
   section: { marginTop: SPACING.lg },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, marginBottom: SPACING.md },
@@ -250,4 +285,15 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center', ...SHADOWS.card },
   statNumber: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   statLabel: { fontSize: 12, fontWeight: '500', color: COLORS.textMuted, marginTop: 2 },
+  resumeCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    ...SHADOWS.card,
+  },
+  resumeCourse: { fontSize: 15, fontWeight: '700', color: COLORS.textMain },
+  resumeLesson: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
 });
