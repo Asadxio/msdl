@@ -112,11 +112,13 @@ service cloud.firestore {
     function isValidLibraryWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['title', 'pdf_url', 'pdfUrl', 'category', 'category_id', 'deleted', 'deleted_at', 'created_at', 'updated_at']
+          ['title', 'description', 'file_url', 'pdf_url', 'pdfUrl', 'category', 'category_id', 'deleted', 'deleted_at', 'created_at', 'updated_at']
         )
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
-        && (('pdf_url' in request.resource.data && request.resource.data.pdf_url is string)
+        && (!('description' in request.resource.data) || request.resource.data.description is string)
+        && (('file_url' in request.resource.data && request.resource.data.file_url is string)
+            || ('pdf_url' in request.resource.data && request.resource.data.pdf_url is string)
             || ('pdfUrl' in request.resource.data && request.resource.data.pdfUrl is string))
         && (!('category' in request.resource.data) || request.resource.data.category is string)
         && (!('category_id' in request.resource.data) || request.resource.data.category_id is string)

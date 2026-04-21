@@ -30,6 +30,7 @@ export default function AttendanceScreen() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [savingUserId, setSavingUserId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -82,6 +83,7 @@ export default function AttendanceScreen() {
         user_id: targetUser.id,
         created_at: serverTimestamp(),
       });
+      setFeedback(`${targetUser.name}: ${status} saved`);
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to mark attendance.');
     } finally {
@@ -102,6 +104,7 @@ export default function AttendanceScreen() {
         <Text style={styles.title}>Attendance</Text>
         <Text style={styles.subtitle}>{canMark ? 'Mark daily attendance' : `Your attendance (${attendancePercent}% present)`}</Text>
       </View>
+      {!!feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
 
       {canMark ? (
         <View style={styles.panel}>
@@ -123,10 +126,10 @@ export default function AttendanceScreen() {
                   <Text style={styles.meta}>{item.email}</Text>
                 </View>
                 <TouchableOpacity style={styles.presentBtn} onPress={() => markAttendance(item, 'present')} disabled={savingUserId === item.id}>
-                  <Text style={styles.presentText}>Present</Text>
+                  <Text style={styles.presentText}>{savingUserId === item.id ? 'Saving...' : 'Present'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.absentBtn} onPress={() => markAttendance(item, 'absent')} disabled={savingUserId === item.id}>
-                  <Text style={styles.absentText}>Absent</Text>
+                  <Text style={styles.absentText}>{savingUserId === item.id ? 'Saving...' : 'Absent'}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -158,6 +161,7 @@ const styles = StyleSheet.create({
   header: { backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 13, color: COLORS.textMuted },
+  feedback: { fontSize: 12, color: '#166534', paddingHorizontal: SPACING.md, paddingVertical: 6, textAlign: 'left' },
   panel: { flex: 1, padding: SPACING.md, gap: 8 },
   input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.textMain },
   rowCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.sm, flexDirection: 'row', alignItems: 'center', gap: 8, ...SHADOWS.card },

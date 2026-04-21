@@ -1,12 +1,6 @@
 export const logger = {
-  warn: (...args: unknown[]) => {
-    if (__DEV__) {
-      console.warn(...args);
-    }
-  },
-  error: (...args: unknown[]) => {
-    if (__DEV__) {
-      console.error(...args);
-    }
-  },
+  // Intentionally no-op in app runtime to avoid console noise in production builds.
+  // Keep function signatures so call sites remain unchanged.
+  warn: (..._args: unknown[]) => {},
+  error: (..._args: unknown[]) => {},
 };

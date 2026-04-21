@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView,
+  View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -28,7 +28,8 @@ function shuffle<T>(arr: T[]): T[] {
 
 export default function QuizScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -36,6 +37,12 @@ export default function QuizScreen() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState('');
+  const [questionInput, setQuestionInput] = useState('');
+  const [optionInputs, setOptionInputs] = useState(['', '', '', '']);
+  const [correctAnswer, setCorrectAnswer] = useState('');
+  const [category, setCategory] = useState('');
+  const [savingQuestion, setSavingQuestion] = useState(false);
 
   const loadQuiz = useCallback(async () => {
     setLoading(true);
@@ -48,7 +55,7 @@ export default function QuizScreen() {
       const all: QuizQuestion[] = [];
       snap.forEach((d) => {
         const data = d.data() as any;
-        if (!data.question || !Array.isArray(data.options) || data.options.length !== 4 || !data.correct_answer) return;
+        if (!data.question || !Array.isArray(data.options) || data.options.length < 2 || !data.correct_answer) return;
         all.push({
           id: d.id,
           question: data.question,
@@ -57,11 +64,11 @@ export default function QuizScreen() {
           category: data.category || '',
         });
       });
-      if (all.length < 20) {
+      if (all.length === 0) {
         setQuestions([]);
-        setError('Quiz bank has less than 20 questions. Please contact admin.');
+        setError('No quiz questions available yet. Admin can add questions.');
       } else {
-        setQuestions(shuffle(all).slice(0, 20));
+        setQuestions(shuffle(all));
       }
     } catch (e: any) {
       setError(e?.message || 'Failed to load quiz.');
@@ -94,7 +101,7 @@ export default function QuizScreen() {
   const submitQuiz = async () => {
     if (!user?.uid) return;
     if (questions.some((q) => !answers[q.id])) {
-      setError('Please answer all 20 questions before submitting.');
+      setError('Please answer all questions before submitting.');
       return;
     }
     setSubmitting(true);
@@ -108,7 +115,7 @@ export default function QuizScreen() {
       });
       await addDoc(collection(db, 'notifications'), {
         title: 'Quiz Submitted',
-        message: `You scored ${score}/${questions.length} in Bahare Shariyat quiz.`,
+        message: `You scored ${score}/${questions.length} in Quiz.`,
         user_id: user.uid,
         created_at: serverTimestamp(),
       });
@@ -120,13 +127,87 @@ export default function QuizScreen() {
     }
   };
 
+  const saveQuestion = async () => {
+    if (!isAdmin) return;
+    const normalized = optionInputs.map((o) => o.trim()).filter(Boolean);
+    if (!questionInput.trim() || normalized.length < 2 || !correctAnswer.trim()) {
+      setError('Question, at least 2 options, and correct answer are required.');
+      return;
+    }
+    setSavingQuestion(true);
+    try {
+      const payload = {
+        question: questionInput.trim(),
+        options: optionInputs.map((o) => o.trim()).filter(Boolean),
+        correct_answer: correctAnswer.trim(),
+        category: category.trim(),
+        updated_at: serverTimestamp(),
+      };
+      if (editingId) {
+        await updateDoc(doc(db, 'quizzes', editingId), payload);
+      } else {
+        await addDoc(collection(db, 'quizzes'), { ...payload, created_at: serverTimestamp() });
+      }
+      setEditingId('');
+      setQuestionInput('');
+      setOptionInputs(['', '', '', '']);
+      setCorrectAnswer('');
+      setCategory('');
+      await loadQuiz();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save question.');
+    } finally {
+      setSavingQuestion(false);
+    }
+  };
+
+  const editQuestion = (q: QuizQuestion) => {
+    setEditingId(q.id);
+    setQuestionInput(q.question);
+    const opts = [...q.options, '', '', '', ''].slice(0, 4);
+    setOptionInputs(opts);
+    setCorrectAnswer(q.correct_answer);
+    setCategory(q.category || '');
+  };
+
+  const removeQuestion = async (id: string) => {
+    if (!isAdmin || !id) return;
+    try {
+      await deleteDoc(doc(db, 'quizzes', id));
+      await loadQuiz();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to delete question.');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>Bahare Shariyat Quiz</Text>
-        <Text style={styles.subtitle}>20 questions per attempt</Text>
+        <Text style={styles.title}>Quiz</Text>
+        <Text style={styles.subtitle}>Attempt with available questions</Text>
       </View>
+
+      {isAdmin ? (
+        <View style={styles.adminCard}>
+          <Text style={styles.adminTitle}>{editingId ? 'Edit Quiz Question' : 'Add Quiz Question'}</Text>
+          <TextInput style={styles.input} value={questionInput} onChangeText={setQuestionInput} placeholder="Question" />
+          {optionInputs.map((option, i) => (
+            <TextInput
+              key={String(i)}
+              style={styles.input}
+              value={option}
+              onChangeText={(text) => setOptionInputs((prev) => prev.map((item, idx) => (idx === i ? text : item)))}
+              placeholder={`Option ${i + 1}`}
+            />
+          ))}
+          <TextInput style={styles.input} value={correctAnswer} onChangeText={setCorrectAnswer} placeholder="Correct answer" />
+          <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="Category (optional)" />
+          <TouchableOpacity style={styles.btn} onPress={saveQuestion} disabled={savingQuestion}>
+            {savingQuestion ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnText}>{editingId ? 'Update Question' : 'Add Question'}</Text>}
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
@@ -146,6 +227,23 @@ export default function QuizScreen() {
               <Text style={styles.answerQ}>{i + 1}. {item.question}</Text>
               <Text style={[styles.answerLine, !item.ok && { color: COLORS.error }]}>Your answer: {item.selected || 'Not answered'}</Text>
               {!item.ok ? <Text style={styles.answerLine}>Correct: {item.correct}</Text> : null}
+              {isAdmin ? (
+                <View style={styles.row}>
+                  <TouchableOpacity
+                    style={styles.secondaryBtn}
+                    onPress={() => {
+                      const q = questions.find((question) => question.id === item.id);
+                      if (!q) return;
+                      editQuestion(q);
+                    }}
+                  >
+                    <Text style={styles.secondaryBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => removeQuestion(item.id)}>
+                    <Text style={styles.secondaryBtnText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </View>
           ))}
           <TouchableOpacity style={styles.btn} onPress={loadQuiz}><Text style={styles.btnText}>Try New Random Quiz</Text></TouchableOpacity>
@@ -196,6 +294,9 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 13, color: COLORS.textMuted },
   body: { padding: SPACING.md, gap: 10 },
+  adminCard: { margin: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, gap: 8, ...SHADOWS.card },
+  adminTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
+  input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 10, paddingVertical: 9, color: COLORS.textMain, backgroundColor: COLORS.surfaceAlt, textAlign: 'left' },
   progress: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
   questionCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card, gap: 10 },
   question: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
