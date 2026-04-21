@@ -76,7 +76,6 @@ export default function CourseDetailScreen() {
       return unsub;
     } catch {
       setRecordings([]);
-      setFatalError('Unable to load course recordings.');
       return () => {};
     }
   }, [courseId]);
