@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { createNotificationAsAdmin } from '@/lib/notifications';
+import { isValidHttpsUrl } from '@/lib/links';
 
 type CourseItem = {
   id: string;
@@ -195,8 +196,8 @@ export default function ManageAcademicsScreen() {
       Alert.alert('Missing', 'Course name is required');
       return;
     }
-    if (!courseForm.meet_link.trim() || !courseForm.meet_link.trim().startsWith('http')) {
-      Alert.alert('Invalid Meet Link', 'Please add a valid Google Meet link.');
+    if (!courseForm.meet_link.trim() || !isValidHttpsUrl(courseForm.meet_link.trim())) {
+      Alert.alert('Invalid Meet Link', 'Please add a valid http/https class link (Google Meet/Drive/YouTube links are supported).');
       return;
     }
 
@@ -377,8 +378,8 @@ export default function ManageAcademicsScreen() {
       Alert.alert('Missing', 'Recording title, link and course are required.');
       return;
     }
-    if (!recordingUrl.trim().startsWith('http')) {
-      Alert.alert('Invalid URL', 'Please enter a valid recording URL.');
+    if (!isValidHttpsUrl(recordingUrl.trim())) {
+      Alert.alert('Invalid URL', 'Please enter a valid http/https recording URL (Google Drive/YouTube links are supported).');
       return;
     }
     try {
