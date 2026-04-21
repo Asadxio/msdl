@@ -55,6 +55,7 @@ export default function CourseDetailScreen() {
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [reviewGrade, setReviewGrade] = useState('');
   const [reviewing, setReviewing] = useState(false);
+  const [fatalError, setFatalError] = useState<string>('');
 
   const course = courses.find((c) => c.id === courseId);
   const classTimeLabel = course?.class_time || course?.time || '';
@@ -90,6 +91,7 @@ export default function CourseDetailScreen() {
   }, [classTimeLabel]);
   const modules = useMemo(() => (course ? getModulesForCourse(course.id) : []), [course, getModulesForCourse]);
   const generalRecordings = useMemo(() => recordings.filter((r) => !r.lesson_id), [recordings]);
+  const safeModules = Array.isArray(modules) ? modules : [];
 
   const toEmbeddableUrl = (url: string): string => {
     const clean = url.trim();
@@ -121,6 +123,18 @@ export default function CourseDetailScreen() {
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading course...</Text>
         </View>
+      </View>
+    );
+  }
+
+  if (fatalError) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <TouchableOpacity style={styles.errorBackBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
+          <Text style={styles.errorBackText}>Go Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.errorText}>{fatalError}</Text>
       </View>
     );
   }
@@ -360,9 +374,9 @@ export default function CourseDetailScreen() {
               </View>
               <Text style={styles.infoCardTitle}>Learning Path</Text>
             </View>
-            {modules.length === 0 ? (
+            {safeModules.length === 0 ? (
               <Text style={styles.infoCardSubValue}>No modules added yet.</Text>
-            ) : modules.map((module) => {
+            ) : safeModules.map((module) => {
               const moduleLessons = getLessonsForModule(module.id);
               const completedCount = moduleLessons.filter((lesson) => lessonProgress[lesson.id]?.completed).length;
               return (
