@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, I18nManager } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -40,6 +40,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     initPushNotifications().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    try {
+      I18nManager.allowRTL(false);
+      I18nManager.forceRTL(false);
+    } catch {
+      // no-op
+    }
   }, []);
 
   useEffect(() => {

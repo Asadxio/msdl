@@ -58,6 +58,14 @@ export default function HomeScreen() {
     [announcementMessage, announcementTitle]
   );
   const resumeLearning = useMemo(() => getResumeLearning(), [getResumeLearning]);
+  const safePush = (path: string) => {
+    try {
+      if (!path || typeof path !== 'string') return;
+      router.push(path as any);
+    } catch {
+      // no-op: navigation safety guard
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -76,7 +84,7 @@ export default function HomeScreen() {
             <Text style={styles.greeting} testID="greeting-text">السلام عليكم</Text>
             <Text style={styles.welcomeText}>Welcome to</Text>
             <Text style={styles.madrasaName} testID="madrasa-name">
-              Madrasa Tus Salikat{'\n'}Lil Banat
+              Madars tus salikat Lilbanat{'\n'}مدرسۃ السالکات للبنات
             </Text>
             <View style={styles.taglineRow}>
               <View style={styles.goldLine} />
@@ -99,7 +107,10 @@ export default function HomeScreen() {
             <Text style={[styles.sectionTitle, { marginBottom: SPACING.md }]}>Resume Learning</Text>
             <ScalePressable
               style={styles.resumeCard}
-              onPress={() => router.push(`/course/${resumeLearning.courseId}`)}
+              onPress={() => {
+                if (!resumeLearning?.courseId) return;
+                safePush(`/course/${resumeLearning.courseId}`);
+              }}
               testID="resume-learning-card"
             >
               <Ionicons name="play-circle-outline" size={26} color={COLORS.primary} />
@@ -118,7 +129,7 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Featured Courses</Text>
-            <TouchableOpacity testID="view-all-courses-btn" onPress={() => router.push('/courses')}>
+            <TouchableOpacity testID="view-all-courses-btn" onPress={() => safePush('/courses')}>
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
@@ -139,7 +150,10 @@ export default function HomeScreen() {
                 <ScalePressable
                   style={styles.courseCard}
                   testID={`featured-course-card-${item.id}`}
-                  onPress={() => router.push(`/course/${item.id}`)}
+                  onPress={() => {
+                    if (!item?.id) return;
+                    safePush(`/course/${item.id}`);
+                  }}
                 >
                   <Image source={{ uri: getCourseImage(index) }} style={styles.courseCardImage} />
                   <LinearGradient
@@ -161,7 +175,7 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Our Teachers</Text>
-            <TouchableOpacity testID="view-all-teachers-btn" onPress={() => router.push('/teachers')}>
+            <TouchableOpacity testID="view-all-teachers-btn" onPress={() => safePush('/teachers')}>
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
@@ -182,7 +196,10 @@ export default function HomeScreen() {
                 <ScalePressable
                   style={styles.teacherPreviewCard}
                   testID={`teacher-preview-${item.id}`}
-                  onPress={() => router.push(`/teacher/${item.id}`)}
+                  onPress={() => {
+                    if (!item?.id) return;
+                    safePush(`/teacher/${item.id}`);
+                  }}
                 >
                   <Image source={{ uri: getTeacherAvatar(item.id) }} style={styles.teacherAvatar} />
                   <Text style={styles.teacherPreviewName} numberOfLines={1}>
@@ -210,7 +227,7 @@ export default function HomeScreen() {
                 </View>
                 <Text style={styles.announcementTitle}>{announcementTitle}</Text>
                 <Text style={styles.announcementDesc}>{announcementMessage}</Text>
-                <TouchableOpacity style={styles.announcementBtn} testID="learn-more-btn" onPress={() => router.push('/notifications')}>
+                <TouchableOpacity style={styles.announcementBtn} testID="learn-more-btn" onPress={() => safePush('/notifications')}>
                   <Text style={styles.announcementBtnText}>Open Announcements</Text>
                   <Ionicons name="arrow-forward" size={16} color={COLORS.secondary} />
                 </TouchableOpacity>
