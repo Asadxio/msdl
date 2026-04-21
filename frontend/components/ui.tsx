@@ -118,13 +118,13 @@ export const AppInput = React.memo(function AppInput({
 
   const handleFocus = React.useCallback((e: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
     animateFocus(1);
-    props.onFocus?.(e);
-  }, [animateFocus, props.onFocus]);
+    onFocus?.(e);
+  }, [animateFocus, onFocus]);
 
   const handleBlur = React.useCallback((e: Parameters<NonNullable<TextInputProps['onBlur']>>[0]) => {
     animateFocus(0);
-    props.onBlur?.(e);
-  }, [animateFocus, props.onBlur]);
+    onBlur?.(e);
+  }, [animateFocus, onBlur]);
 
   const animatedInputStyle = React.useMemo(() => ({
     borderColor: focusAnim.interpolate({

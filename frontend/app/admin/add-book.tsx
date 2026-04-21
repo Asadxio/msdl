@@ -22,6 +22,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { isValidHttpsUrl, normalizeGoogleDriveFileUrl } from '@/lib/links';
 
 const INITIAL_BOOKS = [
   {
@@ -53,6 +54,7 @@ export default function AddBookScreen() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [pdfUrl, setPdfUrl] = useState('');
   const [category, setCategory] = useState('');
   const [saving, setSaving] = useState(false);
@@ -62,7 +64,7 @@ export default function AddBookScreen() {
   const [editingCategoryId, setEditingCategoryId] = useState('');
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [formError, setFormError] = useState('');
-  const [focusedField, setFocusedField] = useState<'title' | 'pdfUrl' | 'newCategory' | 'editCategory' | null>(null);
+  const [focusedField, setFocusedField] = useState<'title' | 'description' | 'pdfUrl' | 'newCategory' | 'editCategory' | null>(null);
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -85,22 +87,41 @@ export default function AddBookScreen() {
       Alert.alert('Unauthorized', 'Only admin can add books.');
       return;
     }
-    if (!title.trim() || !pdfUrl.trim() || !category.trim()) {
+    const selected = categories.find((c) => c.id === category);
+    const categoryName = selected?.name?.trim() || newCategory.trim();
+    const normalizedPdfUrl = normalizeGoogleDriveFileUrl(pdfUrl.trim());
+
+    if (!title.trim() || !normalizedPdfUrl || !categoryName) {
       setFormError('Book title, PDF link, and category are required.');
       Alert.alert('Missing Fields', 'Please fill in all fields');
       return;
     }
+    if (!isValidHttpsUrl(normalizedPdfUrl)) {
+      setFormError('Please enter a valid http/https link.');
+      Alert.alert('Invalid Link', 'Please provide a valid http/https link (Google Drive and other links are supported).');
+      return;
+    }
     setFormError('');
     setSaving(true);
-    const selected = categories.find((c) => c.id === category);
-    const success = await addBook(title.trim(), pdfUrl.trim(), selected?.name?.trim() || '', selected?.id);
-    setSaving(false);
-    if (success) {
-      Alert.alert('Success', 'Book added successfully', [
-        { text: 'OK', onPress: () => { setTitle(''); setPdfUrl(''); setCategory(''); } },
-      ]);
-    } else {
-      Alert.alert('Error', 'Failed to add book. Please try again.');
+    try {
+      let categoryId = selected?.id;
+      if (!categoryId && newCategory.trim()) {
+        const newCatRef = await addDoc(collection(db, 'categories'), { name: categoryName, created_at: serverTimestamp() });
+        categoryId = newCatRef.id;
+        setCategory(newCatRef.id);
+      }
+      const success = await addBook(title.trim(), normalizedPdfUrl, categoryName, categoryId, description.trim());
+      if (success) {
+        Alert.alert('Success', 'Book added successfully', [
+          { text: 'OK', onPress: () => { setTitle(''); setDescription(''); setPdfUrl(''); setCategory(''); setNewCategory(''); } },
+        ]);
+      } else {
+        Alert.alert('Error', 'Failed to add book. Please try again.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to add book.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -138,8 +159,12 @@ export default function AddBookScreen() {
       Alert.alert('Missing', 'Category name is required.');
       return;
     }
-    await addDoc(collection(db, 'categories'), { name, created_at: serverTimestamp() });
-    setNewCategory('');
+    try {
+      await addDoc(collection(db, 'categories'), { name, created_at: serverTimestamp() });
+      setNewCategory('');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to add category.');
+    }
   };
 
   const saveEditedCategory = async () => {
@@ -148,9 +173,13 @@ export default function AddBookScreen() {
       Alert.alert('Missing', 'Category name is required.');
       return;
     }
-    await updateDoc(doc(db, 'categories', editingCategoryId), { name });
-    setEditingCategoryId('');
-    setEditingCategoryName('');
+    try {
+      await updateDoc(doc(db, 'categories', editingCategoryId), { name });
+      setEditingCategoryId('');
+      setEditingCategoryName('');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to save category.');
+    }
   };
 
   const deleteCategory = (item: { id: string; name: string }) => {
@@ -160,8 +189,12 @@ export default function AddBookScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          await deleteDoc(doc(db, 'categories', item.id));
-          if (category === item.id) setCategory('');
+          try {
+            await deleteDoc(doc(db, 'categories', item.id));
+            if (category === item.id) setCategory('');
+          } catch (err: any) {
+            Alert.alert('Error', err?.message || 'Failed to delete category.');
+          }
         },
       },
     ]);
@@ -230,10 +263,25 @@ export default function AddBookScreen() {
 
           {/* PDF URL */}
           <View style={styles.field}>
-            <Text style={styles.label}>PDF Link (Google Drive)</Text>
+            <Text style={styles.label}>Description</Text>
+            <TextInput
+              style={[styles.input, focusedField === 'description' && styles.inputFocused]}
+              placeholder="Enter short description"
+              placeholderTextColor={COLORS.textMuted}
+              value={description}
+              onChangeText={setDescription}
+              onFocus={() => setFocusedField('description')}
+              onBlur={() => setFocusedField(null)}
+              testID="book-description-input"
+            />
+          </View>
+
+          {/* PDF URL */}
+          <View style={styles.field}>
+            <Text style={styles.label}>File URL (HTTP/HTTPS / Google Drive)</Text>
             <TextInput
               style={[styles.input, focusedField === 'pdfUrl' && styles.inputFocused]}
-              placeholder="https://drive.google.com/..."
+              placeholder="https://... or http://..."
               placeholderTextColor={COLORS.textMuted}
               value={pdfUrl}
               onChangeText={setPdfUrl}
@@ -303,11 +351,11 @@ export default function AddBookScreen() {
 
           {/* Save Button */}
           <TouchableOpacity
-            style={[styles.saveBtn, (!title || !pdfUrl || !category) && styles.saveBtnDisabled]}
+            style={[styles.saveBtn, (!title || !pdfUrl || (!category && !newCategory.trim())) && styles.saveBtnDisabled]}
             testID="save-book-btn"
             activeOpacity={0.8}
             onPress={handleSave}
-            disabled={saving || !title || !pdfUrl || !category}
+            disabled={saving || !title || !pdfUrl || (!category && !newCategory.trim())}
           >
             {saving ? (
               <ActivityIndicator size="small" color="#FFFFFF" />

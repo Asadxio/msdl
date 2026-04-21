@@ -28,7 +28,8 @@ import { useAuth } from '@/context/AuthContext';
 import { uploadUriFile } from '@/lib/storage';
 
 export default function CourseDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+  const courseId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const {
@@ -55,21 +56,28 @@ export default function CourseDetailScreen() {
   const [reviewGrade, setReviewGrade] = useState('');
   const [reviewing, setReviewing] = useState(false);
 
-  const course = courses.find((c) => c.id === id);
+  const course = courses.find((c) => c.id === courseId);
   const classTimeLabel = course?.class_time || course?.time || '';
   const meetLink = course?.meet_link || course?.class_link || '';
   const isReviewer = profile?.role === 'admin' || profile?.role === 'teacher';
 
   useEffect(() => {
-    if (!id) return;
-    const q = query(collection(db, 'recordings'), where('course_id', '==', id));
-    const unsub = onSnapshot(q, (snap) => {
-      const arr: { id: string; title: string; description: string; file_url: string; lesson_id?: string }[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
-      setRecordings(arr);
-    });
-    return unsub;
-  }, [id]);
+    if (!courseId) return;
+    try {
+      const q = query(collection(db, 'recordings'), where('course_id', '==', courseId));
+      const unsub = onSnapshot(q, (snap) => {
+        const arr: { id: string; title: string; description: string; file_url: string; lesson_id?: string }[] = [];
+        snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+        setRecordings(arr);
+      }, () => {
+        setRecordings([]);
+      });
+      return unsub;
+    } catch {
+      setRecordings([]);
+      return () => {};
+    }
+  }, [courseId]);
 
   const showJoinNow = useMemo(() => {
     if (!classTimeLabel) return true;
@@ -96,10 +104,14 @@ export default function CourseDetailScreen() {
   };
 
   const openRecordingPlayer = (url: string) => {
-    const embedUrl = toEmbeddableUrl(url);
-    if (!embedUrl) return;
-    setPlayerUrl(embedUrl);
-    setPlayerVisible(true);
+    try {
+      const embedUrl = toEmbeddableUrl(url);
+      if (!embedUrl) return;
+      setPlayerUrl(embedUrl);
+      setPlayerVisible(true);
+    } catch {
+      Alert.alert('Error', 'Unable to open recording right now.');
+    }
   };
 
   if (loading) {
@@ -125,45 +137,58 @@ export default function CourseDetailScreen() {
     );
   }
 
-  const teacher = teachers.find((t) => course.teacher_name.includes(t.name.split(' ').slice(-2).join(' ')));
-  const courseIndex = courses.findIndex((c) => c.id === id);
+  const teacher = teachers.find((t) => (course.teacher_name || '').includes((t.name || '').split(' ').slice(-2).join(' ')));
+  const courseIndex = courses.findIndex((c) => c.id === courseId);
 
   const handleJoinClass = () => {
-    if (meetLink && meetLink.trim().length > 0) {
-      Linking.openURL(meetLink).catch(() => {
-        Alert.alert('Error', 'Unable to open the class link');
-      });
-    } else {
-      Alert.alert(
-        'Join Class',
-        'Class link will be shared by teacher',
-        [{ text: 'OK', style: 'default' }]
-      );
+    try {
+      if (meetLink && meetLink.trim().length > 0) {
+        Linking.openURL(meetLink).catch(() => {
+          Alert.alert('Error', 'Unable to open the class link');
+        });
+      } else {
+        Alert.alert(
+          'Join Class',
+          'Class link will be shared by teacher',
+          [{ text: 'OK', style: 'default' }]
+        );
+      }
+    } catch {
+      Alert.alert('Error', 'Unable to open class right now.');
     }
   };
 
   const openSubmissionModal = (assignmentId: string) => {
-    const current = getSubmissionForAssignment(assignmentId);
-    setActiveAssignmentId(assignmentId);
-    setSubmissionText(current?.text_answer || '');
-    setSelectedUpload(current?.file_url ? { uri: current.file_url, name: 'Existing file' } : null);
-    setExternalFileUrl(current?.file_url || '');
-    setSubmissionModalVisible(true);
+    try {
+      if (!assignmentId) return;
+      const current = getSubmissionForAssignment(assignmentId);
+      setActiveAssignmentId(assignmentId);
+      setSubmissionText(current?.text_answer || '');
+      setSelectedUpload(current?.file_url ? { uri: current.file_url, name: 'Existing file' } : null);
+      setExternalFileUrl(current?.file_url || '');
+      setSubmissionModalVisible(true);
+    } catch {
+      Alert.alert('Error', 'Unable to open assignment submission.');
+    }
   };
 
   const pickSubmissionFile = async () => {
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.9,
-    });
-    if (picked.canceled || !picked.assets?.[0]) return;
-    const file = picked.assets[0];
-    setSelectedUpload({
-      uri: file.uri,
-      name: file.fileName || 'submission-image',
-      mimeType: file.mimeType || 'image/jpeg',
-    });
-    setExternalFileUrl('');
+    try {
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+      });
+      const file = picked?.assets?.[0];
+      if (picked?.canceled || !file?.uri) return;
+      setSelectedUpload({
+        uri: file.uri,
+        name: file.fileName || 'submission-image',
+        mimeType: file.mimeType || 'image/jpeg',
+      });
+      setExternalFileUrl('');
+    } catch {
+      Alert.alert('Error', 'Unable to pick file right now.');
+    }
   };
 
   const submitAssignmentHandler = async () => {
@@ -234,6 +259,15 @@ export default function CourseDetailScreen() {
     }
   };
 
+  const safePush = (path: string) => {
+    try {
+      if (!path) return;
+      router.push(path as any);
+    } catch {
+      // no-op: keep app responsive
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -262,7 +296,9 @@ export default function CourseDetailScreen() {
             style={styles.teacherCard}
             testID="course-detail-teacher-link"
             activeOpacity={0.8}
-            onPress={() => teacher && router.push(`/teacher/${teacher.id}`)}
+            onPress={() => {
+              if (teacher?.id) safePush(`/teacher/${teacher.id}`);
+            }}
           >
             {teacher && (
               <Image source={{ uri: getTeacherAvatar(teacher.id) }} style={styles.teacherAvatar} />

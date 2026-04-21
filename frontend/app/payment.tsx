@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,8 +10,10 @@ import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme'
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 import { normalizeFirebaseError } from '@/lib/errors';
+import { isValidHttpsUrl } from '@/lib/links';
 
 type PaymentType = 'fees' | 'sadqa' | 'zakat' | 'fitra';
+const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 
 export default function PaymentFlowScreen() {
   const insets = useSafeAreaInsets();
@@ -26,6 +28,8 @@ export default function PaymentFlowScreen() {
   const [razorpayLink, setRazorpayLink] = useState('');
   const [statusText, setStatusText] = useState('No payment record yet.');
   const [error, setError] = useState('');
+  const [openingPayment, setOpeningPayment] = useState(false);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -34,8 +38,9 @@ export default function PaymentFlowScreen() {
         const settingsData = settingsSnap.exists() ? (settingsSnap.data() as any) : {};
         const fee = Number(settingsData.fees_amount || 0);
         const link = String(settingsData.razorpay_link || '');
+        const effectiveLink = link || (__DEV__ ? DEV_RAZORPAY_TEST_LINK : '');
         setFeesAmount(fee);
-        setRazorpayLink(link);
+        setRazorpayLink(effectiveLink);
         setAmount(String(fee || ''));
 
         if (!user?.uid) return;
@@ -61,7 +66,13 @@ export default function PaymentFlowScreen() {
 
   const onPayNow = async () => {
     if (!razorpayLink.trim()) {
-      setError('Payment link is not configured yet. Please contact admin.');
+      setError('Payment link is not configured yet. Please contact admin or use manual payment confirmation.');
+      Alert.alert('Payment Link Missing', 'Razorpay link is not configured. Please contact admin for a manual payment method.');
+      return;
+    }
+    if (!isValidHttpsUrl(razorpayLink.trim())) {
+      setError('Configured payment link is invalid. Please contact admin.');
+      Alert.alert('Invalid Payment Link', 'Configured Razorpay link is invalid. Please contact admin.');
       return;
     }
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
@@ -69,10 +80,17 @@ export default function PaymentFlowScreen() {
       return;
     }
     setError('');
-    await Linking.openURL(razorpayLink).catch(() => {
-      Alert.alert('Error', 'Unable to open payment link');
-    });
-    setStep(3);
+    setOpeningPayment(true);
+    try {
+      let opened = true;
+      await Linking.openURL(razorpayLink).catch(() => {
+        opened = false;
+        Alert.alert('Payment Link Unavailable', 'Unable to open payment link. Please contact admin for manual payment support.');
+      });
+      if (opened) setStep(3);
+    } finally {
+      setOpeningPayment(false);
+    }
   };
 
   const onConfirmPayment = async () => {
@@ -83,6 +101,7 @@ export default function PaymentFlowScreen() {
     }
     setError('');
     try {
+      setSubmittingPayment(true);
       await addDoc(collection(db, 'payments'), {
         user_id: user.uid,
         user_name: profile.name,
@@ -97,6 +116,8 @@ export default function PaymentFlowScreen() {
       setStep(4);
     } catch (err) {
       setError(normalizeFirebaseError(err, 'Failed to save payment confirmation.'));
+    } finally {
+      setSubmittingPayment(false);
     }
   };
 
@@ -149,8 +170,8 @@ export default function PaymentFlowScreen() {
             <Text style={styles.cardTitle}>2) Pay</Text>
             <Text style={styles.bodyText}>Type: {paymentType.toUpperCase()}</Text>
             <Text style={styles.bodyText}>Amount: ₹{parsedAmount.toFixed(2)}</Text>
-            <TouchableOpacity style={styles.primaryBtn} onPress={onPayNow}>
-              <Text style={styles.primaryBtnText}>Open Razorpay</Text>
+            <TouchableOpacity style={[styles.primaryBtn, openingPayment && styles.primaryBtnDisabled]} onPress={onPayNow} disabled={openingPayment}>
+              {openingPayment ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Open Razorpay</Text>}
             </TouchableOpacity>
           </View>
         ) : null}
@@ -166,8 +187,8 @@ export default function PaymentFlowScreen() {
               placeholder="Enter UPI ref / transaction id"
               placeholderTextColor={COLORS.textMuted}
             />
-            <TouchableOpacity style={styles.primaryBtn} onPress={onConfirmPayment}>
-              <Text style={styles.primaryBtnText}>Submit Confirmation</Text>
+            <TouchableOpacity style={[styles.primaryBtn, submittingPayment && styles.primaryBtnDisabled]} onPress={onConfirmPayment} disabled={submittingPayment}>
+              {submittingPayment ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Submit Confirmation</Text>}
             </TouchableOpacity>
           </View>
         ) : null}
@@ -210,6 +231,7 @@ const styles = StyleSheet.create({
   label: { ...TYPOGRAPHY.label, color: COLORS.text },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.text, backgroundColor: COLORS.background },
   primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 12, alignItems: 'center', marginTop: SPACING.xs },
+  primaryBtnDisabled: { opacity: 0.7 },
   primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   bodyText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
   error: { color: COLORS.error, ...TYPOGRAPHY.body },

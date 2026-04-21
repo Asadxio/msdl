@@ -34,6 +34,7 @@ import {
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
+import { isValidHttpsUrl } from '@/lib/links';
 
 type AppSettings = {
   fees_amount: number;
@@ -71,6 +72,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   youtube_telegram: '',
 };
 const HELP_WHATSAPP_URL = 'https://wa.link/s82kj2';
+const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
 
 function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
@@ -259,15 +261,17 @@ export default function AboutScreen() {
 
   const shareApp = async () => {
     await Share.share({
-      message: 'Join Madrasa Tus Salikat Lil Banat app for courses, library and updates.',
+      message: 'Join Madars tus salikat Lilbanat (مدرسۃ السالکات للبنات) app for courses, library and updates.',
     });
   };
 
   const getLatestPaymentSettings = async () => {
     const snap = await getDoc(doc(db, 'app_settings', 'platform'));
     const data = snap.exists() ? (snap.data() as any) : {};
+    const rawLink = String(data.razorpay_link || settings.razorpay_link || '').trim();
+    const fallbackLink = __DEV__ && !rawLink ? DEV_RAZORPAY_TEST_LINK : '';
     return {
-      razorpay_link: String(data.razorpay_link || settings.razorpay_link || '').trim(),
+      razorpay_link: rawLink || fallbackLink,
       fees_amount: Number(data.fees_amount ?? settings.fees_amount ?? 0),
     };
   };
@@ -291,8 +295,8 @@ export default function AboutScreen() {
       Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
       return;
     }
-    if (!link.startsWith('http')) {
-      Alert.alert('Invalid Link', 'Payment link must be a valid URL.');
+    if (!isValidHttpsUrl(link)) {
+      Alert.alert('Invalid Link', 'Payment link must be a valid http/https URL.');
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -310,7 +314,9 @@ export default function AboutScreen() {
       created_at: serverTimestamp(),
     });
     await createPaymentNotification(profile.name, amount, 'fees');
-    await Linking.openURL(link);
+    await Linking.openURL(link).catch(() => {
+      Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
+    });
     Alert.alert('Recorded', 'Your payment attempt was recorded and is pending admin approval.');
   };
 
@@ -323,8 +329,8 @@ export default function AboutScreen() {
       Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
       return;
     }
-    if (!link.startsWith('http')) {
-      Alert.alert('Invalid Link', 'Payment link must be a valid URL.');
+    if (!isValidHttpsUrl(link)) {
+      Alert.alert('Invalid Link', 'Payment link must be a valid http/https URL.');
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -343,7 +349,9 @@ export default function AboutScreen() {
       created_at: serverTimestamp(),
     });
     await createPaymentNotification(profile.name, amount, donationType);
-    await Linking.openURL(link);
+    await Linking.openURL(link).catch(() => {
+      Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
+    });
     Alert.alert('Donation Initiated', `${donationType.toUpperCase()} donation recorded and pending admin approval.`);
   };
 
@@ -356,8 +364,8 @@ export default function AboutScreen() {
       Alert.alert('Missing Link', 'Please set the Razorpay payment link.');
       return;
     }
-    if (!link.startsWith('http')) {
-      setPaymentError('Please enter a valid URL starting with http or https.');
+    if (!isValidHttpsUrl(link)) {
+      setPaymentError('Please enter a valid http/https URL.');
       Alert.alert('Invalid Link', 'Please enter a valid payment link URL.');
       return;
     }
@@ -385,6 +393,9 @@ export default function AboutScreen() {
   };
 
   const validatePickedAsset = (asset: any): string | null => {
+    const uri = String(asset?.uri || '');
+    if (!uri) return 'Image file is missing URI.';
+    if (!(uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('http'))) return 'Unsupported image path.';
     const mime = asset.mimeType || '';
     if (mime && !mime.startsWith('image/')) return 'Only image files are allowed.';
     if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) return 'Image size must be below 5MB.';
@@ -392,25 +403,39 @@ export default function AboutScreen() {
   };
 
   const pickProfileImage = async (source: 'camera' | 'gallery') => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const ImagePicker: any = require('expo-image-picker');
-    const perm = source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', `Please allow ${source} access to upload profile image.`);
-      return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ImagePicker: any = require('expo-image-picker');
+      const perm = source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm?.granted) {
+        Alert.alert('Permission needed', `Please allow ${source} access to upload profile image.`);
+        return;
+      }
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+      const asset = result?.assets?.[0];
+      if (result?.canceled || !asset?.uri) return;
+      const errorMessage = validatePickedAsset(asset);
+      if (errorMessage) {
+        Alert.alert('Invalid Image', errorMessage);
+        return;
+      }
+      await updateProfileMedia({ photo_url: asset.uri, avatar: profile?.avatar || 'person' });
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to upload profile image.');
     }
-    const result = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
-    if (result.canceled || !result.assets[0]) return;
-    const errorMessage = validatePickedAsset(result.assets[0]);
-    if (errorMessage) {
-      Alert.alert('Invalid Image', errorMessage);
-      return;
+  };
+
+  const safePush = (path: string) => {
+    try {
+      if (!path) return;
+      router.push(path as any);
+    } catch {
+      // no-op
     }
-    await updateProfileMedia({ photo_url: result.assets[0].uri, avatar: profile?.avatar || 'person' });
   };
 
   return (
@@ -420,9 +445,9 @@ export default function AboutScreen() {
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Profile</Text>
-            <Text style={styles.headerSubtitle}>Madrasa Tus Salikat Lil Banat</Text>
+            <Text style={styles.headerSubtitle}>Madars tus salikat Lilbanat • مدرسۃ السالکات للبنات</Text>
           </View>
-          <TouchableOpacity style={styles.moreBtn} onPress={() => router.push('/more')} testID="goto-more-btn">
+          <TouchableOpacity style={styles.moreBtn} onPress={() => safePush('/more')} testID="goto-more-btn">
             <Ionicons name="grid-outline" size={16} color={COLORS.primary} />
             <Text style={styles.moreBtnText}>More</Text>
           </TouchableOpacity>
@@ -474,27 +499,27 @@ export default function AboutScreen() {
         {isAdmin && (
           <View style={styles.adminCard} testID="admin-controls">
             <Text style={styles.adminTitle}>Admin Controls</Text>
-            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/users')} testID="manage-users-btn">
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/users')} testID="manage-users-btn">
               <Ionicons name="people-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Manage Users</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/add-book')} testID="admin-add-book-link">
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/add-book')} testID="admin-add-book-link">
               <Ionicons name="book-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Add Library Book</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/manage-academics')} testID="manage-academics-btn">
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/manage-academics')} testID="manage-academics-btn">
               <Ionicons name="school-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Manage Teachers & Courses</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/payments')} testID="manage-payments-btn">
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/payments')} testID="manage-payments-btn">
               <Ionicons name="card-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Manage Payments</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.adminItem} onPress={() => router.push('/admin/analytics')}>
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/analytics')}>
               <Ionicons name="stats-chart-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Analytics Dashboard</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
@@ -731,11 +756,13 @@ export default function AboutScreen() {
 
         <SectionCard title="Introduction" icon="sparkles">
           <Text style={styles.bodyText}>
-            Madrasa Tus Salikat Lil Banat is dedicated to providing comprehensive Islamic education for women.
+            Madrasa Tus Salikat Lilbanat is a modern Islamic learning platform dedicated to providing quality education for girls. It combines traditional Islamic knowledge with modern technology to make learning accessible, structured, and engaging.
           </Text>
           <Text style={styles.bodyText}>
             Our curriculum covers Quran, Hadith, Fiqh, Arabic, and practical Islamic lifestyle learning.
           </Text>
+          <Text style={styles.bodyText}>اللهم زدني علماً</Text>
+          <Text style={styles.bodyText}>Ya Allah, increase me in knowledge and guide me to the right path.</Text>
         </SectionCard>
       </ScrollView>
     </View>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, FlatList,
   ActivityIndicator, TextInput, Alert, ScrollView, Image,
@@ -65,6 +65,14 @@ export default function ChatsScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const usersMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.name])), [users]);
+  const safePush = useCallback((path: string) => {
+    try {
+      if (!path) return;
+      router.push(path as any);
+    } catch {
+      // no-op
+    }
+  }, [router]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -133,7 +141,7 @@ export default function ChatsScreen() {
     if (!user) return;
     const existing = chats.find((c) => c.type === 'direct' && c.participants.length === 2 && c.participants.includes(target.id) && c.participants.includes(user.uid));
     if (existing) {
-      router.push(`/chat/${existing.id}`);
+      safePush(`/chat/${existing.id}`);
       return;
     }
 
@@ -159,7 +167,7 @@ export default function ChatsScreen() {
       };
       const ref = await addDoc(collection(db, 'chats'), payload);
       setShowUsers(false);
-      router.push(`/chat/${ref.id}`);
+      safePush(`/chat/${ref.id}`);
     } catch (e: any) {
       setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
       Alert.alert('Could not start chat', e?.message || 'Please try again.');
@@ -213,7 +221,7 @@ export default function ChatsScreen() {
       setShowGroupCreator(false);
       setGroupName('');
       setSelected([]);
-      router.push(`/chat/${ref.id}`);
+      safePush(`/chat/${ref.id}`);
     } catch (e: any) {
       setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
       Alert.alert('Could not create group', e?.message || 'Please try again.');
@@ -226,7 +234,7 @@ export default function ChatsScreen() {
     if (!user || !isAdmin) return;
     const existing = chats.find((c) => c.type === 'broadcast');
     if (existing) {
-      router.push(`/chat/${existing.id}`);
+      safePush(`/chat/${existing.id}`);
       return;
     }
     setOpeningBroadcast(true);
@@ -243,7 +251,7 @@ export default function ChatsScreen() {
         typing: {},
         unread_counts: { [user.uid]: 0 },
       });
-      router.push(`/chat/${ref.id}`);
+      safePush(`/chat/${ref.id}`);
     } catch (e: any) {
       setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
       Alert.alert('Could not open broadcast', e?.message || 'Please try again.');
@@ -372,7 +380,7 @@ export default function ChatsScreen() {
             const otherId = item.participants.find((p) => p !== user?.uid);
             const avatarUser = otherId ? userById[otherId] : undefined;
             return (
-            <ScalePressable style={styles.chatCard} onPress={() => router.push(`/chat/${item.id}`)}>
+            <ScalePressable style={styles.chatCard} onPress={() => safePush(`/chat/${item.id}`)}>
               {avatarUser?.photo_url ? (
                 <Image source={{ uri: avatarUser.photo_url }} style={styles.chatAvatar} />
               ) : (
@@ -400,7 +408,7 @@ export default function ChatsScreen() {
             </ScalePressable>
           )}}
           ListEmptyComponent={(
-            <EmptyState icon="chatbubbles-outline" message="No chats yet. Start one from New Chat." />
+            <EmptyState icon="chatbubbles-outline" message="No messages yet. Start one from New Chat." />
           )}
         />
       )}
@@ -444,11 +452,11 @@ const styles = StyleSheet.create({
   chatName: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.textMain },
   chatType: { fontSize: 10, color: COLORS.goldText, backgroundColor: COLORS.goldBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, textTransform: 'uppercase' },
   previewRow: { marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', gap: 8, alignItems: 'center' },
-  chatPreview: { flex: 1, fontSize: 13, color: COLORS.textMuted },
+  chatPreview: { flex: 1, fontSize: 13, color: COLORS.textMuted, textAlign: 'left' },
   metaRight: { alignItems: 'flex-end', gap: 4 },
   chatTime: { fontSize: 11, color: COLORS.textMuted },
   unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   center: { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl },
-  emptyText: { color: COLORS.textMuted, fontSize: 14, textAlign: 'center' },
+  emptyText: { color: COLORS.textMuted, fontSize: 14, textAlign: 'left' },
 });

@@ -30,6 +30,8 @@ export type Teacher = {
 export type Book = {
   id: string;
   title: string;
+  description?: string;
+  file_url: string;
   pdf_url: string;
   category: string;
   category_id?: string;
@@ -143,7 +145,13 @@ type DataContextType = {
   }) => Promise<boolean>;
   getResumeLearning: () => ResumeLearning | null;
   getCourseProgress: (courseId: string) => CourseProgressSummary;
-  addBook: (title: string, pdf_url: string, category: string, category_id?: string) => Promise<boolean>;
+  addBook: (
+    title: string,
+    file_url: string,
+    category: string,
+    category_id?: string,
+    description?: string,
+  ) => Promise<boolean>;
   deleteBook: (bookId: string) => Promise<boolean>;
 };
 
@@ -235,7 +243,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         booksData.push({
           id: doc.id,
           title: data.title || '',
-          pdf_url: data.pdf_url || data.pdfUrl || '',
+          description: data.description || '',
+          file_url: data.file_url || data.pdf_url || data.pdfUrl || '',
+          pdf_url: data.file_url || data.pdf_url || data.pdfUrl || '',
           category: data.category || '',
           category_id: data.category_id || '',
         });
@@ -441,19 +451,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [courses, profile?.role, user?.uid]);
 
-  const addBook = async (title: string, pdf_url: string, category: string, category_id?: string): Promise<boolean> => {
+  const addBook = async (
+    title: string,
+    file_url: string,
+    category: string,
+    category_id?: string,
+    description?: string,
+  ): Promise<boolean> => {
     if (profile?.role !== 'admin') {
       logger.warn('Unauthorized: only admin can add books');
       return false;
     }
-    if (!title.trim() || !pdf_url.trim() || !category.trim()) {
+    if (!title.trim() || !file_url.trim() || !category.trim()) {
       logger.warn('Invalid book payload: missing required fields');
       return false;
     }
     try {
       await withTimeout(addDoc(collection(db, 'library'), {
         title: title.trim(),
-        pdf_url: pdf_url.trim(),
+        description: String(description || '').trim(),
+        file_url: file_url.trim(),
+        // keep backward compatibility for existing readers/rules
+        pdf_url: file_url.trim(),
         category: category.trim(),
         category_id: category_id || '',
         created_at: serverTimestamp(),
@@ -646,41 +665,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [fetchLearning, submissions, user?.uid]);
 
   const getResumeLearning = useCallback((): ResumeLearning | null => {
-    if (lastOpenedLessonId) {
-      const lastLesson = lessons.find((lesson) => lesson.id === lastOpenedLessonId);
-      if (lastLesson && !lessonProgress[lastLesson.id]?.completed) {
-        const module = modules.find((m) => m.id === lastLesson.module_id);
-        const course = courses.find((c) => c.id === lastLesson.course_id);
-        if (module && course) {
-          return {
-            courseId: course.id,
-            courseName: course.name,
-            moduleId: module.id,
-            moduleTitle: module.title,
-            lessonId: lastLesson.id,
-            lessonTitle: lastLesson.title,
-          };
+    try {
+      if (lastOpenedLessonId) {
+        const lastLesson = lessons.find((lesson) => lesson.id === lastOpenedLessonId);
+        if (lastLesson && !lessonProgress[lastLesson.id]?.completed) {
+          const module = modules.find((m) => m.id === lastLesson.module_id);
+          const course = courses.find((c) => c.id === lastLesson.course_id);
+          if (module && course && course.id) {
+            return {
+              courseId: String(course.id),
+              courseName: String(course.name || 'Course'),
+              moduleId: String(module.id || ''),
+              moduleTitle: String(module.title || 'Module'),
+              lessonId: String(lastLesson.id || ''),
+              lessonTitle: String(lastLesson.title || 'Lesson'),
+            };
+          }
         }
       }
-    }
-    for (const course of courses) {
-      const cModules = getModulesForCourse(course.id);
-      for (const module of cModules) {
-        const mLessons = getLessonsForModule(module.id);
-        const nextLesson = mLessons.find((lesson) => !lessonProgress[lesson.id]?.completed);
-        if (nextLesson) {
-          return {
-            courseId: course.id,
-            courseName: course.name,
-            moduleId: module.id,
-            moduleTitle: module.title,
-            lessonId: nextLesson.id,
-            lessonTitle: nextLesson.title,
-          };
+      for (const course of courses) {
+        if (!course?.id) continue;
+        const cModules = getModulesForCourse(course.id);
+        for (const module of cModules) {
+          if (!module?.id) continue;
+          const mLessons = getLessonsForModule(module.id);
+          const nextLesson = mLessons.find((lesson) => lesson?.id && !lessonProgress[lesson.id]?.completed);
+          if (nextLesson?.id) {
+            return {
+              courseId: String(course.id),
+              courseName: String(course.name || 'Course'),
+              moduleId: String(module.id),
+              moduleTitle: String(module.title || 'Module'),
+              lessonId: String(nextLesson.id),
+              lessonTitle: String(nextLesson.title || 'Lesson'),
+            };
+          }
         }
       }
+      return null;
+    } catch {
+      return null;
     }
-    return null;
   }, [courses, getLessonsForModule, getModulesForCourse, lastOpenedLessonId, lessonProgress, lessons, modules]);
 
   const getCourseProgress = useCallback((courseId: string): CourseProgressSummary => {
