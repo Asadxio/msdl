@@ -7,16 +7,22 @@ import {
   Image,
   TouchableOpacity,
   StatusBar,
-  FlatList
+  FlatList,
+  Modal,
+  TextInput,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS, MEDIA, getCourseImage, getTeacherAvatar } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
 import { db } from '@/lib/firebase';
 import { EmptyState, ScalePressable, SkeletonCard } from '@/components/ui';
+import { useAuth } from '@/context/AuthContext';
+import { normalizeGoogleDriveFileUrl } from '@/lib/links';
 
 const DEFAULT_ANNOUNCEMENT_TITLE = 'Enrollment Open for 2025';
 const DEFAULT_ANNOUNCEMENT_DESC = 'Admissions are now open for all courses. Register today and begin your journey of Islamic knowledge.';
@@ -25,9 +31,36 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { courses, teachers, loading, getResumeLearning, getCourseProgress } = useData();
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
   const featuredCourses = courses.slice(0, 5);
   const [announcementTitle, setAnnouncementTitle] = useState(DEFAULT_ANNOUNCEMENT_TITLE);
   const [announcementMessage, setAnnouncementMessage] = useState(DEFAULT_ANNOUNCEMENT_DESC);
+  const [noticeModalVisible, setNoticeModalVisible] = useState(false);
+  const [noticeDraftTitle, setNoticeDraftTitle] = useState('');
+  const [noticeDraftMessage, setNoticeDraftMessage] = useState('');
+  const [savingNotice, setSavingNotice] = useState(false);
+  const [useCustomNotice, setUseCustomNotice] = useState(false);
+
+  useEffect(() => {
+    const loadNotice = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'app_settings', 'platform'));
+        if (!snap.exists()) return;
+        const data = snap.data() as any;
+        const title = String(data.notice_title || '').trim();
+        const message = String(data.notice_message || '').trim();
+        if (title || message) {
+          setAnnouncementTitle(title || DEFAULT_ANNOUNCEMENT_TITLE);
+          setAnnouncementMessage(message || DEFAULT_ANNOUNCEMENT_DESC);
+          setUseCustomNotice(true);
+        }
+      } catch {
+        // ignore and fallback to announcement stream
+      }
+    };
+    loadNotice().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const q = query(
@@ -43,17 +76,48 @@ export default function HomeScreen() {
           item.category === 'announcement' || item.title?.toLowerCase().includes('announcement')
         ));
 
-      setAnnouncementTitle(latestAnnouncement?.title?.trim() || DEFAULT_ANNOUNCEMENT_TITLE);
-      setAnnouncementMessage(latestAnnouncement?.message?.trim() || DEFAULT_ANNOUNCEMENT_DESC);
+      if (!useCustomNotice) {
+        setAnnouncementTitle(latestAnnouncement?.title?.trim() || DEFAULT_ANNOUNCEMENT_TITLE);
+        setAnnouncementMessage(latestAnnouncement?.message?.trim() || DEFAULT_ANNOUNCEMENT_DESC);
+      }
     });
     return unsub;
-  }, []);
+  }, [useCustomNotice]);
 
   const isDefaultAnnouncement = useMemo(
     () => announcementTitle === DEFAULT_ANNOUNCEMENT_TITLE && announcementMessage === DEFAULT_ANNOUNCEMENT_DESC,
     [announcementMessage, announcementTitle]
   );
   const resumeLearning = useMemo(() => getResumeLearning(), [getResumeLearning]);
+  const openNoticeEditor = () => {
+    setNoticeDraftTitle(announcementTitle);
+    setNoticeDraftMessage(announcementMessage);
+    setNoticeModalVisible(true);
+  };
+
+  const saveNotice = async () => {
+    if (!isAdmin) return;
+    if (!noticeDraftTitle.trim() || !noticeDraftMessage.trim()) {
+      Alert.alert('Missing fields', 'Notice title and message are required.');
+      return;
+    }
+    setSavingNotice(true);
+    try {
+      await setDoc(doc(db, 'app_settings', 'platform'), {
+        notice_title: noticeDraftTitle.trim(),
+        notice_message: noticeDraftMessage.trim(),
+        updated_at: serverTimestamp(),
+      }, { merge: true });
+      setAnnouncementTitle(noticeDraftTitle.trim());
+      setAnnouncementMessage(noticeDraftMessage.trim());
+      setUseCustomNotice(true);
+      setNoticeModalVisible(false);
+    } catch {
+      Alert.alert('Save failed', 'Could not update notice.');
+    } finally {
+      setSavingNotice(false);
+    }
+  };
   const safePush = (path: string) => {
     try {
       if (!path || typeof path !== 'string') return;
@@ -190,7 +254,7 @@ export default function HomeScreen() {
                     safePush(`/teacher/${item.id}`);
                   }}
                 >
-                  <Image source={{ uri: getTeacherAvatar(item.id) }} style={styles.teacherAvatar} />
+                  <Image source={{ uri: item.photo_url ? normalizeGoogleDriveFileUrl(item.photo_url) : getTeacherAvatar(item.id) }} style={styles.teacherAvatar} />
                   <Text style={styles.teacherPreviewName} numberOfLines={1}>
                     {item.name.split(' ').slice(-2).join(' ')}
                   </Text>
@@ -205,7 +269,14 @@ export default function HomeScreen() {
 
         {/* Announcements */}
         <View style={[styles.section, { paddingHorizontal: SPACING.lg }]}>
-          <Text style={[styles.sectionTitle, { marginBottom: SPACING.md }]}>Announcements</Text>
+          <View style={[styles.sectionHeader, { marginBottom: SPACING.md }]}>
+            <Text style={styles.sectionTitle}>Announcements</Text>
+            {isAdmin ? (
+              <TouchableOpacity onPress={openNoticeEditor}>
+                <Text style={styles.viewAllText}>Edit Notice</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
           <View style={styles.announcementCard} testID="announcement-card">
             <Image source={{ uri: MEDIA.lanternIcon }} style={styles.lanternIcon} />
             <View style={styles.announcementContent}>
@@ -222,6 +293,36 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+        <Modal visible={noticeModalVisible} transparent animationType="fade" onRequestClose={() => setNoticeModalVisible(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Edit Home Notice</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={noticeDraftTitle}
+                onChangeText={setNoticeDraftTitle}
+                placeholder="Notice title"
+                placeholderTextColor={COLORS.textMuted}
+              />
+              <TextInput
+                style={[styles.modalInput, styles.modalTextArea]}
+                value={noticeDraftMessage}
+                onChangeText={setNoticeDraftMessage}
+                placeholder="Notice message"
+                placeholderTextColor={COLORS.textMuted}
+                multiline
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalBtnGhost} onPress={() => setNoticeModalVisible(false)}>
+                  <Text style={styles.modalBtnGhostText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalBtnPrimary} onPress={saveNotice} disabled={savingNotice}>
+                  {savingNotice ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalBtnPrimaryText}>Save</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Quick Stats */}
         <View style={[styles.section, { paddingHorizontal: SPACING.lg }]}>
@@ -292,6 +393,16 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center', ...SHADOWS.card },
   statNumber: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   statLabel: { fontSize: 12, fontWeight: '500', color: COLORS.textMuted, marginTop: 2 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: SPACING.md },
+  modalCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, gap: SPACING.sm, ...SHADOWS.card },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.textMain },
+  modalInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 10, paddingVertical: 9, color: COLORS.textMain, backgroundColor: COLORS.surfaceAlt },
+  modalTextArea: { minHeight: 90, textAlignVertical: 'top' },
+  modalActions: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.xs },
+  modalBtnGhost: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingVertical: 10, alignItems: 'center' },
+  modalBtnGhostText: { color: COLORS.textMain, fontWeight: '700' },
+  modalBtnPrimary: { flex: 1, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 10, alignItems: 'center' },
+  modalBtnPrimaryText: { color: '#fff', fontWeight: '700' },
   resumeCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,

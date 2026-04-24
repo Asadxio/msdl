@@ -60,7 +60,7 @@ type PaymentItem = {
   amount: number;
   status: 'pending' | 'approved' | 'rejected' | 'verified' | 'submitted';
   provider?: 'razorpay';
-  type?: 'fees' | 'sadqa' | 'zakat' | 'fitra';
+  type?: 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -71,7 +71,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   instagram: '',
   youtube_telegram: '',
 };
-const HELP_WHATSAPP_URL = 'https://wa.link/s82kj2';
+const HELP_WHATSAPP_URL = 'https://wa.link/mrtyi1';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
 
@@ -245,11 +245,6 @@ export default function AboutScreen() {
     await deleteDoc(doc(db, 'feedback', id));
   };
 
-  const openSocial = async (value: string) => {
-    if (!value.trim()) return;
-    await Linking.openURL(value.trim());
-  };
-
   const openHelp = async () => {
     const canOpen = await Linking.canOpenURL(HELP_WHATSAPP_URL);
     if (!canOpen) {
@@ -320,7 +315,7 @@ export default function AboutScreen() {
     Alert.alert('Recorded', 'Your payment attempt was recorded and is pending admin approval.');
   };
 
-  const donate = async (donationType: 'sadqa' | 'zakat' | 'fitra') => {
+  const donate = async (donationType: 'sadqa' | 'zakat' | 'fitra' | 'langar') => {
     if (!user || !profile) return;
     const paymentSettings = await getLatestPaymentSettings();
     const link = paymentSettings.razorpay_link;
@@ -402,17 +397,36 @@ export default function AboutScreen() {
     return null;
   };
 
+  const ensureImagePickerPermission = async (ImagePicker: any, source: 'camera' | 'gallery'): Promise<boolean> => {
+    const existing = source === 'camera'
+      ? await ImagePicker.getCameraPermissionsAsync()
+      : await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (existing?.granted) return true;
+    if (!existing?.canAskAgain) {
+      Alert.alert(
+        'Permission blocked',
+        `Please enable ${source} permission from app settings to continue.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } },
+        ],
+      );
+      return false;
+    }
+    const requested = source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (requested?.granted) return true;
+    Alert.alert('Permission needed', `Please allow ${source} access to upload profile image.`);
+    return false;
+  };
+
   const pickProfileImage = async (source: 'camera' | 'gallery') => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ImagePicker: any = require('expo-image-picker');
-      const perm = source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm?.granted) {
-        Alert.alert('Permission needed', `Please allow ${source} access to upload profile image.`);
-        return;
-      }
+      const hasPermission = await ensureImagePickerPermission(ImagePicker, source);
+      if (!hasPermission) return;
       const result = source === 'camera'
         ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
@@ -613,7 +627,7 @@ export default function AboutScreen() {
         </SectionCard>
 
         <SectionCard title="Donations (Razorpay Link)" icon="heart-outline">
-          <Text style={styles.bodyText}>Support the madrasa through Sadqa, Zakat, or Fitra.</Text>
+          <Text style={styles.bodyText}>Support the madrasa through Sadqa, Zakat, Fitra, or Langar.</Text>
           <Text style={styles.inputLabel}>Donation Amount</Text>
           <TextInput
             style={[styles.input, { marginTop: 10 }, focusedInput === 'donation_amount' && styles.inputFocused]}
@@ -635,6 +649,9 @@ export default function AboutScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('fitra')}>
               <Text style={styles.primaryBtnText}>Donate Fitra</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('langar')}>
+              <Text style={styles.primaryBtnText}>Donate Langar</Text>
             </TouchableOpacity>
           </View>
           <Text style={[styles.bodyText, { marginTop: 10, fontSize: 12 }]}>
@@ -728,9 +745,9 @@ export default function AboutScreen() {
             </>
           ) : (
             <>
-              {!!settings.whatsapp_channel && <TouchableOpacity style={styles.linkBtn} onPress={() => openSocial(settings.whatsapp_channel)}><Text style={styles.linkBtnText}>WhatsApp Channel</Text></TouchableOpacity>}
-              {!!settings.instagram && <TouchableOpacity style={styles.linkBtn} onPress={() => openSocial(settings.instagram)}><Text style={styles.linkBtnText}>Instagram</Text></TouchableOpacity>}
-              {!!settings.youtube_telegram && <TouchableOpacity style={styles.linkBtn} onPress={() => openSocial(settings.youtube_telegram)}><Text style={styles.linkBtnText}>YouTube / Telegram</Text></TouchableOpacity>}
+              <TouchableOpacity style={styles.linkBtn} onPress={openHelp}>
+                <Text style={styles.linkBtnText}>WhatsApp Support</Text>
+              </TouchableOpacity>
             </>
           )}
 

@@ -21,6 +21,7 @@ type NotificationItem = {
   message: string;
   user_id: string;
   category?: 'announcement' | 'notification' | 'class_reminder';
+  sound?: 'default';
   read?: Record<string, boolean>;
   created_at?: { toDate?: () => Date };
 };
@@ -57,10 +58,6 @@ export default function NotificationsScreen() {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [focusedField, setFocusedField] = useState<'title' | 'message' | 'recipient' | null>(null);
   const [focusedEditField, setFocusedEditField] = useState<'editTitle' | 'editMessage' | null>(null);
-
-  const isAnnouncement = (item: NotificationItem): boolean => (
-    item.category === 'announcement' || item.title.toLowerCase().includes('announcement')
-  );
 
   useEffect(() => {
     if (!user) return;
@@ -131,36 +128,41 @@ export default function NotificationsScreen() {
     }
   };
 
-  const startEditAnnouncement = (item: NotificationItem) => {
+  const startEditNotification = (item: NotificationItem) => {
     setEditingId(item.id);
     setEditingTitle(item.title);
     setEditingMessage(item.message);
     setShowEditModal(true);
   };
 
-  const saveAnnouncementEdit = async () => {
+  const saveNotificationEdit = async () => {
     if (!isAdmin || !editingId || !editingTitle.trim() || !editingMessage.trim()) return;
     setUpdating(true);
     try {
+      const lowerTitle = editingTitle.trim().toLowerCase();
+      const category = lowerTitle.includes('announcement')
+        ? 'announcement'
+        : (lowerTitle.includes('class reminder') || lowerTitle.includes('reminder') ? 'class_reminder' : 'notification');
       await updateDoc(doc(db, 'notifications', editingId), {
         title: editingTitle.trim(),
         message: editingMessage.trim(),
-        category: 'announcement',
+        category,
+        sound: 'default',
       });
-      Alert.alert('Updated', 'Announcement was updated successfully.');
+      Alert.alert('Updated', 'Notification was updated successfully.');
       setEditingId('');
       setEditingTitle('');
       setEditingMessage('');
       setShowEditModal(false);
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update announcement.');
+      Alert.alert('Error', err?.message || 'Failed to update notification.');
     } finally {
       setUpdating(false);
     }
   };
 
-  const deleteAnnouncement = (item: NotificationItem) => {
-    Alert.alert('Delete Announcement', 'Are you sure you want to delete this announcement?', [
+  const deleteNotification = (item: NotificationItem) => {
+    Alert.alert('Delete Notification', 'Are you sure you want to delete this notification?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -174,8 +176,9 @@ export default function NotificationsScreen() {
               setEditingMessage('');
               setShowEditModal(false);
             }
+            setFeedback({ type: 'success', text: 'Notification deleted successfully.' });
           } catch (err: any) {
-            Alert.alert('Error', err?.message || 'Failed to delete announcement.');
+            Alert.alert('Error', err?.message || 'Failed to delete notification.');
           }
         },
       },
@@ -186,13 +189,18 @@ export default function NotificationsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <View style={styles.headerTitleRow}>
-          <Text style={styles.headerTitle}>Notifications</Text>
-          {unreadCount > 0 ? (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-            </View>
-          ) : null}
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.headerTitle}>Notifications</Text>
+            {unreadCount > 0 ? (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
+              </View>
+            ) : null}
+          </View>
+          <TouchableOpacity style={styles.refreshBtn} onPress={() => setReloadKey((v) => v + 1)}>
+            <Ionicons name="refresh" size={16} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
         <Text style={styles.headerSubtitle}>Latest updates and class reminders</Text>
       </View>
@@ -317,12 +325,12 @@ export default function NotificationsScreen() {
               </View>
               <Text style={styles.cardMsg}>{item.message}</Text>
               <Text style={styles.cardTime}>{formatDate(item)}</Text>
-              {isAdmin && isAnnouncement(item) ? (
+              {isAdmin ? (
                 <View style={styles.adminActions}>
-                  <TouchableOpacity onPress={() => startEditAnnouncement(item)}>
+                  <TouchableOpacity onPress={() => startEditNotification(item)}>
                     <Text style={styles.editActionText}>Edit</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => deleteAnnouncement(item)}>
+                  <TouchableOpacity onPress={() => deleteNotification(item)}>
                     <Text style={styles.deleteActionText}>Delete</Text>
                   </TouchableOpacity>
                 </View>
@@ -334,7 +342,7 @@ export default function NotificationsScreen() {
       <Modal visible={showEditModal} transparent animationType="fade" onRequestClose={() => setShowEditModal(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Announcement</Text>
+            <Text style={styles.modalTitle}>Edit Notification</Text>
             <Text style={styles.inputLabel}>Title</Text>
             <TextInput
               style={[styles.input, focusedEditField === 'editTitle' && styles.inputFocused]}
@@ -368,7 +376,7 @@ export default function NotificationsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.sendBtn, styles.editSaveBtn, updating && { opacity: 0.6 }]}
-                onPress={saveAnnouncementEdit}
+                onPress={saveNotificationEdit}
                 disabled={updating || !editingTitle.trim() || !editingMessage.trim()}
               >
                 {updating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Update</Text>}
@@ -388,7 +396,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header,
   },
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  refreshBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
   feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   unreadBadge: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },

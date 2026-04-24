@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS, SHADOWS, getTeacherAvatar, getCourseImage } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
+import { normalizeGoogleDriveFileUrl } from '@/lib/links';
 
 export default function TeacherDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -57,6 +58,9 @@ export default function TeacherDetailScreen() {
   const matchedCourses = teacherCourses.length > 0
     ? teacherCourses
     : courses.filter((c) => c.teacher_name.includes(teacher.name.split(' ').slice(-2).join(' ')));
+  const teacherAvatar = teacher.photo_url
+    ? normalizeGoogleDriveFileUrl(teacher.photo_url)
+    : getTeacherAvatar(teacher.id);
 
   return (
     <View style={styles.container}>
@@ -78,7 +82,7 @@ export default function TeacherDetailScreen() {
 
         {/* Profile */}
         <View style={styles.profileSection}>
-          <Image source={{ uri: getTeacherAvatar(teacher.id) }} style={styles.avatar} />
+          <Image source={{ uri: teacherAvatar }} style={styles.avatar} />
           <View style={styles.titleBadge}>
             <Ionicons name="star" size={14} color={COLORS.secondary} />
             <Text style={styles.titleBadgeText}>{teacher.title}</Text>

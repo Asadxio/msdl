@@ -25,6 +25,7 @@ import { db } from '@/lib/firebase';
 import { ScalePressable } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { uploadUriFile } from '@/lib/storage';
+import { normalizeMeetUrl, prepareExternalUrl } from '@/lib/links';
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
@@ -41,6 +42,8 @@ export default function CourseDetailScreen() {
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
   const [playerVisible, setPlayerVisible] = useState(false);
   const [playerUrl, setPlayerUrl] = useState('');
+  const [playerSourceUrl, setPlayerSourceUrl] = useState('');
+  const [playerError, setPlayerError] = useState(false);
 
   const [activeAssignmentId, setActiveAssignmentId] = useState<string>('');
   const [submissionModalVisible, setSubmissionModalVisible] = useState(false);
@@ -58,7 +61,7 @@ export default function CourseDetailScreen() {
 
   const course = courses.find((c) => c.id === courseId);
   const classTimeLabel = course?.class_time || course?.time || '';
-  const meetLink = course?.meet_link || course?.class_link || '';
+  const meetLink = normalizeMeetUrl(course?.meet_link || course?.class_link || '');
   const isReviewer = profile?.role === 'admin' || profile?.role === 'teacher';
 
   useEffect(() => {
@@ -109,6 +112,8 @@ export default function CourseDetailScreen() {
     try {
       const embedUrl = toEmbeddableUrl(url);
       if (!embedUrl) return;
+      setPlayerError(false);
+      setPlayerSourceUrl(url);
       setPlayerUrl(embedUrl);
       setPlayerVisible(true);
     } catch {
@@ -156,10 +161,10 @@ export default function CourseDetailScreen() {
 
   const openExternalLink = async (url?: string) => {
     try {
-      let link = url?.trim();
-      if (!link) return;
-      if (!link.toLowerCase().startsWith('http')) {
-        link = `https://${link}`;
+      const link = prepareExternalUrl(url || '');
+      if (!link) {
+        Alert.alert('Error', 'Invalid link');
+        return;
       }
       console.log('[CourseDetail] Opening link:', link);
       await Linking.openURL(link).catch(() => {
@@ -206,14 +211,25 @@ export default function CourseDetailScreen() {
   const pickSubmissionFile = async () => {
     try {
       console.log('[CourseDetail] Upload button pressed');
-      console.log('[CourseDetail] Requesting media library permission...');
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log('Permission:', permission);
-      if (!permission.granted) {
-        Alert.alert('Permission required', 'Allow gallery access');
+      const existingPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+      if (!existingPermission.granted && !existingPermission.canAskAgain) {
+        Alert.alert(
+          'Permission blocked',
+          'Gallery access is disabled. Enable it from app settings to continue.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } },
+          ],
+        );
         return;
       }
-      console.log('[CourseDetail] Opening image picker...');
+      const permission = existingPermission.granted
+        ? existingPermission
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission required', 'Please allow gallery access before uploading.');
+        return;
+      }
       const picked = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.7,
@@ -645,11 +661,25 @@ export default function CourseDetailScreen() {
             <Text style={styles.playerTitle}>Class Recording</Text>
             <View style={{ width: 36 }} />
           </View>
-          {playerUrl ? (
-            <WebView source={{ uri: playerUrl }} style={styles.playerWebView} allowsFullscreenVideo />
+          {playerUrl && !playerError ? (
+            <WebView
+              source={{ uri: playerUrl }}
+              style={styles.playerWebView}
+              allowsFullscreenVideo
+              onError={() => setPlayerError(true)}
+              onHttpError={() => setPlayerError(true)}
+            />
           ) : (
             <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Unable to load recording.</Text>
+              <Text style={styles.loadingText}>Couldn&apos;t preview this file. It may be too large.</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity style={styles.infoBtn} onPress={() => { void openExternalLink(playerSourceUrl || playerUrl); }}>
+                  <Text style={styles.infoBtnText}>Open Externally</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.infoBtn} onPress={() => { void openExternalLink(playerSourceUrl || playerUrl); }}>
+                  <Text style={styles.infoBtnText}>Download / Open</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>
@@ -823,4 +853,13 @@ const styles = StyleSheet.create({
   },
   playerTitle: { color: COLORS.textMain, fontWeight: '700', fontSize: 15 },
   playerWebView: { flex: 1, backgroundColor: '#000' },
+  infoBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  infoBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
 });

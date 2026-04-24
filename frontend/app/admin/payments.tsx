@@ -17,7 +17,7 @@ type PaymentItem = {
   amount: number;
   status: 'pending' | 'approved' | 'rejected' | 'verified' | 'submitted';
   provider?: 'razorpay';
-  type?: 'fees' | 'sadqa' | 'zakat' | 'fitra';
+  type?: 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
   created_at?: { toDate?: () => Date };
 };
 

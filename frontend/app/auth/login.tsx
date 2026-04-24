@@ -9,6 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
+import { prepareExternalUrl } from '@/lib/links';
 
 /**
  * Production-safe Login UI:
@@ -33,6 +35,7 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const WHATSAPP_HELP_URL = 'https://wa.link/mrtyi1';
 
   const handleEmailChange = useCallback((text: string) => setEmail(text), []);
   const handlePasswordChange = useCallback((text: string) => setPassword(text), []);
@@ -144,6 +147,16 @@ export default function LoginScreen() {
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+          <TouchableOpacity
+            style={styles.helpBtn}
+            onPress={() => {
+              const url = prepareExternalUrl(WHATSAPP_HELP_URL);
+              if (!url) return;
+              Linking.openURL(url).catch(() => {});
+            }}
+          >
+            <Text style={styles.helpBtnText}>Need Help? WhatsApp Us</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -201,4 +214,6 @@ const styles = StyleSheet.create({
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.md },
   footerText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
   footerLink: { ...TYPOGRAPHY.label, color: COLORS.primary },
+  helpBtn: { alignSelf: 'center', marginTop: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: '#DCFCE7' },
+  helpBtnText: { ...TYPOGRAPHY.label, color: '#166534', fontWeight: '700' },
 });

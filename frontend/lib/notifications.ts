@@ -7,6 +7,7 @@ export type NotificationPayload = {
   title: string;
   message: string;
   user_id?: string;
+  sound?: 'default';
 };
 
 export async function createNotificationAsAdmin(
@@ -24,12 +25,14 @@ export async function createNotificationAsAdmin(
   const isClassReminder = titleLower.includes('class reminder') || titleLower.includes('reminder');
   const pushBody = isClassReminder ? 'Class reminder received. Open app for details.' : message;
   const category = isClassReminder ? 'class_reminder' : (isAnnouncement ? 'announcement' : 'notification');
+  const sound = payload.sound || 'default';
 
   await addDoc(collection(db, 'notifications'), {
     title,
     message,
     user_id: userId,
     category,
+    sound,
     read: {},
     created_at: serverTimestamp(),
   });
@@ -38,13 +41,13 @@ export async function createNotificationAsAdmin(
     await sendPushToAllUsers({
       title: isAnnouncement ? 'New Announcement' : title,
       body: pushBody,
-      data: { type: category },
+      data: { type: category, sound },
     }).catch(() => {});
   } else {
     await sendPushToUserIds([userId], {
       title,
       body: pushBody,
-      data: { type: 'notification' },
+      data: { type: 'notification', sound },
     }).catch(() => {});
   }
   return true;

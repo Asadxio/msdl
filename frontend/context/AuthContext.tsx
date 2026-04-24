@@ -93,8 +93,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = async () => {
     if (auth.currentUser) {
-      await reload(auth.currentUser);
-      setUser({ ...auth.currentUser } as User);
+      try {
+        await reload(auth.currentUser);
+        setUser({ ...auth.currentUser } as User);
+      } catch (err) {
+        logger.warn('Failed to refresh auth user:', err);
+      }
     }
   };
 
@@ -213,9 +217,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOutUser = async () => {
-    await firebaseSignOut(auth);
-    setUser(null);
-    setProfile(null);
+    try {
+      await firebaseSignOut(auth);
+    } catch (err) {
+      logger.warn('Failed to sign out cleanly:', err);
+    } finally {
+      setUser(null);
+      setProfile(null);
+    }
   };
 
   return (

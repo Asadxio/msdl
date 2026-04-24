@@ -26,10 +26,25 @@ type ChatItem = {
   unread_counts?: Record<string, number>;
 };
 
+function normalizeChatItem(id: string, raw: any): ChatItem {
+  const safe = raw && typeof raw === 'object' ? raw : {};
+  return {
+    id,
+    type: safe.type === 'group' || safe.type === 'broadcast' ? safe.type : 'direct',
+    name: typeof safe.name === 'string' ? safe.name : '',
+    participants: Array.isArray(safe.participants) ? safe.participants.filter((p: unknown) => typeof p === 'string') : [],
+    participant_names: safe.participant_names && typeof safe.participant_names === 'object' ? safe.participant_names : {},
+    last_message: typeof safe.last_message === 'string' ? safe.last_message : '',
+    updated_at: safe.updated_at || null,
+    unread_counts: safe.unread_counts && typeof safe.unread_counts === 'object' ? safe.unread_counts : {},
+  };
+}
+
 function chatTitle(chat: ChatItem, usersMap: Record<string, string>, myUid: string): string {
   if (chat.type === 'broadcast') return chat.name || 'Broadcast';
   if (chat.type === 'group') return chat.name || 'Group Chat';
-  const other = chat.participants.find((p) => p !== myUid);
+  const safeParticipants = Array.isArray(chat.participants) ? chat.participants : [];
+  const other = safeParticipants.find((p) => p !== myUid);
   if (!other) return 'Direct Chat';
   return chat.participant_names?.[other] || usersMap[other] || 'Direct Chat';
 }
@@ -87,7 +102,7 @@ export default function ChatsScreen() {
 
     const unsubA = onSnapshot(participantsQ, (snap) => {
       const arr: ChatItem[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+      snap.forEach((d) => arr.push(normalizeChatItem(d.id, d.data())));
       setChats((prev) => {
         const b = prev.filter((c) => c.type === 'broadcast');
         const merged = [...arr, ...b.filter((bc) => !arr.some((x) => x.id === bc.id))];
@@ -102,7 +117,7 @@ export default function ChatsScreen() {
 
     const unsubB = onSnapshot(broadcastQ, (snap) => {
       const arr: ChatItem[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+      snap.forEach((d) => arr.push(normalizeChatItem(d.id, d.data())));
       setChats((prev) => {
         const normal = prev.filter((c) => c.type !== 'broadcast');
         const merged = [...normal, ...arr.filter((x) => !normal.some((n) => n.id === x.id))];

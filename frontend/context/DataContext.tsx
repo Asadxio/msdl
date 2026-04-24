@@ -25,6 +25,7 @@ export type Teacher = {
   name: string;
   title: string;
   courses: string[];
+  photo_url?: string;
 };
 
 export type Book = {
@@ -214,6 +215,7 @@ function getLocalTeachers(): Teacher[] {
       const course = LOCAL_COURSES.find((c) => c.id === cid);
       return course ? course.name : '';
     }).filter(Boolean),
+    photo_url: '',
   }));
 }
 
@@ -289,6 +291,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           name: data.name || '',
           title: data.title || '',
           courses: Array.isArray(data.courses) ? data.courses : [],
+          photo_url: data.photo_url || '',
         });
       });
 

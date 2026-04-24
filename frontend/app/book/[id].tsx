@@ -23,6 +23,7 @@ export default function BookViewerScreen() {
   const { books, booksLoading } = useData();
   const [webViewLoading, setWebViewLoading] = useState(true);
   const [webViewError, setWebViewError] = useState(false);
+  const [webViewErrorMessage, setWebViewErrorMessage] = useState('Unable to preview this file.');
 
   if (booksLoading) {
     return (
@@ -116,8 +117,18 @@ export default function BookViewerScreen() {
         {webViewError ? (
           <View style={styles.centerContainer}>
             <Ionicons name="document-outline" size={56} color={COLORS.border} />
-            <Text style={styles.errorTitle}>Unable to load PDF</Text>
-            <Text style={styles.errorDesc}>Use the buttons above to view or download</Text>
+            <Text style={styles.errorTitle}>Couldn&apos;t preview this file</Text>
+            <Text style={styles.errorDesc}>{webViewErrorMessage}</Text>
+            <View style={styles.errorActions}>
+              <TouchableOpacity style={styles.actionBtn} onPress={handleViewExternal}>
+                <Ionicons name="open-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.actionBtnText}>Open Externally</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.downloadBtn]} onPress={handleDownload}>
+                <Ionicons name="download-outline" size={18} color="#fff" />
+                <Text style={[styles.actionBtnText, { color: '#fff' }]}>Download</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
           <WebView
@@ -125,7 +136,16 @@ export default function BookViewerScreen() {
             style={styles.webView}
             onLoadStart={() => setWebViewLoading(true)}
             onLoadEnd={() => setWebViewLoading(false)}
-            onError={() => { setWebViewError(true); setWebViewLoading(false); }}
+            onHttpError={() => {
+              setWebViewErrorMessage('File may be too large for inline preview. Use Open Externally or Download.');
+              setWebViewError(true);
+              setWebViewLoading(false);
+            }}
+            onError={() => {
+              setWebViewErrorMessage('Use Open Externally or Download to continue.');
+              setWebViewError(true);
+              setWebViewLoading(false);
+            }}
             javaScriptEnabled
             startInLoadingState
             testID="pdf-webview"
@@ -144,6 +164,7 @@ const styles = StyleSheet.create({
   errorBackText: { fontSize: 15, fontWeight: '600', color: COLORS.textMain },
   errorTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
   errorDesc: { fontSize: 14, color: COLORS.textMuted, textAlign: 'center' },
+  errorActions: { marginTop: SPACING.sm, flexDirection: 'row', gap: SPACING.sm },
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm,

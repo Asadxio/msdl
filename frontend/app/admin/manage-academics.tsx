@@ -12,7 +12,7 @@ import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { createNotificationAsAdmin } from '@/lib/notifications';
-import { isValidHttpsUrl } from '@/lib/links';
+import { isValidHttpsUrl, normalizeMeetUrl } from '@/lib/links';
 
 type CourseItem = {
   id: string;
@@ -196,7 +196,8 @@ export default function ManageAcademicsScreen() {
       Alert.alert('Missing', 'Course name is required');
       return;
     }
-    if (!courseForm.meet_link.trim() || !isValidHttpsUrl(courseForm.meet_link.trim())) {
+    const normalizedMeetLink = normalizeMeetUrl(courseForm.meet_link);
+    if (!normalizedMeetLink || !isValidHttpsUrl(normalizedMeetLink)) {
       Alert.alert('Invalid Meet Link', 'Please add a valid http/https class link (Google Meet/Drive/YouTube links are supported).');
       return;
     }
@@ -206,7 +207,7 @@ export default function ManageAcademicsScreen() {
       teacher_name: courseForm.teacher_name.trim(),
       schedule: courseForm.schedule.trim(),
       class_time: (courseForm.class_time || '').trim(),
-      meet_link: courseForm.meet_link.trim(),
+      meet_link: normalizedMeetLink,
       description: courseForm.description.trim(),
       updated_at: serverTimestamp(),
     };
