@@ -6,11 +6,9 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  Dimensions,
   StatusBar,
-  FlatList,
+  FlatList
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -20,15 +18,13 @@ import { useData } from '@/context/DataContext';
 import { db } from '@/lib/firebase';
 import { EmptyState, ScalePressable, SkeletonCard } from '@/components/ui';
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.72;
 const DEFAULT_ANNOUNCEMENT_TITLE = 'Enrollment Open for 2025';
 const DEFAULT_ANNOUNCEMENT_DESC = 'Admissions are now open for all courses. Register today and begin your journey of Islamic knowledge.';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { courses, teachers, loading, getResumeLearning } = useData();
+  const { courses, teachers, loading, getResumeLearning, getCourseProgress } = useData();
   const featuredCourses = courses.slice(0, 5);
   const [announcementTitle, setAnnouncementTitle] = useState(DEFAULT_ANNOUNCEMENT_TITLE);
   const [announcementMessage, setAnnouncementMessage] = useState(DEFAULT_ANNOUNCEMENT_DESC);
@@ -69,7 +65,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 30 }}
@@ -77,10 +73,7 @@ export default function HomeScreen() {
         {/* Header Section */}
         <View style={styles.headerWrapper}>
           <Image source={{ uri: MEDIA.homeHeaderBg }} style={styles.headerBgImage} />
-          <LinearGradient
-            colors={['rgba(15,56,34,0.85)', 'rgba(15,56,34,0.95)']}
-            style={[styles.headerOverlay, { paddingTop: insets.top + 20 }]}
-          >
+          <View style={[styles.headerOverlay, { paddingTop: insets.top + 20 }]}>
             <Text style={styles.greeting} testID="greeting-text">السلام عليكم</Text>
             <Text style={styles.welcomeText}>Welcome to</Text>
             <Text style={styles.madrasaName} testID="madrasa-name">
@@ -91,7 +84,7 @@ export default function HomeScreen() {
               <Text style={styles.tagline}>Nurturing Knowledge & Faith</Text>
               <View style={styles.goldLine} />
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
         {/* Loading State */}
@@ -136,38 +129,34 @@ export default function HomeScreen() {
           {featuredCourses.length === 0 ? (
             <EmptyState icon="book-outline" message="No featured courses available." />
           ) : (
-            <FlatList
-              horizontal
-              data={featuredCourses}
-              keyExtractor={(item) => item.id}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-              testID="featured-courses-scroll"
-              initialNumToRender={4}
-              maxToRenderPerBatch={6}
-              windowSize={5}
-              renderItem={({ item, index }) => (
-                <ScalePressable
-                  style={styles.courseCard}
-                  testID={`featured-course-card-${item.id}`}
-                  onPress={() => {
-                    if (!item?.id) return;
-                    safePush(`/course/${item.id}`);
-                  }}
-                >
-                  <Image source={{ uri: getCourseImage(index) }} style={styles.courseCardImage} />
-                  <LinearGradient
-                    colors={['transparent', 'rgba(15,56,34,0.9)']}
-                    style={styles.courseCardGradient}
+            <View style={styles.verticalList}>
+              {featuredCourses.map((item, index) => {
+                const progress = getCourseProgress(item.id);
+                return (
+                  <ScalePressable
+                    key={item.id}
+                    style={styles.courseCard}
+                    testID={`featured-course-card-${item.id}`}
+                    onPress={() => {
+                      if (!item?.id) return;
+                      safePush(`/course/${item.id}`);
+                    }}
                   >
+                    <Image source={{ uri: getCourseImage(index) }} style={styles.courseCardImage} />
                     <View style={styles.courseCardContent}>
                       <Text style={styles.courseCardName} numberOfLines={2}>{item.name}</Text>
                       <Text style={styles.courseCardTeacher} numberOfLines={1}>{item.teacher_name}</Text>
+                      <View style={styles.courseProgressRow}>
+                        <Text style={styles.courseProgressLabel}>Progress {progress.completionPercent}%</Text>
+                      </View>
+                      <View style={styles.courseProgressTrack}>
+                        <View style={[styles.courseProgressFill, { width: `${Math.min(100, Math.max(0, progress.completionPercent))}%` }]} />
+                      </View>
                     </View>
-                  </LinearGradient>
-                </ScalePressable>
-              )}
-            />
+                  </ScalePressable>
+                );
+              })}
+            </View>
           )}
         </View>
 
@@ -219,20 +208,18 @@ export default function HomeScreen() {
           <Text style={[styles.sectionTitle, { marginBottom: SPACING.md }]}>Announcements</Text>
           <View style={styles.announcementCard} testID="announcement-card">
             <Image source={{ uri: MEDIA.lanternIcon }} style={styles.lanternIcon} />
-            <LinearGradient colors={[COLORS.primary, '#0A2B1A']} style={styles.announcementGradient}>
-              <View style={styles.announcementContent}>
-                <View style={styles.announcementBadge}>
-                  <Ionicons name="megaphone" size={14} color={COLORS.secondary} />
-                  <Text style={styles.announcementBadgeText}>{isDefaultAnnouncement ? 'New' : 'Live'}</Text>
-                </View>
-                <Text style={styles.announcementTitle}>{announcementTitle}</Text>
-                <Text style={styles.announcementDesc}>{announcementMessage}</Text>
-                <TouchableOpacity style={styles.announcementBtn} testID="learn-more-btn" onPress={() => safePush('/notifications')}>
-                  <Text style={styles.announcementBtnText}>Open Announcements</Text>
-                  <Ionicons name="arrow-forward" size={16} color={COLORS.secondary} />
-                </TouchableOpacity>
+            <View style={styles.announcementContent}>
+              <View style={styles.announcementBadge}>
+                <Ionicons name="megaphone" size={14} color={COLORS.goldText} />
+                <Text style={styles.announcementBadgeText}>{isDefaultAnnouncement ? 'New' : 'Live'}</Text>
               </View>
-            </LinearGradient>
+              <Text style={styles.announcementTitle}>{announcementTitle}</Text>
+              <Text style={styles.announcementDesc}>{announcementMessage}</Text>
+              <TouchableOpacity style={styles.announcementBtn} testID="learn-more-btn" onPress={() => safePush('/notifications')}>
+                <Text style={styles.announcementBtnText}>Open Announcements</Text>
+                <Ionicons name="arrow-forward" size={16} color={COLORS.goldText} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -260,12 +247,12 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  headerWrapper: { height: 320, position: 'relative' },
+  headerWrapper: { height: 284, position: 'relative' },
   headerBgImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  headerOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 30 },
-  greeting: { fontSize: 32, color: COLORS.secondary, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
-  welcomeText: { fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '400', letterSpacing: 2, textTransform: 'uppercase' },
-  madrasaName: { fontSize: 26, color: '#FFFFFF', fontWeight: '800', textAlign: 'center', lineHeight: 34, marginTop: 4 },
+  headerOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 24, backgroundColor: 'rgba(6,78,59,0.82)' },
+  greeting: { fontSize: 28, color: COLORS.secondary, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  welcomeText: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '500', letterSpacing: 1.6, textTransform: 'uppercase' },
+  madrasaName: { fontSize: 22, color: '#FFFFFF', fontWeight: '800', textAlign: 'center', lineHeight: 30, marginTop: 4 },
   taglineRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 10 },
   goldLine: { width: 30, height: 1.5, backgroundColor: COLORS.secondary },
   tagline: { color: COLORS.secondary, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
@@ -277,27 +264,30 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 20, fontWeight: '700', color: COLORS.textMain },
   viewAllText: { fontSize: 14, fontWeight: '600', color: COLORS.secondary },
   horizontalList: { paddingLeft: SPACING.lg, paddingRight: SPACING.sm, gap: SPACING.md },
-  courseCard: { width: CARD_WIDTH, height: 200, borderRadius: RADIUS.xl, overflow: 'hidden', ...SHADOWS.card },
-  courseCardImage: { width: '100%', height: '100%' },
-  courseCardGradient: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end' },
-  courseCardContent: { padding: SPACING.md },
-  courseCardName: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
-  courseCardTeacher: { fontSize: 13, color: COLORS.secondaryLight, fontWeight: '500' },
+  verticalList: { paddingHorizontal: SPACING.lg, gap: SPACING.md },
+  courseCard: { borderRadius: RADIUS.xl, overflow: 'hidden', ...SHADOWS.card, backgroundColor: COLORS.surface },
+  courseCardImage: { width: '100%', height: 118 },
+  courseCardContent: { padding: SPACING.md, gap: 4 },
+  courseCardName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain, marginBottom: 2 },
+  courseCardTeacher: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500' },
+  courseProgressRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
+  courseProgressLabel: { fontSize: 11, color: COLORS.textMain, fontWeight: '700' },
+  courseProgressTrack: { height: 6, borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceAlt, marginTop: 4, overflow: 'hidden' },
+  courseProgressFill: { height: '100%', borderRadius: RADIUS.full, backgroundColor: COLORS.primary },
   teacherPreviewCard: { alignItems: 'center', width: 110, gap: 8 },
   teacherAvatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: COLORS.secondary },
   teacherPreviewName: { fontSize: 13, fontWeight: '600', color: COLORS.textMain, textAlign: 'center' },
   teacherTitleBadge: { backgroundColor: COLORS.goldBg, paddingHorizontal: 10, paddingVertical: 3, borderRadius: RADIUS.full },
   teacherTitleText: { fontSize: 10, fontWeight: '700', color: COLORS.goldText, textTransform: 'uppercase', letterSpacing: 0.5 },
-  announcementCard: { borderRadius: RADIUS.xl, overflow: 'hidden', ...SHADOWS.card },
-  lanternIcon: { position: 'absolute', right: -10, top: -10, width: 120, height: 120, opacity: 0.3, zIndex: 1 },
-  announcementGradient: { borderRadius: RADIUS.xl, overflow: 'hidden' },
+  announcementCard: { borderRadius: RADIUS.xl, overflow: 'hidden', ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  lanternIcon: { position: 'absolute', right: -10, top: -10, width: 110, height: 110, opacity: 0.12, zIndex: 1 },
   announcementContent: { padding: SPACING.lg },
-  announcementBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(212,175,55,0.15)', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 5, borderRadius: RADIUS.full, marginBottom: 12 },
-  announcementBadgeText: { fontSize: 12, fontWeight: '700', color: COLORS.secondary },
-  announcementTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginBottom: 8 },
-  announcementDesc: { fontSize: 14, color: 'rgba(255,255,255,0.75)', lineHeight: 22, marginBottom: 16 },
+  announcementBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.goldBg, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 5, borderRadius: RADIUS.full, marginBottom: 12 },
+  announcementBadgeText: { fontSize: 12, fontWeight: '700', color: COLORS.goldText },
+  announcementTitle: { fontSize: 19, fontWeight: '700', color: COLORS.textMain, marginBottom: 8 },
+  announcementDesc: { fontSize: 14, color: COLORS.textMuted, lineHeight: 22, marginBottom: 16 },
   announcementBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  announcementBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.secondary },
+  announcementBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.goldText },
   statsRow: { flexDirection: 'row', gap: SPACING.md },
   statCard: { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center', ...SHADOWS.card },
   statNumber: { fontSize: 24, fontWeight: '800', color: COLORS.primary },

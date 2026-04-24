@@ -9,6 +9,8 @@ import { EmptyState, FadeInView, ScalePressable } from '@/components/ui';
 
 function CourseCard({ course, index }: { course: Course; index: number }) {
   const router = useRouter();
+  const { getCourseProgress } = useData();
+  const progress = getCourseProgress(course.id);
   const handlePress = () => {
     try {
       const path = course?.id ? `/course/${course.id}` : '';
@@ -33,9 +35,17 @@ function CourseCard({ course, index }: { course: Course; index: number }) {
           <Ionicons name="person-circle-outline" size={16} color={COLORS.textMuted} />
           <Text style={styles.teacherName} numberOfLines={1}>{course.teacher_name}</Text>
         </View>
+        <View style={styles.progressRow}>
+          <Text style={styles.progressLabel}>Progress {progress.completionPercent}%</Text>
+          <Text style={styles.progressMeta}>
+            {progress.lessonsDone}/{progress.totalLessons || 0} lessons
+          </Text>
+        </View>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, progress.completionPercent))}%` }]} />
+        </View>
         <View style={styles.attendBtn}>
-          <Ionicons name="videocam" size={16} color="#FFFFFF" />
-          <Text style={styles.attendBtnText}>Attend Class</Text>
+          <Text style={styles.attendBtnText}>Open Course</Text>
         </View>
       </View>
     </ScalePressable>
@@ -67,6 +77,10 @@ export default function CoursesScreen() {
           renderItem={({ item, index }) => <CourseCard course={item} index={index} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={6}
+          maxToRenderPerBatch={8}
+          windowSize={6}
+          removeClippedSubviews
           testID="courses-list"
         />
       )}
@@ -86,24 +100,29 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg, gap: SPACING.md },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
+    borderRadius: 18,
     overflow: 'hidden',
     ...SHADOWS.card,
   },
-  cardImage: { width: '100%', height: 132 },
+  cardImage: { width: '100%', height: 116 },
   cardBody: { padding: SPACING.md, gap: SPACING.sm },
-  courseName: { ...TYPOGRAPHY.heading, fontSize: 18, color: COLORS.text },
+  courseName: { ...TYPOGRAPHY.heading, fontSize: 17, color: COLORS.text },
   teacherRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   teacherName: { ...TYPOGRAPHY.body, color: COLORS.textMuted, flex: 1 },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  progressLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textMain },
+  progressMeta: { fontSize: 11, color: COLORS.textMuted, fontWeight: '600' },
+  progressTrack: { height: 6, borderRadius: 999, backgroundColor: COLORS.surfaceAlt, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 999, backgroundColor: COLORS.primary },
   attendBtn: {
     marginTop: SPACING.xs,
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: 12,
+    backgroundColor: COLORS.goldBg,
+    borderRadius: RADIUS.full,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.xs,
   },
-  attendBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  attendBtnText: { color: COLORS.goldText, fontSize: 13, fontWeight: '700' },
 });

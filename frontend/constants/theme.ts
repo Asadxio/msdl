@@ -1,20 +1,20 @@
 export const COLORS = {
-  primary: '#0FA958',
-  background: '#F6FAF8',
+  primary: '#064E3B',
+  background: '#FFFFFF',
   surface: '#FFFFFF',
-  text: '#132018',
-  textMain: '#132018',
-  textMuted: '#5F7065',
-  border: '#D8E4DC',
+  text: '#0F2F25',
+  textMain: '#0F2F25',
+  textMuted: '#5B6E67',
+  border: '#E2E8E5',
   error: '#B42318',
-  success: '#0FA958',
+  success: '#0F7660',
   // Backward-compat aliases to keep existing screens functional.
-  primaryLight: '#3ABB7A',
-  secondary: '#0FA958',
-  secondaryLight: '#E6F7EE',
-  surfaceAlt: '#F1F6F3',
-  goldBg: '#E6F7EE',
-  goldText: '#0C8A49',
+  primaryLight: '#0B6B53',
+  secondary: '#D4AF37',
+  secondaryLight: '#F5ECD0',
+  surfaceAlt: '#F8FAF9',
+  goldBg: '#FAF4E1',
+  goldText: '#9A7A1A',
 };
 
 export const SPACING = {
@@ -61,16 +61,16 @@ export const TYPOGRAPHY = {
 export const SHADOWS = {
   card: {
     shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 1,
   },
   header: {
     shadowColor: COLORS.text,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
     elevation: 1,
   },
 };

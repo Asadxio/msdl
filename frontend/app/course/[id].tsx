@@ -16,7 +16,6 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
 import { COLORS, SPACING, RADIUS, SHADOWS, getCourseImage, getTeacherAvatar } from '@/constants/theme';
@@ -327,10 +326,7 @@ export default function CourseDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={styles.heroWrapper}>
           <Image source={{ uri: getCourseImage(courseIndex) }} style={styles.heroImage} />
-          <LinearGradient
-            colors={['rgba(15,56,34,0.3)', 'rgba(15,56,34,0.95)']}
-            style={styles.heroGradient}
-          />
+          <View style={styles.heroGradient} />
           <TouchableOpacity
             style={[styles.backBtn, { top: insets.top + 10 }]}
             onPress={() => router.back()}
@@ -672,7 +668,7 @@ const styles = StyleSheet.create({
 
   heroWrapper: { position: 'relative', height: 270 },
   heroImage: { width: '100%', height: '100%' },
-  heroGradient: { ...StyleSheet.absoluteFillObject },
+  heroGradient: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6,78,59,0.68)' },
   backBtn: {
     position: 'absolute',
     left: 16,
@@ -704,9 +700,11 @@ const styles = StyleSheet.create({
 
   infoCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
+    borderRadius: 18,
     padding: 14,
     gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     ...SHADOWS.card,
   },
   infoCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -737,11 +735,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceAlt,
     marginTop: 8,
   },
-  lessonRowDone: { borderColor: '#CFE9DB', backgroundColor: '#F4FBF7' },
+  lessonRowDone: { borderColor: '#CFE9DB', backgroundColor: '#F7FBF9' },
   lessonTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
   lessonMeta: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   lessonDetailCard: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, backgroundColor: COLORS.surface, marginTop: 8, padding: 10, gap: 8 },
-  completeBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 9, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
+  completeBtn: { backgroundColor: COLORS.goldText, borderRadius: RADIUS.full, paddingVertical: 9, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
   completeBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   lessonRecordingBlock: { marginTop: 4, gap: 4 },
   lessonRecordingTitle: { color: COLORS.textMain, fontSize: 13, fontWeight: '700' },
@@ -755,21 +753,21 @@ const styles = StyleSheet.create({
   assignmentFeedback: { color: COLORS.textMain, fontSize: 12, marginTop: 2 },
   assignmentGrade: { color: COLORS.primary, fontSize: 12, fontWeight: '700', marginTop: 2 },
   studentSubmissionBlock: { marginTop: 4, gap: 4 },
-  assignmentActionBtn: { marginTop: 4, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 8, paddingHorizontal: 10, alignSelf: 'flex-start' },
-  assignmentActionText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  assignmentActionBtn: { marginTop: 4, backgroundColor: COLORS.goldBg, borderRadius: RADIUS.full, paddingVertical: 8, paddingHorizontal: 12, alignSelf: 'flex-start' },
+  assignmentActionText: { color: COLORS.goldText, fontWeight: '700', fontSize: 12 },
 
   reviewerBlock: { marginTop: 6, gap: 8 },
   reviewerSubmissionRow: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, padding: 8, flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: COLORS.surface },
   reviewerSubmissionMeta: { color: COLORS.textMuted, fontSize: 11 },
   reviewerSubmissionText: { color: COLORS.textMain, fontSize: 12, marginTop: 2 },
-  reviewBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 6, paddingHorizontal: 8 },
-  reviewBtnText: { color: '#fff', fontWeight: '700', fontSize: 11 },
+  reviewBtn: { backgroundColor: COLORS.goldBg, borderRadius: RADIUS.full, paddingVertical: 6, paddingHorizontal: 10 },
+  reviewBtnText: { color: COLORS.goldText, fontWeight: '700', fontSize: 11 },
 
   descriptionText: { marginTop: 4, fontSize: 14, color: COLORS.textMuted, lineHeight: 21 },
   joinBtn: {
     marginTop: 18,
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.goldBg,
+    borderRadius: RADIUS.full,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -777,7 +775,7 @@ const styles = StyleSheet.create({
     gap: 8,
     ...SHADOWS.card,
   },
-  joinBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  joinBtnText: { color: COLORS.goldText, fontWeight: '700', fontSize: 16 },
   joinLaterCard: { marginTop: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.lg, padding: 12 },
 
   recordingRow: {
@@ -795,17 +793,17 @@ const styles = StyleSheet.create({
   recordingDesc: { fontSize: 12, color: COLORS.textMuted },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.md, gap: 10 },
+  modalCard: { backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.md, gap: 10, borderTopWidth: 1, borderColor: COLORS.border },
   modalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.textMain },
   modalInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, padding: 10, color: COLORS.textMain, backgroundColor: COLORS.surfaceAlt },
   modalTextArea: { minHeight: 90, textAlignVertical: 'top' },
-  secondaryModalBtn: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 10, alignItems: 'center' },
-  secondaryModalBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: 13 },
+  secondaryModalBtn: { borderWidth: 1, borderColor: COLORS.goldText, borderRadius: RADIUS.full, paddingVertical: 10, alignItems: 'center' },
+  secondaryModalBtnText: { color: COLORS.goldText, fontWeight: '700', fontSize: 13 },
   modalActionRow: { flexDirection: 'row', gap: 10 },
   modalCancelBtn: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingVertical: 11, alignItems: 'center' },
   modalCancelText: { color: COLORS.textMain, fontWeight: '700' },
-  modalSubmitBtn: { flex: 1, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 11, alignItems: 'center' },
-  modalSubmitText: { color: '#fff', fontWeight: '700' },
+  modalSubmitBtn: { flex: 1, backgroundColor: COLORS.goldBg, borderRadius: RADIUS.full, paddingVertical: 11, alignItems: 'center' },
+  modalSubmitText: { color: COLORS.goldText, fontWeight: '700' },
   playerContainer: { flex: 1, backgroundColor: '#000' },
   playerTopBar: {
     flexDirection: 'row',
