@@ -9,12 +9,22 @@ import { EmptyState, FadeInView, ScalePressable } from '@/components/ui';
 
 function CourseCard({ course, index }: { course: Course; index: number }) {
   const router = useRouter();
+  const handlePress = () => {
+    try {
+      const path = course?.id ? `/course/${course.id}` : '';
+      if (!path) return;
+      console.log('[Courses] course card pressed:', path);
+      router.push(path);
+    } catch (e) {
+      console.log('[Courses] navigation ERROR:', e);
+    }
+  };
 
   return (
     <ScalePressable
       style={styles.card}
       testID={`course-card-${course.id}`}
-      onPress={() => router.push(`/course/${course.id}`)}
+      onPress={handlePress}
     >
       <Image source={{ uri: getCourseImage(index) }} style={styles.cardImage} />
       <View style={styles.cardBody}>
@@ -35,6 +45,7 @@ function CourseCard({ course, index }: { course: Course; index: number }) {
 export default function CoursesScreen() {
   const insets = useSafeAreaInsets();
   const { courses, loading } = useData();
+  const safeCourses = Array.isArray(courses) ? courses : [];
 
   return (
     <View style={styles.container}>
@@ -42,16 +53,16 @@ export default function CoursesScreen() {
       <FadeInView style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
         <Text style={styles.headerTitle}>Our Courses</Text>
         <Text style={styles.headerSubtitle}>
-          {loading ? 'Loading...' : `${courses.length} courses available`}
+          {loading ? 'Loading...' : `${safeCourses.length} courses available`}
         </Text>
       </FadeInView>
       {loading ? (
         <EmptyState icon="hourglass-outline" message="Loading courses..." />
-      ) : courses.length === 0 ? (
+      ) : safeCourses.length === 0 ? (
         <EmptyState icon="book-outline" message="No courses available yet." />
       ) : (
         <FlatList
-          data={courses}
+          data={safeCourses}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => <CourseCard course={item} index={index} />}
           contentContainerStyle={styles.listContent}

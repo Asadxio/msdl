@@ -55,7 +55,7 @@ export default function CourseDetailScreen() {
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [reviewGrade, setReviewGrade] = useState('');
   const [reviewing, setReviewing] = useState(false);
-  const [fatalError, setFatalError] = useState<string>('');
+  const [fatalError] = useState<string>('');
 
   const course = courses.find((c) => c.id === courseId);
   const classTimeLabel = course?.class_time || course?.time || '';
@@ -92,6 +92,7 @@ export default function CourseDetailScreen() {
   const modules = useMemo(() => (course ? getModulesForCourse(course.id) : []), [course, getModulesForCourse]);
   const generalRecordings = useMemo(() => recordings.filter((r) => !r.lesson_id), [recordings]);
   const safeModules = Array.isArray(modules) ? modules : [];
+  const safeProgress = lessonProgress || {};
 
   const toEmbeddableUrl = (url: string): string => {
     const clean = url.trim();
@@ -154,12 +155,27 @@ export default function CourseDetailScreen() {
   const teacher = teachers.find((t) => (course.teacher_name || '').includes((t.name || '').split(' ').slice(-2).join(' ')));
   const courseIndex = courses.findIndex((c) => c.id === courseId);
 
+  const openExternalLink = async (url?: string) => {
+    try {
+      let link = url?.trim();
+      if (!link) return;
+      if (!link.toLowerCase().startsWith('http')) {
+        link = `https://${link}`;
+      }
+      console.log('[CourseDetail] Opening link:', link);
+      await Linking.openURL(link).catch(() => {
+        Alert.alert('Error', 'Invalid link');
+      });
+    } catch (e) {
+      console.log('[CourseDetail] openExternalLink ERROR:', e);
+      Alert.alert('Error', 'Invalid link');
+    }
+  };
+
   const handleJoinClass = () => {
     try {
       if (meetLink && meetLink.trim().length > 0) {
-        Linking.openURL(meetLink).catch(() => {
-          Alert.alert('Error', 'Unable to open the class link');
-        });
+        void openExternalLink(meetLink);
       } else {
         Alert.alert(
           'Join Class',
@@ -167,7 +183,8 @@ export default function CourseDetailScreen() {
           [{ text: 'OK', style: 'default' }]
         );
       }
-    } catch {
+    } catch (e) {
+      console.log('[CourseDetail] handleJoinClass ERROR:', e);
       Alert.alert('Error', 'Unable to open class right now.');
     }
   };
@@ -181,26 +198,39 @@ export default function CourseDetailScreen() {
       setSelectedUpload(current?.file_url ? { uri: current.file_url, name: 'Existing file' } : null);
       setExternalFileUrl(current?.file_url || '');
       setSubmissionModalVisible(true);
-    } catch {
+    } catch (e) {
+      console.log('[CourseDetail] openSubmissionModal ERROR:', e);
       Alert.alert('Error', 'Unable to open assignment submission.');
     }
   };
 
   const pickSubmissionFile = async () => {
     try {
+      console.log('[CourseDetail] Upload button pressed');
+      console.log('[CourseDetail] Requesting media library permission...');
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('Permission:', permission);
+      if (!permission.granted) {
+        Alert.alert('Permission required', 'Allow gallery access');
+        return;
+      }
+      console.log('[CourseDetail] Opening image picker...');
       const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.9,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
       });
+      if (picked.canceled) return;
       const file = picked?.assets?.[0];
-      if (picked?.canceled || !file?.uri) return;
+      console.log('Picked file:', file);
+      if (!file?.uri) return;
       setSelectedUpload({
         uri: file.uri,
         name: file.fileName || 'submission-image',
         mimeType: file.mimeType || 'image/jpeg',
       });
       setExternalFileUrl('');
-    } catch {
+    } catch (e) {
+      console.log('[CourseDetail] pickSubmissionFile ERROR:', e);
       Alert.alert('Error', 'Unable to pick file right now.');
     }
   };
@@ -213,17 +243,20 @@ export default function CourseDetailScreen() {
     }
     setSubmittingAssignment(true);
     try {
+      console.log('[CourseDetail] submitAssignmentHandler started', { activeAssignmentId });
       let fileUrl = '';
       if (externalFileUrl.trim()) {
         fileUrl = externalFileUrl.trim();
       } else if (selectedUpload?.uri) {
         fileUrl = selectedUpload.uri;
         if (!selectedUpload.uri.startsWith('http')) {
+          console.log('[CourseDetail] Upload started');
           fileUrl = await uploadUriFile({
             uri: selectedUpload.uri,
             path: `assignment_submissions/${user?.uid || 'anonymous'}/${Date.now()}_${selectedUpload.name}`,
             contentType: selectedUpload.mimeType,
           });
+          console.log('[CourseDetail] Upload completed');
         }
       }
       const ok = await submitAssignment({
@@ -237,6 +270,9 @@ export default function CourseDetailScreen() {
       } else {
         Alert.alert('Error', 'Unable to submit assignment. Please try again.');
       }
+    } catch (e) {
+      console.log('[CourseDetail] submitAssignmentHandler ERROR:', e);
+      Alert.alert('Error', 'Something went wrong');
     } finally {
       setSubmittingAssignment(false);
     }
@@ -268,6 +304,9 @@ export default function CourseDetailScreen() {
       } else {
         Alert.alert('Error', 'Unable to review submission.');
       }
+    } catch (e) {
+      console.log('[CourseDetail] reviewSubmissionHandler ERROR:', e);
+      Alert.alert('Error', 'Something went wrong');
     } finally {
       setReviewing(false);
     }
@@ -377,24 +416,32 @@ export default function CourseDetailScreen() {
             {safeModules.length === 0 ? (
               <Text style={styles.infoCardSubValue}>No modules added yet.</Text>
             ) : safeModules.map((module) => {
-              const moduleLessons = getLessonsForModule(module.id);
-              const completedCount = moduleLessons.filter((lesson) => lessonProgress[lesson.id]?.completed).length;
+              const moduleLessonsRaw = getLessonsForModule(module.id);
+              const moduleLessons = Array.isArray(moduleLessonsRaw) ? moduleLessonsRaw : [];
+              const completedCount = moduleLessons.filter((lesson) => safeProgress[lesson.id]?.completed).length;
               return (
                 <View key={module.id} style={styles.moduleBlock}>
                   <Text style={styles.moduleTitle}>{module.title}</Text>
                   <Text style={styles.moduleMeta}>{completedCount}/{moduleLessons.length} completed</Text>
                   {moduleLessons.map((lesson) => {
-                    const done = !!lessonProgress[lesson.id]?.completed;
-                    const lessonAssignments = getAssignmentsForLesson(lesson.id);
+                    const done = !!safeProgress[lesson.id]?.completed;
+                    const lessonAssignmentsRaw = getAssignmentsForLesson(lesson.id);
+                    const lessonAssignments = Array.isArray(lessonAssignmentsRaw) ? lessonAssignmentsRaw : [];
                     const isExpanded = expandedLessonId === lesson.id;
-                    const lessonRecordings = recordings.filter((rec) => rec.lesson_id === lesson.id);
+                    const lessonRecordings = (Array.isArray(recordings) ? recordings : []).filter((rec) => rec.lesson_id === lesson.id);
                     return (
                       <View key={lesson.id}>
                         <ScalePressable
                           style={[styles.lessonRow, done && styles.lessonRowDone]}
                           onPress={async () => {
-                            await markLessonOpened(lesson);
-                            setExpandedLessonId((prev) => (prev === lesson.id ? null : lesson.id));
+                            try {
+                              await markLessonOpened(lesson);
+                            } catch (e) {
+                              console.log('[CourseDetail] markLessonOpened ERROR:', e);
+                              Alert.alert('Error', 'Something went wrong');
+                            } finally {
+                              setExpandedLessonId((prev) => (prev === lesson.id ? null : lesson.id));
+                            }
                           }}
                           testID={`lesson-${lesson.id}`}
                         >
@@ -409,7 +456,14 @@ export default function CourseDetailScreen() {
                           <View style={styles.lessonDetailCard}>
                             <TouchableOpacity
                               style={styles.completeBtn}
-                              onPress={() => markLessonComplete(lesson)}
+                              onPress={async () => {
+                                try {
+                                  await markLessonComplete(lesson);
+                                } catch (e) {
+                                  console.log('[CourseDetail] markLessonComplete ERROR:', e);
+                                  Alert.alert('Error', 'Something went wrong');
+                                }
+                              }}
                             >
                               <Ionicons name="checkmark-done" size={16} color="#fff" />
                               <Text style={styles.completeBtnText}>{done ? 'Completed' : 'Mark lesson complete'}</Text>
@@ -432,14 +486,15 @@ export default function CourseDetailScreen() {
                               <Text style={styles.infoCardSubValue}>No assignments in this lesson yet.</Text>
                             ) : lessonAssignments.map((assignment) => {
                               const mySubmission = getSubmissionForAssignment(assignment.id);
-                              const assignmentSubmissions = isReviewer ? getSubmissionsForAssignment(assignment.id) : [];
+                              const assignmentSubmissionsRaw = isReviewer ? getSubmissionsForAssignment(assignment.id) : [];
+                              const assignmentSubmissions = Array.isArray(assignmentSubmissionsRaw) ? assignmentSubmissionsRaw : [];
                               return (
                                 <View key={assignment.id} style={styles.assignmentCard}>
                                   <Text style={styles.assignmentTitle}>{assignment.title}</Text>
                                   <Text style={styles.assignmentDesc}>{assignment.description || 'No description provided.'}</Text>
                                   {assignment.due_date ? <Text style={styles.assignmentDue}>Due: {assignment.due_date}</Text> : null}
                                   {assignment.file_url ? (
-                                    <TouchableOpacity onPress={() => Linking.openURL(assignment.file_url || '').catch(() => {})}>
+                                    <TouchableOpacity onPress={() => { void openExternalLink(assignment.file_url || ''); }}>
                                       <Text style={styles.assignmentLink}>Open assignment file</Text>
                                     </TouchableOpacity>
                                   ) : null}
@@ -463,7 +518,7 @@ export default function CourseDetailScreen() {
                                             <Text style={styles.reviewerSubmissionMeta}>Status: {submission.status}</Text>
                                             {submission.text_answer ? <Text style={styles.reviewerSubmissionText} numberOfLines={2}>{submission.text_answer}</Text> : null}
                                             {submission.file_url ? (
-                                              <TouchableOpacity onPress={() => Linking.openURL(submission.file_url || '').catch(() => {})}>
+                                              <TouchableOpacity onPress={() => { void openExternalLink(submission.file_url || ''); }}>
                                                 <Text style={styles.assignmentLink}>Open submitted file</Text>
                                               </TouchableOpacity>
                                             ) : null}
