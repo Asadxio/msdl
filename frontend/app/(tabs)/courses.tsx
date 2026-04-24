@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, StatusBar, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -54,17 +54,24 @@ function CourseCard({ course, index }: { course: Course; index: number }) {
 
 export default function CoursesScreen() {
   const insets = useSafeAreaInsets();
-  const { courses, loading } = useData();
+  const { courses, loading, refetch } = useData();
   const safeCourses = Array.isArray(courses) ? courses : [];
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <FadeInView style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
-        <Text style={styles.headerTitle}>Our Courses</Text>
-        <Text style={styles.headerSubtitle}>
-          {loading ? 'Loading...' : `${safeCourses.length} courses available`}
-        </Text>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Our Courses</Text>
+            <Text style={styles.headerSubtitle}>
+              {loading ? 'Loading...' : `${safeCourses.length} courses available`}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.refreshBtn} onPress={refetch}>
+            <Text style={styles.refreshText}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
       </FadeInView>
       {loading ? (
         <EmptyState icon="hourglass-outline" message="Loading courses..." />
@@ -95,6 +102,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.md,
   },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  refreshBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingVertical: 6 },
+  refreshText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   headerTitle: { ...TYPOGRAPHY.title, color: COLORS.text },
   headerSubtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg, gap: SPACING.md },

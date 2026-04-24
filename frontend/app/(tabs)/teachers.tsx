@@ -1,14 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, StatusBar, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY, getTeacherAvatar } from '@/constants/theme';
 import { useData, Teacher } from '@/context/DataContext';
 import { EmptyState, FadeInView, ScalePressable } from '@/components/ui';
+import { normalizeGoogleDriveFileUrl } from '@/lib/links';
 
 function TeacherCard({ teacher }: { teacher: Teacher }) {
   const router = useRouter();
+  const avatarUri = teacher.photo_url ? normalizeGoogleDriveFileUrl(teacher.photo_url) : getTeacherAvatar(teacher.id);
 
   return (
     <ScalePressable
@@ -17,7 +19,7 @@ function TeacherCard({ teacher }: { teacher: Teacher }) {
       onPress={() => router.push(`/teacher/${teacher.id}`)}
     >
       <View style={styles.cardTop}>
-        <Image source={{ uri: getTeacherAvatar(teacher.id) }} style={styles.avatar} />
+        <Image source={{ uri: avatarUri }} style={styles.avatar} />
       </View>
       <View style={styles.cardBody}>
         <Text style={styles.teacherName}>{teacher.name}</Text>
@@ -33,14 +35,21 @@ function TeacherCard({ teacher }: { teacher: Teacher }) {
 
 export default function TeachersScreen() {
   const insets = useSafeAreaInsets();
-  const { teachers, loading } = useData();
+  const { teachers, loading, refetch } = useData();
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <FadeInView style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
-        <Text style={styles.headerTitle}>Our Teachers</Text>
-        <Text style={styles.headerSubtitle}>Guiding with knowledge & wisdom</Text>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Our Teachers</Text>
+            <Text style={styles.headerSubtitle}>Guiding with knowledge & wisdom</Text>
+          </View>
+          <TouchableOpacity style={styles.refreshBtn} onPress={refetch}>
+            <Text style={styles.refreshText}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
       </FadeInView>
       {loading ? (
         <EmptyState icon="hourglass-outline" message="Loading teachers..." />
@@ -60,8 +69,11 @@ export default function TeachersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   headerTitle: { ...TYPOGRAPHY.title, color: COLORS.text },
   headerSubtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  refreshBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingVertical: 6 },
+  refreshText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg, gap: SPACING.md },
   card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, overflow: 'hidden', ...SHADOWS.card },
   cardTop: { alignItems: 'center', paddingVertical: SPACING.md, backgroundColor: COLORS.background },

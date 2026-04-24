@@ -8,6 +8,11 @@ import { withTimeout } from '@/lib/errors';
 
 const PUSH_API_URL = process.env.EXPO_PUBLIC_PUSH_API_URL || '';
 
+export type NotificationPermissionResult = {
+  granted: boolean;
+  canAskAgain: boolean;
+};
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -31,17 +36,31 @@ export async function initPushNotifications(): Promise<void> {
   }
 }
 
+export async function requestNotificationPermission(): Promise<NotificationPermissionResult> {
+  if (!Device.isDevice) return { granted: false, canAskAgain: false };
+  try {
+    const existing = await Notifications.getPermissionsAsync();
+    if (existing.granted) {
+      return { granted: true, canAskAgain: true };
+    }
+    if (!existing.canAskAgain) {
+      return { granted: false, canAskAgain: false };
+    }
+    const requested = await Notifications.requestPermissionsAsync();
+    return {
+      granted: requested.granted || requested.status === 'granted',
+      canAskAgain: requested.canAskAgain,
+    };
+  } catch {
+    return { granted: false, canAskAgain: false };
+  }
+}
+
 export async function registerDevicePushToken(userId: string): Promise<string | null> {
   if (!Device.isDevice) return null;
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') return null;
+  const permission = await requestNotificationPermission();
+  if (!permission.granted) return null;
 
   const tokenResponse = await Notifications.getDevicePushTokenAsync();
   const token = String(tokenResponse?.data || '');

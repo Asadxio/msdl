@@ -1,11 +1,11 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet, I18nManager } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, I18nManager, Alert } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
-import { initPushNotifications, registerDevicePushToken } from '@/lib/pushNotifications';
+import { initPushNotifications, registerDevicePushToken, requestNotificationPermission } from '@/lib/pushNotifications';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, authLoading, emailVerified } = useAuth();
@@ -53,7 +53,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user?.uid) return;
-    registerDevicePushToken(user.uid).catch(() => {});
+    const setupPush = async () => {
+      const permission = await requestNotificationPermission();
+      if (!permission.granted) {
+        Alert.alert(
+          'Notification Permission Required',
+          permission.canAskAgain
+            ? 'Please allow notifications to receive chat and class updates.'
+            : 'Notifications are disabled. Enable them from device settings to receive updates.',
+        );
+        return;
+      }
+      await registerDevicePushToken(user.uid);
+    };
+    setupPush().catch(() => {
+      Alert.alert('Notifications', 'Unable to configure notifications right now.');
+    });
   }, [user?.uid]);
 
   useEffect(() => {
@@ -95,6 +110,9 @@ export default function RootLayout() {
             <Stack.Screen name="teacher/[id]" />
             <Stack.Screen name="book/[id]" />
             <Stack.Screen name="chat/[id]" />
+            <Stack.Screen name="recordings" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="status" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />

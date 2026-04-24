@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity, FlatList, ActivityIndicator, TextInput, Alert,
+  View, Text, StyleSheet, StatusBar, TouchableOpacity, FlatList, ActivityIndicator, TextInput, Alert, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addDoc, collection, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
@@ -21,6 +21,16 @@ type AppUser = { id: string; name: string; email: string; role: string; status: 
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+function formatMarkedAt(value?: { toDate?: () => Date }): string {
+  try {
+    const dt = value?.toDate ? value.toDate() : null;
+    if (!dt) return 'Time unavailable';
+    return dt.toLocaleString();
+  } catch {
+    return 'Time unavailable';
+  }
+}
+
 export default function AttendanceScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
@@ -31,9 +41,12 @@ export default function AttendanceScreen() {
   const [savingUserId, setSavingUserId] = useState('');
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState('');
+  const [usersError, setUsersError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!user?.uid) return;
+    setLoading(true);
     const q = canMark
       ? query(collection(db, 'attendance'), orderBy('created_at', 'desc'))
       : query(collection(db, 'attendance'), where('user_id', '==', user.uid), orderBy('created_at', 'desc'));
@@ -44,22 +57,28 @@ export default function AttendanceScreen() {
       setLoading(false);
     }, () => setLoading(false));
     return unsub;
-  }, [canMark, user?.uid]);
+  }, [canMark, user?.uid, reloadKey]);
 
   useEffect(() => {
     if (!canMark) return;
     const loadUsers = async () => {
-      const snap = await getDocs(collection(db, 'users'));
-      const arr: AppUser[] = [];
-      snap.forEach((d) => {
-        const data = d.data() as any;
-        if (data.status !== 'approved' || data.role === 'admin') return;
-        arr.push({ id: d.id, name: data.name || 'User', email: data.email || '', role: data.role || 'student', status: data.status });
-      });
-      setUsers(arr);
+      try {
+        setUsersError('');
+        const snap = await getDocs(collection(db, 'users'));
+        const arr: AppUser[] = [];
+        snap.forEach((d) => {
+          const data = d.data() as any;
+          if (data.status !== 'approved' || data.role === 'admin') return;
+          arr.push({ id: d.id, name: data.name || 'User', email: data.email || '', role: data.role || 'student', status: data.status });
+        });
+        setUsers(arr);
+      } catch {
+        setUsers([]);
+        setUsersError('Unable to load users right now. Pull to refresh later.');
+      }
     };
     loadUsers().catch(() => {});
-  }, [canMark]);
+  }, [canMark, reloadKey]);
 
   const markAttendance = async (targetUser: AppUser, status: 'present' | 'absent') => {
     if (!user?.uid) return;
@@ -97,17 +116,41 @@ export default function AttendanceScreen() {
     return Math.round((present / history.length) * 100);
   }, [history, canMark]);
 
+  const attendanceByUser = useMemo(() => {
+    const grouped: Record<string, { total: number; present: number; absent: number; latestAt?: { toDate?: () => Date } }> = {};
+    history.forEach((item) => {
+      if (!item.user_id) return;
+      if (!grouped[item.user_id]) {
+        grouped[item.user_id] = { total: 0, present: 0, absent: 0, latestAt: item.created_at };
+      }
+      grouped[item.user_id].total += 1;
+      if (item.status === 'present') grouped[item.user_id].present += 1;
+      if (item.status === 'absent') grouped[item.user_id].absent += 1;
+      if (!grouped[item.user_id].latestAt && item.created_at) grouped[item.user_id].latestAt = item.created_at;
+    });
+    return grouped;
+  }, [history]);
+
+  const recentAttendance = useMemo(() => history.slice(0, 80), [history]);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>Attendance</Text>
-        <Text style={styles.subtitle}>{canMark ? 'Mark daily attendance' : `Your attendance (${attendancePercent}% present)`}</Text>
+        <View style={styles.titleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>Attendance</Text>
+            <Text style={styles.subtitle}>{canMark ? 'Mark + review attendance records' : `Your attendance (${attendancePercent}% present)`}</Text>
+          </View>
+          <TouchableOpacity style={styles.refreshBtn} onPress={() => setReloadKey((v) => v + 1)}>
+            <Text style={styles.refreshText}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       {!!feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
 
       {canMark ? (
-        <View style={styles.panel}>
+        <ScrollView style={styles.panel} contentContainerStyle={{ paddingBottom: 20 }}>
           <TextInput
             style={styles.input}
             value={date}
@@ -115,15 +158,17 @@ export default function AttendanceScreen() {
             placeholder="YYYY-MM-DD"
             placeholderTextColor={COLORS.textMuted}
           />
-          <FlatList
-            data={users}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ gap: 8, paddingBottom: 20 }}
-            renderItem={({ item }) => (
-              <View style={styles.rowCard}>
+          {users.map((item) => {
+            const summary = attendanceByUser[item.id] || { total: 0, present: 0, absent: 0 };
+            return (
+              <View style={styles.rowCard} key={item.id}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{item.name}</Text>
                   <Text style={styles.meta}>{item.email}</Text>
+                  <Text style={styles.summaryText}>
+                    Total: {summary.total} • Present: {summary.present} • Absent: {summary.absent}
+                  </Text>
+                  <Text style={styles.timeText}>Last entry: {formatMarkedAt(summary.latestAt)}</Text>
                 </View>
                 <TouchableOpacity style={styles.presentBtn} onPress={() => markAttendance(item, 'present')} disabled={savingUserId === item.id}>
                   <Text style={styles.presentText}>{savingUserId === item.id ? 'Saving...' : 'Present'}</Text>
@@ -132,10 +177,20 @@ export default function AttendanceScreen() {
                   <Text style={styles.absentText}>{savingUserId === item.id ? 'Saving...' : 'Absent'}</Text>
                 </TouchableOpacity>
               </View>
-            )}
-            ListEmptyComponent={<Text style={styles.empty}>No approved users found.</Text>}
-          />
-        </View>
+            );
+          })}
+          {users.length === 0 ? <Text style={styles.empty}>No approved users found.</Text> : null}
+          {!!usersError ? <Text style={styles.errorText}>{usersError}</Text> : null}
+          <Text style={[styles.subtitle, { marginTop: 10 }]}>Recent attendance log</Text>
+          {recentAttendance.map((item) => (
+            <View key={item.id} style={styles.historyCard}>
+              <Text style={styles.name}>{item.date} • {item.status}</Text>
+              <Text style={styles.meta}>User: {users.find((u) => u.id === item.user_id)?.name || item.user_id}</Text>
+              <Text style={styles.timeText}>Marked: {formatMarkedAt(item.created_at)}</Text>
+            </View>
+          ))}
+          {recentAttendance.length === 0 ? <Text style={styles.empty}>No attendance records yet.</Text> : null}
+        </ScrollView>
       ) : loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
@@ -147,6 +202,7 @@ export default function AttendanceScreen() {
             <View style={styles.historyCard}>
               <Text style={styles.name}>{item.date}</Text>
               <Text style={[styles.meta, item.status === 'present' ? { color: '#166534' } : { color: COLORS.error }]}>{item.status}</Text>
+              <Text style={styles.timeText}>Marked: {formatMarkedAt(item.created_at)}</Text>
             </View>
           )}
           ListEmptyComponent={<View style={styles.center}><Text style={styles.empty}>No attendance records yet.</Text></View>}
@@ -161,13 +217,19 @@ const styles = StyleSheet.create({
   header: { backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 13, color: COLORS.textMuted },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  refreshBtn: { borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: COLORS.surfaceAlt },
+  refreshText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   feedback: { fontSize: 12, color: '#166534', paddingHorizontal: SPACING.md, paddingVertical: 6, textAlign: 'left' },
+  errorText: { fontSize: 12, color: COLORS.error, paddingHorizontal: 2, paddingTop: 2 },
   panel: { flex: 1, padding: SPACING.md, gap: 8 },
   input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.textMain },
   rowCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.sm, flexDirection: 'row', alignItems: 'center', gap: 8, ...SHADOWS.card },
   historyCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.sm, ...SHADOWS.card },
   name: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
   meta: { fontSize: 12, color: COLORS.textMuted, marginTop: 2, textTransform: 'capitalize' },
+  summaryText: { fontSize: 12, color: COLORS.primary, marginTop: 4, fontWeight: '600' },
+  timeText: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
   presentBtn: { backgroundColor: '#DCFCE7', borderRadius: RADIUS.lg, paddingVertical: 8, paddingHorizontal: 10 },
   absentBtn: { backgroundColor: '#FEE2E2', borderRadius: RADIUS.lg, paddingVertical: 8, paddingHorizontal: 10 },
   presentText: { color: '#166534', fontWeight: '700', fontSize: 12 },

@@ -10,9 +10,9 @@ import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme'
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 import { normalizeFirebaseError } from '@/lib/errors';
-import { isValidHttpsUrl } from '@/lib/links';
+import { isValidHttpsUrl, prepareExternalUrl } from '@/lib/links';
 
-type PaymentType = 'fees' | 'sadqa' | 'zakat' | 'fitra';
+type PaymentType = 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 
 export default function PaymentFlowScreen() {
@@ -82,8 +82,13 @@ export default function PaymentFlowScreen() {
     setError('');
     setOpeningPayment(true);
     try {
+      const safePaymentUrl = prepareExternalUrl(razorpayLink);
+      if (!safePaymentUrl) {
+        Alert.alert('Invalid Payment Link', 'Configured Razorpay link is invalid. Please contact admin.');
+        return;
+      }
       let opened = true;
-      await Linking.openURL(razorpayLink).catch(() => {
+      await Linking.openURL(safePaymentUrl).catch(() => {
         opened = false;
         Alert.alert('Payment Link Unavailable', 'Unable to open payment link. Please contact admin for manual payment support.');
       });
@@ -143,7 +148,7 @@ export default function PaymentFlowScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>1) Select Payment Type</Text>
             <View style={styles.choiceRow}>
-              {(['fees', 'sadqa', 'zakat', 'fitra'] as PaymentType[]).map((type) => (
+              {(['fees', 'sadqa', 'zakat', 'fitra', 'langar'] as PaymentType[]).map((type) => (
                 <TouchableOpacity key={type} style={[styles.choiceChip, paymentType === type && styles.choiceChipActive]} onPress={() => setPaymentType(type)}>
                   <Text style={[styles.choiceText, paymentType === type && styles.choiceTextActive]}>{type.toUpperCase()}</Text>
                 </TouchableOpacity>
@@ -155,7 +160,6 @@ export default function PaymentFlowScreen() {
               keyboardType="numeric"
               value={amount}
               onChangeText={setAmount}
-              editable={paymentType !== 'fees'}
               placeholder="Enter amount"
               placeholderTextColor={COLORS.textMuted}
             />

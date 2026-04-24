@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput,
-  KeyboardAvoidingView, Platform, FlatList, ActivityIndicator,
+  KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  addDoc, arrayUnion, collection, doc, getDocs, increment, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, updateDoc, where,
+  addDoc, arrayUnion, collection, doc, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, updateDoc, where,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -35,7 +35,39 @@ type MessageItem = {
   client_id?: string;
   localOnly?: boolean;
   failed?: boolean;
+  deleted_for_everyone?: boolean;
+  deleted_for?: string[];
 };
+
+function normalizeChatMeta(id: string, raw: any): ChatMeta {
+  const safe = raw && typeof raw === 'object' ? raw : {};
+  return {
+    id,
+    type: safe.type === 'group' || safe.type === 'broadcast' ? safe.type : 'direct',
+    name: typeof safe.name === 'string' ? safe.name : '',
+    participants: Array.isArray(safe.participants) ? safe.participants.filter((p: unknown) => typeof p === 'string') : [],
+    participant_names: safe.participant_names && typeof safe.participant_names === 'object' ? safe.participant_names : {},
+    typing: safe.typing && typeof safe.typing === 'object' ? safe.typing : {},
+    unread_counts: safe.unread_counts && typeof safe.unread_counts === 'object' ? safe.unread_counts : {},
+  };
+}
+
+function normalizeMessage(id: string, raw: any): MessageItem {
+  const safe = raw && typeof raw === 'object' ? raw : {};
+  return {
+    id,
+    text: typeof safe.text === 'string' ? safe.text : '',
+    sender_id: typeof safe.sender_id === 'string' ? safe.sender_id : '',
+    sender_name: typeof safe.sender_name === 'string' ? safe.sender_name : 'User',
+    created_at: safe.created_at || null,
+    read_by: Array.isArray(safe.read_by) ? safe.read_by.filter((v: unknown) => typeof v === 'string') : [],
+    client_id: typeof safe.client_id === 'string' ? safe.client_id : undefined,
+    localOnly: !!safe.localOnly,
+    failed: !!safe.failed,
+    deleted_for_everyone: !!safe.deleted_for_everyone,
+    deleted_for: Array.isArray(safe.deleted_for) ? safe.deleted_for.filter((v: unknown) => typeof v === 'string') : [],
+  };
+}
 
 const PAGE_SIZE = 20;
 
@@ -100,6 +132,7 @@ export default function ChatDetailScreen() {
   const [lastCursor, setLastCursor] = useState<any>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const typingTimer = useRef<any>(null);
   const listRef = useRef<FlatList<MessageItem>>(null);
 
@@ -111,7 +144,7 @@ export default function ChatDetailScreen() {
         setLoading(false);
         return;
       }
-      setChat({ id: snap.id, ...(snap.data() as any) });
+      setChat(normalizeChatMeta(snap.id, snap.data()));
       setLoading(false);
     });
     return unsub;
@@ -130,7 +163,7 @@ export default function ChatDetailScreen() {
       limit(PAGE_SIZE),
     );
     const unsub = onSnapshot(initialQ, (snap) => {
-      const latest = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as MessageItem[];
+      const latest = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
       setMessages((prev) => {
         const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
         const seen = new Set(latest.map((m) => m.id));
@@ -163,7 +196,7 @@ export default function ChatDetailScreen() {
         limit(PAGE_SIZE),
       );
       const snap = await getDocs(olderQ);
-      const older = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as MessageItem[];
+      const older = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
       setMessages((prev) => {
         const existing = new Set(prev.map((m) => m.id));
         const uniqueOlder = older.filter((m) => !existing.has(m.id));
@@ -185,7 +218,8 @@ export default function ChatDetailScreen() {
 
   const canAccess = useMemo(() => {
     if (!user || !chat) return false;
-    return chat.type === 'broadcast' || chat.participants.includes(user.uid);
+    const participants = Array.isArray(chat.participants) ? chat.participants : [];
+    return chat.type === 'broadcast' || participants.includes(user.uid);
   }, [chat, user]);
 
   const othersTyping = useMemo(() => {
@@ -236,6 +270,8 @@ export default function ChatDetailScreen() {
         created_at: serverTimestamp(),
         read_by: [user.uid],
         client_id: clientId,
+        deleted_for: [],
+        deleted_for_everyone: false,
       });
       const unreadUpdates: Record<string, any> = { [`unread_counts.${user.uid}`]: 0 };
       (chat?.participants || []).forEach((uid) => {
@@ -264,6 +300,75 @@ export default function ChatDetailScreen() {
     }
   }, [chat?.participants, id, profile?.name, sending, setTyping, text, user?.email, user?.uid]);
 
+  const refreshMessages = useCallback(async () => {
+    if (!id || refreshing) return;
+    setRefreshing(true);
+    try {
+      const [chatSnap, messageSnap] = await Promise.all([
+        getDoc(doc(db, 'chats', id)),
+        getDocs(query(
+          collection(db, 'messages'),
+          where('chat_id', '==', id),
+          orderBy('created_at', 'desc'),
+          limit(PAGE_SIZE),
+        )),
+      ]);
+      if (chatSnap.exists()) {
+        setChat(normalizeChatMeta(chatSnap.id, chatSnap.data()));
+      }
+      const latest = messageSnap.docs.map((d) => normalizeMessage(d.id, d.data()));
+      setMessages((prev) => {
+        const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
+        const pending = prev.filter((m) => m.localOnly && !confirmedClientIds.has(m.client_id));
+        return [...latest, ...pending].sort((a, b) => toMillis(b) - toMillis(a));
+      });
+      setLastCursor(messageSnap.docs.length ? messageSnap.docs[messageSnap.docs.length - 1] : null);
+      setHasMore(messageSnap.docs.length === PAGE_SIZE);
+    } catch {
+      setSendError('Could not refresh chat. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [id, refreshing]);
+
+  const deleteForMe = useCallback(async (message: MessageItem) => {
+    if (!user?.uid) return;
+    if (message.localOnly) {
+      setMessages((prev) => prev.filter((m) => m.id !== message.id));
+      return;
+    }
+    try {
+      await updateDoc(doc(db, 'messages', message.id), {
+        deleted_for: arrayUnion(user.uid),
+      });
+    } catch {
+      setSendError('Could not delete message. Please try again.');
+    }
+  }, [user?.uid]);
+
+  const unsendForEveryone = useCallback(async (message: MessageItem) => {
+    if (!user?.uid || message.sender_id !== user.uid) return;
+    try {
+      await updateDoc(doc(db, 'messages', message.id), {
+        text: 'This message was unsent.',
+        deleted_for_everyone: true,
+        unsent_by: user.uid,
+        unsent_at: serverTimestamp(),
+      });
+    } catch {
+      setSendError('Could not unsend message. Please try again.');
+    }
+  }, [user?.uid]);
+
+  const openMessageActions = useCallback((item: MessageItem) => {
+    const canUnsend = item.sender_id === user?.uid && !item.localOnly;
+    Alert.alert('Message options', 'Choose an action for this message.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete for me', onPress: () => { void deleteForMe(item); } },
+      ...(canUnsend ? [{ text: 'Unsend for everyone', style: 'destructive' as const, onPress: () => { void unsendForEveryone(item); } }] : []),
+    ]);
+  }, [deleteForMe, unsendForEveryone, user?.uid]);
+
   useEffect(() => {
     if (!id || !user?.uid || !chat) return;
     updateDoc(doc(db, 'chats', id), { [`unread_counts.${user.uid}`]: 0 }).catch(() => {});
@@ -282,19 +387,26 @@ export default function ChatDetailScreen() {
     }
   }, [messages.length]);
 
+  const visibleMessages = useMemo(
+    () => messages.filter((m) => !m.deleted_for?.includes(user?.uid || '')),
+    [messages, user?.uid],
+  );
+
   const renderMessage = useCallback(({ item }: { item: MessageItem }) => {
     const mine = item.sender_id === user?.uid;
     const otherParticipantCount = Math.max((chat?.participants?.length || 1) - 1, 1);
     const seenByOthers = (item.read_by?.length || 1) > 1 || (item.read_by?.length || 0) >= otherParticipantCount + 1;
     return (
-      <MessageBubble
-        item={item}
-        mine={mine}
-        showSender={!mine && chat?.type !== 'direct'}
-        seenByOthers={seenByOthers}
-      />
+      <TouchableOpacity activeOpacity={0.8} onLongPress={() => openMessageActions(item)}>
+        <MessageBubble
+          item={{ ...item, text: item.deleted_for_everyone ? 'This message was unsent.' : item.text }}
+          mine={mine}
+          showSender={!mine && chat?.type !== 'direct'}
+          seenByOthers={seenByOthers}
+        />
+      </TouchableOpacity>
     );
-  }, [chat?.participants?.length, chat?.type, user?.uid]);
+  }, [chat?.participants?.length, chat?.type, openMessageActions, user?.uid]);
 
   if (loading) {
     return (
@@ -330,12 +442,15 @@ export default function ChatDetailScreen() {
           <Text style={styles.topTitle}>{title}</Text>
           {othersTyping ? <Text style={styles.typingText}>Typing...</Text> : null}
         </View>
+        <ScalePressable style={styles.backBtn} onPress={refreshMessages} disabled={refreshing}>
+          {refreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
+        </ScalePressable>
       </View>
 
       <FlatList
         ref={listRef}
         inverted
-        data={messages}
+        data={visibleMessages}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         onEndReached={loadMore}

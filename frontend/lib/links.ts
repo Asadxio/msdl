@@ -25,3 +25,22 @@ export function normalizeGoogleDriveFileUrl(raw: string): string {
 
   return value;
 }
+
+export function normalizeUrlWithProtocol(raw: string): string {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value}`;
+}
+
+export function normalizeMeetUrl(raw: string): string {
+  const value = normalizeUrlWithProtocol(raw);
+  if (!value) return '';
+  return value.replace(/^http:\/\/meet\.google\.com/i, 'https://meet.google.com');
+}
+
+export function prepareExternalUrl(raw: string): string | null {
+  const normalized = normalizeUrlWithProtocol(raw);
+  if (!normalized) return null;
+  return isValidHttpsUrl(normalized) ? normalized : null;
+}
