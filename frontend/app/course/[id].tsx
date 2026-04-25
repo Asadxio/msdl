@@ -212,6 +212,11 @@ export default function CourseDetailScreen() {
     try {
       console.log('[CourseDetail] Upload button pressed');
       const existingPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+      console.log('[CourseDetail] Existing media permission', {
+        granted: existingPermission.granted,
+        canAskAgain: existingPermission.canAskAgain,
+        status: existingPermission.status,
+      });
       if (!existingPermission.granted && !existingPermission.canAskAgain) {
         Alert.alert(
           'Permission blocked',
@@ -226,6 +231,11 @@ export default function CourseDetailScreen() {
       const permission = existingPermission.granted
         ? existingPermission
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('[CourseDetail] Requested media permission', {
+        granted: permission.granted,
+        canAskAgain: permission.canAskAgain,
+        status: permission.status,
+      });
       if (!permission.granted) {
         Alert.alert('Permission required', 'Please allow gallery access before uploading.');
         return;
@@ -234,6 +244,7 @@ export default function CourseDetailScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.7,
       });
+      console.log('[CourseDetail] Picker result', { canceled: picked.canceled, assetsCount: picked?.assets?.length || 0 });
       if (picked.canceled) return;
       const file = picked?.assets?.[0];
       console.log('Picked file:', file);

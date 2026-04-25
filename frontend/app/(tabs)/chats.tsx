@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, FlatList,
-  ActivityIndicator, TextInput, Alert, ScrollView, Image,
+  ActivityIndicator, TextInput, Alert, ScrollView, Image, TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
-  addDoc, collection, getDocs, onSnapshot, orderBy, query, serverTimestamp, where,
+  addDoc, arrayRemove, arrayUnion, collection, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -24,6 +24,8 @@ type ChatItem = {
   last_message?: string;
   updated_at?: any;
   unread_counts?: Record<string, number>;
+  pinned_by?: string[];
+  hidden_by?: string[];
 };
 
 function normalizeChatItem(id: string, raw: any): ChatItem {
@@ -37,6 +39,8 @@ function normalizeChatItem(id: string, raw: any): ChatItem {
     last_message: typeof safe.last_message === 'string' ? safe.last_message : '',
     updated_at: safe.updated_at || null,
     unread_counts: safe.unread_counts && typeof safe.unread_counts === 'object' ? safe.unread_counts : {},
+    pinned_by: Array.isArray(safe.pinned_by) ? safe.pinned_by.filter((v: unknown) => typeof v === 'string') : [],
+    hidden_by: Array.isArray(safe.hidden_by) ? safe.hidden_by.filter((v: unknown) => typeof v === 'string') : [],
   };
 }
 
@@ -79,6 +83,8 @@ export default function ChatsScreen() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const usersMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.name])), [users]);
   const safePush = useCallback((path: string) => {
     try {
@@ -151,6 +157,57 @@ export default function ChatsScreen() {
     };
     loadUsers().catch(() => {});
   }, []);
+
+  const toggleChatSelection = useCallback((chatId: string) => {
+    setSelectedChatIds((prev) => (prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId]));
+  }, []);
+
+  const togglePinChat = useCallback(async (chatItem: ChatItem) => {
+    if (!user?.uid) return;
+    try {
+      console.log('[Chats] Pin chat clicked', { chatId: chatItem.id });
+      const pinned = (Array.isArray(chatItem.pinned_by) ? chatItem.pinned_by : []).includes(user.uid);
+      await updateDoc(doc(db, 'chats', chatItem.id), {
+        pinned_by: pinned ? arrayRemove(user.uid) : arrayUnion(user.uid),
+      });
+    } catch (error: any) {
+      console.log('[Chats] togglePinChat ERROR', error);
+      Alert.alert('Action failed', error?.message || 'Could not update pin status.');
+    }
+  }, [user?.uid]);
+
+  const deleteSelectedChats = useCallback(async () => {
+    if (!user?.uid || selectedChatIds.length === 0 || bulkUpdating) return;
+    console.log('[Chats] Delete selected clicked', { count: selectedChatIds.length });
+    Alert.alert('Delete selected chats', `Delete ${selectedChatIds.length} selected chat(s) from your list?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          const run = async () => {
+            setBulkUpdating(true);
+            try {
+              await Promise.all(selectedChatIds.map(async (chatId) => {
+                await updateDoc(doc(db, 'chats', chatId), {
+                  hidden_by: arrayUnion(user.uid),
+                  [`unread_counts.${user.uid}`]: 0,
+                });
+              }));
+              setSelectedChatIds([]);
+              setFeedback({ type: 'success', text: 'Selected chats deleted from your list.' });
+            } catch (error: any) {
+              console.log('[Chats] deleteSelectedChats ERROR', error);
+              Alert.alert('Delete failed', error?.message || 'Could not delete selected chats.');
+            } finally {
+              setBulkUpdating(false);
+            }
+          };
+          run().catch(() => {});
+        },
+      },
+    ]);
+  }, [bulkUpdating, selectedChatIds, user?.uid]);
 
   const getOrCreateDirectChat = async (target: AppUser) => {
     if (!user) return;
@@ -275,7 +332,9 @@ export default function ChatsScreen() {
     }
   };
 
-  const filteredUsers = users.filter((u) => (
+  const safeUsers = Array.isArray(users) ? users : [];
+  const safeChats = Array.isArray(chats) ? chats : [];
+  const filteredUsers = safeUsers.filter((u) => (
     u.id !== user?.uid && (
       !debouncedSearch
       || u.name.toLowerCase().includes(debouncedSearch)
@@ -283,9 +342,17 @@ export default function ChatsScreen() {
     )
   ));
 
-  const filteredChats = chats.filter((c) => (
+  const filteredChats = safeChats
+    .filter((c) => !(Array.isArray(c.hidden_by) ? c.hidden_by : []).includes(user?.uid || ''))
+    .filter((c) => (
     !debouncedSearch || chatTitle(c, usersMap, user?.uid || '').toLowerCase().includes(debouncedSearch)
-  ));
+    ))
+    .sort((a, b) => {
+      const aPinned = (Array.isArray(a.pinned_by) ? a.pinned_by : []).includes(user?.uid || '');
+      const bPinned = (Array.isArray(b.pinned_by) ? b.pinned_by : []).includes(user?.uid || '');
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      return (b.updated_at?.seconds || 0) - (a.updated_at?.seconds || 0);
+    });
 
   const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 
@@ -319,6 +386,12 @@ export default function ChatsScreen() {
             </ScalePressable>
           </>
         )}
+        <ScalePressable style={styles.toolBtn} onPress={deleteSelectedChats} disabled={selectedChatIds.length === 0 || bulkUpdating}>
+          <Ionicons name="trash-outline" size={16} color={selectedChatIds.length === 0 ? COLORS.textMuted : COLORS.error} />
+          <Text style={[styles.toolBtnText, selectedChatIds.length === 0 && { color: COLORS.textMuted }]}>
+            {bulkUpdating ? 'Deleting...' : `Delete Selected (${selectedChatIds.length})`}
+          </Text>
+        </ScalePressable>
       </View>
       <View style={styles.searchWrap}>
         <TextInput
@@ -392,10 +465,16 @@ export default function ChatsScreen() {
           windowSize={8}
           removeClippedSubviews
           renderItem={({ item }) => {
-            const otherId = item.participants.find((p) => p !== user?.uid);
+            const otherId = (Array.isArray(item.participants) ? item.participants : []).find((p) => p !== user?.uid);
             const avatarUser = otherId ? userById[otherId] : undefined;
+            const pinned = (Array.isArray(item.pinned_by) ? item.pinned_by : []).includes(user?.uid || '');
+            const selectedNow = selectedChatIds.includes(item.id);
             return (
-            <ScalePressable style={styles.chatCard} onPress={() => safePush(`/chat/${item.id}`)}>
+            <ScalePressable
+              style={[styles.chatCard, selectedNow && styles.chatCardSelected]}
+              onPress={() => safePush(`/chat/${item.id}`)}
+              onLongPress={() => toggleChatSelection(item.id)}
+            >
               {avatarUser?.photo_url ? (
                 <Image source={{ uri: avatarUser.photo_url }} style={styles.chatAvatar} />
               ) : (
@@ -406,7 +485,10 @@ export default function ChatsScreen() {
               <View style={{ flex: 1 }}>
               <View style={styles.chatTitleRow}>
                 <Text style={styles.chatName}>{chatTitle(item, usersMap, user?.uid || '')}</Text>
-                <Text style={styles.chatType}>{item.type}</Text>
+                <View style={styles.chatMetaTop}>
+                  {pinned ? <Ionicons name="pin" size={12} color={COLORS.primary} /> : null}
+                  <Text style={styles.chatType}>{item.type}</Text>
+                </View>
               </View>
               <View style={styles.previewRow}>
                 <Text style={styles.chatPreview} numberOfLines={1}>{item.last_message || 'No messages yet'}</Text>
@@ -419,6 +501,14 @@ export default function ChatsScreen() {
                   ) : null}
                 </View>
               </View>
+              </View>
+              <View style={styles.chatActions}>
+                <TouchableOpacity onPress={() => togglePinChat(item)} style={styles.actionBtn}>
+                  <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={16} color={COLORS.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => toggleChatSelection(item.id)} style={styles.actionBtn}>
+                  <Ionicons name={selectedNow ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={selectedNow ? COLORS.primary : COLORS.textMuted} />
+                </TouchableOpacity>
               </View>
             </ScalePressable>
           )}}
@@ -464,6 +554,7 @@ const styles = StyleSheet.create({
   chatAvatar: { width: 32, height: 32, borderRadius: 16, marginTop: 2 },
   chatAvatarFallback: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   chatTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  chatMetaTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chatName: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.textMain },
   chatType: { fontSize: 10, color: COLORS.goldText, backgroundColor: COLORS.goldBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, textTransform: 'uppercase' },
   previewRow: { marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', gap: 8, alignItems: 'center' },
@@ -472,6 +563,9 @@ const styles = StyleSheet.create({
   chatTime: { fontSize: 11, color: COLORS.textMuted },
   unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  chatActions: { justifyContent: 'space-between', alignItems: 'center', paddingLeft: 2 },
+  actionBtn: { padding: 4 },
+  chatCardSelected: { borderWidth: 1, borderColor: COLORS.primary },
   center: { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl },
   emptyText: { color: COLORS.textMuted, fontSize: 14, textAlign: 'left' },
 });

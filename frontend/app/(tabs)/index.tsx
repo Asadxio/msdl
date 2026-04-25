@@ -33,7 +33,9 @@ export default function HomeScreen() {
   const { courses, teachers, loading, getResumeLearning, getCourseProgress } = useData();
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
-  const featuredCourses = courses.slice(0, 5);
+  const safeCourses = Array.isArray(courses) ? courses : [];
+  const safeTeachers = Array.isArray(teachers) ? teachers : [];
+  const featuredCourses = safeCourses.slice(0, 5);
   const [announcementTitle, setAnnouncementTitle] = useState(DEFAULT_ANNOUNCEMENT_TITLE);
   const [announcementMessage, setAnnouncementMessage] = useState(DEFAULT_ANNOUNCEMENT_DESC);
   const [noticeModalVisible, setNoticeModalVisible] = useState(false);
@@ -232,12 +234,12 @@ export default function HomeScreen() {
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
-          {teachers.length === 0 ? (
+          {safeTeachers.length === 0 ? (
             <EmptyState icon="people-outline" message="No teachers available." />
           ) : (
             <FlatList
               horizontal
-              data={teachers}
+              data={safeTeachers}
               keyExtractor={(item) => item.id}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
@@ -278,7 +280,6 @@ export default function HomeScreen() {
             ) : null}
           </View>
           <View style={styles.announcementCard} testID="announcement-card">
-            <Image source={{ uri: MEDIA.lanternIcon }} style={styles.lanternIcon} />
             <View style={styles.announcementContent}>
               <View style={styles.announcementBadge}>
                 <Ionicons name="megaphone" size={14} color={COLORS.goldText} />
@@ -328,11 +329,11 @@ export default function HomeScreen() {
         <View style={[styles.section, { paddingHorizontal: SPACING.lg }]}>
           <View style={styles.statsRow}>
             <View style={styles.statCard} testID="stat-courses">
-              <Text style={styles.statNumber}>{courses.length}</Text>
+              <Text style={styles.statNumber}>{safeCourses.length}</Text>
               <Text style={styles.statLabel}>Courses</Text>
             </View>
             <View style={styles.statCard} testID="stat-teachers">
-              <Text style={styles.statNumber}>{teachers.length}</Text>
+              <Text style={styles.statNumber}>{safeTeachers.length}</Text>
               <Text style={styles.statLabel}>Teachers</Text>
             </View>
             <View style={styles.statCard} testID="stat-students">
