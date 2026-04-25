@@ -42,7 +42,10 @@ type AppSettings = {
   whatsapp_channel: string;
   whatsapp_contact: string;
   instagram: string;
-  youtube_telegram: string;
+  youtube_link: string;
+  telegram_link: string;
+  donation_content: string;
+  introduction_content: string;
 };
 
 type FeedbackItem = {
@@ -69,7 +72,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   whatsapp_channel: '',
   whatsapp_contact: '',
   instagram: '',
-  youtube_telegram: '',
+  youtube_link: '',
+  telegram_link: '',
+  donation_content: 'Your sadaqah, zakat, fitrah and langar support help students access Islamic education with dignity and consistency.',
+  introduction_content: 'Madrasa Tus Salikat Lilbanat is a modern Islamic learning platform dedicated to quality Islamic education for girls.',
 };
 const HELP_WHATSAPP_URL = 'https://wa.link/mrtyi1';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
@@ -153,9 +159,11 @@ export default function AboutScreen() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      const snap = await getDoc(doc(db, 'app_settings', 'platform'));
-      if (snap.exists()) {
+      try {
+        const snap = await getDoc(doc(db, 'app_settings', 'platform'));
+        if (!snap.exists()) return;
         const data = snap.data() as any;
+        const ytTgLegacy = String(data.youtube_telegram || '').trim();
         setSettings((prev) => ({
           ...prev,
           fees_amount: Number(data.fees_amount || 0),
@@ -163,8 +171,13 @@ export default function AboutScreen() {
           whatsapp_channel: data.whatsapp_channel || '',
           whatsapp_contact: data.whatsapp_contact || '',
           instagram: data.instagram || '',
-          youtube_telegram: data.youtube_telegram || '',
+          youtube_link: data.youtube_link || ytTgLegacy || '',
+          telegram_link: data.telegram_link || '',
+          donation_content: data.donation_content || prev.donation_content,
+          introduction_content: data.introduction_content || prev.introduction_content,
         }));
+      } catch (error) {
+        console.log('[About] loadSettings ERROR', error);
       }
     };
     loadSettings().catch(() => {});
@@ -197,16 +210,26 @@ export default function AboutScreen() {
 
   const saveSettings = async () => {
     if (!isAdmin) return;
-    if (!settings.whatsapp_channel.trim() && !settings.whatsapp_contact.trim() && !settings.instagram.trim() && !settings.youtube_telegram.trim()) {
+    try {
+      await setDoc(doc(db, 'app_settings', 'platform'), {
+        ...settings,
+        updated_at: serverTimestamp(),
+      }, { merge: true });
+      Alert.alert('Saved', 'Settings updated successfully.');
+    } catch (error: any) {
+      console.log('[About] saveSettings ERROR', error);
+      Alert.alert('Save failed', error?.message || 'Could not save settings.');
+    }
+  };
+
+  const saveSocialSettings = async () => {
+    if (!isAdmin) return;
+    if (!settings.whatsapp_channel.trim() && !settings.whatsapp_contact.trim() && !settings.instagram.trim() && !settings.youtube_link.trim() && !settings.telegram_link.trim()) {
       setSocialError('Add at least one social/contact link before saving.');
       return;
     }
     setSocialError('');
-    await setDoc(doc(db, 'app_settings', 'platform'), {
-      ...settings,
-      updated_at: serverTimestamp(),
-    }, { merge: true });
-    Alert.alert('Saved', 'Settings updated successfully.');
+    await saveSettings();
   };
 
   const submitFeedback = async () => {
@@ -217,41 +240,78 @@ export default function AboutScreen() {
       return;
     }
     setFeedbackError('');
-    const parsed = Number(fbRating || 0);
-    await addDoc(collection(db, 'feedback'), {
-      user_id: user.uid,
-      user_name: profile.name,
-      message: fbMessage.trim(),
-      rating: Number.isFinite(parsed) && parsed > 0 ? Math.min(5, Math.max(1, parsed)) : null,
-      created_at: serverTimestamp(),
-    });
-    setFbMessage('');
-    setFbRating('');
-    Alert.alert('Thanks!', 'Your feedback has been submitted.');
+    try {
+      const parsed = Number(fbRating || 0);
+      await addDoc(collection(db, 'feedback'), {
+        user_id: user.uid,
+        user_name: profile.name,
+        message: fbMessage.trim(),
+        rating: Number.isFinite(parsed) && parsed > 0 ? Math.min(5, Math.max(1, parsed)) : null,
+        created_at: serverTimestamp(),
+      });
+      setFbMessage('');
+      setFbRating('');
+      Alert.alert('Thanks!', 'Your feedback has been submitted.');
+    } catch (error) {
+      console.log('[About] submitFeedback ERROR', error);
+      Alert.alert('Error', 'Could not submit feedback right now.');
+    }
   };
 
   const saveFeedbackEdit = async () => {
     if (!isAdmin || !editingFeedbackId) return;
-    await updateDoc(doc(db, 'feedback', editingFeedbackId), {
-      message: editingFeedbackMsg.trim(),
-      updated_at: serverTimestamp(),
-    });
-    setEditingFeedbackId(null);
-    setEditingFeedbackMsg('');
+    try {
+      await updateDoc(doc(db, 'feedback', editingFeedbackId), {
+        message: editingFeedbackMsg.trim(),
+        updated_at: serverTimestamp(),
+      });
+      setEditingFeedbackId(null);
+      setEditingFeedbackMsg('');
+    } catch (error) {
+      console.log('[About] saveFeedbackEdit ERROR', error);
+      Alert.alert('Error', 'Could not save feedback edit.');
+    }
   };
 
   const deleteFeedback = async (id: string) => {
     if (!isAdmin) return;
-    await deleteDoc(doc(db, 'feedback', id));
+    try {
+      await deleteDoc(doc(db, 'feedback', id));
+    } catch (error) {
+      console.log('[About] deleteFeedback ERROR', error);
+      Alert.alert('Error', 'Could not delete feedback.');
+    }
   };
 
   const openHelp = async () => {
-    const canOpen = await Linking.canOpenURL(HELP_WHATSAPP_URL);
-    if (!canOpen) {
+    try {
+      const canOpen = await Linking.canOpenURL(HELP_WHATSAPP_URL);
+      if (!canOpen) {
+        Alert.alert('Unavailable', 'Could not open WhatsApp right now.');
+        return;
+      }
+      await Linking.openURL(HELP_WHATSAPP_URL);
+    } catch {
       Alert.alert('Unavailable', 'Could not open WhatsApp right now.');
-      return;
     }
-    await Linking.openURL(HELP_WHATSAPP_URL);
+  };
+
+  const openSocialLink = async (url: string, label: string) => {
+    try {
+      if (!url?.trim()) {
+        Alert.alert('Not set', `${label} link is not configured yet.`);
+        return;
+      }
+      const clean = url.trim();
+      const canOpen = await Linking.canOpenURL(clean);
+      if (!canOpen) {
+        Alert.alert('Unavailable', `Could not open ${label} right now.`);
+        return;
+      }
+      await Linking.openURL(clean);
+    } catch {
+      Alert.alert('Unavailable', `Could not open ${label} right now.`);
+    }
   };
 
   const shareApp = async () => {
@@ -283,71 +343,81 @@ export default function AboutScreen() {
 
   const payFees = async () => {
     if (!user || !profile) return;
-    const paymentSettings = await getLatestPaymentSettings();
-    const link = paymentSettings.razorpay_link;
-    const amount = Number(paymentSettings.fees_amount || 0);
-    if (!link) {
-      Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
-      return;
-    }
-    if (!isValidHttpsUrl(link)) {
-      Alert.alert('Invalid Link', 'Payment link must be a valid http/https URL.');
-      return;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert('Invalid Fees', 'Fees amount must be greater than 0.');
-      return;
-    }
+    try {
+      const paymentSettings = await getLatestPaymentSettings();
+      const link = paymentSettings.razorpay_link;
+      const amount = Number(paymentSettings.fees_amount || 0);
+      if (!link) {
+        Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
+        return;
+      }
+      if (!isValidHttpsUrl(link)) {
+        Alert.alert('Invalid Link', 'Payment link must be a valid http/https URL.');
+        return;
+      }
+      if (!Number.isFinite(amount) || amount <= 0) {
+        Alert.alert('Invalid Fees', 'Fees amount must be greater than 0.');
+        return;
+      }
 
-    await addDoc(collection(db, 'payments'), {
-      user_id: user.uid,
-      user_name: profile.name,
-      amount,
-      status: 'pending',
-      provider: 'razorpay',
-      type: 'fees',
-      created_at: serverTimestamp(),
-    });
-    await createPaymentNotification(profile.name, amount, 'fees');
-    await Linking.openURL(link).catch(() => {
-      Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
-    });
-    Alert.alert('Recorded', 'Your payment attempt was recorded and is pending admin approval.');
+      await addDoc(collection(db, 'payments'), {
+        user_id: user.uid,
+        user_name: profile.name,
+        amount,
+        status: 'pending',
+        provider: 'razorpay',
+        type: 'fees',
+        created_at: serverTimestamp(),
+      });
+      await createPaymentNotification(profile.name, amount, 'fees');
+      await Linking.openURL(link).catch(() => {
+        Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
+      });
+      Alert.alert('Recorded', 'Your payment attempt was recorded and is pending admin approval.');
+    } catch (error) {
+      console.log('[About] payFees ERROR', error);
+      Alert.alert('Error', 'Could not start fees payment.');
+    }
   };
 
   const donate = async (donationType: 'sadqa' | 'zakat' | 'fitra' | 'langar') => {
     if (!user || !profile) return;
-    const paymentSettings = await getLatestPaymentSettings();
-    const link = paymentSettings.razorpay_link;
-    const amount = Number(donationAmount || 0);
-    if (!link) {
-      Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
-      return;
+    try {
+      const paymentSettings = await getLatestPaymentSettings();
+      const link = paymentSettings.razorpay_link;
+      const amount = Number(donationAmount || 0);
+      if (!link) {
+        Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
+        return;
+      }
+      if (!isValidHttpsUrl(link)) {
+        Alert.alert('Invalid Link', 'Payment link must be a valid http/https URL.');
+        return;
+      }
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setDonationError('Enter a valid donation amount greater than 0.');
+        Alert.alert('Invalid Amount', 'Enter a valid donation amount.');
+        return;
+      }
+      setDonationError('');
+      await addDoc(collection(db, 'payments'), {
+        user_id: user.uid,
+        user_name: profile.name,
+        amount,
+        status: 'pending',
+        provider: 'razorpay',
+        type: donationType,
+        created_at: serverTimestamp(),
+      });
+      await createPaymentNotification(profile.name, amount, donationType);
+      await Linking.openURL(link).catch(() => {
+        Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
+      });
+      Alert.alert('Donation Initiated', `${donationType.toUpperCase()} donation recorded and pending admin approval.`);
+    } catch (error) {
+      console.log('[About] donate ERROR', error);
+      Alert.alert('Error', 'Could not start donation right now.');
     }
-    if (!isValidHttpsUrl(link)) {
-      Alert.alert('Invalid Link', 'Payment link must be a valid http/https URL.');
-      return;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setDonationError('Enter a valid donation amount greater than 0.');
-      Alert.alert('Invalid Amount', 'Enter a valid donation amount.');
-      return;
-    }
-    setDonationError('');
-    await addDoc(collection(db, 'payments'), {
-      user_id: user.uid,
-      user_name: profile.name,
-      amount,
-      status: 'pending',
-      provider: 'razorpay',
-      type: donationType,
-      created_at: serverTimestamp(),
-    });
-    await createPaymentNotification(profile.name, amount, donationType);
-    await Linking.openURL(link).catch(() => {
-      Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
-    });
-    Alert.alert('Donation Initiated', `${donationType.toUpperCase()} donation recorded and pending admin approval.`);
   };
 
   const savePaymentSettings = async () => {
@@ -398,31 +468,50 @@ export default function AboutScreen() {
   };
 
   const ensureImagePickerPermission = async (ImagePicker: any, source: 'camera' | 'gallery'): Promise<boolean> => {
-    const existing = source === 'camera'
-      ? await ImagePicker.getCameraPermissionsAsync()
-      : await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (existing?.granted) return true;
-    if (!existing?.canAskAgain) {
-      Alert.alert(
-        'Permission blocked',
-        `Please enable ${source} permission from app settings to continue.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } },
-        ],
-      );
+    try {
+      const existing = source === 'camera'
+        ? await ImagePicker.getCameraPermissionsAsync()
+        : await ImagePicker.getMediaLibraryPermissionsAsync();
+      console.log('[About] Existing image picker permission', {
+        source,
+        granted: existing?.granted,
+        canAskAgain: existing?.canAskAgain,
+        status: existing?.status,
+      });
+      if (existing?.granted) return true;
+      if (!existing?.canAskAgain) {
+        Alert.alert(
+          'Permission blocked',
+          `Please enable ${source} permission from app settings to continue.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } },
+          ],
+        );
+        return false;
+      }
+      const requested = source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('[About] Requested image picker permission', {
+        source,
+        granted: requested?.granted,
+        canAskAgain: requested?.canAskAgain,
+        status: requested?.status,
+      });
+      if (requested?.granted) return true;
+      Alert.alert('Permission needed', `Please allow ${source} access to upload profile image.`);
+      return false;
+    } catch (error) {
+      console.log('[About] ensureImagePickerPermission ERROR', error);
+      Alert.alert('Error', `Unable to request ${source} permission right now.`);
       return false;
     }
-    const requested = source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (requested?.granted) return true;
-    Alert.alert('Permission needed', `Please allow ${source} access to upload profile image.`);
-    return false;
   };
 
   const pickProfileImage = async (source: 'camera' | 'gallery') => {
     try {
+      console.log('[About] pickProfileImage button pressed', { source });
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ImagePicker: any = require('expo-image-picker');
       const hasPermission = await ensureImagePickerPermission(ImagePicker, source);
@@ -430,6 +519,7 @@ export default function AboutScreen() {
       const result = source === 'camera'
         ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+      console.log('[About] Image picker result', { source, canceled: result?.canceled, assetsCount: result?.assets?.length || 0 });
       const asset = result?.assets?.[0];
       if (result?.canceled || !asset?.uri) return;
       const errorMessage = validatePickedAsset(asset);
@@ -627,7 +717,22 @@ export default function AboutScreen() {
         </SectionCard>
 
         <SectionCard title="Donations (Razorpay Link)" icon="heart-outline">
-          <Text style={styles.bodyText}>Support the madrasa through Sadqa, Zakat, Fitra, or Langar.</Text>
+          <Text style={styles.bodyText}>{settings.donation_content}</Text>
+          {isAdmin ? (
+            <>
+              <Text style={styles.inputLabel}>Editable Donation Content</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, focusedInput === 'donation_content' && styles.inputFocused]}
+                placeholder="Write donation appeal content..."
+                placeholderTextColor={COLORS.textMuted}
+                value={settings.donation_content}
+                onChangeText={(v) => setSettings((p) => ({ ...p, donation_content: v }))}
+                multiline
+                onFocus={() => setFocusedInput('donation_content')}
+                onBlur={() => setFocusedInput(null)}
+              />
+            </>
+          ) : null}
           <Text style={styles.inputLabel}>Donation Amount</Text>
           <TextInput
             style={[styles.input, { marginTop: 10 }, focusedInput === 'donation_amount' && styles.inputFocused]}
@@ -736,15 +841,31 @@ export default function AboutScreen() {
               <TextInput style={[styles.input, focusedInput === 'social_contact' && styles.inputFocused]} placeholder="WhatsApp Contact (URL or number)" placeholderTextColor={COLORS.textMuted} value={settings.whatsapp_contact} onChangeText={(v) => setSettings((p) => ({ ...p, whatsapp_contact: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_contact')} onBlur={() => setFocusedInput(null)} />
               <Text style={styles.inputLabel}>Instagram Link</Text>
               <TextInput style={[styles.input, focusedInput === 'social_instagram' && styles.inputFocused]} placeholder="Instagram Link" placeholderTextColor={COLORS.textMuted} value={settings.instagram} onChangeText={(v) => setSettings((p) => ({ ...p, instagram: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_instagram')} onBlur={() => setFocusedInput(null)} />
-              <Text style={styles.inputLabel}>YouTube / Telegram Link</Text>
-              <TextInput style={[styles.input, focusedInput === 'social_youtube' && styles.inputFocused]} placeholder="YouTube / Telegram Link" placeholderTextColor={COLORS.textMuted} value={settings.youtube_telegram} onChangeText={(v) => setSettings((p) => ({ ...p, youtube_telegram: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_youtube')} onBlur={() => setFocusedInput(null)} />
+              <Text style={styles.inputLabel}>YouTube Link</Text>
+              <TextInput style={[styles.input, focusedInput === 'social_youtube' && styles.inputFocused]} placeholder="YouTube Link" placeholderTextColor={COLORS.textMuted} value={settings.youtube_link} onChangeText={(v) => setSettings((p) => ({ ...p, youtube_link: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_youtube')} onBlur={() => setFocusedInput(null)} />
+              <Text style={styles.inputLabel}>Telegram Link</Text>
+              <TextInput style={[styles.input, focusedInput === 'social_telegram' && styles.inputFocused]} placeholder="Telegram Link" placeholderTextColor={COLORS.textMuted} value={settings.telegram_link} onChangeText={(v) => setSettings((p) => ({ ...p, telegram_link: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_telegram')} onBlur={() => setFocusedInput(null)} />
               {socialError ? <Text style={styles.inputError}>{socialError}</Text> : null}
-              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSocialSettings}>
                 <Text style={styles.secondaryBtnText}>Save Social Links</Text>
               </TouchableOpacity>
             </>
           ) : (
             <>
+              <View style={styles.row}>
+                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.whatsapp_channel, 'WhatsApp Channel'); }}>
+                  <Text style={styles.linkBtnText}>WhatsApp Channel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.instagram, 'Instagram'); }}>
+                  <Text style={styles.linkBtnText}>Instagram</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.youtube_link, 'YouTube'); }}>
+                  <Text style={styles.linkBtnText}>YouTube</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.telegram_link, 'Telegram'); }}>
+                  <Text style={styles.linkBtnText}>Telegram</Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity style={styles.linkBtn} onPress={openHelp}>
                 <Text style={styles.linkBtnText}>WhatsApp Support</Text>
               </TouchableOpacity>
@@ -772,9 +893,25 @@ export default function AboutScreen() {
         </View>
 
         <SectionCard title="Introduction" icon="sparkles">
-          <Text style={styles.bodyText}>
-            Madrasa Tus Salikat Lilbanat is a modern Islamic learning platform dedicated to providing quality education for girls. It combines traditional Islamic knowledge with modern technology to make learning accessible, structured, and engaging.
-          </Text>
+          <Text style={styles.bodyText}>{settings.introduction_content}</Text>
+          {isAdmin ? (
+            <>
+              <Text style={styles.inputLabel}>Editable Introduction</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, focusedInput === 'intro_content' && styles.inputFocused]}
+                value={settings.introduction_content}
+                onChangeText={(v) => setSettings((p) => ({ ...p, introduction_content: v }))}
+                multiline
+                placeholder="Write introduction content..."
+                placeholderTextColor={COLORS.textMuted}
+                onFocus={() => setFocusedInput('intro_content')}
+                onBlur={() => setFocusedInput(null)}
+              />
+              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
+                <Text style={styles.secondaryBtnText}>Save Introduction</Text>
+              </TouchableOpacity>
+            </>
+          ) : null}
           <Text style={styles.bodyText}>
             Our curriculum covers Quran, Hadith, Fiqh, Arabic, and practical Islamic lifestyle learning.
           </Text>

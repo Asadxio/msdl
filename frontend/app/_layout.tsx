@@ -39,7 +39,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, [user, profile, authLoading, emailVerified, segments, router]);
 
   useEffect(() => {
-    initPushNotifications().catch(() => {});
+    initPushNotifications().catch((error) => {
+      console.log('[Notifications] initPushNotifications effect ERROR', error);
+    });
   }, []);
 
   useEffect(() => {
@@ -54,7 +56,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user?.uid) return;
     const setupPush = async () => {
+      console.log('[Notifications] setupPush started');
       const permission = await requestNotificationPermission();
+      console.log('[Notifications] setupPush permission status', permission);
       if (!permission.granted) {
         Alert.alert(
           'Notification Permission Required',
@@ -64,21 +68,33 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         );
         return;
       }
-      await registerDevicePushToken(user.uid);
+      const token = await registerDevicePushToken(user.uid);
+      console.log('[Notifications] setupPush registerDevicePushToken result', { hasToken: Boolean(token) });
     };
-    setupPush().catch(() => {
+    setupPush().catch((error) => {
+      console.log('[Notifications] setupPush ERROR', error);
       Alert.alert('Notifications', 'Unable to configure notifications right now.');
     });
   }, [user?.uid]);
 
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = (response.notification.request.content.data || {}) as any;
-      if (data?.chat_id) {
-        router.push(`/chat/${data.chat_id}`);
-      }
-    });
-    return () => sub.remove();
+    try {
+      const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+        try {
+          const data = (response.notification.request.content.data || {}) as any;
+          console.log('[Notifications] notification response received', data);
+          if (data?.chat_id) {
+            router.push(`/chat/${data.chat_id}`);
+          }
+        } catch (error) {
+          console.log('[Notifications] response handler ERROR', error);
+        }
+      });
+      return () => sub.remove();
+    } catch (error) {
+      console.log('[Notifications] addNotificationResponseReceivedListener ERROR', error);
+      return () => {};
+    }
   }, [router]);
 
   if (authLoading) {

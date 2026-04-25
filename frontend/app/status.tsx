@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity, TextInput, FlatList, ActivityIndicator, Alert,
+  View, Text, StyleSheet, StatusBar, TouchableOpacity, TextInput, FlatList, ActivityIndicator, Alert, Linking, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import {
   addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc,
 } from 'firebase/firestore';
@@ -26,6 +27,8 @@ type StatusItem = {
   user_name: string;
   role: 'teacher' | 'student' | 'admin';
   text: string;
+  media_url?: string;
+  media_type?: 'image' | 'video' | '';
   created_at?: { toDate?: () => Date };
   likes?: string[];
   comments?: StatusComment[];
@@ -37,7 +40,7 @@ export default function StatusScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile } = useAuth();
-  const isTeacher = profile?.role === 'teacher';
+  const canPostStatus = profile?.role === 'teacher' || profile?.role === 'admin';
   const isStudent = profile?.role === 'student';
 
   const [statusText, setStatusText] = useState('');
@@ -46,6 +49,7 @@ export default function StatusScreen() {
   const [items, setItems] = useState<StatusItem[]>([]);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [updatingId, setUpdatingId] = useState('');
+  const [statusMedia, setStatusMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'status_updates'), orderBy('created_at', 'desc'));
@@ -66,6 +70,8 @@ export default function StatusScreen() {
           user_name: data.user_name || 'Teacher',
           role: data.role || 'teacher',
           text: data.text || '',
+          media_url: typeof data.media_url === 'string' ? data.media_url : '',
+          media_type: data.media_type === 'video' ? 'video' : data.media_type === 'image' ? 'image' : '',
           created_at: data.created_at || null,
           likes: Array.isArray(data.likes) ? data.likes : [],
           comments: Array.isArray(data.comments) ? data.comments : [],
@@ -75,16 +81,20 @@ export default function StatusScreen() {
       setLoading(false);
 
       if ((profile?.role === 'admin' || profile?.role === 'teacher') && expiredIds.length > 0) {
-        await Promise.all(expiredIds.map((id) => deleteDoc(doc(db, 'status_updates', id)).catch(() => {})));
+        await Promise.all(expiredIds.map((statusId) => deleteDoc(doc(db, 'status_updates', statusId)).catch(() => {})));
       }
-    }, () => setLoading(false));
+    }, (error) => {
+      console.log('[Status] onSnapshot ERROR', error);
+      setLoading(false);
+    });
     return unsub;
   }, [profile?.role]);
 
   const postStatus = async () => {
-    if (!isTeacher || !user?.uid || !profile) return;
-    if (!statusText.trim()) {
-      Alert.alert('Missing text', 'Please write a status update.');
+    console.log('[Status] Post button clicked');
+    if (!canPostStatus || !user?.uid || !profile) return;
+    if (!statusText.trim() && !statusMedia?.uri) {
+      Alert.alert('Missing content', 'Please add text, image, or video.');
       return;
     }
     setPosting(true);
@@ -92,17 +102,55 @@ export default function StatusScreen() {
       await addDoc(collection(db, 'status_updates'), {
         user_id: user.uid,
         user_name: profile.name || 'Teacher',
-        role: 'teacher',
+        role: profile.role === 'admin' ? 'admin' : 'teacher',
         text: statusText.trim(),
+        media_url: statusMedia?.uri || '',
+        media_type: statusMedia?.type || '',
         likes: [],
         comments: [],
         created_at: serverTimestamp(),
       });
       setStatusText('');
-    } catch {
+      setStatusMedia(null);
+    } catch (error) {
+      console.log('[Status] postStatus ERROR', error);
       Alert.alert('Post failed', 'Could not post status right now.');
     } finally {
       setPosting(false);
+    }
+  };
+
+  const pickStatusMedia = async () => {
+    try {
+      console.log('[Status] Pick media button clicked');
+      const existing = await ImagePicker.getMediaLibraryPermissionsAsync();
+      console.log('[Status] Existing media permission', existing?.status, existing?.granted);
+      if (!existing.granted && !existing.canAskAgain) {
+        Alert.alert('Permission blocked', 'Enable gallery permission from settings to upload status media.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } },
+        ]);
+        return;
+      }
+      const permission = existing.granted ? existing : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('[Status] Requested media permission', permission?.status, permission?.granted);
+      if (!permission.granted) {
+        Alert.alert('Permission required', 'Gallery permission is required to upload status media.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        quality: 0.7,
+      });
+      console.log('[Status] Picker result', { canceled: result.canceled, assetsCount: result?.assets?.length || 0 });
+      if (result.canceled) return;
+      const asset = result?.assets?.[0];
+      if (!asset?.uri) return;
+      const mediaType = asset.type === 'video' ? 'video' : 'image';
+      setStatusMedia({ uri: asset.uri, type: mediaType });
+    } catch (error) {
+      console.log('[Status] pickStatusMedia ERROR', error);
+      Alert.alert('Error', 'Unable to open gallery right now.');
     }
   };
 
@@ -160,9 +208,9 @@ export default function StatusScreen() {
         </View>
       </View>
 
-      {isTeacher ? (
+      {canPostStatus ? (
         <View style={styles.composeCard}>
-          <Text style={styles.composeTitle}>Post Status (Teacher)</Text>
+          <Text style={styles.composeTitle}>Post Status ({profile?.role === 'admin' ? 'Admin' : 'Teacher'})</Text>
           <TextInput
             style={styles.input}
             value={statusText}
@@ -171,6 +219,24 @@ export default function StatusScreen() {
             placeholderTextColor={COLORS.textMuted}
             multiline
           />
+          {statusMedia?.uri ? (
+            <View style={styles.previewRow}>
+              {statusMedia.type === 'image' ? (
+                <Image source={{ uri: statusMedia.uri }} style={styles.previewImage} />
+              ) : (
+                <View style={styles.previewVideo}>
+                  <Ionicons name="videocam" size={18} color={COLORS.primary} />
+                  <Text style={styles.previewVideoText}>Video selected</Text>
+                </View>
+              )}
+              <TouchableOpacity onPress={() => setStatusMedia(null)}>
+                <Text style={styles.clearMediaText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          <TouchableOpacity style={styles.ghostBtn} onPress={pickStatusMedia}>
+            <Text style={styles.ghostBtnText}>Add Image / Video</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.primaryBtn} onPress={postStatus} disabled={posting}>
             {posting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Post Status</Text>}
           </TouchableOpacity>
@@ -187,7 +253,17 @@ export default function StatusScreen() {
           renderItem={({ item }) => (
             <View style={styles.card}>
               <Text style={styles.cardName}>{item.user_name}</Text>
-              <Text style={styles.cardText}>{item.text}</Text>
+              {item.text ? <Text style={styles.cardText}>{item.text}</Text> : null}
+              {item.media_url ? (
+                item.media_type === 'video' ? (
+                  <View style={styles.videoBadge}>
+                    <Ionicons name="videocam" size={16} color={COLORS.primary} />
+                    <Text style={styles.cardMeta}>Video status</Text>
+                  </View>
+                ) : (
+                  <Image source={{ uri: item.media_url }} style={styles.statusImage} />
+                )
+              ) : null}
               <Text style={styles.cardMeta}>
                 {item.created_at?.toDate ? item.created_at.toDate().toLocaleString() : 'Just now'}
               </Text>
@@ -218,7 +294,7 @@ export default function StatusScreen() {
                 </>
               ) : null}
 
-              {(item.comments || []).slice(-3).map((comment) => (
+              {(Array.isArray(item.comments) ? item.comments : []).slice(-3).map((comment) => (
                 <Text key={comment.id} style={styles.commentText}>• {comment.user_name}: {comment.text}</Text>
               ))}
             </View>
@@ -266,4 +342,11 @@ const styles = StyleSheet.create({
   commentText: { fontSize: 12, color: COLORS.textMuted },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
   empty: { color: COLORS.textMuted, fontSize: 13 },
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  previewImage: { width: 56, height: 56, borderRadius: 8, backgroundColor: COLORS.surfaceAlt },
+  previewVideo: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8, backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border },
+  previewVideoText: { fontSize: 12, color: COLORS.textMain, fontWeight: '600' },
+  clearMediaText: { fontSize: 12, fontWeight: '700', color: COLORS.error },
+  statusImage: { width: '100%', height: 180, borderRadius: 12, backgroundColor: COLORS.surfaceAlt },
+  videoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });
