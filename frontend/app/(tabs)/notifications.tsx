@@ -23,6 +23,8 @@ type NotificationItem = {
   category?: 'announcement' | 'notification' | 'class_reminder';
   sound?: 'default';
   read?: Record<string, boolean>;
+  target_user_ids?: string[];
+  target_roles?: ('student' | 'teacher' | 'admin')[];
   created_at?: { toDate?: () => Date };
 };
 
@@ -60,18 +62,28 @@ export default function NotificationsScreen() {
   const [focusedEditField, setFocusedEditField] = useState<'editTitle' | 'editMessage' | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
     setLoadError('');
     setLoading(true);
     const q = query(
       collection(db, 'notifications'),
-      where('user_id', 'in', [user.uid, 'all']),
+      where('user_id', 'in', [user.uid, 'all', 'role_targeted']),
       orderBy('created_at', 'desc'),
       limit(100),
     );
     const unsub = onSnapshot(q, (snap) => {
       const next: NotificationItem[] = [];
-      snap.forEach((d) => next.push({ id: d.id, ...(d.data() as any) }));
+      snap.forEach((d) => {
+        const safe = d.data() as any;
+        const targetUserIds = Array.isArray(safe.target_user_ids) ? safe.target_user_ids : [];
+        const targetRoles = Array.isArray(safe.target_roles) ? safe.target_roles : [];
+        const isRoleTargeted = safe.user_id === 'role_targeted';
+        const allowById = targetUserIds.includes(user.uid);
+        const allowByRole = profile?.role ? targetRoles.includes(profile.role) : false;
+        if (!isRoleTargeted || allowById || allowByRole) {
+          next.push({ id: d.id, ...safe });
+        }
+      });
       setItems(next);
       setLoading(false);
     }, (err) => {
@@ -79,7 +91,7 @@ export default function NotificationsScreen() {
       setLoading(false);
     });
     return unsub;
-  }, [user, user?.uid, reloadKey]);
+  }, [profile?.role, user?.uid, reloadKey]);
 
   const markAsRead = async (item: NotificationItem) => {
     if (!user?.uid) return;

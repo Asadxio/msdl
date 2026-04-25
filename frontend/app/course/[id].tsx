@@ -240,10 +240,17 @@ export default function CourseDetailScreen() {
         Alert.alert('Permission required', 'Please allow gallery access before uploading.');
         return;
       }
-      const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.7,
-      });
+      let picked: ImagePicker.ImagePickerResult;
+      try {
+        picked = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.7,
+        });
+      } catch (pickerError: any) {
+        console.log('[CourseDetail] Native picker launch ERROR:', pickerError);
+        Alert.alert('Error', pickerError?.message || 'Unable to open gallery right now.');
+        return;
+      }
       console.log('[CourseDetail] Picker result', { canceled: picked.canceled, assetsCount: picked?.assets?.length || 0 });
       if (picked.canceled) return;
       const file = picked?.assets?.[0];

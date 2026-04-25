@@ -18,11 +18,20 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const inAuth = segments[0] === 'auth';
     const isAdmin = profile?.role === 'admin';
     const inAdmin = segments[0] === 'admin';
+    const inUnauthorized = segments[0] === 'unauthorized';
+    const topLevelPath = segments.join('/');
+    const teacherOnlyRoutes = new Set(['status']);
+    const isTeacherOnlyRoute = teacherOnlyRoutes.has(topLevelPath);
+    const isTeacherOrAdmin = profile?.role === 'teacher' || profile?.role === 'admin';
 
     if (!user) {
       if (!inAuth) router.replace('/auth/login');
-    } else if (inAdmin && !isAdmin) {
+    } else if (inUnauthorized && profile?.status === 'approved') {
       router.replace('/');
+    } else if (inAdmin && !isAdmin) {
+      router.replace('/unauthorized?required=admin');
+    } else if (isTeacherOnlyRoute && !isTeacherOrAdmin) {
+      router.replace('/unauthorized?required=teacher');
     } else if (profile?.status === 'rejected') {
       if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
     } else if (profile?.status === 'deactivated') {
@@ -127,6 +136,8 @@ export default function RootLayout() {
             <Stack.Screen name="book/[id]" />
             <Stack.Screen name="chat/[id]" />
             <Stack.Screen name="recordings" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="unauthorized" options={{ animation: 'fade' }} />
             <Stack.Screen name="status" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />

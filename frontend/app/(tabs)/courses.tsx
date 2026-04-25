@@ -1,5 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, Image, StatusBar, TouchableOpacity } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  View, Text, StyleSheet, FlatList, Image, StatusBar, TouchableOpacity, TextInput,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -55,7 +57,24 @@ function CourseCard({ course, index }: { course: Course; index: number }) {
 export default function CoursesScreen() {
   const insets = useSafeAreaInsets();
   const { courses, loading, refetch } = useData();
-  const safeCourses = Array.isArray(courses) ? courses : [];
+  const safeCourses = useMemo(() => (Array.isArray(courses) ? courses : []), [courses]);
+  const [search, setSearch] = useState('');
+  const [teacherFilter, setTeacherFilter] = useState('all');
+  const teacherOptions = useMemo(
+    () => ['all', ...Array.from(new Set(safeCourses.map((course) => String(course?.teacher_name || '').trim()).filter(Boolean)))],
+    [safeCourses],
+  );
+  const filteredCourses = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return safeCourses.filter((course) => {
+      const safeName = String(course?.name || '').toLowerCase();
+      const safeTeacher = String(course?.teacher_name || '').toLowerCase();
+      const safeDescription = String(course?.description || '').toLowerCase();
+      const matchesSearch = !q || safeName.includes(q) || safeTeacher.includes(q) || safeDescription.includes(q);
+      const matchesTeacher = teacherFilter === 'all' || String(course?.teacher_name || '') === teacherFilter;
+      return matchesSearch && matchesTeacher;
+    });
+  }, [safeCourses, search, teacherFilter]);
 
   return (
     <View style={styles.container}>
@@ -65,21 +84,50 @@ export default function CoursesScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Our Courses</Text>
             <Text style={styles.headerSubtitle}>
-              {loading ? 'Loading...' : `${safeCourses.length} courses available`}
+              {loading ? 'Loading...' : `${filteredCourses.length} of ${safeCourses.length} courses`}
             </Text>
           </View>
           <TouchableOpacity style={styles.refreshBtn} onPress={refetch}>
             <Text style={styles.refreshText}>Refresh</Text>
           </TouchableOpacity>
         </View>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search courses or teachers"
+          placeholderTextColor={COLORS.textMuted}
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <FlatList
+          data={teacherOptions}
+          horizontal
+          keyExtractor={(item) => item}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.teacherFilterList}
+          renderItem={({ item }) => {
+            const selected = teacherFilter === item;
+            return (
+              <TouchableOpacity
+                style={[styles.teacherChip, selected && styles.teacherChipSelected]}
+                onPress={() => setTeacherFilter(item)}
+              >
+                <Text style={[styles.teacherChipText, selected && styles.teacherChipTextSelected]}>
+                  {item === 'all' ? 'All Teachers' : item}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
       </FadeInView>
       {loading ? (
         <EmptyState icon="hourglass-outline" message="Loading courses..." />
-      ) : safeCourses.length === 0 ? (
-        <EmptyState icon="book-outline" message="No courses available yet." />
+      ) : filteredCourses.length === 0 ? (
+        <EmptyState icon="search-outline" message="No courses match this search/filter." />
       ) : (
         <FlatList
-          data={safeCourses}
+          data={filteredCourses}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => <CourseCard course={item} index={index} />}
           contentContainerStyle={styles.listContent}
@@ -103,6 +151,22 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  searchInput: {
+    marginTop: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: COLORS.textMain,
+    fontSize: 13,
+  },
+  teacherFilterList: { paddingTop: SPACING.sm, gap: 8, paddingRight: 16 },
+  teacherChip: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, borderRadius: RADIUS.full, paddingHorizontal: 10, paddingVertical: 6 },
+  teacherChipSelected: { borderColor: COLORS.primary, backgroundColor: '#E8F5EE' },
+  teacherChipText: { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
+  teacherChipTextSelected: { color: COLORS.primary },
   refreshBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingVertical: 6 },
   refreshText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   headerTitle: { ...TYPOGRAPHY.title, color: COLORS.text },

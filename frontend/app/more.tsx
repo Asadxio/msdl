@@ -23,6 +23,7 @@ export default function MoreScreen() {
     { label: 'Status', icon: 'radio-outline', route: '/status' },
     { label: 'Teachers', icon: 'people-outline', route: '/teachers' },
     { label: 'Settings', icon: 'settings-outline', route: '/settings' },
+    { label: 'Privacy Policy', icon: 'shield-checkmark-outline', route: '/privacy' },
     { label: 'About & Donations', icon: 'heart-outline', route: '/payment' },
     { label: 'Manage Academics', icon: 'school-outline', route: '/admin/manage-academics', adminOnly: true },
     { label: 'Admin Payments', icon: 'card-outline', route: '/admin/payments', adminOnly: true },

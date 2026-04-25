@@ -138,10 +138,17 @@ export default function StatusScreen() {
         Alert.alert('Permission required', 'Gallery permission is required to upload status media.');
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
-        quality: 0.7,
-      });
+      let result: ImagePicker.ImagePickerResult;
+      try {
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.All,
+          quality: 0.7,
+        });
+      } catch (pickerError: any) {
+        console.log('[Status] Native picker launch ERROR', pickerError);
+        Alert.alert('Error', pickerError?.message || 'Unable to open gallery right now.');
+        return;
+      }
       console.log('[Status] Picker result', { canceled: result.canceled, assetsCount: result?.assets?.length || 0 });
       if (result.canceled) return;
       const asset = result?.assets?.[0];

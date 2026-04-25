@@ -11,7 +11,7 @@ import {
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { createNotificationAsAdmin } from '@/lib/notifications';
+import { createNotificationAsAdmin, createRoleNotificationAsAdmin } from '@/lib/notifications';
 import { isValidHttpsUrl, normalizeMeetUrl } from '@/lib/links';
 
 type CourseItem = {
@@ -164,7 +164,7 @@ export default function ManageAcademicsScreen() {
 
   useEffect(() => {
     if (profile && !isAdmin) {
-      router.replace('/');
+      router.replace('/unauthorized?required=admin');
       return;
     }
     if (isAdmin) fetchData();
@@ -189,6 +189,15 @@ export default function ManageAcademicsScreen() {
     const belongsToCourse = lessons.some((lesson) => lesson.id === recordingLessonId && lesson.course_id === recordingCourseId);
     if (!belongsToCourse) setRecordingLessonId('');
   }, [lessons, recordingCourseId, recordingLessonId]);
+
+  if (profile && !isAdmin) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center', padding: SPACING.lg }]}>
+        <Text style={styles.sectionTitle}>Access denied</Text>
+        <Text style={styles.helper}>Only admins can manage academics.</Text>
+      </View>
+    );
+  }
 
   const saveCourse = async () => {
     if (!isAdmin) return;
@@ -224,11 +233,20 @@ export default function ManageAcademicsScreen() {
       }
       setCourseForm(INITIAL_COURSE);
       setEditingCourseId(null);
+      const announcementMessage = `${payload.name} - ${payload.schedule}${payload.class_time ? ` at ${payload.class_time}` : ''}`;
       await createNotificationAsAdmin(profile, {
         title: editingCourseId ? 'Class Schedule Updated' : 'New Class Scheduled',
-        message: `${payload.name} - ${payload.schedule}${payload.class_time ? ` at ${payload.class_time}` : ''}`,
+        message: announcementMessage,
         user_id: 'all',
       });
+      if (!editingCourseId) {
+        await createRoleNotificationAsAdmin(profile, {
+          title: 'New Course Available',
+          message: `${payload.name} has been added. Open Courses to enroll now.`,
+          roles: ['student'],
+          category: 'new_course',
+        });
+      }
       await fetchData();
     } catch {
       Alert.alert('Save Failed', 'Could not save course. Please try again.');
