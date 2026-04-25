@@ -166,8 +166,11 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
     if not target_user_ids:
         return {"ok": True, "sent": 0}
 
-    # Non-admin chat push guard: user can notify only participants of their own chat.
+    # Non-admin push guard: only chat notifications are allowed and user can notify only participants of their own chat.
     if not is_admin:
+        event_type = str((payload.data or {}).get("type", "")).strip()
+        if event_type not in {"chat_message", "chat_broadcast"}:
+            raise HTTPException(status_code=403, detail="Non-admin push is restricted to chat notifications")
         chat_id = str((payload.data or {}).get("chat_id", "")).strip()
         if not chat_id:
             raise HTTPException(status_code=403, detail="Non-admin push requires chat context")

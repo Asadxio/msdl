@@ -1,4 +1,4 @@
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, getDocs, query, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { sendPushToAllUsers, sendPushToUserIds } from '@/lib/pushNotifications';
@@ -51,4 +51,86 @@ export async function createNotificationAsAdmin(
     }).catch(() => {});
   }
   return true;
+}
+
+export async function createRoleNotificationAsAdmin(
+  profile: UserProfile | null,
+  payload: NotificationPayload & { roles: Array<'student' | 'teacher'>; category?: string }
+): Promise<boolean> {
+  if (profile?.role !== 'admin') return false;
+  const title = payload.title.trim();
+  const message = payload.message.trim();
+  const safeRoles = Array.isArray(payload.roles) ? payload.roles : [];
+  if (!title || !message || safeRoles.length === 0) return false;
+  try {
+    const uniqueRoles = Array.from(new Set(safeRoles));
+    const roleSnapshots = await Promise.all(uniqueRoles.map(async (role) => getDocs(query(
+      collection(db, 'users'),
+      where('role', '==', role),
+      where('status', '==', 'approved'),
+    ))));
+    const userIds = roleSnapshots.flatMap((snap) => snap.docs.map((d) => d.id)).filter(Boolean);
+    const dedupedUserIds = Array.from(new Set(userIds));
+    if (dedupedUserIds.length === 0) return false;
+    await addDoc(collection(db, 'notifications'), {
+      title,
+      message,
+      user_id: 'role_targeted',
+      target_roles: uniqueRoles,
+      target_user_ids: dedupedUserIds,
+      category: payload.category || 'notification',
+      sound: payload.sound || 'default',
+      read: {},
+      created_at: serverTimestamp(),
+    });
+    await sendPushToUserIds(dedupedUserIds, {
+      title,
+      body: message,
+      data: { type: payload.category || 'notification', sound: payload.sound || 'default' },
+    }).catch(() => {});
+    return true;
+  } catch (error) {
+    console.log('[Notifications] createRoleNotificationAsAdmin ERROR', error);
+    return false;
+  }
+}
+
+export async function createRoleNotification(
+  payload: NotificationPayload & { roles: Array<'student' | 'teacher'>; category?: string }
+): Promise<boolean> {
+  const title = payload.title.trim();
+  const message = payload.message.trim();
+  const safeRoles = Array.isArray(payload.roles) ? payload.roles : [];
+  if (!title || !message || safeRoles.length === 0) return false;
+  try {
+    const uniqueRoles = Array.from(new Set(safeRoles));
+    const roleSnapshots = await Promise.all(uniqueRoles.map(async (role) => getDocs(query(
+      collection(db, 'users'),
+      where('role', '==', role),
+      where('status', '==', 'approved'),
+    ))));
+    const userIds = roleSnapshots.flatMap((snap) => snap.docs.map((d) => d.id)).filter(Boolean);
+    const dedupedUserIds = Array.from(new Set(userIds));
+    if (dedupedUserIds.length === 0) return false;
+    await addDoc(collection(db, 'notifications'), {
+      title,
+      message,
+      user_id: 'role_targeted',
+      target_roles: uniqueRoles,
+      target_user_ids: dedupedUserIds,
+      category: payload.category || 'notification',
+      sound: payload.sound || 'default',
+      read: {},
+      created_at: serverTimestamp(),
+    });
+    await sendPushToUserIds(dedupedUserIds, {
+      title,
+      body: message,
+      data: { type: payload.category || 'notification', sound: payload.sound || 'default' },
+    }).catch(() => {});
+    return true;
+  } catch (error) {
+    console.log('[Notifications] createRoleNotification ERROR', error);
+    return false;
+  }
 }

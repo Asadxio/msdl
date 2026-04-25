@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   collection, getDocs, getDoc, addDoc, serverTimestamp, doc, updateDoc, setDoc, query, where,
 } from 'firebase/firestore';
@@ -7,6 +8,7 @@ import { COURSES as LOCAL_COURSES, TEACHERS as LOCAL_TEACHERS } from '@/constant
 import { useAuth } from '@/context/AuthContext';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+import { createRoleNotification } from '@/lib/notifications';
 
 export type Course = {
   id: string;
@@ -187,6 +189,8 @@ const DataContext = createContext<DataContextType>({
   addBook: async () => false,
   deleteBook: async () => false,
 });
+const COURSES_CACHE_KEY = 'courses_cache_v1';
+const TEACHERS_CACHE_KEY = 'teachers_cache_v1';
 
 export function useData() {
   return useContext(DataContext);
@@ -297,11 +301,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       setCourses(coursesData.length > 0 ? coursesData : getLocalCourses());
       setTeachers(teachersData.length > 0 ? teachersData : getLocalTeachers());
+      await AsyncStorage.setItem(COURSES_CACHE_KEY, JSON.stringify(coursesData)).catch(() => {});
+      await AsyncStorage.setItem(TEACHERS_CACHE_KEY, JSON.stringify(teachersData)).catch(() => {});
     } catch (err: any) {
       logger.warn('Firebase fetch failed, using local data:', normalizeFirebaseError(err, 'Failed to fetch data'));
       setError(normalizeFirebaseError(err, 'Failed to fetch data'));
-      setCourses(getLocalCourses());
-      setTeachers(getLocalTeachers());
+      const cachedCoursesRaw = await AsyncStorage.getItem(COURSES_CACHE_KEY).catch(() => null);
+      const cachedTeachersRaw = await AsyncStorage.getItem(TEACHERS_CACHE_KEY).catch(() => null);
+      let cachedCourses: Course[] = [];
+      let cachedTeachers: Teacher[] = [];
+      try {
+        const parsed = cachedCoursesRaw ? JSON.parse(cachedCoursesRaw) : [];
+        cachedCourses = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        cachedCourses = [];
+      }
+      try {
+        const parsed = cachedTeachersRaw ? JSON.parse(cachedTeachersRaw) : [];
+        cachedTeachers = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        cachedTeachers = [];
+      }
+      setCourses(cachedCourses.length > 0 ? cachedCourses : getLocalCourses());
+      setTeachers(cachedTeachers.length > 0 ? cachedTeachers : getLocalTeachers());
     } finally {
       setLoading(false);
     }
@@ -622,13 +644,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),
       }, { merge: true }));
-      await withTimeout(addDoc(collection(db, 'notifications'), {
+      await createRoleNotification({
         title: 'Assignment Submitted',
         message: 'A student has submitted an assignment for review.',
-        user_id: 'all',
+        roles: ['teacher'],
         category: 'assignment_submitted',
-        created_at: serverTimestamp(),
-      })).catch(() => {});
+      }).catch(() => {});
       await fetchLearning();
       return true;
     } catch (err: any) {

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -70,17 +71,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
 
   const emailVerified = user?.emailVerified ?? false;
+  const getProfileCacheKey = (uid: string) => `profile_cache_${uid}`;
 
   const fetchProfile = async (uid: string) => {
     try {
       const snap = await getDoc(doc(db, 'users', uid));
       if (snap.exists()) {
-        setProfile(snap.data() as UserProfile);
+        const nextProfile = snap.data() as UserProfile;
+        setProfile(nextProfile);
+        await AsyncStorage.setItem(getProfileCacheKey(uid), JSON.stringify(nextProfile)).catch(() => {});
       } else {
         setProfile(null);
+        await AsyncStorage.removeItem(getProfileCacheKey(uid)).catch(() => {});
       }
     } catch (err) {
       logger.warn('Failed to fetch profile:', err);
+      const cached = await AsyncStorage.getItem(getProfileCacheKey(uid)).catch(() => null);
+      if (cached) {
+        try {
+          setProfile(JSON.parse(cached) as UserProfile);
+          return;
+        } catch {
+          // fall back to null profile
+        }
+      }
       setProfile(null);
     }
   };
@@ -106,6 +120,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
+        const cachedProfile = await AsyncStorage.getItem(getProfileCacheKey(firebaseUser.uid)).catch(() => null);
+        if (cachedProfile) {
+          try {
+            setProfile(JSON.parse(cachedProfile) as UserProfile);
+          } catch {
+            // ignore invalid cached profile
+          }
+        }
         await fetchProfile(firebaseUser.uid);
       } else {
         setProfile(null);

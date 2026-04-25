@@ -516,9 +516,16 @@ export default function AboutScreen() {
       const ImagePicker: any = require('expo-image-picker');
       const hasPermission = await ensureImagePickerPermission(ImagePicker, source);
       if (!hasPermission) return;
-      const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+      let result: any;
+      try {
+        result = source === 'camera'
+          ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
+          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+      } catch (pickerError: any) {
+        console.log('[About] Native image picker launch ERROR', pickerError);
+        Alert.alert('Error', pickerError?.message || 'Unable to open image picker right now.');
+        return;
+      }
       console.log('[About] Image picker result', { source, canceled: result?.canceled, assetsCount: result?.assets?.length || 0 });
       const asset = result?.assets?.[0];
       if (result?.canceled || !asset?.uri) return;

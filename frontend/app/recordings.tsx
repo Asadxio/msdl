@@ -71,6 +71,26 @@ export default function RecordingsScreen() {
     });
   };
 
+  const downloadRecording = async (rawUrl: string) => {
+    const url = prepareExternalUrl(rawUrl);
+    if (!url) {
+      Alert.alert('Invalid URL', 'Download URL is missing or invalid.');
+      return;
+    }
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('Download Unavailable', 'No app is available to open this file.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      console.log('[Recordings] downloadRecording ERROR', error);
+      Alert.alert('Download Failed', 'Could not start download. Opening externally instead.');
+      await safeOpenRecording(url);
+    }
+  };
+
   const deleteRecording = (item: RecordingItem) => {
     if (!isAdmin) return;
     Alert.alert('Delete Recording', `Delete "${item.title || 'recording'}"?`, [
@@ -124,6 +144,10 @@ export default function RecordingsScreen() {
                 <Text style={styles.cardTitle}>{item.title || 'Recording'}</Text>
                 <Text style={styles.cardMeta}>{courseMap[item.course_id || ''] || 'Course'}</Text>
                 <Text style={styles.cardDesc}>{item.description || 'Tap to open recording'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.downloadBtn} onPress={() => { void downloadRecording(item.file_url); }}>
+                <Ionicons name="download-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.downloadText}>Download</Text>
               </TouchableOpacity>
               {isAdmin ? (
                 <TouchableOpacity
@@ -180,6 +204,8 @@ const styles = StyleSheet.create({
   cardDesc: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   deleteBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FFF1F2' },
   deleteText: { fontSize: 12, fontWeight: '700', color: COLORS.error },
+  downloadBtn: { paddingHorizontal: 8, paddingVertical: 8, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  downloadText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
   empty: { fontSize: 13, color: COLORS.textMuted },
 });
