@@ -32,6 +32,8 @@ type StatusItem = {
   created_at?: { toDate?: () => Date };
   likes?: string[];
   comments?: StatusComment[];
+  views?: string[]; // Track unique viewers by user_id
+  view_count?: number;
 };
 
 const STATUS_EXPIRY_MS = 24 * 60 * 60 * 1000;
@@ -75,6 +77,8 @@ export default function StatusScreen() {
           created_at: data.created_at || null,
           likes: Array.isArray(data.likes) ? data.likes : [],
           comments: Array.isArray(data.comments) ? data.comments : [],
+          views: Array.isArray(data.views) ? data.views : [],
+          view_count: Array.isArray(data.views) ? data.views.length : 0,
         });
       });
       setItems(next);
@@ -200,6 +204,30 @@ export default function StatusScreen() {
     }
   };
 
+  // Track view when status is displayed (for students)
+  const trackView = async (item: StatusItem) => {
+    if (!user?.uid || item.user_id === user.uid) return; // Don't track own views
+    const alreadyViewed = (item.views || []).includes(user.uid);
+    if (alreadyViewed) return;
+    
+    try {
+      await updateDoc(doc(db, 'status_updates', item.id), {
+        views: arrayUnion(user.uid),
+      });
+    } catch (error) {
+      console.log('[Status] trackView ERROR', error);
+    }
+  };
+
+  // Track views when items change
+  useEffect(() => {
+    if (!user?.uid || !items.length) return;
+    // Track view for all visible statuses
+    items.forEach((item) => {
+      trackView(item);
+    });
+  }, [items, user?.uid]);
+
   const visibleItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
 
   return (
@@ -275,8 +303,18 @@ export default function StatusScreen() {
                 {item.created_at?.toDate ? item.created_at.toDate().toLocaleString() : 'Just now'}
               </Text>
               <View style={styles.row}>
-                <Text style={styles.cardMeta}>Likes: {(item.likes || []).length}</Text>
-                <Text style={styles.cardMeta}>Comments: {(item.comments || []).length}</Text>
+                <View style={styles.statRow}>
+                  <Ionicons name="eye-outline" size={14} color={COLORS.textMuted} />
+                  <Text style={styles.cardMeta}>{item.view_count || 0} views</Text>
+                </View>
+                <View style={styles.statRow}>
+                  <Ionicons name="heart-outline" size={14} color={COLORS.textMuted} />
+                  <Text style={styles.cardMeta}>{(item.likes || []).length} likes</Text>
+                </View>
+                <View style={styles.statRow}>
+                  <Ionicons name="chatbubble-outline" size={14} color={COLORS.textMuted} />
+                  <Text style={styles.cardMeta}>{(item.comments || []).length}</Text>
+                </View>
               </View>
 
               {isStudent ? (
@@ -340,6 +378,7 @@ const styles = StyleSheet.create({
   cardText: { fontSize: 14, color: COLORS.textMain, lineHeight: 20 },
   cardMeta: { fontSize: 11, color: COLORS.textMuted },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   commentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   primaryBtn: { borderRadius: RADIUS.md, backgroundColor: COLORS.primary, paddingVertical: 10, alignItems: 'center' },
   primaryBtnSmall: { borderRadius: RADIUS.md, backgroundColor: COLORS.primary, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
