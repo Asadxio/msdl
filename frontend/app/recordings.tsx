@@ -86,9 +86,17 @@ export default function RecordingsScreen() {
       Alert.alert('Invalid URL', 'Recording URL is missing or invalid.');
       return;
     }
-    await Linking.openURL(url).catch(() => {
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('Cannot Open', 'No app available to open this recording.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (e) {
+      console.log('[Recordings] safeOpenRecording ERROR:', e);
       Alert.alert('Open Failed', 'Could not open recording. Please try again later.');
-    });
+    }
   };
 
   const downloadRecording = async (rawUrl: string) => {

@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet, I18nManager, Alert } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, I18nManager, Alert, Linking } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -67,24 +67,40 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user?.uid) return;
     const setupPush = async () => {
-      console.log('[Notifications] setupPush started');
-      const permission = await requestNotificationPermission();
-      console.log('[Notifications] setupPush permission status', permission);
-      if (!permission.granted) {
-        Alert.alert(
-          'Notification Permission Required',
-          permission.canAskAgain
-            ? 'Please allow notifications to receive chat and class updates.'
-            : 'Notifications are disabled. Enable them from device settings to receive updates.',
-        );
-        return;
+      try {
+        console.log('[Notifications] setupPush started');
+        // Initialize notification handler first
+        await initPushNotifications();
+        
+        const permission = await requestNotificationPermission();
+        console.log('[Notifications] setupPush permission status', permission);
+        
+        if (!permission.granted) {
+          // Only show alert if permission can be requested again
+          if (permission.canAskAgain) {
+            Alert.alert(
+              'Enable Notifications',
+              'Allow notifications to receive chat and class updates.',
+              [
+                { text: 'Not Now', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => Linking.openSettings().catch(() => {}) },
+              ],
+            );
+          }
+          // Don't show error for denied permissions - this is normal user behavior
+          return;
+        }
+        
+        const token = await registerDevicePushToken(user.uid);
+        console.log('[Notifications] setupPush registerDevicePushToken result', { hasToken: Boolean(token) });
+      } catch (error) {
+        // Log error but don't show alert - notifications are not critical
+        console.log('[Notifications] setupPush inner ERROR', error);
       }
-      const token = await registerDevicePushToken(user.uid);
-      console.log('[Notifications] setupPush registerDevicePushToken result', { hasToken: Boolean(token) });
     };
     setupPush().catch((error) => {
-      console.log('[Notifications] setupPush ERROR', error);
-      Alert.alert('Notifications', 'Unable to configure notifications right now.');
+      console.log('[Notifications] setupPush outer ERROR', error);
+      // Don't show alert for setup failures - this often happens on web/simulators
     });
   }, [user?.uid]);
 

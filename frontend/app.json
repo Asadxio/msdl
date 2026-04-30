@@ -13,7 +13,7 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Take photos for your profile and chat",
         "NSPhotoLibraryUsageDescription": "Share photos in chat conversations",
-        "NSMicrophoneUsageDescription": "Record voice messages in chat",
+        "NSMicrophoneUsageDescription": "Enable voice and video calls",
         "NSUserNotificationsUsageDescription": "Receive class reminders and messages"
       }
     },
@@ -22,6 +22,8 @@
         "INTERNET",
         "POST_NOTIFICATIONS",
         "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
         "READ_EXTERNAL_STORAGE"

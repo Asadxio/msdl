@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,19 +53,63 @@ export default function BookViewerScreen() {
     );
   }
 
-  // Google Docs Viewer for PDFs
-  const viewerUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(book.pdf_url)}`;
+  // Safe URL preparation
+  const safePdfUrl = (() => {
+    const raw = String(book?.pdf_url || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `https://${raw}`;
+  })();
 
-  const handleDownload = () => {
-    Linking.openURL(book.pdf_url).catch(() => {
-      Linking.openURL(book.pdf_url);
-    });
+  // Google Docs Viewer for PDFs
+  const viewerUrl = safePdfUrl ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(safePdfUrl)}` : '';
+
+  const handleDownload = async () => {
+    if (!safePdfUrl) {
+      Alert.alert('Invalid URL', 'This book does not have a valid download link.');
+      return;
+    }
+    try {
+      const canOpen = await Linking.canOpenURL(safePdfUrl);
+      if (!canOpen) {
+        Alert.alert('Cannot Open', 'Unable to open this link. Please try again later.');
+        return;
+      }
+      await Linking.openURL(safePdfUrl);
+    } catch (e) {
+      console.log('[Book] handleDownload ERROR:', e);
+      Alert.alert('Error', 'Unable to open download link.');
+    }
   };
 
-  const handleViewExternal = () => {
-    Linking.openURL(viewerUrl).catch(() => {
-      Linking.openURL(book.pdf_url);
-    });
+  const handleViewExternal = async () => {
+    if (!viewerUrl) {
+      Alert.alert('Invalid URL', 'This book does not have a valid view link.');
+      return;
+    }
+    try {
+      const canOpen = await Linking.canOpenURL(viewerUrl);
+      if (!canOpen) {
+        // Fallback to direct URL
+        if (safePdfUrl) {
+          await Linking.openURL(safePdfUrl);
+        } else {
+          Alert.alert('Cannot Open', 'Unable to open this link.');
+        }
+        return;
+      }
+      await Linking.openURL(viewerUrl);
+    } catch (e) {
+      console.log('[Book] handleViewExternal ERROR:', e);
+      // Fallback to direct URL
+      if (safePdfUrl) {
+        try {
+          await Linking.openURL(safePdfUrl);
+        } catch {
+          Alert.alert('Error', 'Unable to open book viewer.');
+        }
+      }
+    }
   };
 
   return (

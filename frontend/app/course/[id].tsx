@@ -163,16 +163,19 @@ export default function CourseDetailScreen() {
     try {
       const link = prepareExternalUrl(url || '');
       if (!link) {
-        Alert.alert('Error', 'Invalid link');
+        Alert.alert('Error', 'Invalid or missing link.');
         return;
       }
       console.log('[CourseDetail] Opening link:', link);
-      await Linking.openURL(link).catch(() => {
-        Alert.alert('Error', 'Invalid link');
-      });
+      const canOpen = await Linking.canOpenURL(link);
+      if (!canOpen) {
+        Alert.alert('Cannot Open', 'No app available to open this link.');
+        return;
+      }
+      await Linking.openURL(link);
     } catch (e) {
       console.log('[CourseDetail] openExternalLink ERROR:', e);
-      Alert.alert('Error', 'Invalid link');
+      Alert.alert('Error', 'Unable to open link right now.');
     }
   };
 
