@@ -1,9 +1,11 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, I18nManager, Alert } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { CallProvider } from '@/context/CallContext';
+import { IncomingCallModal } from '@/components/IncomingCallModal';
 import * as Notifications from 'expo-notifications';
 import { initPushNotifications, registerDevicePushToken, requestNotificationPermission } from '@/lib/pushNotifications';
 
@@ -121,38 +123,43 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <DataProvider>
-        <AuthGate>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              animation: 'fade_from_bottom',
-              animationDuration: 220,
-              contentStyle: { backgroundColor: COLORS.background },
-            }}
-          >
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="course/[id]" />
-            <Stack.Screen name="teacher/[id]" />
-            <Stack.Screen name="book/[id]" />
-            <Stack.Screen name="chat/[id]" />
-            <Stack.Screen name="recordings" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="unauthorized" options={{ animation: 'fade' }} />
-            <Stack.Screen name="status" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/payments" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/manage-academics" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/analytics" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
-            <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
-            <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />
-            <Stack.Screen name="auth/forgot-password" options={{ animation: 'slide_from_right' }} />
-          </Stack>
-        </AuthGate>
+        <CallProvider>
+          <AuthGate>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                animation: 'fade_from_bottom',
+                animationDuration: 220,
+                contentStyle: { backgroundColor: COLORS.background },
+              }}
+            >
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="course/[id]" />
+              <Stack.Screen name="teacher/[id]" />
+              <Stack.Screen name="book/[id]" />
+              <Stack.Screen name="chat/[id]" />
+              <Stack.Screen name="call/[id]" options={{ animation: 'fade', gestureEnabled: false }} />
+              <Stack.Screen name="recordings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="unauthorized" options={{ animation: 'fade' }} />
+              <Stack.Screen name="status" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/payments" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/manage-academics" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/analytics" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/forgot-password" options={{ animation: 'slide_from_right' }} />
+            </Stack>
+            {/* Global incoming call modal */}
+            <IncomingCallModal />
+          </AuthGate>
+        </CallProvider>
       </DataProvider>
     </AuthProvider>
   );

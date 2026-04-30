@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Query
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,13 +6,33 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime
 import json
 from fastapi import HTTPException, Header
-from firebase_admin import auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
-import firebase_admin
+
+# Agora token generation
+try:
+    from agora_token_builder import RtcTokenBuilder
+    AGORA_AVAILABLE = True
+except ImportError:
+    AGORA_AVAILABLE = False
+    RtcTokenBuilder = None
+
+# Firebase admin (optional - may not be installed)
+try:
+    from firebase_admin import auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
+    import firebase_admin
+    FIREBASE_ADMIN_AVAILABLE = True
+except ImportError:
+    FIREBASE_ADMIN_AVAILABLE = False
+    firebase_auth = None
+    credentials = None
+    admin_firestore = None
+    initialize_app = None
+    messaging = None
+    firebase_admin = None
 
 
 ROOT_DIR = Path(__file__).parent
@@ -55,9 +75,6 @@ async def create_status_check(input: StatusCheckCreate):
 async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
-
-# Include the router in the main app
-app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -200,3 +217,102 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+# ============ AGORA TOKEN GENERATION ============
+
+class AgoraTokenResponse(BaseModel):
+    token: str
+    uid: int
+    channel: str
+    expires_at: int
+
+@api_router.get("/agora/token", response_model=AgoraTokenResponse)
+async def generate_agora_token(
+    channel: str = Query(..., description="Channel name for the call"),
+    uid: int = Query(0, description="User ID (0 for auto-generated)", ge=0),
+    role: int = Query(1, description="Role: 1=Publisher, 2=Subscriber"),
+    ttl: int = Query(3600, description="Token TTL in seconds", ge=60, le=86400)
+):
+    """
+    Generate an Agora RTC token for voice/video calls.
+    
+    - **channel**: Unique channel name for the call
+    - **uid**: User ID (0 for anonymous/auto-generated)
+    - **role**: 1 = Publisher (can send audio/video), 2 = Subscriber (receive only)
+    - **ttl**: Token time-to-live in seconds (default 1 hour)
+    """
+    if not AGORA_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Agora token generation not available. Please install agora-token-builder."
+        )
+    
+    # Get Agora credentials from environment
+    app_id = os.getenv("AGORA_APP_ID")
+    app_certificate = os.getenv("AGORA_APP_CERTIFICATE")
+    
+    if not app_id:
+        raise HTTPException(
+            status_code=500,
+            detail="AGORA_APP_ID environment variable not set"
+        )
+    
+    # If no certificate, return a warning but allow for testing with App ID only
+    if not app_certificate:
+        logging.warning("[Agora] No AGORA_APP_CERTIFICATE set - using App ID only mode")
+        # For testing without certificate, return a placeholder
+        # In production, you should always use a certificate
+        return AgoraTokenResponse(
+            token="",  # Empty token means use App ID only authentication
+            uid=uid,
+            channel=channel,
+            expires_at=int(datetime.utcnow().timestamp()) + ttl
+        )
+    
+    # Calculate expiration timestamp
+    privilege_expired_ts = int(datetime.utcnow().timestamp()) + ttl
+    
+    try:
+        # Generate RTC token
+        token = RtcTokenBuilder.buildTokenWithUid(
+            appId=app_id,
+            appCertificate=app_certificate,
+            channelName=channel,
+            uid=uid,
+            role=role,
+            privilegeExpiredTs=privilege_expired_ts
+        )
+        
+        return AgoraTokenResponse(
+            token=token,
+            uid=uid,
+            channel=channel,
+            expires_at=privilege_expired_ts
+        )
+        
+    except Exception as e:
+        logging.error(f"[Agora] Token generation failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Token generation failed: {str(e)}"
+        )
+
+@api_router.get("/agora/config")
+async def get_agora_config():
+    """
+    Get Agora configuration status (for debugging).
+    Does not expose sensitive credentials.
+    """
+    app_id = os.getenv("AGORA_APP_ID")
+    app_certificate = os.getenv("AGORA_APP_CERTIFICATE")
+    
+    return {
+        "agora_available": AGORA_AVAILABLE,
+        "app_id_configured": bool(app_id),
+        "app_certificate_configured": bool(app_certificate),
+        "auth_mode": "token" if app_certificate else "app_id_only" if app_id else "not_configured"
+    }
+
+# Include the router in the main app - MUST be at the end after all routes are defined
+app.include_router(api_router)

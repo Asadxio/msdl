@@ -12,6 +12,8 @@ import {
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { useCall } from '@/context/CallContext';
+import { CallParticipant, isPlatformSupported } from '@/lib/agora';
 import { sendPushToUserIds } from '@/lib/pushNotifications';
 import { EmptyState, ScalePressable, SkeletonCard } from '@/components/ui';
 
@@ -431,6 +433,48 @@ export default function ChatDetailScreen() {
 
   const title = chat.type === 'group' ? (chat.name || 'Group Chat') : chat.type === 'broadcast' ? 'Broadcast' : 'Direct Chat';
 
+  // Get the call context for initiating calls
+  const { initiateCall, isInCall } = useCall();
+  
+  // Get the other participant for direct chats (for 1-to-1 calls)
+  const otherParticipant: CallParticipant | null = useMemo(() => {
+    if (chat?.type !== 'direct' || !user?.uid) return null;
+    const otherId = chat.participants.find((p) => p !== user.uid);
+    if (!otherId) return null;
+    return {
+      id: otherId,
+      name: chat.participant_names?.[otherId] || 'User',
+    };
+  }, [chat, user?.uid]);
+
+  const handleVoiceCall = useCallback(async () => {
+    if (!otherParticipant) {
+      Alert.alert('Error', 'Cannot initiate call');
+      return;
+    }
+    if (!isPlatformSupported()) {
+      Alert.alert('Not Supported', 'Voice calls are only available on mobile devices');
+      return;
+    }
+    await initiateCall(otherParticipant, 'voice');
+    router.push(`/call/${chat?.id || ''}`);
+  }, [otherParticipant, initiateCall, router, chat?.id]);
+
+  const handleVideoCall = useCallback(async () => {
+    if (!otherParticipant) {
+      Alert.alert('Error', 'Cannot initiate call');
+      return;
+    }
+    if (!isPlatformSupported()) {
+      Alert.alert('Not Supported', 'Video calls are only available on mobile devices');
+      return;
+    }
+    await initiateCall(otherParticipant, 'video');
+    router.push(`/call/${chat?.id || ''}`);
+  }, [otherParticipant, initiateCall, router, chat?.id]);
+
+  const showCallButtons = chat?.type === 'direct' && otherParticipant && !isInCall;
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -442,6 +486,17 @@ export default function ChatDetailScreen() {
           <Text style={styles.topTitle}>{title}</Text>
           {othersTyping ? <Text style={styles.typingText}>Typing...</Text> : null}
         </View>
+        {/* Call buttons for direct chats */}
+        {showCallButtons && (
+          <>
+            <ScalePressable style={styles.callBtn} onPress={handleVoiceCall}>
+              <Ionicons name="call" size={20} color={COLORS.primary} />
+            </ScalePressable>
+            <ScalePressable style={styles.callBtn} onPress={handleVideoCall}>
+              <Ionicons name="videocam" size={20} color={COLORS.primary} />
+            </ScalePressable>
+          </>
+        )}
         <ScalePressable style={styles.backBtn} onPress={refreshMessages} disabled={refreshing}>
           {refreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
         </ScalePressable>
@@ -526,4 +581,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10, backgroundColor: COLORS.surfaceAlt, color: COLORS.textMain,
   },
   sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primary },
+  callBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt, marginRight: 8 },
 });
