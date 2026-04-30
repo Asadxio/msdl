@@ -209,7 +209,7 @@ export default function ChatsScreen() {
     ]);
   }, [bulkUpdating, selectedChatIds, user?.uid]);
 
-  const getOrCreateDirectChat = async (target: AppUser) => {
+  const getOrCreateDirectChat = useCallback(async (target: AppUser) => {
     if (!user) return;
     const existing = chats.find((c) => c.type === 'direct' && c.participants.length === 2 && c.participants.includes(target.id) && c.participants.includes(user.uid));
     if (existing) {
@@ -246,13 +246,13 @@ export default function ChatsScreen() {
     } finally {
       setCreatingDirectFor(null);
     }
-  };
+  }, [chats, profile?.name, safePush, user]);
 
-  const toggleParticipant = (id: string) => {
+  const toggleParticipant = useCallback((id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id].slice(0, 200)));
-  };
+  }, []);
 
-  const createGroup = async () => {
+  const createGroup = useCallback(async () => {
     if (!user || !isAdmin) return;
     const cleanedName = groupName.trim();
     if (!cleanedName) {
@@ -300,9 +300,9 @@ export default function ChatsScreen() {
     } finally {
       setCreatingGroup(false);
     }
-  };
+  }, [groupName, isAdmin, profile?.name, safePush, selected, user, usersMap]);
 
-  const openBroadcastChat = async () => {
+  const openBroadcastChat = useCallback(async () => {
     if (!user || !isAdmin) return;
     const existing = chats.find((c) => c.type === 'broadcast');
     if (existing) {
@@ -330,19 +330,20 @@ export default function ChatsScreen() {
     } finally {
       setOpeningBroadcast(false);
     }
-  };
+  }, [chats, isAdmin, safePush, user]);
 
   const safeUsers = Array.isArray(users) ? users : [];
   const safeChats = Array.isArray(chats) ? chats : [];
-  const filteredUsers = safeUsers.filter((u) => (
+  
+  const filteredUsers = useMemo(() => safeUsers.filter((u) => (
     u.id !== user?.uid && (
       !debouncedSearch
       || u.name.toLowerCase().includes(debouncedSearch)
       || (u.email || '').toLowerCase().includes(debouncedSearch)
     )
-  ));
+  )), [safeUsers, user?.uid, debouncedSearch]);
 
-  const filteredChats = safeChats
+  const filteredChats = useMemo(() => safeChats
     .filter((c) => !(Array.isArray(c.hidden_by) ? c.hidden_by : []).includes(user?.uid || ''))
     .filter((c) => (
     !debouncedSearch || chatTitle(c, usersMap, user?.uid || '').toLowerCase().includes(debouncedSearch)
@@ -352,7 +353,7 @@ export default function ChatsScreen() {
       const bPinned = (Array.isArray(b.pinned_by) ? b.pinned_by : []).includes(user?.uid || '');
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
       return (b.updated_at?.seconds || 0) - (a.updated_at?.seconds || 0);
-    });
+    }), [safeChats, user?.uid, debouncedSearch, usersMap]);
 
   const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 

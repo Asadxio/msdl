@@ -9,7 +9,13 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Take photos for your profile and chat",
+        "NSPhotoLibraryUsageDescription": "Share photos in chat conversations",
+        "NSMicrophoneUsageDescription": "Record voice messages in chat",
+        "NSUserNotificationsUsageDescription": "Receive class reminders and messages"
+      }
     },
     "android": {
       "permissions": [

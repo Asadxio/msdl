@@ -118,11 +118,13 @@ export default function AboutScreen() {
   const testimonials = useMemo(() => feedback.slice(0, 6), [feedback]);
 
   const serialize = (value: any): any => {
-    if (value?.toDate && typeof value.toDate === 'function') {
+    // Safe timestamp conversion with null guard
+    if (value && typeof value.toDate === 'function') {
       try {
-        return value.toDate().toISOString();
+        const date = value.toDate();
+        return date ? date.toISOString() : null;
       } catch {
-        return value;
+        return null;
       }
     }
     if (Array.isArray(value)) return value.map((v) => serialize(v));
