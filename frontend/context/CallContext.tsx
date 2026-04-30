@@ -1,9 +1,10 @@
 /**
- * Call Context - Manages call state across the app
+ * Call Context - Manages call state with Socket.io signaling
  */
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, AppState, AppStateStatus } from 'react-native';
+import { useRouter } from 'expo-router';
 import {
   CallData,
   CallStatus,
@@ -14,71 +15,250 @@ import {
   fetchAgoraToken,
   AGORA_APP_ID,
   isPlatformSupported,
+  formatCallDuration,
 } from '@/lib/agora';
+import {
+  connectSocket,
+  disconnectSocket,
+  isSocketConnected,
+  addSocketListener,
+  removeSocketListener,
+  initiateCallSignal,
+  acceptCallSignal,
+  rejectCallSignal,
+  endCallSignal,
+  cancelCallSignal,
+} from '@/lib/socket';
 import { useAuth } from './AuthContext';
-import { db } from '@/lib/firebase';
-import { doc, setDoc, onSnapshot, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+
+// Incoming call data from socket
+interface IncomingCallData {
+  call_id: string;
+  caller_id: string;
+  caller_name: string;
+  call_type: 'voice' | 'video';
+  channel_name: string;
+}
 
 interface CallContextType {
   // State
   currentCall: CallData | null;
   isInCall: boolean;
-  incomingCall: CallData | null;
+  incomingCall: IncomingCallData | null;
+  callDuration: number;
+  callStatus: CallStatus;
+  isSocketConnected: boolean;
   
   // Actions
   initiateCall: (participant: CallParticipant, callType: CallType) => Promise<void>;
   acceptCall: () => Promise<void>;
-  rejectCall: () => Promise<void>;
-  endCall: () => Promise<void>;
+  rejectCall: (reason?: string) => void;
+  endCall: () => void;
+  cancelOutgoingCall: () => void;
   
   // Agora state
   agoraToken: string | null;
   agoraUid: number;
+  channelName: string | null;
 }
 
 const CallContext = createContext<CallContextType | null>(null);
 
 export function CallProvider({ children }: { children: React.ReactNode }) {
   const { user, profile } = useAuth();
+  const router = useRouter();
+  
+  // Call state
   const [currentCall, setCurrentCall] = useState<CallData | null>(null);
-  const [incomingCall, setIncomingCall] = useState<CallData | null>(null);
+  const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
+  const [callStatus, setCallStatus] = useState<CallStatus>('idle');
+  const [callDuration, setCallDuration] = useState(0);
+  
+  // Agora state
   const [agoraToken, setAgoraToken] = useState<string | null>(null);
   const [agoraUid, setAgoraUid] = useState<number>(0);
-  const callDocUnsubRef = useRef<(() => void) | null>(null);
+  const [channelName, setChannelName] = useState<string | null>(null);
+  
+  // Socket connection state
+  const [socketConnected, setSocketConnected] = useState(false);
+  
+  // Timers
+  const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const ringTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isInCall = currentCall !== null && 
-    ['connecting', 'connected', 'calling', 'ringing'].includes(currentCall.status);
+    ['connecting', 'connected', 'calling', 'ringing'].includes(callStatus);
 
-  // Listen for incoming calls
+  // Connect socket when user is authenticated
   useEffect(() => {
-    if (!user?.uid) return;
+    if (user?.uid && profile?.name) {
+      console.log('[CallContext] Connecting socket for user:', user.uid);
+      connectSocket(user.uid, profile.name)
+        .then(() => {
+          setSocketConnected(true);
+          console.log('[CallContext] Socket connected');
+        })
+        .catch((error) => {
+          console.error('[CallContext] Socket connection failed:', error);
+          setSocketConnected(false);
+        });
+    }
 
-    const callDocRef = doc(db, 'active_calls', user.uid);
-    const unsubscribe = onSnapshot(callDocRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        // No incoming call
-        if (incomingCall && incomingCall.receiverId === user.uid) {
-          setIncomingCall(null);
-        }
+    return () => {
+      if (user?.uid) {
+        disconnectSocket();
+        setSocketConnected(false);
+      }
+    };
+  }, [user?.uid, profile?.name]);
+
+  // Handle app state changes (background/foreground)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active' && user?.uid && profile?.name && !isSocketConnected()) {
+        // Reconnect socket when app comes to foreground
+        connectSocket(user.uid, profile.name)
+          .then(() => setSocketConnected(true))
+          .catch(() => setSocketConnected(false));
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, [user?.uid, profile?.name]);
+
+  // Setup socket event listeners
+  useEffect(() => {
+    // Incoming call handler
+    const handleIncomingCall = (data: IncomingCallData) => {
+      console.log('[CallContext] Incoming call:', data);
+      
+      // Don't show if already in a call
+      if (isInCall) {
+        console.log('[CallContext] Already in call, auto-rejecting');
+        rejectCallSignal(data.call_id, 'busy');
         return;
       }
-
-      const callData = snapshot.data() as CallData;
       
-      // Check if this is an incoming call (we're the receiver)
-      if (callData.receiverId === user.uid && callData.status === 'calling') {
-        setIncomingCall(callData);
-      } else if (callData.status === 'ended' || callData.status === 'rejected') {
-        setIncomingCall(null);
-        if (currentCall?.id === callData.id) {
-          setCurrentCall(null);
-          setAgoraToken(null);
-        }
-      }
-    });
+      setIncomingCall(data);
+      setCallStatus('ringing');
+    };
 
-    return () => unsubscribe();
-  }, [user?.uid, currentCall?.id, incomingCall]);
+    // Call accepted by receiver
+    const handleCallAccepted = async (data: { call_id: string; channel_name: string }) => {
+      console.log('[CallContext] Call accepted:', data);
+      
+      if (currentCall?.id === data.call_id) {
+        setCallStatus('connected');
+        setChannelName(data.channel_name);
+        startCallTimer();
+        
+        // Navigate to call screen
+        router.push(`/call/${data.channel_name}`);
+      }
+    };
+
+    // Call rejected by receiver
+    const handleCallRejected = (data: { call_id: string; reason: string }) => {
+      console.log('[CallContext] Call rejected:', data);
+      
+      if (currentCall?.id === data.call_id) {
+        Alert.alert('Call Declined', data.reason === 'busy' ? 'User is busy' : 'Call was declined');
+        cleanupCall();
+      }
+    };
+
+    // Call ended by other party
+    const handleCallEnded = (data: { call_id: string; reason: string; duration: number }) => {
+      console.log('[CallContext] Call ended:', data);
+      
+      if (currentCall?.id === data.call_id || incomingCall?.call_id === data.call_id) {
+        cleanupCall();
+        router.back();
+      }
+    };
+
+    // Call cancelled by caller
+    const handleCallCancelled = (data: { call_id: string }) => {
+      console.log('[CallContext] Call cancelled:', data);
+      
+      if (incomingCall?.call_id === data.call_id) {
+        setIncomingCall(null);
+        setCallStatus('idle');
+      }
+    };
+
+    // User unavailable
+    const handleCallUnavailable = (data: { call_id: string; reason: string }) => {
+      console.log('[CallContext] Call unavailable:', data);
+      
+      if (currentCall?.id === data.call_id) {
+        Alert.alert('Cannot Call', data.reason);
+        cleanupCall();
+      }
+    };
+
+    // Call connected (confirmation for receiver)
+    const handleCallConnected = async (data: { call_id: string; channel_name: string }) => {
+      console.log('[CallContext] Call connected:', data);
+      setCallStatus('connected');
+      setChannelName(data.channel_name);
+      startCallTimer();
+    };
+
+    // Register listeners
+    addSocketListener('call:incoming', handleIncomingCall);
+    addSocketListener('call:accepted', handleCallAccepted);
+    addSocketListener('call:rejected', handleCallRejected);
+    addSocketListener('call:ended', handleCallEnded);
+    addSocketListener('call:cancelled', handleCallCancelled);
+    addSocketListener('call:unavailable', handleCallUnavailable);
+    addSocketListener('call:connected', handleCallConnected);
+
+    return () => {
+      removeSocketListener('call:incoming', handleIncomingCall);
+      removeSocketListener('call:accepted', handleCallAccepted);
+      removeSocketListener('call:rejected', handleCallRejected);
+      removeSocketListener('call:ended', handleCallEnded);
+      removeSocketListener('call:cancelled', handleCallCancelled);
+      removeSocketListener('call:unavailable', handleCallUnavailable);
+      removeSocketListener('call:connected', handleCallConnected);
+    };
+  }, [currentCall, incomingCall, isInCall, router]);
+
+  // Start call duration timer
+  const startCallTimer = useCallback(() => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+    }
+    setCallDuration(0);
+    callTimerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+  }, []);
+
+  // Stop call duration timer
+  const stopCallTimer = useCallback(() => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+  }, []);
+
+  // Cleanup call state
+  const cleanupCall = useCallback(() => {
+    stopCallTimer();
+    if (ringTimeoutRef.current) {
+      clearTimeout(ringTimeoutRef.current);
+      ringTimeoutRef.current = null;
+    }
+    setCurrentCall(null);
+    setIncomingCall(null);
+    setCallStatus('idle');
+    setAgoraToken(null);
+    setChannelName(null);
+    setCallDuration(0);
+  }, [stopCallTimer]);
 
   // Initiate a call
   const initiateCall = useCallback(async (participant: CallParticipant, callType: CallType) => {
@@ -87,13 +267,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (!isPlatformSupported()) {
-      Alert.alert('Not Supported', 'Voice/video calls are only available on mobile devices');
+    if (!socketConnected) {
+      Alert.alert('Connection Error', 'Not connected to server. Please try again.');
       return;
     }
 
-    if (!AGORA_APP_ID) {
-      Alert.alert('Configuration Error', 'Agora App ID is not configured');
+    if (!isPlatformSupported()) {
+      Alert.alert('Not Supported', 'Voice/video calls are only available on mobile devices');
       return;
     }
 
@@ -104,12 +284,18 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const callId = generateCallId();
-      const channelName = generateChannelName(user.uid, participant.id);
+      const channel = generateChannelName(user.uid, participant.id);
+
+      // Get Agora token
+      const tokenResponse = await fetchAgoraToken(channel, 0);
+      setAgoraToken(tokenResponse.token);
+      setAgoraUid(tokenResponse.uid);
+      setChannelName(channel);
 
       // Create call data
       const callData: CallData = {
         id: callId,
-        channelName,
+        channelName: channel,
         callType,
         callerId: user.uid,
         callerName: profile.name || 'Unknown',
@@ -119,182 +305,102 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         startedAt: Date.now(),
       };
 
-      // Get Agora token
-      const tokenResponse = await fetchAgoraToken(channelName, 0);
-      setAgoraToken(tokenResponse.token);
-      setAgoraUid(tokenResponse.uid);
-
-      // Save call to Firestore (for receiver to see)
-      await setDoc(doc(db, 'active_calls', participant.id), callData);
-      
-      // Also save caller's reference
-      await setDoc(doc(db, 'active_calls', user.uid), callData);
-
       setCurrentCall(callData);
+      setCallStatus('calling');
 
-      // Listen for call status changes
-      if (callDocUnsubRef.current) {
-        callDocUnsubRef.current();
-      }
+      // Send call signal via socket
+      initiateCallSignal({
+        call_id: callId,
+        receiver_id: participant.id,
+        receiver_name: participant.name,
+        caller_id: user.uid,
+        caller_name: profile.name || 'Unknown',
+        call_type: callType,
+        channel_name: channel,
+      });
 
-      callDocUnsubRef.current = onSnapshot(
-        doc(db, 'active_calls', participant.id),
-        (snapshot) => {
-          if (!snapshot.exists()) {
-            // Call was deleted/ended
-            setCurrentCall(null);
-            setAgoraToken(null);
-            return;
-          }
-
-          const updatedCall = snapshot.data() as CallData;
-          setCurrentCall(updatedCall);
-
-          if (updatedCall.status === 'rejected' || updatedCall.status === 'ended') {
-            setCurrentCall(null);
-            setAgoraToken(null);
-            if (callDocUnsubRef.current) {
-              callDocUnsubRef.current();
-              callDocUnsubRef.current = null;
-            }
-          }
-        }
-      );
-
-      // Auto-timeout after 30 seconds if no answer
-      setTimeout(async () => {
-        const callDoc = await doc(db, 'active_calls', participant.id);
-        // Check if still calling
-        if (currentCall?.status === 'calling') {
-          await updateDoc(callDoc, { status: 'no_answer' });
-          setCurrentCall(null);
-          setAgoraToken(null);
+      // Auto-cancel after 30 seconds if no answer
+      ringTimeoutRef.current = setTimeout(() => {
+        if (callStatus === 'calling') {
+          cancelOutgoingCall();
+          Alert.alert('No Answer', 'The user did not answer');
         }
       }, 30000);
 
     } catch (error: any) {
-      console.error('[Call] initiateCall error:', error);
+      console.error('[CallContext] initiateCall error:', error);
       Alert.alert('Call Failed', error.message || 'Unable to start call');
-      setCurrentCall(null);
-      setAgoraToken(null);
+      cleanupCall();
     }
-  }, [user?.uid, profile, isInCall, currentCall?.status]);
+  }, [user?.uid, profile, socketConnected, isInCall, callStatus, cleanupCall]);
 
   // Accept incoming call
   const acceptCall = useCallback(async () => {
     if (!incomingCall || !user?.uid) return;
 
     try {
-      // Get token for the channel
-      const tokenResponse = await fetchAgoraToken(incomingCall.channelName, 0);
+      // Get Agora token
+      const tokenResponse = await fetchAgoraToken(incomingCall.channel_name, 0);
       setAgoraToken(tokenResponse.token);
       setAgoraUid(tokenResponse.uid);
+      setChannelName(incomingCall.channel_name);
 
-      // Update call status
-      const updatedCall: CallData = {
-        ...incomingCall,
+      // Create call data from incoming
+      const callData: CallData = {
+        id: incomingCall.call_id,
+        channelName: incomingCall.channel_name,
+        callType: incomingCall.call_type,
+        callerId: incomingCall.caller_id,
+        callerName: incomingCall.caller_name,
+        receiverId: user.uid,
+        receiverName: profile?.name || 'Unknown',
         status: 'connected',
+        startedAt: Date.now(),
       };
 
-      await updateDoc(doc(db, 'active_calls', user.uid), { status: 'connected' });
-      await updateDoc(doc(db, 'active_calls', incomingCall.callerId), { status: 'connected' });
-
-      setCurrentCall(updatedCall);
+      setCurrentCall(callData);
+      
+      // Send accept signal
+      acceptCallSignal(incomingCall.call_id);
+      
       setIncomingCall(null);
+      setCallStatus('connecting');
 
-      // Listen for call status changes
-      if (callDocUnsubRef.current) {
-        callDocUnsubRef.current();
-      }
-
-      callDocUnsubRef.current = onSnapshot(
-        doc(db, 'active_calls', user.uid),
-        (snapshot) => {
-          if (!snapshot.exists()) {
-            setCurrentCall(null);
-            setAgoraToken(null);
-            return;
-          }
-
-          const updatedCallData = snapshot.data() as CallData;
-          if (updatedCallData.status === 'ended') {
-            setCurrentCall(null);
-            setAgoraToken(null);
-          } else {
-            setCurrentCall(updatedCallData);
-          }
-        }
-      );
+      // Navigate to call screen
+      router.push(`/call/${incomingCall.channel_name}`);
 
     } catch (error: any) {
-      console.error('[Call] acceptCall error:', error);
+      console.error('[CallContext] acceptCall error:', error);
       Alert.alert('Error', 'Unable to accept call');
+      rejectCallSignal(incomingCall.call_id, 'error');
+      cleanupCall();
     }
-  }, [incomingCall, user?.uid]);
+  }, [incomingCall, user?.uid, profile?.name, router, cleanupCall]);
 
   // Reject incoming call
-  const rejectCall = useCallback(async () => {
-    if (!incomingCall || !user?.uid) return;
-
-    try {
-      await updateDoc(doc(db, 'active_calls', user.uid), { status: 'rejected' });
-      await updateDoc(doc(db, 'active_calls', incomingCall.callerId), { status: 'rejected' });
-      
-      // Clean up after a delay
-      setTimeout(async () => {
-        await deleteDoc(doc(db, 'active_calls', user.uid)).catch(() => {});
-        await deleteDoc(doc(db, 'active_calls', incomingCall.callerId)).catch(() => {});
-      }, 2000);
-
-      setIncomingCall(null);
-    } catch (error: any) {
-      console.error('[Call] rejectCall error:', error);
-    }
-  }, [incomingCall, user?.uid]);
+  const rejectCall = useCallback((reason?: string) => {
+    if (!incomingCall) return;
+    
+    rejectCallSignal(incomingCall.call_id, reason || 'rejected');
+    setIncomingCall(null);
+    setCallStatus('idle');
+  }, [incomingCall]);
 
   // End current call
-  const endCall = useCallback(async () => {
-    if (!currentCall || !user?.uid) return;
-
-    try {
-      const duration = currentCall.startedAt 
-        ? Math.floor((Date.now() - currentCall.startedAt) / 1000)
-        : 0;
-
-      // Update both users' call documents
-      const endedCall = {
-        status: 'ended',
-        endedAt: Date.now(),
-        duration,
-      };
-
-      await updateDoc(doc(db, 'active_calls', user.uid), endedCall).catch(() => {});
-      
-      const otherUserId = currentCall.callerId === user.uid 
-        ? currentCall.receiverId 
-        : currentCall.callerId;
-      await updateDoc(doc(db, 'active_calls', otherUserId), endedCall).catch(() => {});
-
-      // Clean up after a delay
-      setTimeout(async () => {
-        await deleteDoc(doc(db, 'active_calls', user.uid)).catch(() => {});
-        await deleteDoc(doc(db, 'active_calls', otherUserId)).catch(() => {});
-      }, 2000);
-
-      if (callDocUnsubRef.current) {
-        callDocUnsubRef.current();
-        callDocUnsubRef.current = null;
-      }
-
-      setCurrentCall(null);
-      setAgoraToken(null);
-      setIncomingCall(null);
-    } catch (error: any) {
-      console.error('[Call] endCall error:', error);
-      setCurrentCall(null);
-      setAgoraToken(null);
+  const endCall = useCallback(() => {
+    if (currentCall) {
+      endCallSignal(currentCall.id);
     }
-  }, [currentCall, user?.uid]);
+    cleanupCall();
+  }, [currentCall, cleanupCall]);
+
+  // Cancel outgoing call
+  const cancelOutgoingCall = useCallback(() => {
+    if (currentCall && callStatus === 'calling') {
+      cancelCallSignal(currentCall.id);
+    }
+    cleanupCall();
+  }, [currentCall, callStatus, cleanupCall]);
 
   return (
     <CallContext.Provider
@@ -302,12 +408,17 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         currentCall,
         isInCall,
         incomingCall,
+        callDuration,
+        callStatus,
+        isSocketConnected: socketConnected,
         initiateCall,
         acceptCall,
         rejectCall,
         endCall,
+        cancelOutgoingCall,
         agoraToken,
         agoraUid,
+        channelName,
       }}
     >
       {children}

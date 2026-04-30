@@ -124,6 +124,7 @@ export default function ChatDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
+  const { initiateCall, isInCall, isSocketConnected } = useCall();
 
   const [chat, setChat] = useState<ChatMeta | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -432,9 +433,6 @@ export default function ChatDetailScreen() {
   }
 
   const title = chat.type === 'group' ? (chat.name || 'Group Chat') : chat.type === 'broadcast' ? 'Broadcast' : 'Direct Chat';
-
-  // Get the call context for initiating calls
-  const { initiateCall, isInCall } = useCall();
   
   // Get the other participant for direct chats (for 1-to-1 calls)
   const otherParticipant: CallParticipant | null = useMemo(() => {
@@ -456,9 +454,12 @@ export default function ChatDetailScreen() {
       Alert.alert('Not Supported', 'Voice calls are only available on mobile devices');
       return;
     }
+    if (!isSocketConnected) {
+      Alert.alert('Connection Error', 'Not connected to server. Please try again.');
+      return;
+    }
     await initiateCall(otherParticipant, 'voice');
-    router.push(`/call/${chat?.id || ''}`);
-  }, [otherParticipant, initiateCall, router, chat?.id]);
+  }, [otherParticipant, initiateCall, isSocketConnected]);
 
   const handleVideoCall = useCallback(async () => {
     if (!otherParticipant) {
@@ -469,9 +470,12 @@ export default function ChatDetailScreen() {
       Alert.alert('Not Supported', 'Video calls are only available on mobile devices');
       return;
     }
+    if (!isSocketConnected) {
+      Alert.alert('Connection Error', 'Not connected to server. Please try again.');
+      return;
+    }
     await initiateCall(otherParticipant, 'video');
-    router.push(`/call/${chat?.id || ''}`);
-  }, [otherParticipant, initiateCall, router, chat?.id]);
+  }, [otherParticipant, initiateCall, isSocketConnected]);
 
   const showCallButtons = chat?.type === 'direct' && otherParticipant && !isInCall;
 

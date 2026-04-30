@@ -1,5 +1,5 @@
 /**
- * Incoming Call Modal - Shows when receiving a call
+ * Incoming Call Modal - Shows when receiving a call via Socket.io
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -14,22 +14,30 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useCall } from '@/context/CallContext';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 export function IncomingCallModal() {
-  const router = useRouter();
-  const { incomingCall, acceptCall, rejectCall } = useCall();
+  const { incomingCall, acceptCall, rejectCall, callStatus } = useCall();
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(300)).current;
 
   // Pulse animation for avatar
   useEffect(() => {
     if (incomingCall) {
-      const animation = Animated.loop(
+      // Slide in animation
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }).start();
+
+      // Pulse animation
+      const pulseAnimation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.2,
+            toValue: 1.15,
             duration: 800,
             useNativeDriver: true,
           }),
@@ -40,7 +48,7 @@ export function IncomingCallModal() {
           }),
         ])
       );
-      animation.start();
+      pulseAnimation.start();
 
       // Vibrate pattern for incoming call
       if (Platform.OS !== 'web') {
@@ -49,39 +57,42 @@ export function IncomingCallModal() {
       }
 
       return () => {
-        animation.stop();
+        pulseAnimation.stop();
         Vibration.cancel();
+        slideAnim.setValue(300);
       };
     }
-  }, [incomingCall, pulseAnim]);
+  }, [incomingCall, pulseAnim, slideAnim]);
 
   const handleAccept = async () => {
     Vibration.cancel();
     await acceptCall();
-    // Navigate to call screen
-    if (incomingCall?.channelName) {
-      router.push(`/call/${incomingCall.channelName}`);
-    }
   };
 
-  const handleReject = async () => {
+  const handleReject = () => {
     Vibration.cancel();
-    await rejectCall();
+    rejectCall('declined');
   };
 
-  if (!incomingCall) return null;
+  if (!incomingCall || callStatus !== 'ringing') return null;
 
-  const isVideoCall = incomingCall.callType === 'video';
+  const isVideoCall = incomingCall.call_type === 'video';
 
   return (
     <Modal
-      visible={!!incomingCall}
+      visible={true}
       transparent
-      animationType="slide"
+      animationType="none"
       onRequestClose={handleReject}
+      statusBarTranslucent
     >
-      <View style={styles.container}>
-        <View style={styles.content}>
+      <View style={styles.overlay}>
+        <Animated.View 
+          style={[
+            styles.container,
+            { transform: [{ translateY: slideAnim }] }
+          ]}
+        >
           {/* Call type indicator */}
           <View style={styles.callTypeTag}>
             <Ionicons
@@ -97,7 +108,7 @@ export function IncomingCallModal() {
           {/* Caller avatar with pulse animation */}
           <Animated.View
             style={[
-              styles.avatarContainer,
+              styles.avatarOuter,
               { transform: [{ scale: pulseAnim }] },
             ]}
           >
@@ -107,7 +118,7 @@ export function IncomingCallModal() {
           </Animated.View>
 
           {/* Caller name */}
-          <Text style={styles.callerName}>{incomingCall.callerName}</Text>
+          <Text style={styles.callerName}>{incomingCall.caller_name}</Text>
           <Text style={styles.callerSubtext}>is calling you...</Text>
 
           {/* Action buttons */}
@@ -116,49 +127,57 @@ export function IncomingCallModal() {
             <TouchableOpacity
               style={[styles.actionBtn, styles.rejectBtn]}
               onPress={handleReject}
+              activeOpacity={0.8}
             >
               <Ionicons name="close" size={32} color="#fff" />
-              <Text style={styles.actionLabel}>Decline</Text>
             </TouchableOpacity>
+            <Text style={styles.actionLabel}>Decline</Text>
 
             {/* Accept button */}
             <TouchableOpacity
               style={[styles.actionBtn, styles.acceptBtn]}
               onPress={handleAccept}
+              activeOpacity={0.8}
             >
               <Ionicons
                 name={isVideoCall ? 'videocam' : 'call'}
                 size={32}
                 color="#fff"
               />
-              <Text style={styles.actionLabel}>Accept</Text>
             </TouchableOpacity>
+            <Text style={styles.actionLabel}>Accept</Text>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
+  container: {
     alignItems: 'center',
     paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.xl * 2,
+    backgroundColor: '#1a1a2e',
+    borderRadius: RADIUS.xl,
+    marginHorizontal: SPACING.lg,
+    width: '90%',
+    maxWidth: 360,
   },
   callTypeTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: RADIUS.full,
-    marginBottom: 40,
+    marginBottom: 32,
     gap: 8,
   },
   callTypeText: {
@@ -166,8 +185,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  avatarContainer: {
-    marginBottom: 24,
+  avatarOuter: {
+    marginBottom: 20,
   },
   avatar: {
     width: 100,
@@ -176,43 +195,45 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   callerName: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 8,
+    marginBottom: 4,
+    textAlign: 'center',
   },
   callerSubtext: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 60,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 40,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 60,
+    alignItems: 'flex-start',
+    gap: 50,
   },
   actionBtn: {
-    alignItems: 'center',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   rejectBtn: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
     backgroundColor: '#E53935',
   },
   acceptBtn: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
     backgroundColor: '#4CAF50',
   },
   actionLabel: {
-    color: '#fff',
-    fontSize: 14,
-    marginTop: 12,
-    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

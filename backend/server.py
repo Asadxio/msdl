@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime
 import json
 from fastapi import HTTPException, Header
+import socketio
 
 # Agora token generation
 try:
@@ -34,6 +35,9 @@ except ImportError:
     messaging = None
     firebase_admin = None
 
+# Import Socket.io server
+from socket_server import sio, get_online_users_list
+
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -45,6 +49,9 @@ db = client[os.environ['DB_NAME']]
 
 # Create the main app without a prefix
 app = FastAPI()
+
+# Wrap FastAPI app with Socket.io ASGI app
+socket_app = socketio.ASGIApp(sio, app)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -312,6 +319,16 @@ async def get_agora_config():
         "app_id_configured": bool(app_id),
         "app_certificate_configured": bool(app_certificate),
         "auth_mode": "token" if app_certificate else "app_id_only" if app_id else "not_configured"
+    }
+
+@api_router.get("/users/online")
+async def get_online_users():
+    """
+    Get list of currently online user IDs (connected via Socket.io)
+    """
+    return {
+        "online_users": get_online_users_list(),
+        "count": len(get_online_users_list()),
     }
 
 # Include the router in the main app - MUST be at the end after all routes are defined

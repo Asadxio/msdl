@@ -30,7 +30,7 @@ export default function CallScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentCall, agoraToken, agoraUid, endCall } = useCall();
+  const { currentCall, agoraToken, agoraUid, endCall, callDuration: contextCallDuration, callStatus, cancelOutgoingCall } = useCall();
 
   // Agora module refs
   const engineRef = useRef<any>(null);
@@ -43,7 +43,6 @@ export default function CallScreen() {
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [remoteUid, setRemoteUid] = useState<number | null>(null);
-  const [callDuration, setCallDuration] = useState(0);
   const [connectionState, setConnectionState] = useState<string>('Connecting...');
 
   const isVideoCall = currentCall?.callType === 'video';
@@ -55,21 +54,6 @@ export default function CallScreen() {
       loadAgoraEngine().then(setAgoraModules).catch(console.error);
     }
   }, []);
-
-  // Call duration timer
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
-    
-    if (isJoined && remoteUid) {
-      timer = setInterval(() => {
-        setCallDuration((prev) => prev + 1);
-      }, 1000);
-    }
-
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [isJoined, remoteUid]);
 
   // Initialize Agora engine
   const initEngine = useCallback(async () => {
@@ -327,7 +311,7 @@ export default function CallScreen() {
             </View>
             <Text style={styles.participantName}>{otherParticipantName}</Text>
             <Text style={styles.callStatus}>
-              {remoteUid ? formatCallDuration(callDuration) : connectionState}
+              {remoteUid ? formatCallDuration(contextCallDuration) : connectionState}
             </Text>
           </View>
         </View>
