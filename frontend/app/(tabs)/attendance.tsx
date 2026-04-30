@@ -47,16 +47,31 @@ export default function AttendanceScreen() {
   useEffect(() => {
     if (!user?.uid) return;
     setLoading(true);
-    const q = canMark
-      ? query(collection(db, 'attendance'), orderBy('created_at', 'desc'))
-      : query(collection(db, 'attendance'), where('user_id', '==', user.uid), orderBy('created_at', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const arr: AttendanceItem[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
-      setHistory(arr);
+    try {
+      const q = canMark
+        ? query(collection(db, 'attendance'), orderBy('created_at', 'desc'))
+        : query(collection(db, 'attendance'), where('user_id', '==', user.uid), orderBy('created_at', 'desc'));
+      const unsub = onSnapshot(q, (snap) => {
+        try {
+          const arr: AttendanceItem[] = [];
+          snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+          setHistory(Array.isArray(arr) ? arr : []);
+          setLoading(false);
+        } catch (e) {
+          console.log('[Attendance] onSnapshot parse ERROR:', e);
+          setHistory([]);
+          setLoading(false);
+        }
+      }, (err) => {
+        console.log('[Attendance] onSnapshot ERROR:', err);
+        setLoading(false);
+      });
+      return unsub;
+    } catch (e) {
+      console.log('[Attendance] query setup ERROR:', e);
       setLoading(false);
-    }, () => setLoading(false));
-    return unsub;
+      return () => {};
+    }
   }, [canMark, user?.uid, reloadKey]);
 
   useEffect(() => {
@@ -67,17 +82,28 @@ export default function AttendanceScreen() {
         const snap = await getDocs(collection(db, 'users'));
         const arr: AppUser[] = [];
         snap.forEach((d) => {
-          const data = d.data() as any;
-          if (data.status !== 'approved' || data.role === 'admin') return;
-          arr.push({ id: d.id, name: data.name || 'User', email: data.email || '', role: data.role || 'student', status: data.status });
+          try {
+            const data = d.data() as any;
+            if (data?.status !== 'approved' || data?.role === 'admin') return;
+            arr.push({ 
+              id: d.id, 
+              name: String(data?.name || 'User'), 
+              email: String(data?.email || ''), 
+              role: String(data?.role || 'student'), 
+              status: String(data?.status || '') 
+            });
+          } catch (e) {
+            console.log('[Attendance] User parse ERROR:', e);
+          }
         });
-        setUsers(arr);
-      } catch {
+        setUsers(Array.isArray(arr) ? arr : []);
+      } catch (e) {
+        console.log('[Attendance] loadUsers ERROR:', e);
         setUsers([]);
         setUsersError('Unable to load users right now. Pull to refresh later.');
       }
     };
-    loadUsers().catch(() => {});
+    loadUsers().catch((e) => console.log('[Attendance] loadUsers outer ERROR:', e));
   }, [canMark, reloadKey]);
 
   const markAttendance = async (targetUser: AppUser, status: 'present' | 'absent') => {
@@ -118,20 +144,30 @@ export default function AttendanceScreen() {
 
   const attendanceByUser = useMemo(() => {
     const grouped: Record<string, { total: number; present: number; absent: number; latestAt?: { toDate?: () => Date } }> = {};
-    history.forEach((item) => {
-      if (!item.user_id) return;
-      if (!grouped[item.user_id]) {
-        grouped[item.user_id] = { total: 0, present: 0, absent: 0, latestAt: item.created_at };
+    const safeHistory = Array.isArray(history) ? history : [];
+    safeHistory.forEach((item) => {
+      try {
+        if (!item?.user_id) return;
+        if (!grouped[item.user_id]) {
+          grouped[item.user_id] = { total: 0, present: 0, absent: 0, latestAt: item?.created_at };
+        }
+        grouped[item.user_id].total += 1;
+        if (item?.status === 'present') grouped[item.user_id].present += 1;
+        if (item?.status === 'absent') grouped[item.user_id].absent += 1;
+        if (!grouped[item.user_id].latestAt && item?.created_at) grouped[item.user_id].latestAt = item.created_at;
+      } catch (e) {
+        console.log('[Attendance] attendanceByUser item ERROR:', e);
       }
-      grouped[item.user_id].total += 1;
-      if (item.status === 'present') grouped[item.user_id].present += 1;
-      if (item.status === 'absent') grouped[item.user_id].absent += 1;
-      if (!grouped[item.user_id].latestAt && item.created_at) grouped[item.user_id].latestAt = item.created_at;
     });
     return grouped;
   }, [history]);
 
-  const recentAttendance = useMemo(() => history.slice(0, 80), [history]);
+  const recentAttendance = useMemo(() => {
+    const safeHistory = Array.isArray(history) ? history : [];
+    return safeHistory.slice(0, 80);
+  }, [history]);
+  
+  const safeUsers = useMemo(() => Array.isArray(users) ? users : [], [users]);
 
   return (
     <View style={styles.container}>
@@ -158,35 +194,35 @@ export default function AttendanceScreen() {
             placeholder="YYYY-MM-DD"
             placeholderTextColor={COLORS.textMuted}
           />
-          {users.map((item) => {
-            const summary = attendanceByUser[item.id] || { total: 0, present: 0, absent: 0 };
+          {safeUsers.map((item) => {
+            const summary = attendanceByUser[item?.id] || { total: 0, present: 0, absent: 0 };
             return (
-              <View style={styles.rowCard} key={item.id}>
+              <View style={styles.rowCard} key={item?.id || Math.random().toString()}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.meta}>{item.email}</Text>
+                  <Text style={styles.name}>{item?.name || 'User'}</Text>
+                  <Text style={styles.meta}>{item?.email || ''}</Text>
                   <Text style={styles.summaryText}>
-                    Total: {summary.total} • Present: {summary.present} • Absent: {summary.absent}
+                    Total: {summary?.total || 0} • Present: {summary?.present || 0} • Absent: {summary?.absent || 0}
                   </Text>
-                  <Text style={styles.timeText}>Last entry: {formatMarkedAt(summary.latestAt)}</Text>
+                  <Text style={styles.timeText}>Last entry: {formatMarkedAt(summary?.latestAt)}</Text>
                 </View>
-                <TouchableOpacity style={styles.presentBtn} onPress={() => markAttendance(item, 'present')} disabled={savingUserId === item.id}>
-                  <Text style={styles.presentText}>{savingUserId === item.id ? 'Saving...' : 'Present'}</Text>
+                <TouchableOpacity style={styles.presentBtn} onPress={() => markAttendance(item, 'present')} disabled={savingUserId === item?.id}>
+                  <Text style={styles.presentText}>{savingUserId === item?.id ? 'Saving...' : 'Present'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.absentBtn} onPress={() => markAttendance(item, 'absent')} disabled={savingUserId === item.id}>
-                  <Text style={styles.absentText}>{savingUserId === item.id ? 'Saving...' : 'Absent'}</Text>
+                <TouchableOpacity style={styles.absentBtn} onPress={() => markAttendance(item, 'absent')} disabled={savingUserId === item?.id}>
+                  <Text style={styles.absentText}>{savingUserId === item?.id ? 'Saving...' : 'Absent'}</Text>
                 </TouchableOpacity>
               </View>
             );
           })}
-          {users.length === 0 ? <Text style={styles.empty}>No approved users found.</Text> : null}
+          {safeUsers.length === 0 ? <Text style={styles.empty}>No approved users found.</Text> : null}
           {!!usersError ? <Text style={styles.errorText}>{usersError}</Text> : null}
           <Text style={[styles.subtitle, { marginTop: 10 }]}>Recent attendance log</Text>
           {recentAttendance.map((item) => (
-            <View key={item.id} style={styles.historyCard}>
-              <Text style={styles.name}>{item.date} • {item.status}</Text>
-              <Text style={styles.meta}>User: {users.find((u) => u.id === item.user_id)?.name || item.user_id}</Text>
-              <Text style={styles.timeText}>Marked: {formatMarkedAt(item.created_at)}</Text>
+            <View key={item?.id || Math.random().toString()} style={styles.historyCard}>
+              <Text style={styles.name}>{item?.date || 'N/A'} • {item?.status || 'unknown'}</Text>
+              <Text style={styles.meta}>User: {safeUsers.find((u) => u?.id === item?.user_id)?.name || item?.user_id || 'Unknown'}</Text>
+              <Text style={styles.timeText}>Marked: {formatMarkedAt(item?.created_at)}</Text>
             </View>
           ))}
           {recentAttendance.length === 0 ? <Text style={styles.empty}>No attendance records yet.</Text> : null}

@@ -141,16 +141,30 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     if (!id) return;
-    const unsub = onSnapshot(doc(db, 'chats', id), (snap) => {
-      if (!snap.exists()) {
-        setChat(null);
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = onSnapshot(doc(db, 'chats', id), (snap) => {
+        try {
+          if (!snap.exists()) {
+            setChat(null);
+            setLoading(false);
+            return;
+          }
+          setChat(normalizeChatMeta(snap.id, snap.data()));
+          setLoading(false);
+        } catch (e) {
+          console.log('[Chat] onSnapshot parse ERROR:', e);
+          setLoading(false);
+        }
+      }, (err) => {
+        console.log('[Chat] onSnapshot ERROR:', err);
         setLoading(false);
-        return;
-      }
-      setChat(normalizeChatMeta(snap.id, snap.data()));
+      });
+    } catch (e) {
+      console.log('[Chat] useEffect setup ERROR:', e);
       setLoading(false);
-    });
-    return unsub;
+    }
+    return () => { if (unsub) unsub(); };
   }, [id]);
 
   useEffect(() => {
@@ -159,32 +173,43 @@ export default function ChatDetailScreen() {
     setLastCursor(null);
     setHasMore(true);
 
-    const initialQ = query(
-      collection(db, 'messages'),
-      where('chat_id', '==', id),
-      orderBy('created_at', 'desc'),
-      limit(PAGE_SIZE),
-    );
-    const unsub = onSnapshot(initialQ, (snap) => {
-      const latest = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
-      setMessages((prev) => {
-        const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
-        const seen = new Set(latest.map((m) => m.id));
-        const older = prev.filter((m) => !seen.has(m.id) && !m.localOnly);
-        const pending = prev.filter((m) => m.localOnly && !confirmedClientIds.has(m.client_id));
-        return [...latest, ...older, ...pending].sort((a, b) => toMillis(b) - toMillis(a));
-      });
-      setLastCursor(snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
-      setHasMore(snap.docs.length === PAGE_SIZE);
+    let unsub: (() => void) | undefined;
+    try {
+      const initialQ = query(
+        collection(db, 'messages'),
+        where('chat_id', '==', id),
+        orderBy('created_at', 'desc'),
+        limit(PAGE_SIZE),
+      );
+      unsub = onSnapshot(initialQ, (snap) => {
+        try {
+          const latest = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
+          setMessages((prev) => {
+            const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
+            const seen = new Set(latest.map((m) => m.id));
+            const older = prev.filter((m) => !seen.has(m.id) && !m.localOnly);
+            const pending = prev.filter((m) => m.localOnly && !confirmedClientIds.has(m.client_id));
+            return [...latest, ...older, ...pending].sort((a, b) => toMillis(b) - toMillis(a));
+          });
+          setLastCursor(snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
+          setHasMore(snap.docs.length === PAGE_SIZE);
 
-      if (user?.uid) {
-        const firstUnread = latest.find((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
-        if (firstUnread) {
-          updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch(() => {});
+          if (user?.uid) {
+            const firstUnread = latest.find((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
+            if (firstUnread) {
+              updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch((e) => console.log('[Chat] markRead ERROR:', e));
+            }
+          }
+        } catch (e) {
+          console.log('[Chat] messages onSnapshot inner ERROR:', e);
         }
-      }
-    });
-    return unsub;
+      }, (err) => {
+        console.log('[Chat] messages onSnapshot ERROR:', err);
+      });
+    } catch (e) {
+      console.log('[Chat] messages useEffect setup ERROR:', e);
+    }
+    return () => { if (unsub) unsub(); };
   }, [id, user?.uid]);
 
   const loadMore = async () => {
@@ -211,9 +236,11 @@ export default function ChatDetailScreen() {
       if (user?.uid) {
         const firstUnread = older.find((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
         if (firstUnread) {
-          updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch(() => {});
+          updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch((e) => console.log('[Chat] loadMore markRead ERROR:', e));
         }
       }
+    } catch (e) {
+      console.log('[Chat] loadMore ERROR:', e);
     } finally {
       setLoadingMore(false);
     }
@@ -232,7 +259,7 @@ export default function ChatDetailScreen() {
 
   const setTyping = useCallback((isTyping: boolean) => {
     if (!chat || !id || !user?.uid) return;
-    updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: isTyping }).catch(() => {});
+    updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: isTyping }).catch((e) => console.log('[Chat] setTyping ERROR:', e));
   }, [chat, id, user?.uid]);
 
   const onType = useCallback((value: string) => {
@@ -327,7 +354,8 @@ export default function ChatDetailScreen() {
       });
       setLastCursor(messageSnap.docs.length ? messageSnap.docs[messageSnap.docs.length - 1] : null);
       setHasMore(messageSnap.docs.length === PAGE_SIZE);
-    } catch {
+    } catch (e) {
+      console.log('[Chat] refreshMessages ERROR:', e);
       setSendError('Could not refresh chat. Please try again.');
     } finally {
       setRefreshing(false);
@@ -335,7 +363,7 @@ export default function ChatDetailScreen() {
   }, [id, refreshing]);
 
   const deleteForMe = useCallback(async (message: MessageItem) => {
-    if (!user?.uid) return;
+    if (!user?.uid || !message?.id) return;
     if (message.localOnly) {
       setMessages((prev) => prev.filter((m) => m.id !== message.id));
       return;
@@ -344,13 +372,14 @@ export default function ChatDetailScreen() {
       await updateDoc(doc(db, 'messages', message.id), {
         deleted_for: arrayUnion(user.uid),
       });
-    } catch {
+    } catch (e) {
+      console.log('[Chat] deleteForMe ERROR:', e);
       setSendError('Could not delete message. Please try again.');
     }
   }, [user?.uid]);
 
   const unsendForEveryone = useCallback(async (message: MessageItem) => {
-    if (!user?.uid || message.sender_id !== user.uid) return;
+    if (!user?.uid || !message?.id || message.sender_id !== user.uid) return;
     try {
       await updateDoc(doc(db, 'messages', message.id), {
         text: 'This message was unsent.',
@@ -358,7 +387,8 @@ export default function ChatDetailScreen() {
         unsent_by: user.uid,
         unsent_at: serverTimestamp(),
       });
-    } catch {
+    } catch (e) {
+      console.log('[Chat] unsendForEveryone ERROR:', e);
       setSendError('Could not unsend message. Please try again.');
     }
   }, [user?.uid]);
@@ -374,13 +404,13 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     if (!id || !user?.uid || !chat) return;
-    updateDoc(doc(db, 'chats', id), { [`unread_counts.${user.uid}`]: 0 }).catch(() => {});
+    updateDoc(doc(db, 'chats', id), { [`unread_counts.${user.uid}`]: 0 }).catch((e) => console.log('[Chat] clearUnread ERROR:', e));
   }, [chat, id, user?.uid]);
 
   useEffect(() => () => {
     if (typingTimer.current) clearTimeout(typingTimer.current);
     if (id && user?.uid) {
-      updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: false }).catch(() => {});
+      updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: false }).catch((e) => console.log('[Chat] cleanup typing ERROR:', e));
     }
   }, [id, user?.uid]);
 
@@ -391,7 +421,7 @@ export default function ChatDetailScreen() {
   }, [messages.length]);
 
   const visibleMessages = useMemo(
-    () => messages.filter((m) => !m.deleted_for?.includes(user?.uid || '')),
+    () => (Array.isArray(messages) ? messages : []).filter((m) => !(Array.isArray(m?.deleted_for) ? m.deleted_for : []).includes(user?.uid || '')),
     [messages, user?.uid],
   );
 
@@ -510,7 +540,7 @@ export default function ChatDetailScreen() {
         ref={listRef}
         inverted
         data={visibleMessages}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item?.id || Math.random().toString()}
         contentContainerStyle={styles.list}
         onEndReached={loadMore}
         onEndReachedThreshold={0.2}

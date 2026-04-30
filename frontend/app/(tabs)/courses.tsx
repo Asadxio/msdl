@@ -128,7 +128,7 @@ export default function CoursesScreen() {
       ) : (
         <FlatList
           data={filteredCourses}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item?.id || Math.random().toString()}
           renderItem={({ item, index }) => <CourseCard course={item} index={index} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

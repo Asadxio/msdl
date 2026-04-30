@@ -54,44 +54,60 @@ export default function StatusScreen() {
   const [statusMedia, setStatusMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'status_updates'), orderBy('created_at', 'desc'));
-    const unsub = onSnapshot(q, async (snap) => {
-      const now = Date.now();
-      const next: StatusItem[] = [];
-      const expiredIds: string[] = [];
-      snap.forEach((d) => {
-        const data = d.data() as any;
-        const createdAt = data.created_at?.toDate ? data.created_at.toDate().getTime() : 0;
-        if (!createdAt || now - createdAt > STATUS_EXPIRY_MS) {
-          expiredIds.push(d.id);
-          return;
-        }
-        next.push({
-          id: d.id,
-          user_id: data.user_id || '',
-          user_name: data.user_name || 'Teacher',
-          role: data.role || 'teacher',
-          text: data.text || '',
-          media_url: typeof data.media_url === 'string' ? data.media_url : '',
-          media_type: data.media_type === 'video' ? 'video' : data.media_type === 'image' ? 'image' : '',
-          created_at: data.created_at || null,
-          likes: Array.isArray(data.likes) ? data.likes : [],
-          comments: Array.isArray(data.comments) ? data.comments : [],
-          views: Array.isArray(data.views) ? data.views : [],
-          view_count: Array.isArray(data.views) ? data.views.length : 0,
-        });
-      });
-      setItems(next);
-      setLoading(false);
+    let unsub: (() => void) | undefined;
+    try {
+      const q = query(collection(db, 'status_updates'), orderBy('created_at', 'desc'));
+      unsub = onSnapshot(q, async (snap) => {
+        try {
+          const now = Date.now();
+          const next: StatusItem[] = [];
+          const expiredIds: string[] = [];
+          snap.forEach((d) => {
+            try {
+              const data = d.data() as any;
+              const createdAt = data?.created_at?.toDate ? data.created_at.toDate().getTime() : 0;
+              if (!createdAt || now - createdAt > STATUS_EXPIRY_MS) {
+                expiredIds.push(d.id);
+                return;
+              }
+              next.push({
+                id: d.id,
+                user_id: String(data?.user_id || ''),
+                user_name: String(data?.user_name || 'Teacher'),
+                role: data?.role || 'teacher',
+                text: String(data?.text || ''),
+                media_url: typeof data?.media_url === 'string' ? data.media_url : '',
+                media_type: data?.media_type === 'video' ? 'video' : data?.media_type === 'image' ? 'image' : '',
+                created_at: data?.created_at || null,
+                likes: Array.isArray(data?.likes) ? data.likes : [],
+                comments: Array.isArray(data?.comments) ? data.comments : [],
+                views: Array.isArray(data?.views) ? data.views : [],
+                view_count: Array.isArray(data?.views) ? data.views.length : 0,
+              });
+            } catch (e) {
+              console.log('[Status] Item parse ERROR:', e);
+            }
+          });
+          setItems(Array.isArray(next) ? next : []);
+          setLoading(false);
 
-      if ((profile?.role === 'admin' || profile?.role === 'teacher') && expiredIds.length > 0) {
-        await Promise.all(expiredIds.map((statusId) => deleteDoc(doc(db, 'status_updates', statusId)).catch(() => {})));
-      }
-    }, (error) => {
-      console.log('[Status] onSnapshot ERROR', error);
+          if ((profile?.role === 'admin' || profile?.role === 'teacher') && expiredIds.length > 0) {
+            await Promise.all(expiredIds.map((statusId) => deleteDoc(doc(db, 'status_updates', statusId)).catch((e) => console.log('[Status] Delete expired ERROR:', e))));
+          }
+        } catch (e) {
+          console.log('[Status] onSnapshot inner ERROR:', e);
+          setItems([]);
+          setLoading(false);
+        }
+      }, (error) => {
+        console.log('[Status] onSnapshot ERROR', error);
+        setLoading(false);
+      });
+    } catch (e) {
+      console.log('[Status] useEffect setup ERROR:', e);
       setLoading(false);
-    });
-    return unsub;
+    }
+    return () => { if (unsub) unsub(); };
   }, [profile?.role]);
 
   const postStatus = async () => {
@@ -166,14 +182,16 @@ export default function StatusScreen() {
   };
 
   const toggleLike = async (item: StatusItem) => {
-    if (!isStudent || !user?.uid) return;
+    if (!isStudent || !user?.uid || !item?.id) return;
     setUpdatingId(item.id);
     try {
-      const liked = (item.likes || []).includes(user.uid);
+      const safeItemLikes = Array.isArray(item?.likes) ? item.likes : [];
+      const liked = safeItemLikes.includes(user.uid);
       await updateDoc(doc(db, 'status_updates', item.id), {
         likes: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
       });
-    } catch {
+    } catch (e) {
+      console.log('[Status] toggleLike ERROR:', e);
       Alert.alert('Update failed', 'Could not update like.');
     } finally {
       setUpdatingId('');
@@ -181,7 +199,7 @@ export default function StatusScreen() {
   };
 
   const addComment = async (item: StatusItem) => {
-    if (!isStudent || !user?.uid || !profile) return;
+    if (!isStudent || !user?.uid || !profile || !item?.id) return;
     const text = (commentInputs[item.id] || '').trim();
     if (!text) return;
     setUpdatingId(item.id);
@@ -189,7 +207,7 @@ export default function StatusScreen() {
       const comment: StatusComment = {
         id: `${user.uid}_${Date.now()}`,
         user_id: user.uid,
-        user_name: profile.name || 'Student',
+        user_name: profile?.name || 'Student',
         text,
         created_at_ms: Date.now(),
       };
@@ -197,7 +215,8 @@ export default function StatusScreen() {
         comments: arrayUnion(comment),
       });
       setCommentInputs((prev) => ({ ...prev, [item.id]: '' }));
-    } catch {
+    } catch (e) {
+      console.log('[Status] addComment ERROR:', e);
       Alert.alert('Comment failed', 'Could not add comment.');
     } finally {
       setUpdatingId('');
@@ -206,11 +225,12 @@ export default function StatusScreen() {
 
   // Track view when status is displayed (for students)
   const trackView = async (item: StatusItem) => {
-    if (!user?.uid || item.user_id === user.uid) return; // Don't track own views
-    const alreadyViewed = (item.views || []).includes(user.uid);
-    if (alreadyViewed) return;
-    
+    if (!user?.uid || !item?.id || item?.user_id === user.uid) return; // Don't track own views
     try {
+      const safeViews = Array.isArray(item?.views) ? item.views : [];
+      const alreadyViewed = safeViews.includes(user.uid);
+      if (alreadyViewed) return;
+      
       await updateDoc(doc(db, 'status_updates', item.id), {
         views: arrayUnion(user.uid),
       });
@@ -221,10 +241,16 @@ export default function StatusScreen() {
 
   // Track views when items change
   useEffect(() => {
-    if (!user?.uid || !items.length) return;
+    if (!user?.uid) return;
+    const safeItems = Array.isArray(items) ? items : [];
+    if (!safeItems.length) return;
     // Track view for all visible statuses
-    items.forEach((item) => {
-      trackView(item);
+    safeItems.forEach((item) => {
+      try {
+        trackView(item);
+      } catch (e) {
+        console.log('[Status] trackView forEach ERROR:', e);
+      }
     });
   }, [items, user?.uid]);
 
@@ -339,8 +365,8 @@ export default function StatusScreen() {
                 </>
               ) : null}
 
-              {(Array.isArray(item.comments) ? item.comments : []).slice(-3).map((comment) => (
-                <Text key={comment.id} style={styles.commentText}>• {comment.user_name}: {comment.text}</Text>
+              {(Array.isArray(item?.comments) ? item.comments : []).slice(-3).map((comment) => (
+                <Text key={comment?.id || Math.random().toString()} style={styles.commentText}>• {comment?.user_name || 'User'}: {comment?.text || ''}</Text>
               ))}
             </View>
           )}

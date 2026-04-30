@@ -63,51 +63,76 @@ export default function NotificationsScreen() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    setLoadError('');
-    setLoading(true);
-    const q = query(
-      collection(db, 'notifications'),
-      where('user_id', 'in', [user.uid, 'all', 'role_targeted']),
-      orderBy('created_at', 'desc'),
-      limit(100),
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const next: NotificationItem[] = [];
-      snap.forEach((d) => {
-        const safe = d.data() as any;
-        const targetUserIds = Array.isArray(safe.target_user_ids) ? safe.target_user_ids : [];
-        const targetRoles = Array.isArray(safe.target_roles) ? safe.target_roles : [];
-        const isRoleTargeted = safe.user_id === 'role_targeted';
-        const allowById = targetUserIds.includes(user.uid);
-        const allowByRole = profile?.role ? targetRoles.includes(profile.role) : false;
-        if (!isRoleTargeted || allowById || allowByRole) {
-          next.push({ id: d.id, ...safe });
+    let unsub: (() => void) | undefined;
+    try {
+      setLoadError('');
+      setLoading(true);
+      const q = query(
+        collection(db, 'notifications'),
+        where('user_id', 'in', [user.uid, 'all', 'role_targeted']),
+        orderBy('created_at', 'desc'),
+        limit(100),
+      );
+      unsub = onSnapshot(q, (snap) => {
+        try {
+          const next: NotificationItem[] = [];
+          snap.forEach((d) => {
+            try {
+              const safe = d.data() as any;
+              const targetUserIds = Array.isArray(safe?.target_user_ids) ? safe.target_user_ids : [];
+              const targetRoles = Array.isArray(safe?.target_roles) ? safe.target_roles : [];
+              const isRoleTargeted = safe?.user_id === 'role_targeted';
+              const allowById = targetUserIds.includes(user.uid);
+              const allowByRole = profile?.role ? targetRoles.includes(profile.role) : false;
+              if (!isRoleTargeted || allowById || allowByRole) {
+                next.push({ id: d.id, ...safe });
+              }
+            } catch (e) {
+              console.log('[Notifications] item parse ERROR:', e);
+            }
+          });
+          setItems(Array.isArray(next) ? next : []);
+          setLoading(false);
+        } catch (e) {
+          console.log('[Notifications] onSnapshot inner ERROR:', e);
+          setItems([]);
+          setLoading(false);
         }
+      }, (err) => {
+        console.log('[Notifications] onSnapshot ERROR:', err);
+        setLoadError(err?.message || 'Failed to load notifications.');
+        setLoading(false);
       });
-      setItems(next);
+    } catch (e) {
+      console.log('[Notifications] useEffect setup ERROR:', e);
       setLoading(false);
-    }, (err) => {
-      setLoadError(err?.message || 'Failed to load notifications.');
-      setLoading(false);
-    });
-    return unsub;
+    }
+    return () => { if (unsub) unsub(); };
   }, [profile?.role, user?.uid, reloadKey]);
 
   const markAsRead = async (item: NotificationItem) => {
-    if (!user?.uid) return;
-    if (item.read?.[user.uid]) return;
+    if (!user?.uid || !item?.id) return;
     try {
+      const safeRead = item?.read && typeof item.read === 'object' ? item.read : {};
+      if (safeRead[user.uid]) return;
       await updateDoc(doc(db, 'notifications', item.id), {
         [`read.${user.uid}`]: true,
       });
-    } catch {
+    } catch (e) {
+      console.log('[Notifications] markAsRead ERROR:', e);
       // no-op
     }
   };
 
-  const unreadCount = user?.uid
-    ? items.filter((item) => !item.read?.[user.uid]).length
-    : 0;
+  const safeItems = useMemo(() => Array.isArray(items) ? items : [], [items]);
+  
+  const unreadCount = useMemo(() => {
+    if (!user?.uid) return 0;
+    return safeItems.filter((item) => {
+      const safeRead = item?.read && typeof item.read === 'object' ? item.read : {};
+      return !safeRead[user.uid];
+    }).length;
+  }, [safeItems, user?.uid]);
   const skeletonRows = useMemo(() => Array.from({ length: 5 }), []);
 
   const sendNotification = async () => {
@@ -305,8 +330,8 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <FlatList
-          data={items}
-          keyExtractor={(item) => item.id}
+          data={safeItems}
+          keyExtractor={(item) => item?.id || Math.random().toString()}
           contentContainerStyle={styles.list}
           initialNumToRender={10}
           maxToRenderPerBatch={12}

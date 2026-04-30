@@ -50,40 +50,52 @@ export default function HomeScreen() {
         const snap = await getDoc(doc(db, 'app_settings', 'platform'));
         if (!snap.exists()) return;
         const data = snap.data() as any;
-        const title = String(data.notice_title || '').trim();
-        const message = String(data.notice_message || '').trim();
+        const title = String(data?.notice_title || '').trim();
+        const message = String(data?.notice_message || '').trim();
         if (title || message) {
           setAnnouncementTitle(title || DEFAULT_ANNOUNCEMENT_TITLE);
           setAnnouncementMessage(message || DEFAULT_ANNOUNCEMENT_DESC);
           setUseCustomNotice(true);
         }
-      } catch {
+      } catch (e) {
+        console.log('[Home] loadNotice ERROR:', e);
         // ignore and fallback to announcement stream
       }
     };
-    loadNotice().catch(() => {});
+    loadNotice().catch((e) => console.log('[Home] loadNotice outer ERROR:', e));
   }, []);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'notifications'),
-      where('user_id', '==', 'all'),
-      orderBy('created_at', 'desc'),
-      limit(20),
-    );
-    const unsub = onSnapshot(q, (snapshot) => {
-      const latestAnnouncement = snapshot.docs
-        .map((docItem) => docItem.data() as { title?: string; message?: string; category?: string })
-        .find((item) => (
-          item.category === 'announcement' || item.title?.toLowerCase().includes('announcement')
-        ));
+    let unsub: (() => void) | undefined;
+    try {
+      const q = query(
+        collection(db, 'notifications'),
+        where('user_id', '==', 'all'),
+        orderBy('created_at', 'desc'),
+        limit(20),
+      );
+      unsub = onSnapshot(q, (snapshot) => {
+        try {
+          const latestAnnouncement = snapshot.docs
+            .map((docItem) => docItem.data() as { title?: string; message?: string; category?: string })
+            .find((item) => (
+              item?.category === 'announcement' || item?.title?.toLowerCase().includes('announcement')
+            ));
 
-      if (!useCustomNotice) {
-        setAnnouncementTitle(latestAnnouncement?.title?.trim() || DEFAULT_ANNOUNCEMENT_TITLE);
-        setAnnouncementMessage(latestAnnouncement?.message?.trim() || DEFAULT_ANNOUNCEMENT_DESC);
-      }
-    });
-    return unsub;
+          if (!useCustomNotice) {
+            setAnnouncementTitle(latestAnnouncement?.title?.trim() || DEFAULT_ANNOUNCEMENT_TITLE);
+            setAnnouncementMessage(latestAnnouncement?.message?.trim() || DEFAULT_ANNOUNCEMENT_DESC);
+          }
+        } catch (e) {
+          console.log('[Home] onSnapshot inner ERROR:', e);
+        }
+      }, (err) => {
+        console.log('[Home] onSnapshot ERROR:', err);
+      });
+    } catch (e) {
+      console.log('[Home] announcement useEffect ERROR:', e);
+    }
+    return () => { if (unsub) unsub(); };
   }, [useCustomNotice]);
 
   const isDefaultAnnouncement = useMemo(
@@ -114,7 +126,8 @@ export default function HomeScreen() {
       setAnnouncementMessage(noticeDraftMessage.trim());
       setUseCustomNotice(true);
       setNoticeModalVisible(false);
-    } catch {
+    } catch (e) {
+      console.log('[Home] saveNotice ERROR:', e);
       Alert.alert('Save failed', 'Could not update notice.');
     } finally {
       setSavingNotice(false);

@@ -41,23 +41,43 @@ export default function RecordingsScreen() {
         getDocs(collection(db, 'courses')),
       ]);
       const next: RecordingItem[] = [];
-      recordingSnap.forEach((d) => next.push({ id: d.id, ...(d.data() as any) }));
+      recordingSnap.forEach((d) => {
+        try {
+          const data = d.data() as any;
+          next.push({ 
+            id: d.id, 
+            title: String(data?.title || 'Recording'),
+            description: typeof data?.description === 'string' ? data.description : '',
+            file_url: String(data?.file_url || ''),
+            course_id: data?.course_id,
+            lesson_id: data?.lesson_id,
+          });
+        } catch (e) {
+          console.log('[Recordings] item parse ERROR:', e);
+        }
+      });
       const nextMap: CourseMap = {};
       courseSnap.forEach((d) => {
-        const data = d.data() as any;
-        nextMap[d.id] = data.name || 'Course';
+        try {
+          const data = d.data() as any;
+          nextMap[d.id] = String(data?.name || 'Course');
+        } catch (e) {
+          console.log('[Recordings] course parse ERROR:', e);
+        }
       });
-      setItems(next);
+      setItems(Array.isArray(next) ? next : []);
       setCourseMap(nextMap);
-    } catch {
+    } catch (e) {
+      console.log('[Recordings] fetchRecordings ERROR:', e);
       Alert.alert('Error', 'Could not load recordings. Please refresh.');
+      setItems([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchRecordings().catch(() => {});
+    fetchRecordings().catch((e) => console.log('[Recordings] useEffect fetchRecordings ERROR:', e));
   }, [fetchRecordings]);
 
   const safeOpenRecording = async (rawUrl: string) => {
@@ -92,8 +112,8 @@ export default function RecordingsScreen() {
   };
 
   const deleteRecording = (item: RecordingItem) => {
-    if (!isAdmin) return;
-    Alert.alert('Delete Recording', `Delete "${item.title || 'recording'}"?`, [
+    if (!isAdmin || !item?.id) return;
+    Alert.alert('Delete Recording', `Delete "${item?.title || 'recording'}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -103,7 +123,8 @@ export default function RecordingsScreen() {
           try {
             await deleteDoc(doc(db, 'recordings', item.id));
             await fetchRecordings();
-          } catch {
+          } catch (e) {
+            console.log('[Recordings] deleteRecording ERROR:', e);
             Alert.alert('Delete Failed', 'Could not delete recording.');
           } finally {
             setUpdatingId(null);
@@ -136,16 +157,16 @@ export default function RecordingsScreen() {
       ) : (
         <FlatList
           data={sortedItems}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item?.id || Math.random().toString()}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <TouchableOpacity style={{ flex: 1 }} onPress={() => { void safeOpenRecording(item.file_url); }}>
-                <Text style={styles.cardTitle}>{item.title || 'Recording'}</Text>
-                <Text style={styles.cardMeta}>{courseMap[item.course_id || ''] || 'Course'}</Text>
-                <Text style={styles.cardDesc}>{item.description || 'Tap to open recording'}</Text>
+              <TouchableOpacity style={{ flex: 1 }} onPress={() => { void safeOpenRecording(item?.file_url || ''); }}>
+                <Text style={styles.cardTitle}>{item?.title || 'Recording'}</Text>
+                <Text style={styles.cardMeta}>{courseMap[item?.course_id || ''] || 'Course'}</Text>
+                <Text style={styles.cardDesc}>{item?.description || 'Tap to open recording'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.downloadBtn} onPress={() => { void downloadRecording(item.file_url); }}>
+              <TouchableOpacity style={styles.downloadBtn} onPress={() => { void downloadRecording(item?.file_url || ''); }}>
                 <Ionicons name="download-outline" size={16} color={COLORS.primary} />
                 <Text style={styles.downloadText}>Download</Text>
               </TouchableOpacity>
@@ -153,9 +174,9 @@ export default function RecordingsScreen() {
                 <TouchableOpacity
                   style={styles.deleteBtn}
                   onPress={() => deleteRecording(item)}
-                  disabled={updatingId === item.id}
+                  disabled={updatingId === item?.id}
                 >
-                  {updatingId === item.id ? <ActivityIndicator size="small" color={COLORS.error} /> : <Text style={styles.deleteText}>Delete</Text>}
+                  {updatingId === item?.id ? <ActivityIndicator size="small" color={COLORS.error} /> : <Text style={styles.deleteText}>Delete</Text>}
                 </TouchableOpacity>
               ) : null}
             </View>

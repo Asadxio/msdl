@@ -92,22 +92,39 @@ export default function LibraryScreen() {
   }, [search]);
 
   useEffect(() => {
-    const q = query(collection(db, 'categories'), orderBy('name'));
-    const unsub = onSnapshot(q, (snap) => {
-      const arr: { id: string; name: string }[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, name: String((d.data() as any).name || '') }));
-      setCategories(arr.filter((c) => c.name.trim()));
-    });
-    return unsub;
+    let unsub: (() => void) | undefined;
+    try {
+      const q = query(collection(db, 'categories'), orderBy('name'));
+      unsub = onSnapshot(q, (snap) => {
+        try {
+          const arr: { id: string; name: string }[] = [];
+          snap.forEach((d) => arr.push({ id: d.id, name: String((d.data() as any)?.name || '') }));
+          setCategories(Array.isArray(arr) ? arr.filter((c) => c?.name?.trim()) : []);
+        } catch (e) {
+          console.log('[Library] categories parse ERROR:', e);
+          setCategories([]);
+        }
+      }, (err) => {
+        console.log('[Library] onSnapshot ERROR:', err);
+      });
+    } catch (e) {
+      console.log('[Library] useEffect setup ERROR:', e);
+    }
+    return () => { if (unsub) unsub(); };
   }, []);
 
-  const filteredBooks = useMemo(() => books.filter((book) => {
+  const safeBooks = useMemo(() => Array.isArray(books) ? books : [], [books]);
+  
+  const filteredBooks = useMemo(() => safeBooks.filter((book) => {
+    if (!book) return false;
+    const safeTitle = String(book?.title || '').toLowerCase();
+    const safeCategory = String(book?.category || '').toLowerCase();
     const matchSearch = !debouncedSearch
-      || book.title.toLowerCase().includes(debouncedSearch)
-      || book.category.toLowerCase().includes(debouncedSearch);
-    const matchCategory = !selectedCategoryId || book.category_id === selectedCategoryId;
+      || safeTitle.includes(debouncedSearch)
+      || safeCategory.includes(debouncedSearch);
+    const matchCategory = !selectedCategoryId || book?.category_id === selectedCategoryId;
     return matchSearch && matchCategory;
-  }), [books, debouncedSearch, selectedCategoryId]);
+  }), [safeBooks, debouncedSearch, selectedCategoryId]);
 
   const handleDeleteBook = (book: Book) => {
     Alert.alert('Archive Book', `Move "${book.title}" to archive? You can restore later from Firestore backups.`, [
@@ -136,7 +153,7 @@ export default function LibraryScreen() {
           <View>
             <Text style={styles.headerTitle} testID="library-title">Library</Text>
             <Text style={styles.headerSubtitle}>
-              {booksLoading ? 'Loading...' : `${books.length} books available`}
+              {booksLoading ? 'Loading...' : `${safeBooks.length} books available`}
             </Text>
           </View>
           {isAdmin && (
@@ -206,7 +223,7 @@ export default function LibraryScreen() {
       ) : (
         <FlatList
           data={filteredBooks}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item?.id || Math.random().toString()}
           numColumns={2}
           renderItem={({ item }) => <BookCard book={item} isAdmin={isAdmin} onDelete={handleDeleteBook} />}
           contentContainerStyle={styles.listContent}
