@@ -42,7 +42,7 @@
   "seed_data_creation": "N/A - All data is hardcoded in constants/theme.ts as per requirements",
   "retest_needed": false,
   "should_main_agent_self_test": false,
-  "context_for_next_testing_agent": "This is a UI-only mobile-first Islamic Learning App with no backend. All functionality is working correctly. The app uses Expo Router for tab navigation with 5 tabs. All content (14 courses, 3 teachers, 8 books) is hardcoded in /app/frontend/constants/theme.ts. The app loads successfully at https://islamic-learning-49.preview.emergentagent.com. Only minor deprecation warnings exist which don't affect functionality.",
+  "context_for_next_testing_agent": "This is a UI-only mobile-first Islamic Learning App with no backend. All functionality is working correctly. The app uses Expo Router for tab navigation with 5 tabs. All content (14 courses, 3 teachers, 8 books) is hardcoded in /app/frontend/constants/theme.ts. The app loads successfully at https://expo-audit-hub.preview.emergentagent.com. Only minor deprecation warnings exist which don't affect functionality.",
   "test_execution_details": {
     "app_loads_without_errors": "✓ PASS - Home screen loads correctly with no React Native error screens",
     "bottom_tab_navigation": "✓ PASS - All 5 tabs present and functional (Home, Courses, Teachers, Library, About)",

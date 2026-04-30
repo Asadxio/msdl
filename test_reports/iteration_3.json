@@ -46,7 +46,7 @@
   "seed_data_creation": "Firebase Firestore already contains 14 courses and 3 teachers with proper data structure",
   "retest_needed": false,
   "should_main_agent_self_test": false,
-  "context_for_next_testing_agent": "Phase 3 Firebase integration complete and tested. Critical bug fixed: Firebase uses camelCase field names (teacherName, classLink) while code expected snake_case. DataContext now handles both naming conventions. Firebase data loads successfully (14 courses, 3 teachers). Teacher names visible on all course cards. Join Class button shows alert when class_link is empty (Firebase has no class_link data). All previous features from iterations 1 & 2 still working. App loads at https://islamic-learning-49.preview.emergentagent.com",
+  "context_for_next_testing_agent": "Phase 3 Firebase integration complete and tested. Critical bug fixed: Firebase uses camelCase field names (teacherName, classLink) while code expected snake_case. DataContext now handles both naming conventions. Firebase data loads successfully (14 courses, 3 teachers). Teacher names visible on all course cards. Join Class button shows alert when class_link is empty (Firebase has no class_link data). All previous features from iterations 1 & 2 still working. App loads at https://expo-audit-hub.preview.emergentagent.com",
   "test_execution_details": {
     "app_loads_without_errors": "✓ PASS - Home screen loads with greeting, madrasa name, featured courses",
     "home_screen_shows_courses_data": "✓ PASS - Featured courses section shows 5 courses from Firebase",

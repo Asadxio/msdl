@@ -59,7 +59,7 @@
   "seed_data_creation": "Firestore 'library' collection contains 2 books. Admin screen has seed button to add 4 initial books (Risala Roohi Sharif, Misbah-ul-Insha Part 1, Uroos ul Adab, Qirat Course)",
   "retest_needed": false,
   "should_main_agent_self_test": false,
-  "context_for_next_testing_agent": "Phase 4 Library System complete and tested. Firebase Firestore 'library' collection working. Library screen fetches and displays books with category badges. Book viewer uses Google Docs viewer (WebView may not render in web preview but works in native). Admin screen allows seeding 4 books and manual book addition. All navigation flows working. Previous features from iterations 1-3 (tabs, course/teacher details, Firebase courses/teachers) remain functional. App loads at https://islamic-learning-49.preview.emergentagent.com",
+  "context_for_next_testing_agent": "Phase 4 Library System complete and tested. Firebase Firestore 'library' collection working. Library screen fetches and displays books with category badges. Book viewer uses Google Docs viewer (WebView may not render in web preview but works in native). Admin screen allows seeding 4 books and manual book addition. All navigation flows working. Previous features from iterations 1-3 (tabs, course/teacher details, Firebase courses/teachers) remain functional. App loads at https://expo-audit-hub.preview.emergentagent.com",
   "test_execution_details": {
     "app_loads_without_errors": "✓ PASS - Home screen loads with greeting and madrasa name",
     "library_tab_navigation": "✓ PASS - Library tab navigates to library screen",
