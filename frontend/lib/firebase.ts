@@ -9,7 +9,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyDFk_Cc6yEIROJ60vq0VtyFx0qd4YUeqxQ",
   authDomain: "madrasa-app-50d6c.firebaseapp.com",
   projectId: "madrasa-app-50d6c",
-  storageBucket: "madrasa-app-50d6c.firebasestorage.app",
+  storageBucket: "madrasa-app-50d6c.appspot.com",
   messagingSenderId: "675123731963",
   appId: "1:675123731963:web:2b892063276a7c452cbf5e",
 };
@@ -37,4 +37,4 @@ try {
 }
 
 export { db, auth };
-export const storage = getStorage(app);
+export const storage = getStorage(app, `gs://${firebaseConfig.storageBucket}`);
