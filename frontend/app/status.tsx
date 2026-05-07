@@ -104,7 +104,6 @@ export default function StatusScreen() {
       let mediaUrl = '';
       let mediaType: '' | 'image' | 'video' = '';
       if (statusMedia?.uri) {
-        setUploadingMedia(true);
         const extension = statusMedia.type === 'video' ? 'mp4' : 'jpg';
         const contentType = statusMedia.type === 'video' ? 'video/mp4' : 'image/jpeg';
         const storagePath = `status_updates/${user.uid}/${Date.now()}.${extension}`;
@@ -117,7 +116,6 @@ export default function StatusScreen() {
           throw new Error('Media upload did not return a valid HTTPS URL.');
         }
         mediaType = statusMedia.type;
-        setUploadingMedia(false);
       }
       await addDoc(collection(db, 'status_updates'), {
         user_id: user.uid,

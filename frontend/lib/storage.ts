@@ -9,7 +9,7 @@ export async function uploadUriFile(params: {
   if (!isValidUploadUri(params?.uri)) {
     throw new Error('Invalid file URI for upload.');
   }
-  const uploadOnce = async () => {
+  try {
     const res = await fetch(params.uri);
     if (!res.ok) {
       throw new Error(`Failed to read file URI (${res.status}).`);
