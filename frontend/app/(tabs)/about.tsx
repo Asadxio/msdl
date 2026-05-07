@@ -34,7 +34,8 @@ import {
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
-import { isValidHttpsUrl } from '@/lib/links';
+import { isValidHttpsUrl, prepareExternalUrl } from '@/lib/links';
+import { isHttpsUrl, uploadUriFile } from '@/lib/storage';
 
 type AppSettings = {
   fees_amount: number;
@@ -321,8 +322,12 @@ export default function AboutScreen() {
   };
 
   const getLatestPaymentSettings = async () => {
-    const snap = await getDoc(doc(db, 'app_settings', 'platform'));
-    const data = snap.exists() ? (snap.data() as any) : {};
+    const platformSnap = await getDoc(doc(db, 'app_settings', 'platform'));
+    const globalSnap = await getDoc(doc(db, 'app_settings', 'global'));
+    const data = {
+      ...(platformSnap.exists() ? (platformSnap.data() as any) : {}),
+      ...(globalSnap.exists() ? (globalSnap.data() as any) : {}),
+    };
     const rawLink = String(data.razorpay_link || settings.razorpay_link || '').trim();
     const fallbackLink = __DEV__ && !rawLink ? DEV_RAZORPAY_TEST_LINK : '';
     return {
@@ -370,7 +375,12 @@ export default function AboutScreen() {
         created_at: serverTimestamp(),
       });
       await createPaymentNotification(profile.name, amount, 'fees');
-      await Linking.openURL(link).catch(() => {
+      const safeUrl = prepareExternalUrl(link);
+      if (!safeUrl) {
+        Alert.alert('Invalid Link', 'Payment link is invalid.');
+        return;
+      }
+      await Linking.openURL(safeUrl).catch(() => {
         Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
       });
       Alert.alert('Recorded', 'Your payment attempt was recorded and is pending admin approval.');
@@ -410,7 +420,12 @@ export default function AboutScreen() {
         created_at: serverTimestamp(),
       });
       await createPaymentNotification(profile.name, amount, donationType);
-      await Linking.openURL(link).catch(() => {
+      const safeUrl = prepareExternalUrl(link);
+      if (!safeUrl) {
+        Alert.alert('Invalid Link', 'Payment link is invalid.');
+        return;
+      }
+      await Linking.openURL(safeUrl).catch(() => {
         Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
       });
       Alert.alert('Donation Initiated', `${donationType.toUpperCase()} donation recorded and pending admin approval.`);
@@ -510,6 +525,7 @@ export default function AboutScreen() {
   };
 
   const pickProfileImage = async (source: 'camera' | 'gallery') => {
+    if (!user?.uid) return;
     try {
       console.log('[About] pickProfileImage button pressed', { source });
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -534,7 +550,17 @@ export default function AboutScreen() {
         Alert.alert('Invalid Image', errorMessage);
         return;
       }
-      await updateProfileMedia({ photo_url: asset.uri, avatar: profile?.avatar || 'person' });
+      const extension = String(asset?.fileName || '').split('.').pop() || 'jpg';
+      const storagePath = `users/${user.uid}/profile/profile_${Date.now()}.${extension}`;
+      const photoUrl = await uploadUriFile({
+        uri: asset.uri,
+        path: storagePath,
+        contentType: asset?.mimeType || 'image/jpeg',
+      });
+      if (!isHttpsUrl(photoUrl)) {
+        throw new Error('Profile upload did not return a valid HTTPS URL.');
+      }
+      await updateProfileMedia({ photo_url: photoUrl, avatar: profile?.avatar || 'person' });
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to upload profile image.');
     }

@@ -1,7 +1,7 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import {
-  arrayUnion, doc, serverTimestamp, updateDoc,
+  arrayRemove, arrayUnion, doc, serverTimestamp, updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { withTimeout } from '@/lib/errors';
@@ -33,6 +33,20 @@ export async function initPushNotifications(): Promise<void> {
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#0FA958',
         sound: 'default',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      await Notifications.setNotificationChannelAsync('calls', {
+        name: 'calls',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 300, 200, 300],
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      await Notifications.setNotificationChannelAsync('announcements', {
+        name: 'announcements',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
       console.log('[Notifications] Android notification channel configured');
@@ -88,8 +102,8 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
       return null;
     }
 
-    const tokenResponse = await Notifications.getDevicePushTokenAsync().catch((error) => {
-      console.log('[Notifications] getDevicePushTokenAsync ERROR', error);
+    const tokenResponse = await Notifications.getExpoPushTokenAsync().catch((error) => {
+      console.log('[Notifications] getExpoPushTokenAsync ERROR', error);
       return null;
     });
     const token = String(tokenResponse?.data || '');
@@ -97,7 +111,7 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
     if (!token) return null;
 
     await withTimeout(updateDoc(doc(db, 'users', userId), {
-      fcm_tokens: arrayUnion(token),
+      expo_push_tokens: arrayUnion(token),
       fcm_token_updated_at: serverTimestamp(),
     }));
     console.log('[Notifications] Device push token saved');
@@ -106,6 +120,19 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
   } catch (error) {
     console.log('[Notifications] registerDevicePushToken ERROR', error);
     return null;
+  }
+}
+
+export async function unregisterDevicePushToken(userId: string, token?: string | null): Promise<void> {
+  const safeToken = String(token || '').trim();
+  if (!userId || !safeToken) return;
+  try {
+    await withTimeout(updateDoc(doc(db, 'users', userId), {
+      expo_push_tokens: arrayRemove(safeToken),
+      fcm_token_updated_at: serverTimestamp(),
+    }));
+  } catch (error) {
+    console.log('[Notifications] unregisterDevicePushToken ERROR', error);
   }
 }
 

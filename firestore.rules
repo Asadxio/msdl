@@ -34,6 +34,10 @@ service cloud.firestore {
       return data.keys().hasOnly(allowed);
     }
 
+    function isBlankOrHttpsUrl(value) {
+      return value == null || value == '' || (value is string && value.matches('^https://.*$'));
+    }
+
     function isValidUserCreate(uid) {
       return isSelf(uid)
         && hasOnlyAllowedKeys(
@@ -56,14 +60,14 @@ service cloud.firestore {
     function isValidUserUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at']
+          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.email is string
         && request.resource.data.role in ['student', 'teacher', 'admin']
         && request.resource.data.status in ['pending', 'approved', 'deactivated', 'rejected']
-        && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string)
+        && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
         && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
         && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
@@ -73,7 +77,7 @@ service cloud.firestore {
 
     function isValidSelfUserMetadataUpdate(uid) {
       return isSelf(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcm_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'last_login_at'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'last_login_at'])
         && request.resource.data.name == resource.data.name
         && request.resource.data.email == resource.data.email
         && request.resource.data.role == resource.data.role
@@ -84,8 +88,9 @@ service cloud.firestore {
         && (!('referred_by' in resource.data) || request.resource.data.referred_by == resource.data.referred_by)
         && (!('referral_count' in resource.data) || request.resource.data.referral_count == resource.data.referral_count)
         && (!('fcm_tokens' in request.resource.data) || (request.resource.data.fcm_tokens is list && request.resource.data.fcm_tokens.size() <= 10))
+        && (!('expo_push_tokens' in request.resource.data) || (request.resource.data.expo_push_tokens is list && request.resource.data.expo_push_tokens.size() <= 10))
         && (!('fcm_token_updated_at' in request.resource.data) || request.resource.data.fcm_token_updated_at is timestamp)
-        && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string)
+        && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
         && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
         && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp);
     }
@@ -422,7 +427,7 @@ service cloud.firestore {
         && request.resource.data.user_name is string
         && request.resource.data.role in ['teacher', 'admin']
         && request.resource.data.text is string
-        && (!('media_url' in request.resource.data) || request.resource.data.media_url is string)
+        && (!('media_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.media_url))
         && (!('media_type' in request.resource.data) || request.resource.data.media_type in ['', 'image', 'video'])
         && request.resource.data.likes is list
         && request.resource.data.comments is list
@@ -533,6 +538,41 @@ service cloud.firestore {
     }
 
     // modules/lessons/assignments and related learning data
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /quizzes/{quizId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /quiz_results/{resultId} {
+      allow get: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.score is number
+        && request.resource.data.total_questions is number
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.keys().hasOnly(['user_id', 'score', 'total_questions', 'created_at']);
+      allow update, delete: if isAdmin();
+    }
+
+    match /certificates/{certificateId} {
+      allow get: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.user_name is string
+        && request.resource.data.course_name is string
+        && request.resource.data.completion_date is string
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.keys().hasOnly(['user_id', 'user_name', 'course_name', 'completion_date', 'created_at']);
+      allow update, delete: if isAdmin();
+    }
+
     match /modules/{moduleId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();

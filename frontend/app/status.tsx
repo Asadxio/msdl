@@ -12,6 +12,7 @@ import {
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { isHttpsUrl, uploadUriFile } from '@/lib/storage';
 
 type StatusComment = {
   id: string;
@@ -99,13 +100,29 @@ export default function StatusScreen() {
     }
     setPosting(true);
     try {
+      let mediaUrl = '';
+      let mediaType: '' | 'image' | 'video' = '';
+      if (statusMedia?.uri) {
+        const extension = statusMedia.type === 'video' ? 'mp4' : 'jpg';
+        const contentType = statusMedia.type === 'video' ? 'video/mp4' : 'image/jpeg';
+        const storagePath = `status_updates/${user.uid}/${Date.now()}.${extension}`;
+        mediaUrl = await uploadUriFile({
+          uri: statusMedia.uri,
+          path: storagePath,
+          contentType,
+        });
+        if (!isHttpsUrl(mediaUrl)) {
+          throw new Error('Media upload did not return a valid HTTPS URL.');
+        }
+        mediaType = statusMedia.type;
+      }
       await addDoc(collection(db, 'status_updates'), {
         user_id: user.uid,
         user_name: profile.name || 'Teacher',
         role: profile.role === 'admin' ? 'admin' : 'teacher',
         text: statusText.trim(),
-        media_url: statusMedia?.uri || '',
-        media_type: statusMedia?.type || '',
+        media_url: mediaUrl,
+        media_type: mediaType,
         likes: [],
         comments: [],
         created_at: serverTimestamp(),
@@ -152,7 +169,10 @@ export default function StatusScreen() {
       console.log('[Status] Picker result', { canceled: result.canceled, assetsCount: result?.assets?.length || 0 });
       if (result.canceled) return;
       const asset = result?.assets?.[0];
-      if (!asset?.uri) return;
+      if (!asset?.uri || (typeof asset.uri === 'string' && !asset.uri.trim())) {
+        Alert.alert('Invalid media', 'Selected media is missing a valid file path.');
+        return;
+      }
       const mediaType = asset.type === 'video' ? 'video' : 'image';
       setStatusMedia({ uri: asset.uri, type: mediaType });
     } catch (error) {

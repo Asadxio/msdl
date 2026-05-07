@@ -43,7 +43,7 @@ function TabIcon({ name, color, focused }: { name: TabIconName; color: string; f
 }
 
 export default function TabLayout() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadChats, setUnreadChats] = useState(0);
 
@@ -56,13 +56,19 @@ export default function TabLayout() {
 
     const notifQ = query(
       collection(db, 'notifications'),
-      where('user_id', 'in', [user.uid, 'all']),
+      where('user_id', 'in', [user.uid, 'all', 'role_targeted']),
       orderBy('created_at', 'desc'),
     );
     const unsubNotif = onSnapshot(notifQ, (snap) => {
       let count = 0;
       snap.forEach((d) => {
         const data = d.data() as any;
+        if (data.user_id === 'role_targeted') {
+          const targetUserIds = Array.isArray(data.target_user_ids) ? data.target_user_ids : [];
+          const targetRoles = Array.isArray(data.target_roles) ? data.target_roles : [];
+          const visible = targetUserIds.includes(user.uid) || (profile?.role ? targetRoles.includes(profile.role) : false);
+          if (!visible) return;
+        }
         if (!data.read?.[user.uid]) count += 1;
       });
       setUnreadNotifications(count);
@@ -82,7 +88,7 @@ export default function TabLayout() {
       unsubNotif();
       unsubChats();
     };
-  }, [user?.uid]);
+  }, [profile?.role, user?.uid]);
 
   return (
     <Tabs

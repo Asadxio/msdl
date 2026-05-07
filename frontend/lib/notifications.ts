@@ -26,6 +26,7 @@ export async function createNotificationAsAdmin(
   const pushBody = isClassReminder ? 'Class reminder received. Open app for details.' : message;
   const category = isClassReminder ? 'class_reminder' : (isAnnouncement ? 'announcement' : 'notification');
   const sound = payload.sound || 'default';
+  const channel = category === 'class_reminder' ? 'announcements' : 'default';
 
   await addDoc(collection(db, 'notifications'), {
     title,
@@ -41,13 +42,13 @@ export async function createNotificationAsAdmin(
     await sendPushToAllUsers({
       title: isAnnouncement ? 'New Announcement' : title,
       body: pushBody,
-      data: { type: category, sound },
+      data: { type: category, sound, channel },
     }).catch(() => {});
   } else {
     await sendPushToUserIds([userId], {
       title,
       body: pushBody,
-      data: { type: 'notification', sound },
+      data: { type: category, sound, channel },
     }).catch(() => {});
   }
   return true;
@@ -86,7 +87,7 @@ export async function createRoleNotificationAsAdmin(
     await sendPushToUserIds(dedupedUserIds, {
       title,
       body: message,
-      data: { type: payload.category || 'notification', sound: payload.sound || 'default' },
+      data: { type: payload.category || 'notification', sound: payload.sound || 'default', channel: 'announcements' },
     }).catch(() => {});
     return true;
   } catch (error) {
@@ -126,7 +127,7 @@ export async function createRoleNotification(
     await sendPushToUserIds(dedupedUserIds, {
       title,
       body: message,
-      data: { type: payload.category || 'notification', sound: payload.sound || 'default' },
+      data: { type: payload.category || 'notification', sound: payload.sound || 'default', channel: 'announcements' },
     }).catch(() => {});
     return true;
   } catch (error) {
