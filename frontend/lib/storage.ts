@@ -6,8 +6,14 @@ export async function uploadUriFile(params: {
   path: string;
   contentType?: string;
 }): Promise<string> {
+  if (!isValidUploadUri(params?.uri)) {
+    throw new Error('Invalid file URI for upload.');
+  }
   try {
     const res = await fetch(params.uri);
+    if (!res.ok) {
+      throw new Error(`Failed to read file URI (${res.status}).`);
+    }
     const blob = await res.blob();
     const fileRef = ref(storage, params.path);
     await uploadBytes(fileRef, blob, params.contentType ? { contentType: params.contentType } : undefined);
@@ -16,4 +22,20 @@ export async function uploadUriFile(params: {
     console.log('[Storage] uploadUriFile ERROR', error);
     throw error;
   }
+}
+
+export function isLocalFileUri(uri?: string | null): boolean {
+  const value = String(uri || '').trim();
+  return value.startsWith('file://') || value.startsWith('content://');
+}
+
+export function isHttpsUrl(uri?: string | null): boolean {
+  const value = String(uri || '').trim();
+  return value.startsWith('https://');
+}
+
+export function isValidUploadUri(uri?: string | null): boolean {
+  const value = String(uri || '').trim();
+  if (!value) return false;
+  return isLocalFileUri(value) || value.startsWith('http://') || value.startsWith('https://');
 }

@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List
+from urllib import request as urlrequest
 import uuid
 from datetime import datetime
 import json
@@ -126,10 +127,12 @@ def _fetch_user_role(uid: str) -> str:
     return str(data.get("role", ""))
 
 
-def _collect_tokens(user_ids: list[str]) -> list[str]:
+def _collect_tokens(user_ids: list[str]) -> tuple[list[str], list[str], dict[str, list[str]]]:
     if firebase_db is None or not user_ids:
-        return []
-    tokens: list[str] = []
+        return [], [], {}
+    fcm_tokens: list[str] = []
+    expo_tokens: list[str] = []
+    token_owners: dict[str, list[str]] = {}
     for uid in user_ids:
         snap = firebase_db.collection("users").document(uid).get()
         if not snap.exists:
@@ -137,8 +140,37 @@ def _collect_tokens(user_ids: list[str]) -> list[str]:
         data = snap.to_dict() or {}
         for token in (data.get("fcm_tokens") or []):
             if isinstance(token, str) and token.strip():
-                tokens.append(token.strip())
-    return list(set(tokens))
+                safe_token = token.strip()
+                fcm_tokens.append(safe_token)
+                token_owners[safe_token] = token_owners.get(safe_token, []) + [uid]
+        for token in (data.get("expo_push_tokens") or []):
+            if isinstance(token, str) and token.strip():
+                safe_token = token.strip()
+                expo_tokens.append(safe_token)
+                token_owners[safe_token] = token_owners.get(safe_token, []) + [uid]
+    return list(set(fcm_tokens)), list(set(expo_tokens)), token_owners
+
+
+def _send_expo_push(tokens: list[str], payload: PushSendRequest) -> None:
+    if not tokens:
+        return
+    messages = [{
+        "to": token,
+        "title": payload.title,
+        "body": payload.body,
+        "data": payload.data or {},
+        "sound": "default",
+    } for token in tokens if token.startswith("ExponentPushToken[")]
+    if not messages:
+        return
+    req = urlrequest.Request(
+        "https://exp.host/--/api/v2/push/send",
+        data=json.dumps(messages).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    with urlrequest.urlopen(req, timeout=15) as _:
+        pass
 
 
 @api_router.post("/push/send")
@@ -185,17 +217,42 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
             if uid not in participants:
                 raise HTTPException(status_code=403, detail="Recipient outside chat participants")
 
-    tokens = _collect_tokens(target_user_ids)
-    if not tokens:
+    tokens, expo_tokens, token_owners = _collect_tokens(target_user_ids)
+    if not tokens and not expo_tokens:
         return {"ok": True, "sent": 0}
 
-    message = messaging.MulticastMessage(
-        notification=messaging.Notification(title=payload.title, body=payload.body),
-        data={k: str(v) for k, v in (payload.data or {}).items()},
-        tokens=tokens,
-    )
-    result = messaging.send_each_for_multicast(message)
-    return {"ok": True, "sent": result.success_count, "failed": result.failure_count}
+    result = None
+    if tokens:
+        message = messaging.MulticastMessage(
+            notification=messaging.Notification(title=payload.title, body=payload.body),
+            data={k: str(v) for k, v in (payload.data or {}).items()},
+            tokens=tokens,
+        )
+        result = messaging.send_each_for_multicast(message)
+    _send_expo_push(expo_tokens, payload)
+    stale_codes = {
+        "messaging/registration-token-not-registered",
+        "messaging/invalid-registration-token",
+    }
+    stale_tokens: list[str] = []
+    if result:
+        for idx, response in enumerate(result.responses):
+            if response.success:
+                continue
+            code = getattr(response.exception, "code", "") or ""
+            if code in stale_codes and idx < len(tokens):
+                stale_tokens.append(tokens[idx])
+    if stale_tokens:
+        for token in stale_tokens:
+            for uid in token_owners.get(token, []):
+                try:
+                    firebase_db.collection("users").document(uid).update({
+                        "fcm_tokens": admin_firestore.ArrayRemove([token]),
+                        "fcm_token_updated_at": admin_firestore.SERVER_TIMESTAMP,
+                    })
+                except Exception:
+                    pass
+    return {"ok": True, "sent": (result.success_count if result else 0) + len(expo_tokens), "failed": (result.failure_count if result else 0), "stale_removed": len(stale_tokens)}
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

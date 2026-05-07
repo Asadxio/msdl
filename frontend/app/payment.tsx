@@ -31,14 +31,22 @@ export default function PaymentFlowScreen() {
   const [openingPayment, setOpeningPayment] = useState(false);
   const [submittingPayment, setSubmittingPayment] = useState(false);
 
+  const getPaymentSettings = async () => {
+    const globalSnap = await getDoc(doc(db, 'app_settings', 'global'));
+    const platformSnap = await getDoc(doc(db, 'app_settings', 'platform'));
+    const merged = {
+      ...(platformSnap.exists() ? (platformSnap.data() as any) : {}),
+      ...(globalSnap.exists() ? (globalSnap.data() as any) : {}),
+    };
+    const fee = Number(merged.fees_amount || 0);
+    const link = String(merged.razorpay_link || '');
+    return { fee, link: link || (__DEV__ ? DEV_RAZORPAY_TEST_LINK : '') };
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
-        const settingsSnap = await getDoc(doc(db, 'app_settings', 'global'));
-        const settingsData = settingsSnap.exists() ? (settingsSnap.data() as any) : {};
-        const fee = Number(settingsData.fees_amount || 0);
-        const link = String(settingsData.razorpay_link || '');
-        const effectiveLink = link || (__DEV__ ? DEV_RAZORPAY_TEST_LINK : '');
+        const { fee, link: effectiveLink } = await getPaymentSettings();
         setFeesAmount(fee);
         setRazorpayLink(effectiveLink);
         setAmount(String(fee || ''));
@@ -63,6 +71,15 @@ export default function PaymentFlowScreen() {
   }, [feesAmount, paymentType]);
 
   const parsedAmount = useMemo(() => Number(amount || 0), [amount]);
+
+  const onContinueFromAmount = () => {
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Please enter a valid amount greater than 0.');
+      return;
+    }
+    setError('');
+    setStep(2);
+  };
 
   const onPayNow = async () => {
     if (!razorpayLink.trim()) {
@@ -163,7 +180,7 @@ export default function PaymentFlowScreen() {
               placeholder="Enter amount"
               placeholderTextColor={COLORS.textMuted}
             />
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep(2)}>
+            <TouchableOpacity style={styles.primaryBtn} onPress={onContinueFromAmount}>
               <Text style={styles.primaryBtnText}>Continue</Text>
             </TouchableOpacity>
           </View>

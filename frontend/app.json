@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow camera access to capture profile photos and status media.",
+        "NSMicrophoneUsageDescription": "Allow microphone access when recording video status content."
+      }
     },
     "android": {
       "permissions": [
@@ -36,7 +40,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow access to your gallery"
+          "photosPermission": "Allow access to your gallery",
+          "cameraPermission": "Allow camera access to capture profile photos and status media.",
+          "microphonePermission": "Allow microphone access when recording video."
         }
       ],
       [
