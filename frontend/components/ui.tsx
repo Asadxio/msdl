@@ -2,6 +2,7 @@ import React, { PropsWithChildren, useEffect, useRef } from 'react';
 import {
   Animated,
   Pressable,
+  PressableProps,
   StyleProp,
   StyleSheet,
   Text,
@@ -32,19 +33,30 @@ export function FadeInView({ children, style, delay = 0 }: PropsWithChildren<{ s
   );
 }
 
+type ScalePressableProps = PropsWithChildren<{
+  style?: StyleProp<ViewStyle>;
+  onPress?: PressableProps['onPress'];
+  onLongPress?: PressableProps['onLongPress'];
+  testID?: string;
+  disabled?: boolean;
+  haptic?: boolean;
+}>;
+
 export function ScalePressable({
   children,
   style,
   onPress,
+  onLongPress,
   testID,
   disabled,
   haptic = true,
-}: PropsWithChildren<{ style?: StyleProp<ViewStyle>; onPress?: () => void; testID?: string; disabled?: boolean; haptic?: boolean }>) {
+}: ScalePressableProps) {
   const scale = useRef(new Animated.Value(1)).current;
 
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       testID={testID}
       disabled={disabled}
       onPressIn={() => {

@@ -133,20 +133,33 @@ export default function ChatDetailScreen() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const typingTimer = useRef<any>(null);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<MessageItem>>(null);
 
   useEffect(() => {
     if (!id) return;
-    const unsub = onSnapshot(doc(db, 'chats', id), (snap) => {
-      if (!snap.exists()) {
+    let unsub = () => {};
+    try {
+      unsub = onSnapshot(doc(db, 'chats', id), (snap) => {
+        if (!snap.exists()) {
+          setChat(null);
+          setLoading(false);
+          return;
+        }
+        setChat(normalizeChatMeta(snap.id, snap.data()));
+        setLoading(false);
+      }, (error) => {
+        console.log('[ChatDetail] chat listener ERROR', error);
         setChat(null);
         setLoading(false);
-        return;
-      }
-      setChat(normalizeChatMeta(snap.id, snap.data()));
+        setSendError('Could not load chat. Please try again.');
+      });
+    } catch (error) {
+      console.log('[ChatDetail] chat listener setup ERROR', error);
+      setChat(null);
       setLoading(false);
-    });
+      setSendError('Could not load chat. Please try again.');
+    }
     return unsub;
   }, [id]);
 
@@ -162,25 +175,34 @@ export default function ChatDetailScreen() {
       orderBy('created_at', 'desc'),
       limit(PAGE_SIZE),
     );
-    const unsub = onSnapshot(initialQ, (snap) => {
-      const latest = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
-      setMessages((prev) => {
-        const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
-        const seen = new Set(latest.map((m) => m.id));
-        const older = prev.filter((m) => !seen.has(m.id) && !m.localOnly);
-        const pending = prev.filter((m) => m.localOnly && !confirmedClientIds.has(m.client_id));
-        return [...latest, ...older, ...pending].sort((a, b) => toMillis(b) - toMillis(a));
-      });
-      setLastCursor(snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
-      setHasMore(snap.docs.length === PAGE_SIZE);
+    let unsub = () => {};
+    try {
+      unsub = onSnapshot(initialQ, (snap) => {
+        const latest = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
+        setMessages((prev) => {
+          const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
+          const seen = new Set(latest.map((m) => m.id));
+          const older = prev.filter((m) => !seen.has(m.id) && !m.localOnly);
+          const pending = prev.filter((m) => m.localOnly && !confirmedClientIds.has(m.client_id));
+          return [...latest, ...older, ...pending].sort((a, b) => toMillis(b) - toMillis(a));
+        });
+        setLastCursor(snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
+        setHasMore(snap.docs.length === PAGE_SIZE);
 
-      if (user?.uid) {
-        const firstUnread = latest.find((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
-        if (firstUnread) {
-          updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch(() => {});
+        if (user?.uid) {
+          const firstUnread = latest.find((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
+          if (firstUnread) {
+            updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch(() => {});
+          }
         }
-      }
-    });
+      }, (error) => {
+        console.log('[ChatDetail] messages listener ERROR', error);
+        setSendError('Could not load messages. Please try again.');
+      });
+    } catch (error) {
+      console.log('[ChatDetail] messages listener setup ERROR', error);
+      setSendError('Could not load messages. Please try again.');
+    }
     return unsub;
   }, [id, user?.uid]);
 
@@ -211,16 +233,29 @@ export default function ChatDetailScreen() {
           updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch(() => {});
         }
       }
+    } catch (error) {
+      console.log('[ChatDetail] loadMore ERROR', error);
+      setSendError('Could not load older messages. Please try again.');
     } finally {
       setLoadingMore(false);
     }
   };
 
+  const isAdmin = profile?.role === 'admin';
+  const chatParticipants = useMemo(() => (
+    Array.isArray(chat?.participants) ? chat.participants.filter((uid) => typeof uid === 'string') : []
+  ), [chat?.participants]);
+
   const canAccess = useMemo(() => {
     if (!user || !chat) return false;
-    const participants = Array.isArray(chat.participants) ? chat.participants : [];
-    return chat.type === 'broadcast' || participants.includes(user.uid);
-  }, [chat, user]);
+    return chat.type === 'broadcast' || chatParticipants.includes(user.uid);
+  }, [chat, chatParticipants, user]);
+
+  const canSendMessages = useMemo(() => {
+    if (!user?.uid || !chat) return false;
+    if (chat.type === 'broadcast') return isAdmin;
+    return chatParticipants.includes(user.uid);
+  }, [chat, chatParticipants, isAdmin, user?.uid]);
 
   const othersTyping = useMemo(() => {
     if (!chat?.typing || !user?.uid) return false;
@@ -228,9 +263,9 @@ export default function ChatDetailScreen() {
   }, [chat?.typing, user?.uid]);
 
   const setTyping = useCallback((isTyping: boolean) => {
-    if (!chat || !id || !user?.uid) return;
+    if (!chat || !id || !user?.uid || !canSendMessages) return;
     updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: isTyping }).catch(() => {});
-  }, [chat, id, user?.uid]);
+  }, [canSendMessages, chat, id, user?.uid]);
 
   const onType = useCallback((value: string) => {
     setText(value);
@@ -243,6 +278,10 @@ export default function ChatDetailScreen() {
     if (!id || !user?.uid || sending) return;
     const msg = text.trim();
     if (!msg) return;
+    if (!canSendMessages) {
+      setSendError('You do not have permission to send messages in this chat.');
+      return;
+    }
 
     const clientId = `${user.uid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const optimisticMessage: MessageItem = {
@@ -273,8 +312,9 @@ export default function ChatDetailScreen() {
         deleted_for: [],
         deleted_for_everyone: false,
       });
+      const participants = chatParticipants;
       const unreadUpdates: Record<string, any> = { [`unread_counts.${user.uid}`]: 0 };
-      (chat?.participants || []).forEach((uid) => {
+      participants.forEach((uid) => {
         if (uid !== user.uid) unreadUpdates[`unread_counts.${uid}`] = increment(1);
       });
 
@@ -284,12 +324,12 @@ export default function ChatDetailScreen() {
         [`typing.${user.uid}`]: false,
         ...unreadUpdates,
       });
-      const recipientIds = (chat?.participants || []).filter((uid) => uid !== user.uid);
+      const recipientIds = participants.filter((uid) => uid !== user.uid);
       if (recipientIds.length > 0) {
         await sendPushToUserIds(recipientIds, {
           title: profile?.name || 'New message',
           body: msg,
-          data: { type: 'chat', chat_id: id },
+          data: { type: 'chat_message', chat_id: id },
         }).catch(() => {});
       }
     } catch (error: any) {
@@ -298,7 +338,7 @@ export default function ChatDetailScreen() {
     } finally {
       setSending(false);
     }
-  }, [chat?.participants, id, profile?.name, sending, setTyping, text, user?.email, user?.uid]);
+  }, [canSendMessages, chatParticipants, id, profile?.name, sending, setTyping, text, user?.email, user?.uid]);
 
   const refreshMessages = useCallback(async () => {
     if (!id || refreshing) return;
@@ -370,16 +410,16 @@ export default function ChatDetailScreen() {
   }, [deleteForMe, unsendForEveryone, user?.uid]);
 
   useEffect(() => {
-    if (!id || !user?.uid || !chat) return;
+    if (!id || !user?.uid || !chat || (chat.type === 'broadcast' && !isAdmin)) return;
     updateDoc(doc(db, 'chats', id), { [`unread_counts.${user.uid}`]: 0 }).catch(() => {});
-  }, [chat, id, user?.uid]);
+  }, [chat, id, isAdmin, user?.uid]);
 
   useEffect(() => () => {
     if (typingTimer.current) clearTimeout(typingTimer.current);
-    if (id && user?.uid) {
+    if (id && user?.uid && canSendMessages) {
       updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: false }).catch(() => {});
     }
-  }, [id, user?.uid]);
+  }, [canSendMessages, id, user?.uid]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -394,7 +434,7 @@ export default function ChatDetailScreen() {
 
   const renderMessage = useCallback(({ item }: { item: MessageItem }) => {
     const mine = item.sender_id === user?.uid;
-    const otherParticipantCount = Math.max((chat?.participants?.length || 1) - 1, 1);
+    const otherParticipantCount = Math.max(chatParticipants.length - 1, 1);
     const seenByOthers = (item.read_by?.length || 1) > 1 || (item.read_by?.length || 0) >= otherParticipantCount + 1;
     return (
       <TouchableOpacity activeOpacity={0.8} onLongPress={() => openMessageActions(item)}>
@@ -406,7 +446,7 @@ export default function ChatDetailScreen() {
         />
       </TouchableOpacity>
     );
-  }, [chat?.participants?.length, chat?.type, openMessageActions, user?.uid]);
+  }, [chat?.type, chatParticipants.length, openMessageActions, user?.uid]);
 
   if (loading) {
     return (
@@ -470,14 +510,15 @@ export default function ChatDetailScreen() {
         {sendError ? <Text style={styles.sendError}>{sendError}</Text> : null}
         <View style={styles.inputRow}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, !canSendMessages && styles.inputDisabled]}
             value={text}
             onChangeText={onType}
-            placeholder="Type a message..."
+            placeholder={canSendMessages ? 'Type a message...' : 'Only admins can send broadcast messages'}
             placeholderTextColor={COLORS.textMuted}
+            editable={canSendMessages}
             multiline
           />
-          <ScalePressable style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending}>
+          <ScalePressable style={[styles.sendBtn, (!text.trim() || sending || !canSendMessages) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending || !canSendMessages}>
             {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={18} color="#fff" />}
           </ScalePressable>
         </View>
@@ -525,5 +566,6 @@ const styles = StyleSheet.create({
     flex: 1, maxHeight: 100, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.xl,
     paddingHorizontal: 12, paddingVertical: 10, backgroundColor: COLORS.surfaceAlt, color: COLORS.textMain,
   },
+  inputDisabled: { opacity: 0.7 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primary },
 });
