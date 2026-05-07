@@ -82,8 +82,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     };
     setupPush().catch((error) => {
       console.log('[Notifications] setupPush ERROR', error);
-      Alert.alert('Notifications', 'Unable to configure notifications right now.');
     });
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid) return () => {};
+    const tokenSub = Notifications.addPushTokenListener(async (event) => {
+      const nextToken = String((event as any)?.data || '').trim();
+      if (!nextToken) return;
+      await registerDevicePushToken(user.uid);
+    });
+    return () => tokenSub.remove();
   }, [user?.uid]);
 
   useEffect(() => {
