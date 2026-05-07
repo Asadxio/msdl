@@ -85,7 +85,9 @@ export default function ChatsScreen() {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   const [bulkUpdating, setBulkUpdating] = useState(false);
-  const usersMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.name])), [users]);
+  const safeUsers = useMemo(() => (Array.isArray(users) ? users : []), [users]);
+  const safeChats = useMemo(() => (Array.isArray(chats) ? chats : []), [chats]);
+  const usersMap = useMemo(() => Object.fromEntries(safeUsers.map((u) => [u.id, u.name])), [safeUsers]);
   const safePush = useCallback((path: string) => {
     try {
       if (!path) return;
@@ -129,7 +131,9 @@ export default function ChatsScreen() {
         const merged = [...normal, ...arr.filter((x) => !normal.some((n) => n.id === x.id))];
         return merged.sort((x, y) => (y.updated_at?.seconds || 0) - (x.updated_at?.seconds || 0));
       });
-    }, () => {});
+    }, (err) => {
+      console.log('[Chats] broadcast listener ERROR', err);
+    });
 
     return () => {
       unsubA();
@@ -188,11 +192,13 @@ export default function ChatsScreen() {
           const run = async () => {
             setBulkUpdating(true);
             try {
-              await Promise.all(selectedChatIds.map(async (chatId) => {
-                await updateDoc(doc(db, 'chats', chatId), {
-                  hidden_by: arrayUnion(user.uid),
-                  [`unread_counts.${user.uid}`]: 0,
-                });
+              const selectedChats = safeChats.filter((chatItem) => selectedChatIds.includes(chatItem.id));
+              await Promise.all(selectedChats.map(async (chatItem) => {
+                const updatePayload: Record<string, any> = { hidden_by: arrayUnion(user.uid) };
+                if (chatItem.type !== 'broadcast') {
+                  updatePayload[`unread_counts.${user.uid}`] = 0;
+                }
+                await updateDoc(doc(db, 'chats', chatItem.id), updatePayload);
               }));
               setSelectedChatIds([]);
               setFeedback({ type: 'success', text: 'Selected chats deleted from your list.' });
@@ -207,7 +213,7 @@ export default function ChatsScreen() {
         },
       },
     ]);
-  }, [bulkUpdating, selectedChatIds, user?.uid]);
+  }, [bulkUpdating, safeChats, selectedChatIds, user?.uid]);
 
   const getOrCreateDirectChat = async (target: AppUser) => {
     if (!user) return;
@@ -332,8 +338,6 @@ export default function ChatsScreen() {
     }
   };
 
-  const safeUsers = Array.isArray(users) ? users : [];
-  const safeChats = Array.isArray(chats) ? chats : [];
   const filteredUsers = safeUsers.filter((u) => (
     u.id !== user?.uid && (
       !debouncedSearch
