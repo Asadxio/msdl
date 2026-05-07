@@ -9,7 +9,7 @@ export async function uploadUriFile(params: {
   if (!isValidUploadUri(params?.uri)) {
     throw new Error('Invalid file URI for upload.');
   }
-  try {
+  const uploadOnce = async () => {
     const res = await fetch(params.uri);
     if (!res.ok) {
       throw new Error(`Failed to read file URI (${res.status}).`);
@@ -18,9 +18,17 @@ export async function uploadUriFile(params: {
     const fileRef = ref(storage, params.path);
     await uploadBytes(fileRef, blob, params.contentType ? { contentType: params.contentType } : undefined);
     return getDownloadURL(fileRef);
+  };
+  try {
+    return await uploadOnce();
   } catch (error) {
     console.log('[Storage] uploadUriFile ERROR', error);
-    throw error;
+    try {
+      return await uploadOnce();
+    } catch (retryError) {
+      console.log('[Storage] uploadUriFile RETRY ERROR', retryError);
+      throw retryError;
+    }
   }
 }
 

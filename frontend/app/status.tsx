@@ -51,6 +51,7 @@ export default function StatusScreen() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [updatingId, setUpdatingId] = useState('');
   const [statusMedia, setStatusMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, 'status_updates'), orderBy('created_at', 'desc'));
@@ -103,6 +104,7 @@ export default function StatusScreen() {
       let mediaUrl = '';
       let mediaType: '' | 'image' | 'video' = '';
       if (statusMedia?.uri) {
+        setUploadingMedia(true);
         const extension = statusMedia.type === 'video' ? 'mp4' : 'jpg';
         const contentType = statusMedia.type === 'video' ? 'video/mp4' : 'image/jpeg';
         const storagePath = `status_updates/${user.uid}/${Date.now()}.${extension}`;
@@ -115,6 +117,7 @@ export default function StatusScreen() {
           throw new Error('Media upload did not return a valid HTTPS URL.');
         }
         mediaType = statusMedia.type;
+        setUploadingMedia(false);
       }
       await addDoc(collection(db, 'status_updates'), {
         user_id: user.uid,
@@ -133,6 +136,7 @@ export default function StatusScreen() {
       console.log('[Status] postStatus ERROR', error);
       Alert.alert('Post failed', 'Could not post status right now.');
     } finally {
+      setUploadingMedia(false);
       setPosting(false);
     }
   };
@@ -264,9 +268,10 @@ export default function StatusScreen() {
           <TouchableOpacity style={styles.ghostBtn} onPress={pickStatusMedia}>
             <Text style={styles.ghostBtnText}>Add Image / Video</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.primaryBtn} onPress={postStatus} disabled={posting}>
-            {posting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Post Status</Text>}
+          <TouchableOpacity style={styles.primaryBtn} onPress={postStatus} disabled={posting || uploadingMedia}>
+            {(posting || uploadingMedia) ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Post Status</Text>}
           </TouchableOpacity>
+          {uploadingMedia ? <Text style={styles.uploadingText}>Uploading media...</Text> : null}
         </View>
       ) : null}
 
@@ -364,6 +369,7 @@ const styles = StyleSheet.create({
   primaryBtn: { borderRadius: RADIUS.md, backgroundColor: COLORS.primary, paddingVertical: 10, alignItems: 'center' },
   primaryBtnSmall: { borderRadius: RADIUS.md, backgroundColor: COLORS.primary, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
   primaryBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  uploadingText: { fontSize: 12, color: COLORS.textMuted, textAlign: 'center' },
   ghostBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: COLORS.surfaceAlt },
   ghostBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   commentText: { fontSize: 12, color: COLORS.textMuted },
