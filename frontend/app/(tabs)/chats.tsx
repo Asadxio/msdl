@@ -144,13 +144,13 @@ export default function ChatsScreen() {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        const snap = await getDocs(collection(db, 'users'));
+        const snap = await getDocs(query(collection(db, 'public_profiles'), where('searchable', '==', true)));
         const list: AppUser[] = [];
         snap.forEach((d) => {
           const data = d.data() as any;
-          if (data.status !== 'approved') return;
+          if (data.status !== 'approved' || data.is_active === false) return;
           list.push({
-            id: d.id, name: data.name || 'User', email: data.email || '', role: data.role || 'student', status: data.status,
+            id: d.id, name: data.name || 'User', email: '', role: data.role || 'student', status: data.status,
             photo_url: data.photo_url || '', avatar: data.avatar || 'person',
           });
         });

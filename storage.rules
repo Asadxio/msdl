@@ -19,6 +19,26 @@ service firebase.storage {
         && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'];
     }
 
+    function isTeacherOrAdmin() {
+      return isSignedIn()
+        && request.auth.token != null
+        && request.auth.token.role in ['teacher', 'admin'];
+    }
+
+    function isSafeAssignmentUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 10485760
+        && request.resource.contentType in [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'image/jpeg',
+          'image/png',
+          'image/webp'
+        ];
+    }
+
     match /users/{userId}/profile/{fileName} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && request.auth.uid == userId && isSafeImageUpload(5242880);
@@ -27,6 +47,14 @@ service firebase.storage {
     match /status_updates/{userId}/{fileName} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && request.auth.uid == userId && isSafeStatusUpload();
+    }
+
+    match /assignment_submissions/{userId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isTeacherOrAdmin());
+      allow write: if isSignedIn()
+        && request.auth.uid == userId
+        && fileName.matches('^[A-Za-z0-9._-]{6,140}$')
+        && isSafeAssignmentUpload();
     }
 
     match /{allPaths=**} {
