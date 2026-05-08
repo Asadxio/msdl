@@ -16,7 +16,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { WebView } from "react-native-webview";
 import {
   COLORS,
@@ -33,6 +33,39 @@ import { ScalePressable } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 import { uploadUriFile } from "@/lib/storage";
 import { normalizeMeetUrl, prepareExternalUrl } from "@/lib/links";
+
+const MAX_ASSIGNMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
+const ALLOWED_ASSIGNMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+]);
+
+function sanitizeFileName(fileName?: string | null): string {
+  const base = String(fileName || "submission")
+    .trim()
+    .replace(/[^A-Za-z0-9._-]/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 90);
+  return base.length >= 3 ? base : `submission_${Date.now()}`;
+}
+
+function getAssignmentUploadError(error: any): string {
+  const message = String(error?.message || "").toLowerCase();
+  if (message.includes("permission") || message.includes("unauthorized")) {
+    return "Upload permission denied. Please sign in again and retry.";
+  }
+  if (message.includes("network")) {
+    return "Network issue during upload. Please check your internet and retry.";
+  }
+  if (message.includes("unsupported")) return String(error?.message);
+  if (message.includes("too large")) return String(error?.message);
+  return "Unable to upload assignment file right now. Please retry.";
+}
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
@@ -276,76 +309,44 @@ export default function CourseDetailScreen() {
 
   const pickSubmissionFile = async () => {
     try {
-      console.log("[CourseDetail] Upload button pressed");
-      const existingPermission =
-        await ImagePicker.getMediaLibraryPermissionsAsync();
-      console.log("[CourseDetail] Existing media permission", {
-        granted: existingPermission.granted,
-        canAskAgain: existingPermission.canAskAgain,
-        status: existingPermission.status,
-      });
-      if (!existingPermission.granted && !existingPermission.canAskAgain) {
-        Alert.alert(
-          "Permission blocked",
-          "Gallery access is disabled. Enable it from app settings to continue.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Open Settings",
-              onPress: () => {
-                Linking.openSettings().catch(() => {});
-              },
-            },
-          ],
-        );
-        return;
-      }
-      const permission = existingPermission.granted
-        ? existingPermission
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log("[CourseDetail] Requested media permission", {
-        granted: permission.granted,
-        canAskAgain: permission.canAskAgain,
-        status: permission.status,
-      });
-      if (!permission.granted) {
-        Alert.alert(
-          "Permission required",
-          "Please allow gallery access before uploading.",
-        );
-        return;
-      }
-      let picked: ImagePicker.ImagePickerResult;
-      try {
-        picked = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.7,
-        });
-      } catch (pickerError: any) {
-        console.log("[CourseDetail] Native picker launch ERROR:", pickerError);
-        Alert.alert(
-          "Error",
-          pickerError?.message || "Unable to open gallery right now.",
-        );
-        return;
-      }
-      console.log("[CourseDetail] Picker result", {
-        canceled: picked.canceled,
-        assetsCount: picked?.assets?.length || 0,
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "image/*",
+        ],
+        multiple: false,
+        copyToCacheDirectory: true,
       });
       if (picked.canceled) return;
-      const file = picked?.assets?.[0];
-      console.log("Picked file:", file);
+      const file = picked.assets?.[0];
       if (!file?.uri) return;
+      const mimeType = String(file.mimeType || "").toLowerCase().trim();
+      if (!ALLOWED_ASSIGNMENT_MIME_TYPES.has(mimeType)) {
+        Alert.alert(
+          "Unsupported file",
+          "Please upload a PDF, DOC, DOCX, JPG, PNG, or WebP file.",
+        );
+        return;
+      }
+      if ((file.size || 0) <= 0) {
+        Alert.alert("Invalid file", "Selected file is empty.");
+        return;
+      }
+      if ((file.size || 0) > MAX_ASSIGNMENT_UPLOAD_BYTES) {
+        Alert.alert("File too large", "Maximum assignment file size is 10MB.");
+        return;
+      }
       setSelectedUpload({
         uri: file.uri,
-        name: file.fileName || "submission-image",
-        mimeType: file.mimeType || "image/jpeg",
+        name: sanitizeFileName(file.name),
+        mimeType,
       });
       setExternalFileUrl("");
     } catch (e) {
       console.log("[CourseDetail] pickSubmissionFile ERROR:", e);
-      Alert.alert("Error", "Unable to pick file right now.");
+      Alert.alert("Error", "Unable to select a file right now.");
     }
   };
 
@@ -367,17 +368,26 @@ export default function CourseDetailScreen() {
       if (externalFileUrl.trim()) {
         fileUrl = externalFileUrl.trim();
       } else if (selectedUpload?.uri) {
+        if (!selectedUpload.uri.trim()) {
+          throw new Error("Invalid file URI for upload.");
+        }
         fileUrl = selectedUpload.uri;
         if (!selectedUpload.uri.startsWith("http")) {
-          console.log("[CourseDetail] Upload started");
           setAssignmentUploadProgress(0);
+          const safeName = sanitizeFileName(selectedUpload.name);
+          const storageFileName = `${Date.now()}_${safeName}`;
           fileUrl = await uploadUriFile({
             uri: selectedUpload.uri,
-            path: `assignment_submissions/${user?.uid || "anonymous"}/${Date.now()}_${selectedUpload.name}`,
+            path: `assignment_submissions/${user?.uid || "anonymous"}/${storageFileName}`,
             contentType: selectedUpload.mimeType,
+            maxBytes: MAX_ASSIGNMENT_UPLOAD_BYTES,
+            customMetadata: {
+              upload_context: "assignment_submission",
+              user_id: user?.uid || "anonymous",
+              assignment_id: activeAssignmentId,
+            },
             onProgress: setAssignmentUploadProgress,
           });
-          console.log("[CourseDetail] Upload completed");
         }
       }
       const ok = await submitAssignment({
@@ -394,7 +404,7 @@ export default function CourseDetailScreen() {
       }
     } catch (e) {
       console.log("[CourseDetail] submitAssignmentHandler ERROR:", e);
-      Alert.alert("Error", "Something went wrong");
+      Alert.alert("Upload failed", getAssignmentUploadError(e));
     } finally {
       setSubmittingAssignment(false);
     }

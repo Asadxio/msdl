@@ -5,7 +5,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, onSnapshot, orderBy, query, updateDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -64,7 +64,7 @@ export default function AdminPaymentsScreen() {
   const setStatus = async (id: string, status: 'approved' | 'rejected') => {
     setUpdatingId(id);
     try {
-      await updateDoc(doc(db, 'payments', id), { status, reviewed_at: new Date() });
+      await updateDoc(doc(db, 'payments', id), { status, reviewed_at: serverTimestamp() });
     } catch {
       Alert.alert('Update Failed', 'Could not update payment status. Please try again.');
     } finally {

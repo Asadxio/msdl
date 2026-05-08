@@ -6,6 +6,7 @@ type UploadUriFileParams = {
   path: string;
   contentType?: string;
   maxBytes?: number;
+  customMetadata?: Record<string, string>;
   onProgress?: (progress: number) => void;
 };
 
@@ -17,6 +18,9 @@ const SUPPORTED_CONTENT_TYPES = new Set([
   "image/webp",
   "video/mp4",
   "video/quicktime",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
 function normalizeContentType(contentType?: string): string {
@@ -88,7 +92,7 @@ export async function uploadUriFile(
     !SUPPORTED_CONTENT_TYPES.has(contentType)
   ) {
     throw new Error(
-      "Unsupported file type. Please choose a JPG, PNG, WebP, or MP4 file.",
+      "Unsupported file type. Please choose a PDF, DOC, DOCX, JPG, PNG, or WebP file.",
     );
   }
 
@@ -109,6 +113,7 @@ export async function uploadUriFile(
       customMetadata: {
         source: "expo",
         uploaded_at_ms: String(Date.now()),
+        ...(params.customMetadata || {}),
       },
     });
 

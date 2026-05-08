@@ -197,7 +197,11 @@ service cloud.firestore {
         && (
           resource.data.user_id == 'all'
           || resource.data.user_id == request.auth.uid
-          || resource.data.user_id == 'role_targeted'
+          || (resource.data.user_id == 'role_targeted'
+            && ((resource.data.target_user_ids is list && request.auth.uid in resource.data.target_user_ids)
+              || (resource.data.target_roles is list
+                && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+                && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in resource.data.target_roles)))
         );
     }
 
@@ -219,17 +223,21 @@ service cloud.firestore {
     function isValidPaymentCreate() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'type', 'transaction_ref']
+          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'type', 'transaction_ref', 'review_mode', 'currency', 'submitted_at']
         )
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.user_name is string
         && request.resource.data.user_name.size() > 0
         && request.resource.data.amount is number
-        && request.resource.data.amount >= 0
+        && request.resource.data.amount > 0
+        && request.resource.data.amount <= 1000000
         && request.resource.data.status in ['pending']
         && request.resource.data.provider == 'razorpay'
         && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar'])
-        && (!('transaction_ref' in request.resource.data) || request.resource.data.transaction_ref is string)
+        && (!('transaction_ref' in request.resource.data) || (request.resource.data.transaction_ref is string && request.resource.data.transaction_ref.size() >= 4 && request.resource.data.transaction_ref.size() <= 80 && request.resource.data.transaction_ref.matches('^[a-zA-Z0-9_./# -]+$')))
+        && request.resource.data.review_mode == 'manual'
+        && request.resource.data.currency == 'INR'
+        && (!('submitted_at' in request.resource.data) || request.resource.data.submitted_at is timestamp)
         && request.resource.data.created_at is timestamp;
     }
 
@@ -240,6 +248,8 @@ service cloud.firestore {
         && request.resource.data.amount == resource.data.amount
         && request.resource.data.provider == resource.data.provider
         && request.resource.data.type == resource.data.type
+        && request.resource.data.review_mode == resource.data.review_mode
+        && request.resource.data.currency == resource.data.currency
         && request.resource.data.created_at == resource.data.created_at
         && resource.data.status == 'pending'
         && request.resource.data.status == 'submitted'
@@ -251,12 +261,14 @@ service cloud.firestore {
     function isValidPaymentUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'submitted_at', 'type', 'transaction_ref', 'reviewed_at']
+          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'submitted_at', 'type', 'transaction_ref', 'reviewed_at', 'review_mode', 'currency']
         )
         && request.resource.data.user_id == resource.data.user_id
         && request.resource.data.user_name == resource.data.user_name
         && request.resource.data.amount == resource.data.amount
         && request.resource.data.provider == resource.data.provider
+        && request.resource.data.review_mode == resource.data.review_mode
+        && request.resource.data.currency == resource.data.currency
         && request.resource.data.created_at == resource.data.created_at
         && request.resource.data.status in ['pending', 'submitted', 'verified', 'approved', 'rejected']
         && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar'])
@@ -483,7 +495,7 @@ service cloud.firestore {
     match /users/{uid} {
       // Users can read their own profile; signed-in users can list users for app pickers/referrals.
       allow get: if isAdmin() || isSelf(uid);
-      allow list: if isSignedIn();
+      allow list: if isAdmin() || isTeacherOrAdmin();
 
       // Self-signup profile creation.
       allow create: if isValidUserCreate(uid);
@@ -491,6 +503,24 @@ service cloud.firestore {
       // Admin can fully update users; users can update own push/profile/login metadata.
       allow update: if (isAdmin() && isValidUserUpdateByAdmin()) || isValidSelfUserMetadataUpdate(uid) || isValidReferralCountIncrement();
       allow delete: if isAdmin();
+    }
+
+    match /public_profiles/{uid} {
+      allow get, list: if isSignedIn();
+      allow create, update: if (isSelf(uid)
+          && request.resource.data.uid == uid
+          && request.resource.data.role in ['student', 'teacher', 'admin']
+          && request.resource.data.status in ['approved', 'pending', 'deactivated', 'rejected']
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.searchable is bool
+          && request.resource.data.is_active is bool
+          && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
+          && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
+          && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp)
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'role', 'status', 'searchable', 'is_active', 'photo_url', 'avatar', 'updated_at']))
+        || isAdmin();
+      allow delete: if isSelf(uid) || isAdmin();
     }
 
     // courses collection
@@ -632,14 +662,26 @@ service cloud.firestore {
       allow create, update: if isAdmin()
         || (isSignedIn()
           && request.resource.data.user_id == request.auth.uid
-          && request.resource.data.lesson_id is string);
+          && request.resource.data.lesson_id is string
+          && request.resource.data.keys().hasOnly(['user_id', 'lesson_id', 'course_id', 'completed_at', 'updated_at'])
+          && (!('course_id' in request.resource.data) || request.resource.data.course_id is string)
+          && (!('completed_at' in request.resource.data) || request.resource.data.completed_at is timestamp)
+          && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp));
       allow delete: if isAdmin();
     }
 
     match /submissions/{submissionId} {
       allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
       allow create, update: if isTeacherOrAdmin()
-        || (isSignedIn() && request.resource.data.user_id == request.auth.uid);
+        || (isSignedIn()
+          && request.resource.data.user_id == request.auth.uid
+          && request.resource.data.keys().hasOnly(['assignment_id', 'user_id', 'file_url', 'file_name', 'mime_type', 'status', 'submitted_at', 'reviewed_at', 'reviewed_by', 'notes'])
+          && request.resource.data.assignment_id is string
+          && request.resource.data.file_url is string
+          && request.resource.data.file_name is string
+          && (!('mime_type' in request.resource.data) || request.resource.data.mime_type is string)
+          && request.resource.data.status in ['submitted', 'reviewed']
+          && request.resource.data.submitted_at is timestamp);
       allow delete: if isAdmin();
     }
 

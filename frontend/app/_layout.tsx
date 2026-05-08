@@ -8,7 +8,7 @@ import * as Notifications from 'expo-notifications';
 import { initPushNotifications, registerDevicePushToken, requestNotificationPermission } from '@/lib/pushNotifications';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, profile, authLoading, emailVerified } = useAuth();
+  const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -24,7 +24,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       if (!inAuth) router.replace('/auth/login');
     } else if (inUnauthorized && profile?.status === 'approved') {
       router.replace('/');
-    } else if (inAdmin && !isAdmin) {
+    } else if (inAdmin && (profileOffline || !isAdmin)) {
       router.replace('/unauthorized?required=admin');
     } else if (profile?.status === 'rejected') {
       if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
@@ -39,7 +39,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } else if (user && (profile?.status === 'approved' || isAdmin)) {
       if (inAuth) router.replace('/');
     }
-  }, [user, profile, authLoading, emailVerified, segments, router]);
+  }, [user, profile, authLoading, emailVerified, segments, router, profileOffline]);
 
   useEffect(() => {
     initPushNotifications().catch((error) => {

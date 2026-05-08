@@ -15,6 +15,13 @@ import { isValidHttpsUrl, prepareExternalUrl } from '@/lib/links';
 type PaymentType = 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 
+const PAYMENT_REF_PATTERN = /^[a-zA-Z0-9_./# -]{4,80}$/;
+
+function sanitizeTransactionRef(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+
 export default function PaymentFlowScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -117,8 +124,13 @@ export default function PaymentFlowScreen() {
 
   const onConfirmPayment = async () => {
     if (!user?.uid || !profile) return;
-    if (!reference.trim()) {
+    const safeReference = sanitizeTransactionRef(reference);
+    if (!safeReference) {
       setError('Please enter transaction reference / note.');
+      return;
+    }
+    if (!PAYMENT_REF_PATTERN.test(safeReference)) {
+      setError('Reference must be 4-80 chars and only include letters, numbers, spaces, . / # _ -');
       return;
     }
     setError('');
@@ -131,7 +143,10 @@ export default function PaymentFlowScreen() {
         status: 'pending',
         provider: 'razorpay',
         type: paymentType,
-        transaction_ref: reference.trim(),
+        transaction_ref: safeReference,
+        review_mode: 'manual',
+        currency: 'INR',
+        submitted_at: serverTimestamp(),
         created_at: serverTimestamp(),
       });
       setStatusText('pending • awaiting admin confirmation');

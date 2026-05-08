@@ -11,7 +11,7 @@ import {
   User,
 } from 'firebase/auth';
 import {
-  collection, doc, getDoc, getDocs, increment, limit, query, serverTimestamp, setDoc, updateDoc, where,
+  collection, doc, getDoc, getDocs, increment, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
@@ -40,6 +40,7 @@ type AuthContextType = {
   resendVerification: () => Promise<string | null>;
   resetPassword: (email: string) => Promise<string | null>;
   refreshUser: () => Promise<void>;
+  profileOffline: boolean;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -54,6 +55,7 @@ const AuthContext = createContext<AuthContextType>({
   resendVerification: async () => null,
   resetPassword: async () => null,
   refreshUser: async () => {},
+  profileOffline: false,
 });
 
 export function useAuth() {
@@ -69,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [profileOffline, setProfileOffline] = useState(false);
 
   const emailVerified = user?.emailVerified ?? false;
   const getProfileCacheKey = (uid: string) => `profile_cache_${uid}`;
@@ -99,6 +102,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const syncPublicProfile = async (uid: string, nextProfile: UserProfile) => {
+    await setDoc(doc(db, 'public_profiles', uid), {
+      uid,
+      name: nextProfile.name || 'User',
+      role: nextProfile.role,
+      status: nextProfile.status,
+      searchable: nextProfile.status === 'approved',
+      is_active: nextProfile.status === 'approved',
+      photo_url: nextProfile.photo_url || '',
+      avatar: nextProfile.avatar || 'person',
+      updated_at: serverTimestamp(),
+    }, { merge: true }).catch(() => {});
+  };
+
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.uid);
@@ -117,24 +134,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    let profileUnsub: (() => void) | null = null;
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (profileUnsub) {
+        profileUnsub();
+        profileUnsub = null;
+      }
       setUser(firebaseUser);
+      setProfileOffline(false);
       if (firebaseUser) {
         const cachedProfile = await AsyncStorage.getItem(getProfileCacheKey(firebaseUser.uid)).catch(() => null);
         if (cachedProfile) {
           try {
             setProfile(JSON.parse(cachedProfile) as UserProfile);
+            setProfileOffline(true);
           } catch {
             // ignore invalid cached profile
           }
         }
-        await fetchProfile(firebaseUser.uid);
+        profileUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snap) => {
+          setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
+          if (!snap.exists()) {
+            setProfile(null);
+            await AsyncStorage.removeItem(getProfileCacheKey(firebaseUser.uid)).catch(() => {});
+            await firebaseSignOut(auth).catch(() => {});
+            return;
+          }
+          const nextProfile = snap.data() as UserProfile;
+          setProfile(nextProfile);
+          await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
+          await syncPublicProfile(firebaseUser.uid, nextProfile);
+          if (nextProfile.status === 'deactivated' || nextProfile.status === 'rejected') {
+            await firebaseSignOut(auth).catch(() => {});
+          }
+        }, async (err) => {
+          logger.warn('Profile realtime listener failed:', err);
+          setProfileOffline(true);
+          await fetchProfile(firebaseUser.uid);
+        });
       } else {
         setProfile(null);
       }
       setAuthLoading(false);
     });
-    return unsub;
+    return () => {
+      if (profileUnsub) profileUnsub();
+      unsub();
+    };
   }, []);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
@@ -193,6 +239,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         last_login_at: serverTimestamp(),
         created_at: serverTimestamp(),
       });
+      await setDoc(doc(db, 'public_profiles', cred.user.uid), {
+        uid: cred.user.uid,
+        name: safeName,
+        role: safeRole,
+        status: 'pending',
+        searchable: false,
+        is_active: false,
+        photo_url: '',
+        avatar: 'person',
+        updated_at: serverTimestamp(),
+      }, { merge: true });
       if (referrerId) {
         await updateDoc(doc(db, 'users', referrerId), {
           referral_count: increment(1),
@@ -253,7 +310,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       user, profile, authLoading, emailVerified,
       signIn, signUp, signOut: signOutUser, refreshProfile,
-      resendVerification, resetPassword, refreshUser,
+      resendVerification, resetPassword, refreshUser, profileOffline,
     }}>
       {children}
     </AuthContext.Provider>
