@@ -11,6 +11,7 @@ from urllib import request as urlrequest
 import uuid
 from datetime import datetime
 import json
+import time
 from fastapi import HTTPException, Header
 from firebase_admin import auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
 import firebase_admin
@@ -56,9 +57,6 @@ async def create_status_check(input: StatusCheckCreate):
 async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
-
-# Include the router in the main app
-app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -127,6 +125,10 @@ def _fetch_user_role(uid: str) -> str:
     return str(data.get("role", ""))
 
 
+def _dedupe(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(values))
+
+
 def _collect_tokens(user_ids: list[str]) -> tuple[list[str], list[str], dict[str, list[str]]]:
     if firebase_db is None or not user_ids:
         return [], [], {}
@@ -148,29 +150,112 @@ def _collect_tokens(user_ids: list[str]) -> tuple[list[str], list[str], dict[str
                 safe_token = token.strip()
                 expo_tokens.append(safe_token)
                 token_owners[safe_token] = token_owners.get(safe_token, []) + [uid]
-    return list(set(fcm_tokens)), list(set(expo_tokens)), token_owners
+    return _dedupe(fcm_tokens), _dedupe(expo_tokens), token_owners
 
 
-def _send_expo_push(tokens: list[str], payload: PushSendRequest) -> None:
-    if not tokens:
+def _remove_token_from_users(token: str, owners: dict[str, list[str]], field: str) -> None:
+    if firebase_db is None or not token:
         return
-    messages = [{
-        "to": token,
-        "title": payload.title,
-        "body": payload.body,
-        "data": payload.data or {},
-        "sound": "default",
-    } for token in tokens if token.startswith("ExponentPushToken[")]
-    if not messages:
-        return
+    for uid in owners.get(token, []):
+        try:
+            firebase_db.collection("users").document(uid).update({
+                field: admin_firestore.ArrayRemove([token]),
+                "fcm_token_updated_at": admin_firestore.SERVER_TIMESTAMP,
+            })
+        except Exception as exc:
+            logger.warning("Failed cleaning push token for %s: %s", uid, exc)
+
+
+def _post_expo_json(url: str, payload: dict | list) -> dict:
     req = urlrequest.Request(
-        "https://exp.host/--/api/v2/push/send",
-        data=json.dumps(messages).encode("utf-8"),
+        url,
+        data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
-    with urlrequest.urlopen(req, timeout=15) as _:
-        pass
+    with urlrequest.urlopen(req, timeout=15) as response:
+        return json.loads(response.read().decode("utf-8") or "{}")
+
+
+def _chunked(values: list, size: int):
+    for index in range(0, len(values), size):
+        yield values[index:index + size]
+
+
+def _send_expo_push(tokens: list[str], payload: PushSendRequest, token_owners: dict[str, list[str]]) -> dict:
+    valid_tokens = [token for token in tokens if token.startswith("ExponentPushToken[") or token.startswith("ExpoPushToken[")]
+    invalid_tokens = [token for token in tokens if token not in valid_tokens]
+    for token in invalid_tokens:
+        _remove_token_from_users(token, token_owners, "expo_push_tokens")
+    if not valid_tokens:
+        return {"sent": 0, "failed": len(invalid_tokens), "stale_removed": len(invalid_tokens), "retried": 0}
+
+    sent = 0
+    failed = len(invalid_tokens)
+    stale_removed = len(invalid_tokens)
+    retried = 0
+    receipt_ids: list[str] = []
+    retry_messages: list[dict] = []
+
+    for token_batch in _chunked(valid_tokens, 100):
+        messages = [{
+            "to": token,
+            "title": payload.title,
+            "body": payload.body,
+            "data": payload.data or {},
+            "sound": "default",
+            "channelId": str((payload.data or {}).get("channelId") or "default"),
+        } for token in token_batch]
+        try:
+            response = _post_expo_json("https://exp.host/--/api/v2/push/send", messages)
+        except Exception as exc:
+            logger.warning("Expo push send failed, scheduling retry: %s", exc)
+            retry_messages.extend(messages)
+            continue
+
+        tickets = response.get("data") or []
+        for message, ticket in zip(messages, tickets):
+            status = ticket.get("status")
+            if status == "ok" and ticket.get("id"):
+                sent += 1
+                receipt_ids.append(ticket["id"])
+                continue
+            failed += 1
+            error = ((ticket.get("details") or {}).get("error") or "")
+            if error == "DeviceNotRegistered":
+                stale_removed += 1
+                _remove_token_from_users(message["to"], token_owners, "expo_push_tokens")
+            elif error in {"MessageRateExceeded", "ExpoError", "PushTooManyExperienceIds"}:
+                retry_messages.append(message)
+
+    if receipt_ids:
+        time.sleep(1.25)
+        for receipt_batch in _chunked(receipt_ids, 300):
+            try:
+                receipts_response = _post_expo_json("https://exp.host/--/api/v2/push/getReceipts", {"ids": receipt_batch})
+            except Exception as exc:
+                logger.warning("Expo receipt polling failed: %s", exc)
+                continue
+            receipts = receipts_response.get("data") or {}
+            for receipt in receipts.values():
+                if receipt.get("status") == "ok":
+                    continue
+                failed += 1
+                error = ((receipt.get("details") or {}).get("error") or "")
+                if error == "DeviceNotRegistered":
+                    stale_removed += 1
+                    # Receipts do not include the token, so ticket-level cleanup remains the primary stale-token path.
+
+    if retry_messages:
+        retried = len(retry_messages)
+        try:
+            retry_response = _post_expo_json("https://exp.host/--/api/v2/push/send", retry_messages[:100])
+            sent += sum(1 for ticket in (retry_response.get("data") or []) if ticket.get("status") == "ok")
+        except Exception as exc:
+            logger.warning("Expo push retry failed: %s", exc)
+
+    return {"sent": sent, "failed": failed, "stale_removed": stale_removed, "retried": retried}
+
 
 
 @api_router.post("/push/send")
@@ -229,7 +314,7 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
             tokens=tokens,
         )
         result = messaging.send_each_for_multicast(message)
-    _send_expo_push(expo_tokens, payload)
+    expo_result = _send_expo_push(expo_tokens, payload, token_owners)
     stale_codes = {
         "messaging/registration-token-not-registered",
         "messaging/invalid-registration-token",
@@ -244,15 +329,19 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
                 stale_tokens.append(tokens[idx])
     if stale_tokens:
         for token in stale_tokens:
-            for uid in token_owners.get(token, []):
-                try:
-                    firebase_db.collection("users").document(uid).update({
-                        "fcm_tokens": admin_firestore.ArrayRemove([token]),
-                        "fcm_token_updated_at": admin_firestore.SERVER_TIMESTAMP,
-                    })
-                except Exception:
-                    pass
-    return {"ok": True, "sent": (result.success_count if result else 0) + len(expo_tokens), "failed": (result.failure_count if result else 0), "stale_removed": len(stale_tokens)}
+            _remove_token_from_users(token, token_owners, "fcm_tokens")
+    return {
+        "ok": True,
+        "sent": (result.success_count if result else 0) + expo_result["sent"],
+        "failed": (result.failure_count if result else 0) + expo_result["failed"],
+        "stale_removed": len(stale_tokens) + expo_result["stale_removed"],
+        "expo_retried": expo_result["retried"],
+    }
+
+
+# Include routes after every endpoint has been attached to the router.
+app.include_router(api_router)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

@@ -111,6 +111,7 @@ export default function AboutScreen() {
   const [editingFeedbackMsg, setEditingFeedbackMsg] = useState('');
   const [exportingCollection, setExportingCollection] = useState<string | null>(null);
   const [savingProfileMedia, setSavingProfileMedia] = useState(false);
+  const [profileUploadProgress, setProfileUploadProgress] = useState(0);
   const [paymentError, setPaymentError] = useState('');
   const [donationError, setDonationError] = useState('');
   const [feedbackError, setFeedbackError] = useState('');
@@ -550,19 +551,29 @@ export default function AboutScreen() {
         Alert.alert('Invalid Image', errorMessage);
         return;
       }
-      const extension = String(asset?.fileName || '').split('.').pop() || 'jpg';
+      const rawExtension = String(asset?.fileName || '').split('.').pop()?.toLowerCase() || '';
+      const extension = ['jpg', 'jpeg', 'png', 'webp'].includes(rawExtension) ? rawExtension : 'jpg';
+      const mimeType = asset?.mimeType || (extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg');
       const storagePath = `users/${user.uid}/profile/profile_${Date.now()}.${extension}`;
+      setSavingProfileMedia(true);
+      setProfileUploadProgress(0);
       const photoUrl = await uploadUriFile({
         uri: asset.uri,
         path: storagePath,
-        contentType: asset?.mimeType || 'image/jpeg',
+        contentType: mimeType,
+        maxBytes: 5 * 1024 * 1024,
+        onProgress: setProfileUploadProgress,
       });
       if (!isHttpsUrl(photoUrl)) {
         throw new Error('Profile upload did not return a valid HTTPS URL.');
       }
       await updateProfileMedia({ photo_url: photoUrl, avatar: profile?.avatar || 'person' });
+      setProfileUploadProgress(0);
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to upload profile image.');
+      console.log('[About] profile image upload ERROR', err);
+      Alert.alert('Upload failed', err?.message || 'Failed to upload profile image. Please retry.');
+    } finally {
+      setSavingProfileMedia(false);
     }
   };
 
@@ -607,13 +618,16 @@ export default function AboutScreen() {
               {!!profile.referral_code && <Text style={styles.profileEmail}>Referral Code: {profile.referral_code}</Text>}
               <Text style={styles.profileEmail}>Referrals: {profile.referral_count || 0}</Text>
               <View style={styles.profileActionRow}>
-                <TouchableOpacity style={styles.profileMiniBtn} onPress={() => pickProfileImage('gallery')}>
+                <TouchableOpacity style={[styles.profileMiniBtn, savingProfileMedia && styles.disabledBtn]} onPress={() => pickProfileImage('gallery')} disabled={savingProfileMedia}>
                   <Text style={styles.profileMiniBtnText}>Gallery</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.profileMiniBtn} onPress={() => pickProfileImage('camera')}>
+                <TouchableOpacity style={[styles.profileMiniBtn, savingProfileMedia && styles.disabledBtn]} onPress={() => pickProfileImage('camera')} disabled={savingProfileMedia}>
                   <Text style={styles.profileMiniBtnText}>Camera</Text>
                 </TouchableOpacity>
               </View>
+              {savingProfileMedia && profileUploadProgress > 0 ? (
+                <Text style={styles.profileUploadText}>Uploading profile photo... {Math.round(profileUploadProgress * 100)}%</Text>
+              ) : null}
               <View style={styles.avatarPickerRow}>
                 {AVATAR_OPTIONS.map((avatarName) => (
                   <TouchableOpacity
@@ -1029,6 +1043,8 @@ const styles = StyleSheet.create({
   profileActionRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   profileMiniBtn: { borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
   profileMiniBtnText: { color: COLORS.textMain, fontSize: 11, fontWeight: '600' },
+  profileUploadText: { color: COLORS.textMuted, fontSize: 11, fontWeight: '600', marginTop: 6 },
+  disabledBtn: { opacity: 0.55 },
   avatarPickerRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   avatarBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt },
   avatarBtnActive: { backgroundColor: COLORS.goldBg, borderColor: COLORS.goldText },

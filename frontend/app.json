@@ -12,7 +12,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Allow camera access to capture profile photos and status media.",
-        "NSMicrophoneUsageDescription": "Allow microphone access when recording video status content."
+        "NSMicrophoneUsageDescription": "Allow microphone access when recording video status content.",
+        "NSLocationWhenInUseUsageDescription": "Allow location access to show accurate local prayer times and city details.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow location access to keep prayer times accurate while using the app."
       }
     },
     "android": {
@@ -22,7 +24,9 @@
         "CAMERA",
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
-        "READ_EXTERNAL_STORAGE"
+        "READ_EXTERNAL_STORAGE",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",

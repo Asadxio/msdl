@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, FlatList, ActivityIndicator, TextInput, Alert, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -11,15 +11,28 @@ import { useAuth } from '@/context/AuthContext';
 type AttendanceItem = {
   id: string;
   user_id: string;
+  user_name?: string;
+  user_email?: string;
   date: string;
   status: 'present' | 'absent';
   marked_by: string;
+  marked_by_uid?: string;
+  marked_by_name?: string;
   created_at?: { toDate?: () => Date };
+  marked_at?: { toDate?: () => Date };
 };
 
 type AppUser = { id: string; name: string; email: string; role: string; status: string };
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+function getMillis(value?: { toDate?: () => Date }): number {
+  try {
+    return value?.toDate ? value.toDate().getTime() : 0;
+  } catch {
+    return 0;
+  }
+}
 
 function formatMarkedAt(value?: { toDate?: () => Date }): string {
   try {
@@ -48,36 +61,47 @@ export default function AttendanceScreen() {
     if (!user?.uid) return;
     setLoading(true);
     const q = canMark
-      ? query(collection(db, 'attendance'), orderBy('created_at', 'desc'))
-      : query(collection(db, 'attendance'), where('user_id', '==', user.uid), orderBy('created_at', 'desc'));
+      ? query(collection(db, 'attendance'))
+      : query(collection(db, 'attendance'), where('user_id', '==', user.uid));
     const unsub = onSnapshot(q, (snap) => {
       const arr: AttendanceItem[] = [];
       snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+      arr.sort((a, b) => {
+        const bTime = getMillis(b.marked_at || b.created_at);
+        const aTime = getMillis(a.marked_at || a.created_at);
+        if (bTime !== aTime) return bTime - aTime;
+        return String(b.date || '').localeCompare(String(a.date || ''));
+      });
       setHistory(arr);
       setLoading(false);
-    }, () => setLoading(false));
+    }, (error) => {
+      console.log('[Attendance] history listener ERROR', error);
+      setLoading(false);
+    });
     return unsub;
   }, [canMark, user?.uid, reloadKey]);
 
   useEffect(() => {
-    if (!canMark) return;
-    const loadUsers = async () => {
-      try {
-        setUsersError('');
-        const snap = await getDocs(collection(db, 'users'));
-        const arr: AppUser[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as any;
-          if (data.status !== 'approved' || data.role === 'admin') return;
-          arr.push({ id: d.id, name: data.name || 'User', email: data.email || '', role: data.role || 'student', status: data.status });
-        });
-        setUsers(arr);
-      } catch {
-        setUsers([]);
-        setUsersError('Unable to load users right now. Pull to refresh later.');
-      }
-    };
-    loadUsers().catch(() => {});
+    if (!canMark) {
+      setUsers([]);
+      return;
+    }
+    setUsersError('');
+    const usersQ = query(collection(db, 'users'), where('status', '==', 'approved'), where('role', '==', 'student'));
+    const unsub = onSnapshot(usersQ, (snap) => {
+      const arr: AppUser[] = [];
+      snap.forEach((d) => {
+        const data = d.data() as any;
+        arr.push({ id: d.id, name: data.name || 'Student', email: data.email || '', role: data.role || 'student', status: data.status });
+      });
+      arr.sort((a, b) => a.name.localeCompare(b.name));
+      setUsers(arr);
+    }, (error) => {
+      console.log('[Attendance] users listener ERROR', error);
+      setUsers([]);
+      setUsersError('Unable to load students right now. Pull to refresh later.');
+    });
+    return unsub;
   }, [canMark, reloadKey]);
 
   const markAttendance = async (targetUser: AppUser, status: 'present' | 'absent') => {
@@ -89,13 +113,24 @@ export default function AttendanceScreen() {
     const docId = `${targetUser.id}_${date}`;
     setSavingUserId(targetUser.id);
     try {
-      await setDoc(doc(db, 'attendance', docId), {
+      const attendanceRef = doc(db, 'attendance', docId);
+      const existing = await getDoc(attendanceRef);
+      const nextRecord: Record<string, any> = {
         user_id: targetUser.id,
+        user_name: targetUser.name,
+        user_email: targetUser.email,
         date,
         status,
         marked_by: profile?.role || 'teacher',
-        created_at: serverTimestamp(),
-      });
+        marked_by_uid: user.uid,
+        marked_by_name: profile?.name || user.email || 'Teacher',
+        marked_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      };
+      if (!existing.exists()) {
+        nextRecord.created_at = serverTimestamp();
+      }
+      await setDoc(attendanceRef, nextRecord, { merge: true });
       await addDoc(collection(db, 'notifications'), {
         title: 'Attendance Marked',
         message: `Attendance for ${date}: ${status}`,
@@ -121,12 +156,12 @@ export default function AttendanceScreen() {
     history.forEach((item) => {
       if (!item.user_id) return;
       if (!grouped[item.user_id]) {
-        grouped[item.user_id] = { total: 0, present: 0, absent: 0, latestAt: item.created_at };
+        grouped[item.user_id] = { total: 0, present: 0, absent: 0, latestAt: item.marked_at || item.created_at };
       }
       grouped[item.user_id].total += 1;
       if (item.status === 'present') grouped[item.user_id].present += 1;
       if (item.status === 'absent') grouped[item.user_id].absent += 1;
-      if (!grouped[item.user_id].latestAt && item.created_at) grouped[item.user_id].latestAt = item.created_at;
+      if (!grouped[item.user_id].latestAt && (item.marked_at || item.created_at)) grouped[item.user_id].latestAt = item.marked_at || item.created_at;
     });
     return grouped;
   }, [history]);
@@ -168,7 +203,7 @@ export default function AttendanceScreen() {
                   <Text style={styles.summaryText}>
                     Total: {summary.total} • Present: {summary.present} • Absent: {summary.absent}
                   </Text>
-                  <Text style={styles.timeText}>Last entry: {formatMarkedAt(summary.latestAt)}</Text>
+                  <Text style={styles.timeText}>Last synced: {formatMarkedAt(summary.latestAt)}</Text>
                 </View>
                 <TouchableOpacity style={styles.presentBtn} onPress={() => markAttendance(item, 'present')} disabled={savingUserId === item.id}>
                   <Text style={styles.presentText}>{savingUserId === item.id ? 'Saving...' : 'Present'}</Text>
@@ -179,14 +214,14 @@ export default function AttendanceScreen() {
               </View>
             );
           })}
-          {users.length === 0 ? <Text style={styles.empty}>No approved users found.</Text> : null}
+          {users.length === 0 ? <Text style={styles.empty}>No approved students found.</Text> : null}
           {!!usersError ? <Text style={styles.errorText}>{usersError}</Text> : null}
           <Text style={[styles.subtitle, { marginTop: 10 }]}>Recent attendance log</Text>
           {recentAttendance.map((item) => (
             <View key={item.id} style={styles.historyCard}>
               <Text style={styles.name}>{item.date} • {item.status}</Text>
-              <Text style={styles.meta}>User: {users.find((u) => u.id === item.user_id)?.name || item.user_id}</Text>
-              <Text style={styles.timeText}>Marked: {formatMarkedAt(item.created_at)}</Text>
+              <Text style={styles.meta}>Student: {users.find((u) => u.id === item.user_id)?.name || item.user_name || item.user_id}</Text>
+              <Text style={styles.timeText}>Marked: {formatMarkedAt(item.marked_at || item.created_at)}</Text>
             </View>
           ))}
           {recentAttendance.length === 0 ? <Text style={styles.empty}>No attendance records yet.</Text> : null}
@@ -202,7 +237,7 @@ export default function AttendanceScreen() {
             <View style={styles.historyCard}>
               <Text style={styles.name}>{item.date}</Text>
               <Text style={[styles.meta, item.status === 'present' ? { color: '#166534' } : { color: COLORS.error }]}>{item.status}</Text>
-              <Text style={styles.timeText}>Marked: {formatMarkedAt(item.created_at)}</Text>
+              <Text style={styles.timeText}>Marked: {formatMarkedAt(item.marked_at || item.created_at)}</Text>
             </View>
           )}
           ListEmptyComponent={<View style={styles.center}><Text style={styles.empty}>No attendance records yet.</Text></View>}
