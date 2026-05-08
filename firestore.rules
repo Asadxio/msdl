@@ -448,6 +448,37 @@ service cloud.firestore {
         && request.resource.data.comments is list;
     }
 
+
+    function isValidAttendanceRecord() {
+      return hasOnlyAllowedKeys(
+          request.resource.data,
+          ['user_id', 'user_name', 'user_email', 'date', 'status', 'marked_by', 'marked_by_uid', 'marked_by_name', 'created_at', 'marked_at', 'updated_at']
+        )
+        && isTeacherOrAdmin()
+        && request.resource.data.user_id is string
+        && request.resource.data.user_id.size() > 0
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.user_id))
+        && get(/databases/$(database)/documents/users/$(request.resource.data.user_id)).data.role == 'student'
+        && get(/databases/$(database)/documents/users/$(request.resource.data.user_id)).data.status == 'approved'
+        && request.resource.data.date is string
+        && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.status in ['present', 'absent']
+        && request.resource.data.marked_by in ['teacher', 'admin']
+        && request.resource.data.marked_by_uid == request.auth.uid
+        && request.resource.data.marked_by_name is string
+        && (!('user_name' in request.resource.data) || request.resource.data.user_name is string)
+        && (!('user_email' in request.resource.data) || request.resource.data.user_email is string)
+        && request.resource.data.marked_at is timestamp
+        && request.resource.data.updated_at is timestamp
+        && (!('created_at' in request.resource.data) || request.resource.data.created_at is timestamp);
+    }
+
+    function isAttendanceRecordUnchangedOwner() {
+      return resource.data.user_id == request.resource.data.user_id
+        && resource.data.date == request.resource.data.date
+        && (!('created_at' in resource.data) || request.resource.data.created_at == resource.data.created_at);
+    }
+
     // users collection
     match /users/{uid} {
       // Users can read their own profile; signed-in users can list users for app pickers/referrals.
@@ -480,6 +511,14 @@ service cloud.firestore {
     match /library/{bookId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin() && isValidLibraryWrite();
+      allow delete: if isAdmin();
+    }
+
+    // attendance collection
+    match /attendance/{attendanceId} {
+      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create: if isValidAttendanceRecord();
+      allow update: if isValidAttendanceRecord() && isAttendanceRecordUnchangedOwner();
       allow delete: if isAdmin();
     }
 

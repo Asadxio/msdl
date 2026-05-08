@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, StatusBar, ActivityIndicator, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -17,25 +17,37 @@ export default function ProgressScreen() {
   const [attendance, setAttendance] = useState<Attendance[]>([]);
 
   useEffect(() => {
-    const load = async () => {
-      if (!user?.uid) return;
-      setLoading(true);
-      try {
-        const [quizSnap, attendanceSnap] = await Promise.all([
-          getDocs(query(collection(db, 'quiz_results'), where('user_id', '==', user.uid), orderBy('created_at', 'desc'))),
-          getDocs(query(collection(db, 'attendance'), where('user_id', '==', user.uid), orderBy('created_at', 'desc'))),
-        ]);
-        const quizArr: QuizResult[] = [];
-        quizSnap.forEach((d) => quizArr.push({ id: d.id, ...(d.data() as any) }));
-        const attendanceArr: Attendance[] = [];
-        attendanceSnap.forEach((d) => attendanceArr.push({ id: d.id, ...(d.data() as any) }));
-        setQuizResults(quizArr);
-        setAttendance(attendanceArr);
-      } finally {
-        setLoading(false);
-      }
+    if (!user?.uid) return;
+    setLoading(true);
+    let quizReady = false;
+    let attendanceReady = false;
+    const finishLoading = () => {
+      if (quizReady && attendanceReady) setLoading(false);
     };
-    load().catch(() => setLoading(false));
+    const quizUnsub = onSnapshot(query(collection(db, 'quiz_results'), where('user_id', '==', user.uid), orderBy('created_at', 'desc')), (snap) => {
+      const quizArr: QuizResult[] = [];
+      snap.forEach((d) => quizArr.push({ id: d.id, ...(d.data() as any) }));
+      setQuizResults(quizArr);
+      quizReady = true;
+      finishLoading();
+    }, () => {
+      quizReady = true;
+      finishLoading();
+    });
+    const attendanceUnsub = onSnapshot(query(collection(db, 'attendance'), where('user_id', '==', user.uid)), (snap) => {
+      const attendanceArr: Attendance[] = [];
+      snap.forEach((d) => attendanceArr.push({ id: d.id, ...(d.data() as any) }));
+      setAttendance(attendanceArr);
+      attendanceReady = true;
+      finishLoading();
+    }, () => {
+      attendanceReady = true;
+      finishLoading();
+    });
+    return () => {
+      quizUnsub();
+      attendanceUnsub();
+    };
   }, [user?.uid]);
 
   const avgQuizScore = useMemo(() => {

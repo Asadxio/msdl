@@ -5,14 +5,28 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isSafeImageUpload(maxBytes) {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= maxBytes
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+    }
+
+    function isSafeStatusUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 20971520
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'];
+    }
+
     match /users/{userId}/profile/{fileName} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn() && request.auth.uid == userId && isSafeImageUpload(5242880);
     }
 
     match /status_updates/{userId}/{fileName} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn() && request.auth.uid == userId && isSafeStatusUpload();
     }
 
     match /{allPaths=**} {

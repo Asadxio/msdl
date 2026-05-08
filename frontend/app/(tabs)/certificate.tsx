@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, Share, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, getDocs, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -20,23 +20,44 @@ export default function CertificateScreen() {
   const [attendancePct, setAttendancePct] = useState(0);
 
   useEffect(() => {
-    const load = async () => {
-      if (!user?.uid) return;
-      setLoading(true);
-      const [quizSnap, attendanceSnap, certSnap] = await Promise.all([
-        getDocs(query(collection(db, 'quiz_results'), where('user_id', '==', user.uid))),
-        getDocs(query(collection(db, 'attendance'), where('user_id', '==', user.uid))),
-        getDocs(query(collection(db, 'certificates'), where('user_id', '==', user.uid), orderBy('created_at', 'desc'))),
-      ]);
-      const present = attendanceSnap.docs.filter((d) => (d.data() as any).status === 'present').length;
-      setQuizAttempts(quizSnap.size);
-      setAttendancePct(attendanceSnap.size ? Math.round((present / attendanceSnap.size) * 100) : 0);
-      const arr: Certificate[] = [];
-      certSnap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
-      setCerts(arr);
-      setLoading(false);
+    if (!user?.uid) return;
+    setLoading(true);
+    const ready = { quiz: false, attendance: false, certs: false };
+    const finishLoading = () => {
+      if (ready.quiz && ready.attendance && ready.certs) setLoading(false);
     };
-    load().catch(() => setLoading(false));
+    const quizUnsub = onSnapshot(query(collection(db, 'quiz_results'), where('user_id', '==', user.uid)), (snap) => {
+      setQuizAttempts(snap.size);
+      ready.quiz = true;
+      finishLoading();
+    }, () => {
+      ready.quiz = true;
+      finishLoading();
+    });
+    const attendanceUnsub = onSnapshot(query(collection(db, 'attendance'), where('user_id', '==', user.uid)), (snap) => {
+      const present = snap.docs.filter((d) => (d.data() as any).status === 'present').length;
+      setAttendancePct(snap.size ? Math.round((present / snap.size) * 100) : 0);
+      ready.attendance = true;
+      finishLoading();
+    }, () => {
+      ready.attendance = true;
+      finishLoading();
+    });
+    const certUnsub = onSnapshot(query(collection(db, 'certificates'), where('user_id', '==', user.uid), orderBy('created_at', 'desc')), (snap) => {
+      const arr: Certificate[] = [];
+      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+      setCerts(arr);
+      ready.certs = true;
+      finishLoading();
+    }, () => {
+      ready.certs = true;
+      finishLoading();
+    });
+    return () => {
+      quizUnsub();
+      attendanceUnsub();
+      certUnsub();
+    };
   }, [user?.uid]);
 
   const eligible = useMemo(() => quizAttempts > 0 && attendancePct >= 75, [quizAttempts, attendancePct]);

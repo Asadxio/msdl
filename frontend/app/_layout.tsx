@@ -19,10 +19,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const isAdmin = profile?.role === 'admin';
     const inAdmin = segments[0] === 'admin';
     const inUnauthorized = segments[0] === 'unauthorized';
-    const topLevelPath = segments.join('/');
-    const teacherOnlyRoutes = new Set(['status']);
-    const isTeacherOnlyRoute = teacherOnlyRoutes.has(topLevelPath);
-    const isTeacherOrAdmin = profile?.role === 'teacher' || profile?.role === 'admin';
 
     if (!user) {
       if (!inAuth) router.replace('/auth/login');
@@ -30,8 +26,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       router.replace('/');
     } else if (inAdmin && !isAdmin) {
       router.replace('/unauthorized?required=admin');
-    } else if (isTeacherOnlyRoute && !isTeacherOrAdmin) {
-      router.replace('/unauthorized?required=teacher');
     } else if (profile?.status === 'rejected') {
       if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
     } else if (profile?.status === 'deactivated') {
