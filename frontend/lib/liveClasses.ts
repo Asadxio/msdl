@@ -86,6 +86,11 @@ const LIVE_API_URL = process.env.EXPO_PUBLIC_LIVE_API_URL || process.env.EXPO_PU
 const ENROLLMENT_LOOKUP_LIMIT = 500;
 const MIN_LIVE_ATTENDANCE_SECONDS = 60;
 const MAX_LIVE_ATTENDANCE_SECONDS = 4 * 60 * 60;
+type JsonMap = Record<string, unknown>;
+
+function asMap(value: unknown): JsonMap {
+  return value && typeof value === 'object' ? (value as JsonMap) : {};
+}
 
 export function getAgoraUid(uid: string): number {
   let hash = 0;
@@ -101,47 +106,53 @@ export function getLiveClassChannelName(courseId: string, classId?: string): str
   return `madrasa_${safeCourse}_${safeClass}`;
 }
 
-function normalizeLiveClass(id: string, raw: any): LiveClass {
+function normalizeLiveClass(id: string, raw: unknown): LiveClass {
+  const data = asMap(raw);
+  const recording = asMap(data.recording);
+  const screenShare = asMap(data.screen_share);
+  const status = data.status;
+  const recordingStatus = recording.status;
   return {
     id,
-    course_id: String(raw?.course_id || ''),
-    lesson_id: raw?.lesson_id ? String(raw.lesson_id) : '',
-    teacher_id: String(raw?.teacher_id || ''),
-    teacher_name: String(raw?.teacher_name || 'Teacher'),
-    title: String(raw?.title || 'Live Class'),
-    status: raw?.status === 'ended' || raw?.status === 'cancelled' || raw?.status === 'scheduled' ? raw.status : 'live',
-    channel_name: String(raw?.channel_name || ''),
-    agora_app_id: raw?.agora_app_id ? String(raw.agora_app_id) : '',
-    meet_fallback_url: raw?.meet_fallback_url ? String(raw.meet_fallback_url) : '',
-    student_ids: Array.isArray(raw?.student_ids) ? raw.student_ids.filter((v: unknown) => typeof v === 'string') : [],
-    enrollment_source: raw?.enrollment_source || undefined,
-    token_expires_at_epoch: Number(raw?.token_expires_at_epoch || 0) || undefined,
-    started_at: raw?.started_at || null,
-    ended_at: raw?.ended_at || null,
-    created_at: raw?.created_at || null,
-    updated_at: raw?.updated_at || null,
-    participant_count: Number(raw?.participant_count || 0),
-    recording: raw?.recording || { status: 'not_started' },
-    screen_share: raw?.screen_share || { enabled: false },
+    course_id: String(data.course_id || ''),
+    lesson_id: data.lesson_id ? String(data.lesson_id) : '',
+    teacher_id: String(data.teacher_id || ''),
+    teacher_name: String(data.teacher_name || 'Teacher'),
+    title: String(data.title || 'Live Class'),
+    status: status === 'ended' || status === 'cancelled' || status === 'scheduled' ? status : 'live',
+    channel_name: String(data.channel_name || ''),
+    agora_app_id: data.agora_app_id ? String(data.agora_app_id) : '',
+    meet_fallback_url: data.meet_fallback_url ? String(data.meet_fallback_url) : '',
+    student_ids: Array.isArray(data.student_ids) ? data.student_ids.filter((v: unknown): v is string => typeof v === 'string') : [],
+    enrollment_source: data.enrollment_source === 'enrollments' || data.enrollment_source === 'course_student_ids' || data.enrollment_source === 'none' ? data.enrollment_source : undefined,
+    token_expires_at_epoch: Number(data.token_expires_at_epoch || 0) || undefined,
+    started_at: (data.started_at as LiveClass['started_at']) || null,
+    ended_at: (data.ended_at as LiveClass['ended_at']) || null,
+    created_at: (data.created_at as LiveClass['created_at']) || null,
+    updated_at: (data.updated_at as LiveClass['updated_at']) || null,
+    participant_count: Number(data.participant_count || 0),
+    recording: { status: recordingStatus === 'starting' || recordingStatus === 'recording' || recordingStatus === 'processing' || recordingStatus === 'ready' || recordingStatus === 'failed' ? recordingStatus : 'not_started' },
+    screen_share: screenShare.enabled === true ? { enabled: true, presenter_id: String(screenShare.presenter_id || '') } : { enabled: false },
   };
 }
 
-export function normalizeLiveClassParticipant(id: string, raw: any): LiveClassParticipant {
+export function normalizeLiveClassParticipant(id: string, raw: unknown): LiveClassParticipant {
+  const data = asMap(raw);
   return {
     id,
-    user_id: String(raw?.user_id || id),
-    agora_uid: Number(raw?.agora_uid || 0),
-    name: String(raw?.name || 'Participant'),
-    role: raw?.role === 'admin' || raw?.role === 'teacher' ? raw.role : 'student',
-    joined: !!raw?.joined,
-    audio_enabled: raw?.audio_enabled !== false,
-    video_enabled: raw?.video_enabled !== false,
-    force_muted: !!raw?.force_muted,
-    is_speaking: !!raw?.is_speaking,
-    joined_at: raw?.joined_at || null,
-    last_joined_at: raw?.last_joined_at || null,
-    left_at: raw?.left_at || null,
-    total_duration_seconds: Number(raw?.total_duration_seconds || 0),
+    user_id: String(data.user_id || id),
+    agora_uid: Number(data.agora_uid || 0),
+    name: String(data.name || 'Participant'),
+    role: data.role === 'admin' || data.role === 'teacher' ? data.role : 'student',
+    joined: data.joined === true,
+    audio_enabled: data.audio_enabled !== false,
+    video_enabled: data.video_enabled !== false,
+    force_muted: data.force_muted === true,
+    is_speaking: data.is_speaking === true,
+    joined_at: (data.joined_at as LiveClassParticipant['joined_at']) || null,
+    last_joined_at: (data.last_joined_at as LiveClassParticipant['last_joined_at']) || null,
+    left_at: (data.left_at as LiveClassParticipant['left_at']) || null,
+    total_duration_seconds: Number(data.total_duration_seconds || 0),
   };
 }
 
@@ -161,7 +172,7 @@ async function getEligibleStudentIds(courseId: string): Promise<{ ids: string[];
     limit(ENROLLMENT_LOOKUP_LIMIT),
   )).catch(() => null);
   const enrollmentIds = enrollmentSnap?.docs
-    .map((d) => String((d.data() as any)?.user_id || ''))
+    .map((d) => String(asMap(d.data()).user_id || ''))
     .filter(Boolean) || [];
   if (enrollmentIds.length > 0) {
     return { ids: Array.from(new Set(enrollmentIds)), source: 'enrollments' };
