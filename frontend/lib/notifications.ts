@@ -42,13 +42,13 @@ export async function createNotificationAsAdmin(
     await sendPushToAllUsers({
       title: isAnnouncement ? 'New Announcement' : title,
       body: pushBody,
-      data: { type: category, sound, channel },
+      data: { type: category, sound, channel, channelId: channel },
     }).catch(() => {});
   } else {
     await sendPushToUserIds([userId], {
       title,
       body: pushBody,
-      data: { type: category, sound, channel },
+      data: { type: category, sound, channel, channelId: channel },
     }).catch(() => {});
   }
   return true;
@@ -87,7 +87,7 @@ export async function createRoleNotificationAsAdmin(
     await sendPushToUserIds(dedupedUserIds, {
       title,
       body: message,
-      data: { type: payload.category || 'notification', sound: payload.sound || 'default', channel: 'announcements' },
+      data: { type: payload.category || 'notification', sound: payload.sound || 'default', channel: 'announcements', channelId: 'announcements' },
     }).catch(() => {});
     return true;
   } catch (error) {
@@ -127,7 +127,7 @@ export async function createRoleNotification(
     await sendPushToUserIds(dedupedUserIds, {
       title,
       body: message,
-      data: { type: payload.category || 'notification', sound: payload.sound || 'default', channel: 'announcements' },
+      data: { type: payload.category || 'notification', sound: payload.sound || 'default', channel: 'announcements', channelId: 'announcements' },
     }).catch(() => {});
     return true;
   } catch (error) {
