@@ -8,8 +8,7 @@
       ]
     },
     "jsx": "react-jsx",
-    "moduleResolution": "bundler",
-    "baseUrl": "."
+    "moduleResolution": "bundler"
   },
   "include": [
     "**/*.ts",
