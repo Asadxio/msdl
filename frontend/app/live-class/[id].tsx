@@ -120,6 +120,7 @@ export default function LiveClassroomScreen() {
   const [cameraOn, setCameraOn] = useState(true);
   const [speakerOn, setSpeakerOn] = useState(true);
   const [recordingBusy, setRecordingBusy] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState('');
 
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
@@ -150,6 +151,7 @@ export default function LiveClassroomScreen() {
     try { engine.release(); } catch {}
     engineRef.current = null;
     eventHandlerRef.current = null;
+    setReconnecting(false);
   }, []);
 
   const leaveClass = useCallback(async (navigateBack = true, syncAttendance = true) => {
@@ -162,6 +164,7 @@ export default function LiveClassroomScreen() {
       }
       joinedRef.current = false;
       setJoined(false);
+      setReconnecting(false);
       setRemoteUsers([]);
       if (navigateBack) router.back();
     } finally {
@@ -233,10 +236,20 @@ export default function LiveClassroomScreen() {
         await updateParticipantMediaState(classId, user.uid, { video_enabled: false, audio_enabled: false }).catch(() => {});
       } else if (previous.match(/inactive|background/) && nextState === 'active') {
         try { engineRef.current?.setEnableSpeakerphone(speakerOn); } catch {}
+        const resumeVideoOn = localParticipant?.video_enabled !== false;
+        const resumeAudioOn = localParticipant?.audio_enabled !== false && !localParticipant?.force_muted;
+        try { engineRef.current?.muteLocalVideoStream(!resumeVideoOn); } catch {}
+        try { engineRef.current?.muteLocalAudioStream(!resumeAudioOn); } catch {}
+        setCameraOn(resumeVideoOn);
+        setMicOn(resumeAudioOn);
+        await updateParticipantMediaState(classId, user.uid, {
+          video_enabled: resumeVideoOn,
+          audio_enabled: resumeAudioOn,
+        }).catch(() => {});
       }
     });
     return () => sub.remove();
-  }, [classId, speakerOn, user?.uid]);
+  }, [classId, localParticipant?.audio_enabled, localParticipant?.force_muted, localParticipant?.video_enabled, speakerOn, user?.uid]);
 
   const joinClass = useCallback(async () => {
     if (!classId || !user?.uid || !profile || !liveClass || joining || joined) return;
@@ -263,9 +276,19 @@ export default function LiveClassroomScreen() {
       engineRef.current = engine;
       const handler: IRtcEngineEventHandler = {
         onJoinChannelSuccess: () => {
+          setReconnecting(false);
           joinedRef.current = true;
           setJoined(true);
           void markParticipantJoined(classId, profile, user.uid, rtcToken.agoraUid).catch(() => {});
+        },
+        onConnectionStateChanged: (_connection, state, reason) => {
+          if (state === 3) setReconnecting(true);
+          if (state === 5) {
+            setReconnecting(false);
+            setError(`Connection failed (${reason}). Rejoin the class to continue.`);
+            setRemoteUsers([]);
+          }
+          if (state === 1 || state === 4) setReconnecting(false);
         },
         onUserJoined: (_connection, remoteUid) => {
           setRemoteUsers((prev) => {
@@ -522,18 +545,26 @@ export default function LiveClassroomScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={tiles}
-          keyExtractor={(item) => item.key}
-          renderItem={renderTile}
-          numColumns={tiles.length <= 2 ? 1 : 2}
-          key={tiles.length <= 2 ? 'one' : 'two'}
-          contentContainerStyle={styles.grid}
-          removeClippedSubviews={false}
-          initialNumToRender={6}
-          maxToRenderPerBatch={6}
-          windowSize={5}
-        />
+        <>
+          {reconnecting ? (
+            <View style={styles.reconnectBanner}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.reconnectText}>Reconnecting…</Text>
+            </View>
+          ) : null}
+          <FlatList
+            data={tiles}
+            keyExtractor={(item) => item.key}
+            renderItem={renderTile}
+            numColumns={tiles.length <= 2 ? 1 : 2}
+            key={tiles.length <= 2 ? 'one' : 'two'}
+            contentContainerStyle={styles.grid}
+            removeClippedSubviews={false}
+            initialNumToRender={6}
+            maxToRenderPerBatch={6}
+            windowSize={5}
+          />
+        </>
       )}
 
       {joined ? (
@@ -566,6 +597,8 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   title: { color: '#fff', fontSize: 18, fontWeight: '800' },
   subtitle: { color: 'rgba(255,255,255,0.72)', fontSize: 12, marginTop: 2 },
+  reconnectBanner: { marginHorizontal: SPACING.md, marginTop: SPACING.sm, borderRadius: RADIUS.full, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(180,83,9,0.95)', alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8 },
+  reconnectText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   recordBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#B45309' },
   endBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADIUS.full, backgroundColor: COLORS.error },
   endBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
