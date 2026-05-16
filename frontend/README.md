@@ -1,50 +1,49 @@
-# Welcome to your Expo app 👋
+# Frontend (Expo SDK 54)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Production-pilot React Native app built with Expo Router, Firebase, and Agora.
 
-## Get started
+## Current status (2026-05-16 UTC)
 
-1. Install dependencies
+Dependency installation is currently blocked by environment/network policy:
 
-   ```bash
-   npm install
-   ```
+- Proxy-enabled npm path reaches registry but returns `403 Forbidden` for required Expo packages.
+- Proxy-disabled path fails DNS (`EAI_AGAIN`) for `registry.npmjs.org`.
 
-2. Start the app
+See `docs/ENVIRONMENT_RECOVERY.md` for recovery steps.
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Baseline commands (run in this folder)
 
 ```bash
-npm run reset-project
+npm install --no-audit --no-fund
+npx expo --version
+npx expo config --type public
+npm run lint
+npx tsc --noEmit
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Dependency/toolchain recovery
 
-## Learn more
+Use the runbook:
 
-To learn more about developing your project with Expo, look at the following resources:
+- `docs/ENVIRONMENT_RECOVERY.md`
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+This includes:
 
-## Join the community
+- required proxy/registry conditions,
+- diagnostic commands,
+- install validation,
+- Expo/EAS verification sequence.
 
-Join our community of developers creating universal apps.
+## Production QA execution
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Use the QA matrix:
+
+- `docs/PRODUCTION_QA_MATRIX.md`
+
+This matrix covers:
+
+- Android + iOS behavior,
+- Agora reconnect and media restoration,
+- Firebase realtime/listener cleanup,
+- uploads/notifications/attendance/recordings,
+- low-network and long-session stability.

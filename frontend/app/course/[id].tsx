@@ -1433,7 +1433,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
-    ...SHADOWS.button,
+    ...SHADOWS.card,
   },
   liveNowBtn: { backgroundColor: "#16A34A" },
   meetFallbackBtn: { alignItems: "center", paddingVertical: 8 },
