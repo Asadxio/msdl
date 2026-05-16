@@ -189,6 +189,13 @@ service cloud.firestore {
             && request.resource.data.target_roles is list
             && request.resource.data.target_roles.hasOnly(['teacher'])
           )
+          || (
+            isTeacherOrAdmin()
+            && request.resource.data.user_id == 'role_targeted'
+            && request.resource.data.category == 'live_class_started'
+            && request.resource.data.target_roles is list
+            && request.resource.data.target_roles.hasOnly(['student'])
+          )
         );
     }
 
@@ -464,7 +471,7 @@ service cloud.firestore {
     function isValidAttendanceRecord() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'user_email', 'date', 'status', 'marked_by', 'marked_by_uid', 'marked_by_name', 'created_at', 'marked_at', 'updated_at']
+          ['user_id', 'user_name', 'user_email', 'date', 'status', 'marked_by', 'marked_by_uid', 'marked_by_name', 'created_at', 'marked_at', 'updated_at', 'live_class_id', 'course_id', 'duration_seconds']
         )
         && isTeacherOrAdmin()
         && request.resource.data.user_id is string
@@ -475,13 +482,16 @@ service cloud.firestore {
         && request.resource.data.date is string
         && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
         && request.resource.data.status in ['present', 'absent']
-        && request.resource.data.marked_by in ['teacher', 'admin']
+        && request.resource.data.marked_by in ['teacher', 'admin', 'live_class']
         && request.resource.data.marked_by_uid == request.auth.uid
         && request.resource.data.marked_by_name is string
         && (!('user_name' in request.resource.data) || request.resource.data.user_name is string)
         && (!('user_email' in request.resource.data) || request.resource.data.user_email is string)
         && request.resource.data.marked_at is timestamp
         && request.resource.data.updated_at is timestamp
+        && (!('live_class_id' in request.resource.data) || request.resource.data.live_class_id is string)
+        && (!('course_id' in request.resource.data) || request.resource.data.course_id is string)
+        && (!('duration_seconds' in request.resource.data) || (request.resource.data.duration_seconds is number && request.resource.data.duration_seconds >= 0 && request.resource.data.duration_seconds <= 43200))
         && (!('created_at' in request.resource.data) || request.resource.data.created_at is timestamp);
     }
 
@@ -489,6 +499,102 @@ service cloud.firestore {
       return resource.data.user_id == request.resource.data.user_id
         && resource.data.date == request.resource.data.date
         && (!('created_at' in resource.data) || request.resource.data.created_at == resource.data.created_at);
+    }
+
+
+
+    function liveClassDoc(classId) {
+      return get(/databases/$(database)/documents/live_classes/$(classId));
+    }
+
+    function isLiveClassTeacherOrAdmin(data) {
+      return isSignedIn()
+        && (
+          isAdmin()
+          || (isTeacherOrAdmin() && data.teacher_id == request.auth.uid)
+        );
+    }
+
+    function canJoinLiveClassData(data) {
+      return isSignedIn()
+        && data.status == 'live'
+        && (
+          isLiveClassTeacherOrAdmin(data)
+          || (data.student_ids is list && request.auth.uid in data.student_ids)
+        );
+    }
+
+    function canReadLiveClassData(data) {
+      return isSignedIn()
+        && (
+          isLiveClassTeacherOrAdmin(data)
+          || (data.student_ids is list && request.auth.uid in data.student_ids)
+        );
+    }
+
+    function isValidLiveClassWrite() {
+      return hasOnlyAllowedKeys(request.resource.data, [
+          'course_id', 'lesson_id', 'teacher_id', 'teacher_name', 'title', 'status', 'channel_name',
+          'agora_app_id', 'meet_fallback_url', 'student_ids', 'enrollment_source',
+          'participant_count', 'recording', 'screen_share', 'started_at', 'ended_at', 'created_at', 'updated_at'
+        ])
+        && request.resource.data.course_id is string
+        && request.resource.data.teacher_id is string
+        && request.resource.data.title is string
+        && request.resource.data.status in ['scheduled', 'live', 'ended', 'cancelled']
+        && request.resource.data.channel_name is string
+        && (!('lesson_id' in request.resource.data) || request.resource.data.lesson_id is string)
+        && (!('student_ids' in request.resource.data) || (request.resource.data.student_ids is list && request.resource.data.student_ids.size() <= 500))
+        && (!('participant_count' in request.resource.data) || request.resource.data.participant_count is number)
+        && (!('started_at' in request.resource.data) || request.resource.data.started_at is timestamp)
+        && (!('ended_at' in request.resource.data) || request.resource.data.ended_at is timestamp)
+        && request.resource.data.updated_at is timestamp;
+    }
+
+
+    function canReadRecordingData(data) {
+      return isSignedIn()
+        && (
+          !('live_class_id' in data)
+          || data.live_class_id == ''
+          || (data.live_class_id is string
+            && exists(/databases/$(database)/documents/live_classes/$(data.live_class_id))
+            && canReadLiveClassData(get(/databases/$(database)/documents/live_classes/$(data.live_class_id)).data))
+        );
+    }
+
+    function isValidLiveParticipantWrite(classId, userId) {
+      return hasOnlyAllowedKeys(request.resource.data, [
+          'user_id', 'agora_uid', 'name', 'role', 'joined', 'audio_enabled', 'video_enabled',
+          'force_muted', 'is_speaking', 'joined_at', 'last_joined_at', 'left_at', 'total_duration_seconds', 'updated_at'
+        ])
+        && request.resource.data.user_id == userId
+        && request.resource.data.agora_uid is number
+        && request.resource.data.name is string
+        && request.resource.data.role in ['student', 'teacher', 'admin']
+        && request.resource.data.joined is bool
+        && request.resource.data.audio_enabled is bool
+        && request.resource.data.video_enabled is bool
+        && (!('force_muted' in request.resource.data) || request.resource.data.force_muted is bool)
+        && (!('is_speaking' in request.resource.data) || request.resource.data.is_speaking is bool)
+        && (!('total_duration_seconds' in request.resource.data) || (request.resource.data.total_duration_seconds is number && request.resource.data.total_duration_seconds >= 0 && request.resource.data.total_duration_seconds <= 43200))
+        && request.resource.data.updated_at is timestamp
+        && canJoinLiveClassData(liveClassDoc(classId).data);
+    }
+
+    function isValidLiveParticipantModeration(classId) {
+      return isLiveClassTeacherOrAdmin(liveClassDoc(classId).data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['force_muted', 'audio_enabled', 'updated_at'])
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.agora_uid == resource.data.agora_uid
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.joined == resource.data.joined
+        && request.resource.data.video_enabled == resource.data.video_enabled
+        && (!('total_duration_seconds' in resource.data) || request.resource.data.total_duration_seconds == resource.data.total_duration_seconds)
+        && request.resource.data.force_muted is bool
+        && request.resource.data.audio_enabled is bool
+        && request.resource.data.updated_at is timestamp;
     }
 
     // users collection
@@ -642,6 +748,12 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+
+    match /enrollments/{enrollmentId} {
+      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
     match /modules/{moduleId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
@@ -663,9 +775,13 @@ service cloud.firestore {
         || (isSignedIn()
           && request.resource.data.user_id == request.auth.uid
           && request.resource.data.lesson_id is string
-          && request.resource.data.keys().hasOnly(['user_id', 'lesson_id', 'course_id', 'completed_at', 'updated_at'])
+          && request.resource.data.keys().hasOnly(['user_id', 'lesson_id', 'course_id', 'module_id', 'completed', 'quiz_completed', 'completed_at', 'last_opened_at', 'updated_at'])
           && (!('course_id' in request.resource.data) || request.resource.data.course_id is string)
+          && (!('module_id' in request.resource.data) || request.resource.data.module_id is string)
+          && (!('completed' in request.resource.data) || request.resource.data.completed is bool)
+          && (!('quiz_completed' in request.resource.data) || request.resource.data.quiz_completed is bool)
           && (!('completed_at' in request.resource.data) || request.resource.data.completed_at is timestamp)
+          && (!('last_opened_at' in request.resource.data) || request.resource.data.last_opened_at is timestamp)
           && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp));
       allow delete: if isAdmin();
     }
@@ -675,13 +791,16 @@ service cloud.firestore {
       allow create, update: if isTeacherOrAdmin()
         || (isSignedIn()
           && request.resource.data.user_id == request.auth.uid
-          && request.resource.data.keys().hasOnly(['assignment_id', 'user_id', 'file_url', 'file_name', 'mime_type', 'status', 'submitted_at', 'reviewed_at', 'reviewed_by', 'notes'])
+          && request.resource.data.keys().hasOnly(['assignment_id', 'user_id', 'file_url', 'file_name', 'mime_type', 'text_answer', 'status', 'submitted_at', 'created_at', 'updated_at', 'reviewed_at', 'reviewed_by', 'reviewer_id', 'notes', 'feedback', 'grade'])
           && request.resource.data.assignment_id is string
-          && request.resource.data.file_url is string
-          && request.resource.data.file_name is string
+          && (!('file_url' in request.resource.data) || request.resource.data.file_url is string)
+          && (!('file_name' in request.resource.data) || request.resource.data.file_name is string)
           && (!('mime_type' in request.resource.data) || request.resource.data.mime_type is string)
+          && (!('text_answer' in request.resource.data) || request.resource.data.text_answer is string)
           && request.resource.data.status in ['submitted', 'reviewed']
-          && request.resource.data.submitted_at is timestamp);
+          && (!('submitted_at' in request.resource.data) || request.resource.data.submitted_at is timestamp)
+          && (!('created_at' in request.resource.data) || request.resource.data.created_at is timestamp)
+          && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp));
       allow delete: if isAdmin();
     }
 
@@ -692,8 +811,46 @@ service cloud.firestore {
     }
 
     match /recordings/{recordingId} {
-      allow read: if isSignedIn();
+      allow read: if canReadRecordingData(resource.data);
       allow create, update, delete: if isAdmin();
+    }
+
+    match /live_classes/{classId} {
+      allow read: if canReadLiveClassData(resource.data);
+      allow create: if isTeacherOrAdmin()
+        && isValidLiveClassWrite()
+        && (isAdmin() || request.resource.data.teacher_id == request.auth.uid)
+        && request.resource.data.status == 'live';
+      allow update: if isLiveClassTeacherOrAdmin(resource.data)
+        && isValidLiveClassWrite()
+        && request.resource.data.teacher_id == resource.data.teacher_id
+        && request.resource.data.course_id == resource.data.course_id
+        && request.resource.data.created_at == resource.data.created_at;
+      allow delete: if isAdmin();
+
+      match /participants/{userId} {
+        allow read: if canReadLiveClassData(liveClassDoc(classId).data);
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId);
+        allow update: if isValidLiveParticipantModeration(classId) || (isSignedIn() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId));
+        allow delete: if isAdmin();
+      }
+
+      match /attendance_events/{eventId} {
+        allow read: if isTeacherOrAdmin();
+        allow create: if isSignedIn()
+          && hasOnlyAllowedKeys(request.resource.data, ['user_id', 'event', 'duration_seconds', 'at'])
+          && canJoinLiveClassData(liveClassDoc(classId).data)
+          && request.resource.data.user_id == request.auth.uid
+          && request.resource.data.event in ['join', 'leave']
+          && (!('duration_seconds' in request.resource.data) || (request.resource.data.duration_seconds is number && request.resource.data.duration_seconds >= 0 && request.resource.data.duration_seconds <= 43200))
+          && request.resource.data.at is timestamp;
+        allow update, delete: if false;
+      }
+
+      match /recordings/{recordingId} {
+        allow read: if canReadLiveClassData(liveClassDoc(classId).data);
+        allow write: if isLiveClassTeacherOrAdmin(liveClassDoc(classId).data);
+      }
     }
 
     // feedback collection

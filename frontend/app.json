@@ -11,8 +11,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow camera access to capture profile photos and status media.",
-        "NSMicrophoneUsageDescription": "Allow microphone access when recording video status content.",
+        "NSCameraUsageDescription": "Allow camera access for profile photos, status media, and built-in live classes.",
+        "NSMicrophoneUsageDescription": "Allow microphone access for video status content and built-in live classes.",
         "NSLocationWhenInUseUsageDescription": "Allow location access to show accurate local prayer times and city details.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow location access to keep prayer times accurate while using the app."
       }
@@ -26,7 +26,11 @@
         "READ_MEDIA_VIDEO",
         "READ_EXTERNAL_STORAGE",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "BLUETOOTH_CONNECT",
+        "FOREGROUND_SERVICE"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",

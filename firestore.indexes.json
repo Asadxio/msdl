@@ -1,5 +1,4 @@
-{
-  "indexes": [
+{"indexes":[
     {"collectionGroup":"chats","queryScope":"COLLECTION","fields":[{"fieldPath":"participants","arrayConfig":"CONTAINS"},{"fieldPath":"updated_at","order":"DESCENDING"}]},
     {"collectionGroup":"chats","queryScope":"COLLECTION","fields":[{"fieldPath":"type","order":"ASCENDING"},{"fieldPath":"updated_at","order":"DESCENDING"}]},
     {"collectionGroup":"messages","queryScope":"COLLECTION","fields":[{"fieldPath":"chat_id","order":"ASCENDING"},{"fieldPath":"created_at","order":"DESCENDING"}]},
@@ -10,7 +9,11 @@
     {"collectionGroup":"quiz_results","queryScope":"COLLECTION","fields":[{"fieldPath":"user_id","order":"ASCENDING"},{"fieldPath":"created_at","order":"DESCENDING"}]},
     {"collectionGroup":"submissions","queryScope":"COLLECTION","fields":[{"fieldPath":"assignment_id","order":"ASCENDING"},{"fieldPath":"created_at","order":"DESCENDING"}]},
     {"collectionGroup":"lesson_progress","queryScope":"COLLECTION","fields":[{"fieldPath":"user_id","order":"ASCENDING"},{"fieldPath":"lesson_id","order":"ASCENDING"}]},
-    {"collectionGroup":"users","queryScope":"COLLECTION","fields":[{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"role","order":"ASCENDING"}]}
+    {"collectionGroup":"users","queryScope":"COLLECTION","fields":[{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"role","order":"ASCENDING"}]},
+    {"collectionGroup":"live_classes","queryScope":"COLLECTION","fields":[{"fieldPath":"course_id","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
+    {"collectionGroup":"live_classes","queryScope":"COLLECTION","fields":[{"fieldPath":"course_id","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"started_at","order":"DESCENDING"}]},
+    {"collectionGroup":"participants","queryScope":"COLLECTION","fields":[{"fieldPath":"joined_at","order":"ASCENDING"}]},
+    {"collectionGroup":"enrollments","queryScope":"COLLECTION","fields":[{"fieldPath":"course_id","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
+    {"collectionGroup":"enrollments","queryScope":"COLLECTION","fields":[{"fieldPath":"course_id","order":"ASCENDING"},{"fieldPath":"user_id","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]}
   ],
-  "fieldOverrides": []
-}
+  "fieldOverrides":[]}

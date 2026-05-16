@@ -33,6 +33,7 @@ import { ScalePressable } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 import { uploadUriFile } from "@/lib/storage";
 import { normalizeMeetUrl, prepareExternalUrl } from "@/lib/links";
+import { startLiveClass, subscribeActiveLiveClass, type LiveClass } from "@/lib/liveClasses";
 
 const MAX_ASSIGNMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_ASSIGNMENT_MIME_TYPES = new Set([
@@ -120,6 +121,8 @@ export default function CourseDetailScreen() {
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [reviewGrade, setReviewGrade] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [activeLiveClass, setActiveLiveClass] = useState<LiveClass | null>(null);
+  const [startingLiveClass, setStartingLiveClass] = useState(false);
   const [fatalError] = useState<string>("");
 
   const course = courses.find((c) => c.id === courseId);
@@ -128,6 +131,13 @@ export default function CourseDetailScreen() {
     course?.meet_link || course?.class_link || "",
   );
   const isReviewer = profile?.role === "admin" || profile?.role === "teacher";
+
+
+  useEffect(() => {
+    if (!courseId) return;
+    const unsub = subscribeActiveLiveClass(courseId, setActiveLiveClass);
+    return unsub;
+  }, [courseId]);
 
   useEffect(() => {
     if (!courseId) return;
@@ -275,16 +285,51 @@ export default function CourseDetailScreen() {
 
   const handleJoinClass = () => {
     try {
+      if (activeLiveClass?.id) {
+        safePush(`/live-class/${activeLiveClass.id}`);
+        return;
+      }
       if (meetLink && meetLink.trim().length > 0) {
-        void openExternalLink(meetLink);
+        Alert.alert(
+          "Live class not active",
+          "No built-in live class is active right now. Open the temporary Google Meet fallback?",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Meet", onPress: () => { void openExternalLink(meetLink); } },
+          ],
+        );
       } else {
-        Alert.alert("Join Class", "Class link will be shared by teacher", [
+        Alert.alert("Join Class", "Live class will be started by teacher.", [
           { text: "OK", style: "default" },
         ]);
       }
     } catch (e) {
       console.log("[CourseDetail] handleJoinClass ERROR:", e);
       Alert.alert("Error", "Unable to open class right now.");
+    }
+  };
+
+  const handleStartLiveClass = async () => {
+    if (!course || !user?.uid || !profile) return;
+    if (profile.role !== "teacher" && profile.role !== "admin") {
+      Alert.alert("Access denied", "Only teachers/admins can start live classes.");
+      return;
+    }
+    setStartingLiveClass(true);
+    try {
+      const classId = await startLiveClass({
+        courseId: course.id,
+        title: course.name,
+        teacherId: user.uid,
+        teacherName: profile.name || user.email || "Teacher",
+        meetFallbackUrl: meetLink,
+        profile,
+      });
+      safePush(`/live-class/${classId}`);
+    } catch (e: any) {
+      Alert.alert("Start failed", e?.message || "Could not start live class.");
+    } finally {
+      setStartingLiveClass(false);
     }
   };
 
@@ -542,7 +587,7 @@ export default function CourseDetailScreen() {
                   color={COLORS.primary}
                 />
               </View>
-              <Text style={styles.infoCardTitle}>Google Meet Link</Text>
+              <Text style={styles.infoCardTitle}>Temporary Google Meet Fallback</Text>
             </View>
             <Text style={styles.infoCardValue} numberOfLines={2}>
               {meetLink || "Meet link will be shared by teacher"}
@@ -961,16 +1006,38 @@ export default function CourseDetailScreen() {
             </Text>
           </View>
 
-          {showJoinNow ? (
-            <TouchableOpacity
-              style={styles.joinBtn}
-              testID="join-class-btn"
-              activeOpacity={0.8}
-              onPress={handleJoinClass}
-            >
-              <Ionicons name="videocam" size={20} color="#FFFFFF" />
-              <Text style={styles.joinBtnText}>Join Class</Text>
-            </TouchableOpacity>
+          {showJoinNow || activeLiveClass ? (
+            <View style={styles.liveClassActions}>
+              {isReviewer ? (
+                <TouchableOpacity
+                  style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
+                  activeOpacity={0.8}
+                  disabled={startingLiveClass}
+                  onPress={activeLiveClass ? () => safePush(`/live-class/${activeLiveClass.id}`) : handleStartLiveClass}
+                >
+                  {startingLiveClass ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
+                  )}
+                  <Text style={styles.joinBtnText}>{activeLiveClass ? "Open Live Class" : "Start Live Class"}</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.joinBtn, activeLiveClass && styles.liveNowBtn]}
+                testID="join-class-btn"
+                activeOpacity={0.8}
+                onPress={handleJoinClass}
+              >
+                <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
+                <Text style={styles.joinBtnText}>{activeLiveClass ? "Join Live Class" : "Join Class"}</Text>
+              </TouchableOpacity>
+              {meetLink ? (
+                <TouchableOpacity style={styles.meetFallbackBtn} onPress={() => { void openExternalLink(meetLink); }}>
+                  <Text style={styles.meetFallbackText}>Temporary Google Meet fallback</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ) : (
             <View style={styles.joinLaterCard}>
               <Text style={styles.infoCardSubValue}>
@@ -1357,6 +1424,21 @@ const styles = StyleSheet.create({
     ...SHADOWS.card,
   },
   joinBtnText: { color: COLORS.goldText, fontWeight: "700", fontSize: 16 },
+  liveClassActions: { gap: 10, marginTop: SPACING.md },
+  startLiveBtn: {
+    backgroundColor: COLORS.secondary,
+    borderRadius: RADIUS.full,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    ...SHADOWS.button,
+  },
+  liveNowBtn: { backgroundColor: "#16A34A" },
+  meetFallbackBtn: { alignItems: "center", paddingVertical: 8 },
+  meetFallbackText: { color: COLORS.textMuted, fontSize: 12, fontWeight: "700" },
+  disabledBtn: { opacity: 0.65 },
   joinLaterCard: {
     marginTop: 12,
     borderWidth: 1,

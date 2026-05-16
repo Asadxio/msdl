@@ -159,8 +159,8 @@ async function requestBackendPush(payload: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-    }), 15000).catch(() => null);
-    if (response && !response.ok) {
+    }), 15000);
+    if (!response.ok) {
       throw new Error(`Push request failed with status ${response.status}`);
     }
   } catch (error) {
