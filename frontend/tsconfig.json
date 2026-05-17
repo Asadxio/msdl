@@ -6,7 +6,10 @@
       "@/*": [
         "./*"
       ]
-    }
+    },
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "baseUrl": "."
   },
   "include": [
     "**/*.ts",

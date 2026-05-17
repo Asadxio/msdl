@@ -14,6 +14,7 @@ declare module 'react-native-agora' {
     onUserMuteVideo?: (connection: RtcConnection, remoteUid: number, muted: boolean) => void;
     onTokenPrivilegeWillExpire?: (connection: RtcConnection, token: string) => void;
     onRequestToken?: (connection: RtcConnection) => void;
+    onConnectionStateChanged?: (connection: RtcConnection, state: number, reason: number) => void;
   };
 
   export type IRtcEngine = {
