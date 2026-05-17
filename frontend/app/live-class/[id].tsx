@@ -27,6 +27,7 @@ import {
   type IRtcEngineEventHandler,
 } from 'react-native-agora';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { isExpoGo } from '@/lib/runtime';
 import { useAuth } from '@/context/AuthContext';
 import {
   canCurrentUserJoinLiveClass,
@@ -122,6 +123,7 @@ export default function LiveClassroomScreen() {
   const [recordingBusy, setRecordingBusy] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState('');
+  const expoGo = isExpoGo();
 
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
   const localParticipant = useMemo(
@@ -252,6 +254,10 @@ export default function LiveClassroomScreen() {
   }, [classId, localParticipant?.audio_enabled, localParticipant?.force_muted, localParticipant?.video_enabled, speakerOn, user?.uid]);
 
   const joinClass = useCallback(async () => {
+    if (expoGo) {
+      Alert.alert('Development Build Required', 'Live Classes require Development Build or APK.');
+      return;
+    }
     if (!classId || !user?.uid || !profile || !liveClass || joining || joined) return;
     setError('');
     setJoining(true);
@@ -352,7 +358,7 @@ export default function LiveClassroomScreen() {
     } finally {
       setJoining(false);
     }
-  }, [classId, cleanupAgora, joining, joined, liveClass, profile, scheduleTokenRenewal, user?.uid]);
+  }, [classId, cleanupAgora, expoGo, joining, joined, liveClass, profile, scheduleTokenRenewal, user?.uid]);
 
   const toggleMic = useCallback(async () => {
     if (!classId || !user?.uid || localParticipant?.force_muted) {
@@ -514,6 +520,12 @@ export default function LiveClassroomScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+      {expoGo ? (
+        <View style={styles.expoGoBanner}>
+          <Ionicons name="information-circle" size={16} color="#7C2D12" />
+          <Text style={styles.expoGoBannerText}>Live Classes require Development Build or APK</Text>
+        </View>
+      ) : null}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
         <TouchableOpacity style={styles.iconBtn} onPress={() => { void leaveClass(true); }}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -541,7 +553,7 @@ export default function LiveClassroomScreen() {
           <Text style={styles.joinText}>Camera and microphone permissions are required for the built-in classroom.</Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <TouchableOpacity style={[styles.joinBtn, joining && styles.disabledBtn]} disabled={joining} onPress={joinClass}>
-            {joining ? <ActivityIndicator color="#fff" /> : <Text style={styles.joinBtnText}>Join Live Class</Text>}
+            {joining ? <ActivityIndicator color="#fff" /> : <Text style={styles.joinBtnText}>{expoGo ? 'Development Build Required' : 'Join Live Class'}</Text>}
           </TouchableOpacity>
         </View>
       ) : (

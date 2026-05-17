@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { ScalePressable } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
+import IslamicDashboardWidget from '@/components/IslamicDashboardWidget';
 
 type MoreItem = { label: string; icon: keyof typeof Ionicons.glyphMap; route: string; adminOnly?: boolean };
 
@@ -31,7 +32,7 @@ export default function MoreScreen() {
   ];
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}> 
         <Text style={styles.title}>More</Text>
         <Text style={styles.subtitle}>Explore tools and settings</Text>
@@ -45,12 +46,20 @@ export default function MoreScreen() {
           </ScalePressable>
         ))}
       </View>
-    </View>
+
+      <View style={styles.appsSection}>
+        <Text style={styles.appsTitle}>Applications</Text>
+        <View style={styles.appsCard}>
+          <IslamicDashboardWidget />
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background, paddingHorizontal: SPACING.lg },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  content: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xl },
   header: { paddingBottom: SPACING.md },
   title: { ...TYPOGRAPHY.title, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
@@ -65,4 +74,7 @@ const styles = StyleSheet.create({
     ...SHADOWS.card,
   },
   cardText: { ...TYPOGRAPHY.body, color: COLORS.text, fontWeight: '600' },
+  appsSection: { marginTop: SPACING.md, paddingBottom: SPACING.lg },
+  appsTitle: { ...TYPOGRAPHY.heading, color: COLORS.textMain, fontSize: 18, marginBottom: SPACING.sm },
+  appsCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.sm, ...SHADOWS.card },
 });

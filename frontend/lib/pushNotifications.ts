@@ -4,6 +4,7 @@ import {
   arrayRemove, arrayUnion, doc, serverTimestamp, updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { isExpoGo } from '@/lib/runtime';
 import { withTimeout } from '@/lib/errors';
 
 const PUSH_API_URL = process.env.EXPO_PUBLIC_PUSH_API_URL || '';
@@ -25,6 +26,10 @@ Notifications.setNotificationHandler({
 
 export async function initPushNotifications(): Promise<void> {
   try {
+    if (isExpoGo()) {
+      console.log('[Notifications] Expo Go detected: remote notifications are not fully supported in Expo Go.');
+      return;
+    }
     console.log('[Notifications] initPushNotifications called', { isDevice: Device.isDevice, osName: Device.osName });
     if (Device.isDevice && Device.osName === 'Android') {
       await Notifications.setNotificationChannelAsync('default', {
@@ -57,6 +62,14 @@ export async function initPushNotifications(): Promise<void> {
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermissionResult> {
+  if (isExpoGo()) {
+    console.log('[Notifications] permission request skipped in Expo Go');
+    return { granted: false, canAskAgain: false };
+  }
+  if (isExpoGo()) {
+    console.log('[Notifications] token registration skipped in Expo Go');
+    return null;
+  }
   if (!Device.isDevice) {
     console.log('[Notifications] requestPermission skipped: physical device required');
     return { granted: false, canAskAgain: false };
@@ -91,6 +104,10 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 export async function registerDevicePushToken(userId: string): Promise<string | null> {
+  if (isExpoGo()) {
+    console.log('[Notifications] permission request skipped in Expo Go');
+    return { granted: false, canAskAgain: false };
+  }
   if (!Device.isDevice) {
     console.log('[Notifications] registerDevicePushToken skipped: physical device required');
     return null;
