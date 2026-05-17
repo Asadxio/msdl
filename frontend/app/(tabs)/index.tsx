@@ -17,7 +17,7 @@ import {
   Platform,
   useColorScheme,
 } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
@@ -90,8 +90,6 @@ declare const require: ((moduleName: string) => any) | undefined;
 type IslamicTheme = {
   id: string;
   name: string;
-  image: string;
-  tint: string;
   accent: string;
   secondary: string;
 };
@@ -730,177 +728,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.dashboardOuter} testID="islamic-dashboard-widget">
-          <Image
-            source={{ uri: selectedIslamicTheme.image }}
-            style={styles.dashboardBgImage}
-          />
-          <View
-            style={[
-              styles.dashboardTint,
-              { backgroundColor: selectedIslamicTheme.tint },
-            ]}
-          />
-          <View style={styles.dashboardContent}>
-            <View style={styles.dashboardTopRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.dashboardEyebrow}>Islamic Dashboard</Text>
-                <Text style={styles.dashboardTitle}>{hijriDate}</Text>
-                <Text style={styles.dashboardSubtitle}>{gregorianDate}</Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.themeButton,
-                  { borderColor: selectedIslamicTheme.accent },
-                ]}
-                onPress={() =>
-                  setThemeIndex((index) => (index + 1) % ISLAMIC_THEMES.length)
-                }
-                activeOpacity={0.85}
-                testID="change-islamic-theme-btn"
-              >
-                <Ionicons
-                  name="color-palette-outline"
-                  size={16}
-                  color={selectedIslamicTheme.accent}
-                />
-                <Text
-                  style={[
-                    styles.themeButtonText,
-                    { color: selectedIslamicTheme.accent },
-                  ]}
-                >
-                  Change Theme
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.prayerHeroRow}>
-              <Animated.View
-                style={[
-                  styles.countdownMeter,
-                  {
-                    borderColor: selectedIslamicTheme.accent,
-                    transform: [
-                      {
-                        scale: pulseAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [1, 1.025],
-                        }),
-                      },
-                    ],
-                    opacity: pulseAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.96, 1],
-                    }),
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.meterProgressHint,
-                    {
-                      transform: [{ rotate: `${progressDegrees}deg` }],
-                      backgroundColor: selectedIslamicTheme.secondary,
-                    },
-                  ]}
-                />
-                <MaterialCommunityIcons
-                  name="mosque"
-                  size={34}
-                  color={selectedIslamicTheme.accent}
-                />
-                <Text style={styles.currentPrayerLabel}>Current</Text>
-                <Text style={styles.currentPrayerName}>
-                  {prayerWindow.current.name}
-                </Text>
-                <Text style={styles.nextPrayerText}>
-                  Next {prayerWindow.next.name}
-                </Text>
-                <Text style={styles.countdownText}>{countdown}</Text>
-              </Animated.View>
-
-              <View
-                style={[styles.glassPanel, isDarkMode && styles.glassPanelDark]}
-              >
-                <Text style={styles.panelLabel}>Location</Text>
-                <Text style={styles.locationTitle}>{locationDetails.city}</Text>
-                <Text style={styles.locationSubtitle}>
-                  {locationDetails.state} • {locationDetails.country}
-                </Text>
-                <View style={styles.locationMetaGrid}>
-                  <Text style={styles.locationMeta}>
-                    TZ {locationDetails.timezone}
-                  </Text>
-                  <Text style={styles.locationMeta}>{locationDetails.gmt}</Text>
-                  <Text style={styles.locationMeta}>
-                    Elev. {locationDetails.elevation}
-                  </Text>
-                  <Text style={styles.locationMeta}>
-                    {prayerSettings.method}
-                  </Text>
-                </View>
-                {locationDetails.permission !== "granted" ? (
-                  <TouchableOpacity
-                    style={styles.locationButton}
-                    onPress={requestLocation}
-                    activeOpacity={0.85}
-                  >
-                    {locationDetails.permission === "requesting" ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Ionicons
-                        name="location-outline"
-                        size={14}
-                        color="#fff"
-                      />
-                    )}
-                    <Text style={styles.locationButtonText}>
-                      {locationDetails.permission === "requesting"
-                        ? "Detecting location..."
-                        : locationDetails.permission === "denied"
-                          ? "Retry Location"
-                          : "Enable precise location"}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={styles.prayerTimesRow}>
-              {prayerTimes.map((prayer) => {
-                const isCurrent = prayer.name === prayerWindow.current.name;
-                const isNext = prayer.name === prayerWindow.next.name;
-                return (
-                  <View
-                    key={prayer.name}
-                    style={[
-                      styles.prayerPill,
-                      (isCurrent || isNext) && {
-                        borderColor: selectedIslamicTheme.accent,
-                        backgroundColor: "rgba(255,255,255,0.24)",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.prayerPillName,
-                        (isCurrent || isNext) && {
-                          color: selectedIslamicTheme.accent,
-                        },
-                      ]}
-                    >
-                      {prayer.name}
-                    </Text>
-                    <Text style={styles.prayerPillTime}>{prayer.label}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-
-        {/* Loading State */}
+                {/* Loading State */}
         {loading ? (
           <View style={styles.loadingBlock} testID="home-loading">
             <SkeletonCard lines={2} />

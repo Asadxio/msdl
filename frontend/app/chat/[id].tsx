@@ -135,32 +135,42 @@ export default function ChatDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<MessageItem>>(null);
+  const chatUnsubRef = useRef<(() => void) | null>(null);
+  const messagesUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    let unsub = () => {};
+    chatUnsubRef.current?.();
     try {
-      unsub = onSnapshot(doc(db, 'chats', id), (snap) => {
-        if (!snap.exists()) {
+      const unsub = onSnapshot(
+        doc(db, 'chats', id),
+        (snap) => {
+          if (!snap.exists()) {
+            setChat(null);
+            setLoading(false);
+            return;
+          }
+          setChat(normalizeChatMeta(snap.id, snap.data()));
+          setLoading(false);
+        },
+        (error) => {
+          console.log('[ChatDetail] chat listener ERROR', error);
           setChat(null);
           setLoading(false);
-          return;
-        }
-        setChat(normalizeChatMeta(snap.id, snap.data()));
-        setLoading(false);
-      }, (error) => {
-        console.log('[ChatDetail] chat listener ERROR', error);
-        setChat(null);
-        setLoading(false);
-        setSendError('Could not load chat. Please try again.');
-      });
+          setSendError('Could not load chat. Please try again.');
+        },
+      );
+      chatUnsubRef.current = unsub;
     } catch (error) {
       console.log('[ChatDetail] chat listener setup ERROR', error);
       setChat(null);
       setLoading(false);
       setSendError('Could not load chat. Please try again.');
     }
-    return unsub;
+    return () => {
+      chatUnsubRef.current?.();
+      chatUnsubRef.current = null;
+    };
   }, [id]);
 
   useEffect(() => {
@@ -175,35 +185,45 @@ export default function ChatDetailScreen() {
       orderBy('created_at', 'desc'),
       limit(PAGE_SIZE),
     );
-    let unsub = () => {};
-    try {
-      unsub = onSnapshot(initialQ, (snap) => {
-        const latest = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
-        setMessages((prev) => {
-          const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
-          const seen = new Set(latest.map((m) => m.id));
-          const older = prev.filter((m) => !seen.has(m.id) && !m.localOnly);
-          const pending = prev.filter((m) => m.localOnly && !confirmedClientIds.has(m.client_id));
-          return [...latest, ...older, ...pending].sort((a, b) => toMillis(b) - toMillis(a));
-        });
-        setLastCursor(snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
-        setHasMore(snap.docs.length === PAGE_SIZE);
 
-        if (user?.uid) {
-          const firstUnread = latest.find((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
-          if (firstUnread) {
-            updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch(() => {});
+    messagesUnsubRef.current?.();
+    try {
+      const unsub = onSnapshot(
+        initialQ,
+        (snap) => {
+          const latest = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
+          setMessages((prev) => {
+            const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
+            const seen = new Set(latest.map((m) => m.id));
+            const older = prev.filter((m) => !seen.has(m.id) && !m.localOnly);
+            const pending = prev.filter((m) => m.localOnly && !confirmedClientIds.has(m.client_id));
+            return [...latest, ...older, ...pending].sort((a, b) => toMillis(b) - toMillis(a));
+          });
+          setLastCursor(snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
+          setHasMore(snap.docs.length === PAGE_SIZE);
+
+          if (user?.uid) {
+            const firstUnread = latest.find((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
+            if (firstUnread) {
+              updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch(() => {});
+            }
           }
-        }
-      }, (error) => {
-        console.log('[ChatDetail] messages listener ERROR', error);
-        setSendError('Could not load messages. Please try again.');
-      });
+        },
+        (error) => {
+          console.log('[ChatDetail] messages listener ERROR', error);
+          setSendError('Could not load messages. Please try again.');
+        },
+      );
+      messagesUnsubRef.current = unsub;
     } catch (error) {
       console.log('[ChatDetail] messages listener setup ERROR', error);
       setSendError('Could not load messages. Please try again.');
     }
-    return unsub;
+
+    return () => {
+      messagesUnsubRef.current?.();
+      messagesUnsubRef.current = null;
+    };
   }, [id, user?.uid]);
 
   const loadMore = async () => {
