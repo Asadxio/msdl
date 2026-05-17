@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { ScalePressable } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
+import IslamicDashboardWidget from '@/components/IslamicDashboardWidget';
 
 type MoreItem = { label: string; icon: keyof typeof Ionicons.glyphMap; route: string; adminOnly?: boolean };
 
@@ -45,6 +46,11 @@ export default function MoreScreen() {
           </ScalePressable>
         ))}
       </View>
+
+      <View style={styles.appsSection}>
+        <Text style={styles.appsTitle}>Applications</Text>
+        <IslamicDashboardWidget />
+      </View>
     </View>
   );
 }
@@ -65,4 +71,6 @@ const styles = StyleSheet.create({
     ...SHADOWS.card,
   },
   cardText: { ...TYPOGRAPHY.body, color: COLORS.text, fontWeight: '600' },
+  appsSection: { marginTop: SPACING.md, paddingBottom: SPACING.lg },
+  appsTitle: { ...TYPOGRAPHY.heading, color: COLORS.textMain, fontSize: 18 },
 });

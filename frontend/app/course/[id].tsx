@@ -286,7 +286,7 @@ export default function CourseDetailScreen() {
   const handleJoinClass = () => {
     try {
       if (activeLiveClass?.id) {
-        safePush(`/live-class/${activeLiveClass.id}`);
+        safePushLiveClass(activeLiveClass.id);
         return;
       }
       if (meetLink && meetLink.trim().length > 0) {
@@ -325,7 +325,7 @@ export default function CourseDetailScreen() {
         meetFallbackUrl: meetLink,
         profile,
       });
-      safePush(`/live-class/${classId}`);
+      safePushLiveClass(classId);
     } catch (e: any) {
       Alert.alert("Start failed", e?.message || "Could not start live class.");
     } finally {
@@ -496,10 +496,11 @@ export default function CourseDetailScreen() {
     }
   };
 
-  const safePush = (path: string) => {
+  const safePushLiveClass = (liveClassId?: string | null) => {
     try {
-      if (!path) return;
-      router.push(path as any);
+      const id = String(liveClassId || "").trim();
+      if (!id) return;
+      router.push({ pathname: "/live-class/[id]", params: { id } });
     } catch {
       // no-op: keep app responsive
     }
@@ -1013,7 +1014,7 @@ export default function CourseDetailScreen() {
                   style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
                   activeOpacity={0.8}
                   disabled={startingLiveClass}
-                  onPress={activeLiveClass ? () => safePush(`/live-class/${activeLiveClass.id}`) : handleStartLiveClass}
+                  onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : handleStartLiveClass}
                 >
                   {startingLiveClass ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />

@@ -98,7 +98,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           if (data?.chat_id) {
             router.push(`/chat/${data.chat_id}`);
           } else if (data?.live_class_id) {
-            router.push(`/live-class/${data.live_class_id}`);
+            router.push({ pathname: "/live-class/[id]", params: { id: String(data.live_class_id) } });
           }
         } catch (error) {
           console.log('[Notifications] response handler ERROR', error);
