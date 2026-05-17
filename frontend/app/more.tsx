@@ -49,11 +49,9 @@ export default function MoreScreen() {
 
       <View style={styles.appsSection}>
         <Text style={styles.appsTitle}>Applications</Text>
-        <View style={styles.appsCard}>
-          <IslamicDashboardWidget />
-        </View>
+        <IslamicDashboardWidget />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -75,6 +73,5 @@ const styles = StyleSheet.create({
   },
   cardText: { ...TYPOGRAPHY.body, color: COLORS.text, fontWeight: '600' },
   appsSection: { marginTop: SPACING.md, paddingBottom: SPACING.lg },
-  appsTitle: { ...TYPOGRAPHY.heading, color: COLORS.textMain, fontSize: 18, marginBottom: SPACING.sm },
-  appsCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.sm, ...SHADOWS.card },
+  appsTitle: { ...TYPOGRAPHY.heading, color: COLORS.textMain, fontSize: 18 },
 });
