@@ -37,29 +37,6 @@ Required public env vars (must be present in EAS/CI build profile):
 - `EXPO_PUBLIC_PUSH_API_URL`
 - `EXPO_PUBLIC_AGORA_APP_ID`
 
-## Live class backend URL setup (required)
-
-1. Copy environment template:
-
-```bash
-cp .env.example .env
-```
-
-2. Set backend base URL in `.env`:
-
-```env
-EXPO_PUBLIC_LIVE_API_URL=https://YOUR-RAILWAY-URL.up.railway.app
-EXPO_PUBLIC_PUSH_API_URL=https://YOUR-RAILWAY-URL.up.railway.app
-EXPO_PUBLIC_AGORA_APP_ID=your_agora_app_id
-```
-
-3. Ensure backend exposes:
-- `POST /api/live-class/token`
-- `POST /api/live-class/recording/start`
-- `POST /api/live-class/recording/stop`
-
-4. Rebuild Expo dev build/APK after env changes so `EXPO_PUBLIC_*` values are embedded.
-
 Firebase rules validation (required in CI/release checklist):
 
 - Firestore rules deployed and tested with emulator scenario checks.

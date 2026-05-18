@@ -83,8 +83,7 @@ export type LiveClassCreateInput = {
 
 export const AGORA_APP_ID = process.env.EXPO_PUBLIC_AGORA_APP_ID || '';
 const LIVE_API_URL = process.env.EXPO_PUBLIC_LIVE_API_URL || process.env.EXPO_PUBLIC_PUSH_API_URL || '';
-const LIVE_API_SETUP_MESSAGE = 'Live classes are temporarily unavailable. Please update app setup and try again.';
-const LIVE_API_UNAVAILABLE_MESSAGE = 'Could not connect to live class service. Check your internet connection and try again.';
+const LIVE_API_SETUP_MESSAGE = 'Live classes are not configured yet. Please set EXPO_PUBLIC_LIVE_API_URL in your Expo environment.';
 const ENROLLMENT_LOOKUP_LIMIT = 500;
 const MIN_LIVE_ATTENDANCE_SECONDS = 60;
 const MAX_LIVE_ATTENDANCE_SECONDS = 4 * 60 * 60;
@@ -300,10 +299,7 @@ async function requestLiveBackend<T>(path: string, body: Record<string, unknown>
   let response: Response | null = await runFetch().catch(() => null);
   if (!response) {
     await new Promise((resolve) => setTimeout(resolve, 350));
-    response = await runFetch().catch(() => null);
-  }
-  if (!response) {
-    throw new Error(LIVE_API_UNAVAILABLE_MESSAGE);
+    response = await runFetch();
   }
   const payload = await response.json().catch((): Record<string, unknown> => ({}));
   if (!response.ok) {
