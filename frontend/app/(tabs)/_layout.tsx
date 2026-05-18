@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type TabIconName =
@@ -58,6 +58,7 @@ export default function TabLayout() {
       collection(db, 'notifications'),
       where('user_id', 'in', [user.uid, 'all', 'role_targeted']),
       orderBy('created_at', 'desc'),
+      limit(80),
     );
     const unsubNotif = onSnapshot(notifQ, (snap) => {
       let count = 0;
@@ -74,7 +75,7 @@ export default function TabLayout() {
       setUnreadNotifications(count);
     }, () => setUnreadNotifications(0));
 
-    const chatsQ = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
+    const chatsQ = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), limit(200));
     const unsubChats = onSnapshot(chatsQ, (snap) => {
       let count = 0;
       snap.forEach((d) => {

@@ -22,14 +22,14 @@ type ChatItem = {
   participants: string[];
   participant_names?: Record<string, string>;
   last_message?: string;
-  updated_at?: any;
+  updated_at?: { toDate?: () => Date; seconds?: number } | null;
   unread_counts?: Record<string, number>;
   pinned_by?: string[];
   hidden_by?: string[];
 };
 
-function normalizeChatItem(id: string, raw: any): ChatItem {
-  const safe = raw && typeof raw === 'object' ? raw : {};
+function normalizeChatItem(id: string, raw: unknown): ChatItem {
+  const safe: Record<string, unknown> = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   return {
     id,
     type: safe.type === 'group' || safe.type === 'broadcast' ? safe.type : 'direct',
@@ -53,9 +53,10 @@ function chatTitle(chat: ChatItem, usersMap: Record<string, string>, myUid: stri
   return chat.participant_names?.[other] || usersMap[other] || 'Direct Chat';
 }
 
-function fmtChatTime(value: any): string {
+function fmtChatTime(value: unknown): string {
   try {
-    const dt = value?.toDate ? value.toDate() : null;
+    const safe = value as { toDate?: () => Date } | null;
+    const dt = safe?.toDate ? safe.toDate() : null;
     if (!dt) return '';
     return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   } catch {
@@ -91,7 +92,7 @@ export default function ChatsScreen() {
   const safePush = useCallback((path: string) => {
     try {
       if (!path) return;
-      router.push(path as any);
+      router.push(path as never);
     } catch {
       // no-op
     }
@@ -147,7 +148,7 @@ export default function ChatsScreen() {
         const snap = await getDocs(query(collection(db, 'public_profiles'), where('searchable', '==', true)));
         const list: AppUser[] = [];
         snap.forEach((d) => {
-          const data = d.data() as any;
+          const data = d.data() as Partial<AppUser> & { is_active?: boolean };
           if (data.status !== 'approved' || data.is_active === false) return;
           list.push({
             id: d.id, name: data.name || 'User', email: '', role: data.role || 'student', status: data.status,
@@ -174,9 +175,9 @@ export default function ChatsScreen() {
       await updateDoc(doc(db, 'chats', chatItem.id), {
         pinned_by: pinned ? arrayRemove(user.uid) : arrayUnion(user.uid),
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.log('[Chats] togglePinChat ERROR', error);
-      Alert.alert('Action failed', error?.message || 'Could not update pin status.');
+      Alert.alert('Action failed', error instanceof Error ? error.message : 'Could not update pin status.');
     }
   }, [user?.uid]);
 
@@ -202,9 +203,9 @@ export default function ChatsScreen() {
               }));
               setSelectedChatIds([]);
               setFeedback({ type: 'success', text: 'Selected chats deleted from your list.' });
-            } catch (error: any) {
+            } catch (error: unknown) {
               console.log('[Chats] deleteSelectedChats ERROR', error);
-              Alert.alert('Delete failed', error?.message || 'Could not delete selected chats.');
+              Alert.alert('Delete failed', error instanceof Error ? error.message : 'Could not delete selected chats.');
             } finally {
               setBulkUpdating(false);
             }
@@ -246,9 +247,10 @@ export default function ChatsScreen() {
       const ref = await addDoc(collection(db, 'chats'), payload);
       setShowUsers(false);
       safePush(`/chat/${ref.id}`);
-    } catch (e: any) {
-      setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
-      Alert.alert('Could not start chat', e?.message || 'Please try again.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Please try again.';
+      setFeedback({ type: 'error', text: message });
+      Alert.alert('Could not start chat', message);
     } finally {
       setCreatingDirectFor(null);
     }
@@ -300,9 +302,10 @@ export default function ChatsScreen() {
       setGroupName('');
       setSelected([]);
       safePush(`/chat/${ref.id}`);
-    } catch (e: any) {
-      setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
-      Alert.alert('Could not create group', e?.message || 'Please try again.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Please try again.';
+      setFeedback({ type: 'error', text: message });
+      Alert.alert('Could not create group', message);
     } finally {
       setCreatingGroup(false);
     }
@@ -330,9 +333,10 @@ export default function ChatsScreen() {
         unread_counts: { [user.uid]: 0 },
       });
       safePush(`/chat/${ref.id}`);
-    } catch (e: any) {
-      setFeedback({ type: 'error', text: e?.message || 'Please try again.' });
-      Alert.alert('Could not open broadcast', e?.message || 'Please try again.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Please try again.';
+      setFeedback({ type: 'error', text: message });
+      Alert.alert('Could not open broadcast', message);
     } finally {
       setOpeningBroadcast(false);
     }

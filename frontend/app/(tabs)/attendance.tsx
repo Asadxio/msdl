@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, FlatList, ActivityIndicator, TextInput, Alert, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -61,7 +61,7 @@ export default function AttendanceScreen() {
     if (!user?.uid) return;
     setLoading(true);
     const q = canMark
-      ? query(collection(db, 'attendance'))
+      ? query(collection(db, 'attendance'), where('date', '==', date), orderBy('marked_at', 'desc'), limit(500))
       : query(collection(db, 'attendance'), where('user_id', '==', user.uid));
     const unsub = onSnapshot(q, (snap) => {
       const arr: AttendanceItem[] = [];
@@ -79,7 +79,7 @@ export default function AttendanceScreen() {
       setLoading(false);
     });
     return unsub;
-  }, [canMark, user?.uid, reloadKey]);
+  }, [canMark, date, user?.uid, reloadKey]);
 
   useEffect(() => {
     if (!canMark) {
@@ -138,8 +138,8 @@ export default function AttendanceScreen() {
         created_at: serverTimestamp(),
       });
       setFeedback(`${targetUser.name}: ${status} saved`);
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to mark attendance.');
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to mark attendance.');
     } finally {
       setSavingUserId('');
     }

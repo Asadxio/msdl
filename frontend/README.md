@@ -21,6 +21,30 @@ npm run lint
 npx tsc --noEmit
 ```
 
+## Release safety validation checklist (Phase 1)
+
+Before creating a production APK/AAB, run:
+
+```bash
+npx tsc --noEmit
+npm run lint
+npx expo config --type public
+```
+
+Required public env vars (must be present in EAS/CI build profile):
+
+- `EXPO_PUBLIC_LIVE_API_URL`
+- `EXPO_PUBLIC_PUSH_API_URL`
+- `EXPO_PUBLIC_AGORA_APP_ID`
+
+Firebase rules validation (required in CI/release checklist):
+
+- Firestore rules deployed and tested with emulator scenario checks.
+- Storage rules deployed and validated for:
+  - student self-upload
+  - teacher/admin read path
+  - rejected/deactivated user denial
+
 ## Dependency/toolchain recovery
 
 Use the runbook:

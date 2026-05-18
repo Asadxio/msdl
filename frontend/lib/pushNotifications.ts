@@ -66,10 +66,6 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
     console.log('[Notifications] permission request skipped in Expo Go');
     return { granted: false, canAskAgain: false };
   }
-  if (isExpoGo()) {
-    console.log('[Notifications] token registration skipped in Expo Go');
-    return null;
-  }
   if (!Device.isDevice) {
     console.log('[Notifications] requestPermission skipped: physical device required');
     return { granted: false, canAskAgain: false };
@@ -105,8 +101,8 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 
 export async function registerDevicePushToken(userId: string): Promise<string | null> {
   if (isExpoGo()) {
-    console.log('[Notifications] permission request skipped in Expo Go');
-    return { granted: false, canAskAgain: false };
+    console.log('[Notifications] token registration skipped in Expo Go');
+    return null;
   }
   if (!Device.isDevice) {
     console.log('[Notifications] registerDevicePushToken skipped: physical device required');

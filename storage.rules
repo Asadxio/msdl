@@ -21,8 +21,9 @@ service firebase.storage {
 
     function isTeacherOrAdmin() {
       return isSignedIn()
-        && request.auth.token != null
-        && request.auth.token.role in ['teacher', 'admin'];
+        && exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin']
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
     function isSafeAssignmentUpload() {

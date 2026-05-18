@@ -47,9 +47,9 @@ import { EmptyState, ScalePressable, SkeletonCard } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 import { normalizeGoogleDriveFileUrl } from "@/lib/links";
 
-const DEFAULT_ANNOUNCEMENT_TITLE = "Enrollment Open for 2025";
+const DEFAULT_ANNOUNCEMENT_TITLE = "No announcements yet";
 const DEFAULT_ANNOUNCEMENT_DESC =
-  "Admissions are now open for all courses. Register today and begin your journey of Islamic knowledge.";
+  "Important updates from teachers and admins will appear here.";
 
 type PrayerName = "Fajr" | "Dhuhr" | "Asr" | "Maghrib" | "Isha";
 type PrayerTime = { name: PrayerName; time: Date; label: string };

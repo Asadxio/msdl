@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 
 type Certificate = { id: string; user_name: string; course_name: string; completion_date: string };
+type AttendanceRow = { status?: string };
 
 export default function CertificateScreen() {
   const insets = useSafeAreaInsets();
@@ -35,7 +36,10 @@ export default function CertificateScreen() {
       finishLoading();
     });
     const attendanceUnsub = onSnapshot(query(collection(db, 'attendance'), where('user_id', '==', user.uid)), (snap) => {
-      const present = snap.docs.filter((d) => (d.data() as any).status === 'present').length;
+      const present = snap.docs.filter((d) => {
+        const data = d.data() as AttendanceRow;
+        return data.status === 'present';
+      }).length;
       setAttendancePct(snap.size ? Math.round((present / snap.size) * 100) : 0);
       ready.attendance = true;
       finishLoading();
@@ -45,7 +49,15 @@ export default function CertificateScreen() {
     });
     const certUnsub = onSnapshot(query(collection(db, 'certificates'), where('user_id', '==', user.uid), orderBy('created_at', 'desc')), (snap) => {
       const arr: Certificate[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+      snap.forEach((d) => {
+        const data = d.data() as Partial<Certificate>;
+        arr.push({
+          id: d.id,
+          user_name: String(data.user_name || ''),
+          course_name: String(data.course_name || ''),
+          completion_date: String(data.completion_date || ''),
+        });
+      });
       setCerts(arr);
       ready.certs = true;
       finishLoading();
@@ -67,15 +79,19 @@ export default function CertificateScreen() {
     if (!eligible) return;
     const course = courses.find((c) => c.id === selectedCourseId);
     if (!course) return;
-    await addDoc(collection(db, 'certificates'), {
-      user_id: user.uid,
-      user_name: profile.name,
-      course_name: course.name,
-      completion_date: new Date().toISOString().slice(0, 10),
-      created_at: serverTimestamp(),
-    });
-    const certText = `Certificate of Completion\n\nAwarded to: ${profile.name}\nCourse: ${course.name}\nDate: ${new Date().toDateString()}`;
-    await Share.share({ message: certText });
+    try {
+      await addDoc(collection(db, 'certificates'), {
+        user_id: user.uid,
+        user_name: profile.name,
+        course_name: course.name,
+        completion_date: new Date().toISOString().slice(0, 10),
+        created_at: serverTimestamp(),
+      });
+      const certText = `Certificate of Completion\n\nAwarded to: ${profile.name}\nCourse: ${course.name}\nDate: ${new Date().toDateString()}`;
+      await Share.share({ message: certText });
+    } catch {
+      Alert.alert('Failed', 'Could not generate certificate right now.');
+    }
   };
 
   return (

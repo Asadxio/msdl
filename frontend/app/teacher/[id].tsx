@@ -17,7 +17,8 @@ import { useData } from '@/context/DataContext';
 import { normalizeGoogleDriveFileUrl } from '@/lib/links';
 
 export default function TeacherDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { courses, teachers, loading } = useData();
@@ -33,7 +34,7 @@ export default function TeacherDetailScreen() {
     );
   }
 
-  const teacher = teachers.find((t) => t.id === id);
+  const teacher = id ? teachers.find((t) => t.id === id) : undefined;
   if (!teacher) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>

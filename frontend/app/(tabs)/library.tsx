@@ -29,7 +29,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   Tafseer: { bg: COLORS.goldBg, text: COLORS.goldText },
 };
 
-const BOOK_ICONS: Record<string, string> = {
+const BOOK_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Islamic: 'moon',
   Urdu: 'language',
   Qirat: 'mic',
@@ -50,7 +50,7 @@ function BookCard({ book, isAdmin, onDelete }: { book: Book; isAdmin: boolean; o
       onPress={() => router.push(`/book/${book.id}`)}
     >
       <View style={[styles.coverArea, { backgroundColor: catColor.bg }]}>
-        <Ionicons name={iconName as any} size={36} color={catColor.text} />
+        <Ionicons name={iconName} size={36} color={catColor.text} />
       </View>
       <View style={styles.cardBody}>
         <Text style={styles.bookTitle} numberOfLines={2}>{book.title}</Text>
@@ -95,7 +95,10 @@ export default function LibraryScreen() {
     const q = query(collection(db, 'categories'), orderBy('name'));
     const unsub = onSnapshot(q, (snap) => {
       const arr: { id: string; name: string }[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, name: String((d.data() as any).name || '') }));
+      snap.forEach((d) => {
+        const data = d.data() as { name?: string };
+        arr.push({ id: d.id, name: String(data.name || '') });
+      });
       setCategories(arr.filter((c) => c.name.trim()));
     });
     return unsub;
