@@ -32,6 +32,7 @@ export default function RecordingsScreen() {
   const [items, setItems] = useState<RecordingItem[]>([]);
   const [courseMap, setCourseMap] = useState<CourseMap>({});
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   const fetchRecordings = useCallback(async () => {
     setLoading(true);
@@ -41,10 +42,20 @@ export default function RecordingsScreen() {
         getDocs(collection(db, 'courses')),
       ]);
       const next: RecordingItem[] = [];
-      recordingSnap.forEach((d) => next.push({ id: d.id, ...(d.data() as any) }));
+      recordingSnap.forEach((d) => {
+        const data = d.data() as Partial<RecordingItem>;
+        next.push({
+          id: d.id,
+          title: String(data.title || ''),
+          description: data.description ? String(data.description) : '',
+          file_url: String(data.file_url || ''),
+          course_id: data.course_id ? String(data.course_id) : '',
+          lesson_id: data.lesson_id ? String(data.lesson_id) : '',
+        });
+      });
       const nextMap: CourseMap = {};
       courseSnap.forEach((d) => {
-        const data = d.data() as any;
+        const data = d.data() as { name?: string };
         nextMap[d.id] = data.name || 'Course';
       });
       setItems(next);
@@ -60,15 +71,25 @@ export default function RecordingsScreen() {
     fetchRecordings().catch(() => {});
   }, [fetchRecordings]);
 
-  const safeOpenRecording = async (rawUrl: string) => {
+  const safeOpenRecording = async (rawUrl: string, id?: string) => {
     const url = prepareExternalUrl(rawUrl);
     if (!url) {
       Alert.alert('Invalid URL', 'Recording URL is missing or invalid.');
       return;
     }
-    await Linking.openURL(url).catch(() => {
+    try {
+      if (id) setOpeningId(id);
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('Open Unavailable', 'No app is available to play this recording.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
       Alert.alert('Open Failed', 'Could not open recording. Please try again later.');
-    });
+    } finally {
+      if (id) setOpeningId(null);
+    }
   };
 
   const downloadRecording = async (rawUrl: string) => {
@@ -140,10 +161,18 @@ export default function RecordingsScreen() {
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <TouchableOpacity style={{ flex: 1 }} onPress={() => { void safeOpenRecording(item.file_url); }}>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{item.title || 'Recording'}</Text>
                 <Text style={styles.cardMeta}>{courseMap[item.course_id || ''] || 'Course'}</Text>
                 <Text style={styles.cardDesc}>{item.description || 'Tap to open recording'}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.playBtn}
+                onPress={() => { void safeOpenRecording(item.file_url, item.id); }}
+                disabled={openingId === item.id}
+              >
+                {openingId === item.id ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="play-circle-outline" size={16} color={COLORS.primary} />}
+                <Text style={styles.downloadText}>{openingId === item.id ? 'Opening...' : 'Play'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.downloadBtn} onPress={() => { void downloadRecording(item.file_url); }}>
                 <Ionicons name="download-outline" size={16} color={COLORS.primary} />
@@ -160,7 +189,7 @@ export default function RecordingsScreen() {
               ) : null}
             </View>
           )}
-          ListEmptyComponent={<View style={styles.center}><Text style={styles.empty}>No recordings available yet.</Text></View>}
+          ListEmptyComponent={<View style={styles.center}><Text style={styles.empty}>No recordings yet</Text></View>}
         />
       )}
     </View>
@@ -204,6 +233,7 @@ const styles = StyleSheet.create({
   cardDesc: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   deleteBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FFF1F2' },
   deleteText: { fontSize: 12, fontWeight: '700', color: COLORS.error },
+  playBtn: { paddingHorizontal: 8, paddingVertical: 8, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center', gap: 2 },
   downloadBtn: { paddingHorizontal: 8, paddingVertical: 8, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center', gap: 2 },
   downloadText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },

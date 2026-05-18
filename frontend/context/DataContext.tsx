@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  collection, getDocs, getDoc, addDoc, serverTimestamp, doc, updateDoc, setDoc, query, where,
+  collection, getDocs, getDoc, addDoc, serverTimestamp, doc, updateDoc, setDoc, query, where, limit,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { COURSES as LOCAL_COURSES, TEACHERS as LOCAL_TEACHERS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
@@ -191,36 +190,16 @@ const DataContext = createContext<DataContextType>({
 });
 const COURSES_CACHE_KEY = 'courses_cache_v1';
 const TEACHERS_CACHE_KEY = 'teachers_cache_v1';
+const QUERY_CHUNK = 10;
+
+function chunkIds(ids: string[], size = QUERY_CHUNK): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) chunks.push(ids.slice(i, i + size));
+  return chunks;
+}
 
 export function useData() {
   return useContext(DataContext);
-}
-
-function getLocalCourses(): Course[] {
-  return LOCAL_COURSES.map((c) => ({
-    id: c.id,
-    name: c.name,
-    teacher_name: c.teacher,
-    schedule: c.schedule,
-    time: '',
-    class_time: '',
-    description: c.description,
-    class_link: '',
-    meet_link: '',
-  }));
-}
-
-function getLocalTeachers(): Teacher[] {
-  return LOCAL_TEACHERS.map((t) => ({
-    id: t.id,
-    name: t.name,
-    title: t.title,
-    courses: t.courseIds.map((cid) => {
-      const course = LOCAL_COURSES.find((c) => c.id === cid);
-      return course ? course.name : '';
-    }).filter(Boolean),
-    photo_url: '',
-  }));
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -257,7 +236,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       });
       setBooks(booksData);
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.warn('Failed to fetch books:', normalizeFirebaseError(err, 'Failed to fetch books'));
       setBooks([]);
     } finally {
@@ -299,11 +278,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       });
 
-      setCourses(coursesData.length > 0 ? coursesData : getLocalCourses());
-      setTeachers(teachersData.length > 0 ? teachersData : getLocalTeachers());
+      setCourses(coursesData);
+      setTeachers(teachersData);
       await AsyncStorage.setItem(COURSES_CACHE_KEY, JSON.stringify(coursesData)).catch(() => {});
       await AsyncStorage.setItem(TEACHERS_CACHE_KEY, JSON.stringify(teachersData)).catch(() => {});
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.warn('Firebase fetch failed, using local data:', normalizeFirebaseError(err, 'Failed to fetch data'));
       setError(normalizeFirebaseError(err, 'Failed to fetch data'));
       const cachedCoursesRaw = await AsyncStorage.getItem(COURSES_CACHE_KEY).catch(() => null);
@@ -322,31 +301,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       } catch {
         cachedTeachers = [];
       }
-      setCourses(cachedCourses.length > 0 ? cachedCourses : getLocalCourses());
-      setTeachers(cachedTeachers.length > 0 ? cachedTeachers : getLocalTeachers());
+      setCourses(cachedCourses);
+      setTeachers(cachedTeachers);
     } finally {
       setLoading(false);
     }
   };
 
-  const getLocalModulesAndLessons = (seedCourses: Course[]) => {
-    const nextModules: CourseModule[] = [];
-    const nextLessons: Lesson[] = [];
-    seedCourses.forEach((course) => {
-      const introModuleId = `module-${course.id}-1`;
-      const advancedModuleId = `module-${course.id}-2`;
-      nextModules.push(
-        { id: introModuleId, course_id: course.id, title: 'Introduction', order: 1 },
-        { id: advancedModuleId, course_id: course.id, title: 'Practice & Revision', order: 2 },
-      );
-      nextLessons.push(
-        { id: `lesson-${course.id}-1`, course_id: course.id, module_id: introModuleId, title: 'Lesson 1', order: 1, duration_minutes: 20 },
-        { id: `lesson-${course.id}-2`, course_id: course.id, module_id: introModuleId, title: 'Lesson 2', order: 2, duration_minutes: 25, quiz_id: `quiz-${course.id}-2` },
-        { id: `lesson-${course.id}-3`, course_id: course.id, module_id: advancedModuleId, title: 'Lesson 3', order: 3, duration_minutes: 30, content_url: course.meet_link || course.class_link || '' },
-      );
-    });
-    return { nextModules, nextLessons };
-  };
 
   const fetchLearning = useCallback(async () => {
     if (!user?.uid) {
@@ -365,17 +326,38 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         ? collection(db, 'submissions')
         : query(collection(db, 'submissions'), where('user_id', '==', user.uid));
 
-      const [moduleSnap, lessonSnap, assignmentSnap, progressSnap, submissionSnap, learningStateSnap] = await Promise.all([
-        withTimeout(getDocs(collection(db, 'modules'))),
-        withTimeout(getDocs(collection(db, 'lessons'))),
-        withTimeout(getDocs(collection(db, 'assignments'))),
+      const [progressSnap, submissionSnap, learningStateSnap] = await Promise.all([
         withTimeout(getDocs(progressQuery)),
         withTimeout(getDocs(submissionsQuery)),
         withTimeout(getDoc(doc(db, 'learning_state', user.uid))),
       ]);
 
+      let courseIds: string[] = [];
+      if (profile?.role === 'student') {
+        const enrolledSnap = await withTimeout(getDocs(query(
+          collection(db, 'enrollments'),
+          where('user_id', '==', user.uid),
+          where('status', '==', 'active'),
+          limit(200),
+        )));
+        courseIds = Array.from(new Set(enrolledSnap.docs.map((d) => {
+          const data = d.data() as { course_id?: string };
+          return String(data.course_id || '');
+        }).filter(Boolean)));
+      } else if (profile?.role === 'teacher') {
+        const taught = courses.filter((c) => String(c.teacher_name || '').trim() === String(profile.name || '').trim()).map((c) => c.id);
+        courseIds = Array.from(new Set(taught));
+      }
+
+      const moduleSnaps = profile?.role === 'admin' || courseIds.length === 0
+        ? [await withTimeout(getDocs(query(collection(db, 'modules'), limit(1200))))]
+        : await Promise.all(chunkIds(courseIds).map((ids) => withTimeout(getDocs(query(
+          collection(db, 'modules'),
+          where('course_id', 'in', ids),
+        )))));
+
       const nextModules: CourseModule[] = [];
-      moduleSnap.forEach((d) => {
+      moduleSnaps.forEach((moduleSnap) => moduleSnap.forEach((d) => {
         const data = d.data() as any;
         nextModules.push({
           id: d.id,
@@ -383,10 +365,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           title: String(data.title || 'Module'),
           order: Number(data.order || 0),
         });
-      });
+      }));
+
+      const moduleIds = Array.from(new Set(nextModules.map((m) => m.id))).filter(Boolean);
+      const lessonSnaps = profile?.role === 'admin' || moduleIds.length === 0
+        ? [await withTimeout(getDocs(query(collection(db, 'lessons'), limit(1500))))]
+        : await Promise.all(chunkIds(moduleIds).map((ids) => withTimeout(getDocs(query(
+          collection(db, 'lessons'),
+          where('module_id', 'in', ids),
+        )))));
 
       const nextLessons: Lesson[] = [];
-      lessonSnap.forEach((d) => {
+      lessonSnaps.forEach((lessonSnap) => lessonSnap.forEach((d) => {
         const data = d.data() as any;
         nextLessons.push({
           id: d.id,
@@ -402,9 +392,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           quiz_id: data.quiz_id ? String(data.quiz_id) : undefined,
           resources: Array.isArray(data.resources) ? data.resources : undefined,
         });
-      });
+      }));
+      const lessonIds = Array.from(new Set(nextLessons.map((l) => l.id))).filter(Boolean);
+      const assignmentSnaps = profile?.role === 'admin' || lessonIds.length === 0
+        ? [await withTimeout(getDocs(query(collection(db, 'assignments'), limit(1500))))]
+        : await Promise.all(chunkIds(lessonIds).map((ids) => withTimeout(getDocs(query(
+          collection(db, 'assignments'),
+          where('lesson_id', 'in', ids),
+        )))));
       const nextAssignments: Assignment[] = [];
-      assignmentSnap.forEach((d) => {
+      assignmentSnaps.forEach((assignmentSnap) => assignmentSnap.forEach((d) => {
         const data = d.data() as any;
         nextAssignments.push({
           id: d.id,
@@ -416,7 +413,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           due_date: data.due_date ? String(data.due_date) : undefined,
           file_url: data.file_url ? String(data.file_url) : undefined,
         });
-      });
+      }));
 
       const nextProgress: Record<string, LessonProgressState> = {};
       progressSnap.forEach((d) => {
@@ -453,22 +450,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setLastOpenedLessonId(null);
       }
 
-      if (nextModules.length === 0 || nextLessons.length === 0) {
-        const local = getLocalModulesAndLessons(courses.length ? courses : getLocalCourses());
-        setModules(local.nextModules);
-        setLessons(local.nextLessons);
-      } else {
-        setModules(nextModules.sort((a, b) => a.order - b.order));
-        setLessons(nextLessons.sort((a, b) => a.order - b.order));
-      }
+      setModules(nextModules.sort((a, b) => a.order - b.order));
+      setLessons(nextLessons.sort((a, b) => a.order - b.order));
       setAssignments(nextAssignments);
       setLessonProgress(nextProgress);
       setSubmissions(nextSubmissions);
     } catch (err: any) {
       logger.warn('Failed to fetch structured learning:', normalizeFirebaseError(err, 'Failed to fetch learning'));
-      const local = getLocalModulesAndLessons(courses.length ? courses : getLocalCourses());
-      setModules(local.nextModules);
-      setLessons(local.nextLessons);
+      setModules([]);
+      setLessons([]);
       setAssignments([]);
       setSubmissions([]);
       setLessonProgress({});

@@ -51,7 +51,7 @@ export default function MoreScreen() {
         <Text style={styles.appsTitle}>Applications</Text>
         <IslamicDashboardWidget />
       </View>
-    </View>
+    </ScrollView>
   );
 }
 

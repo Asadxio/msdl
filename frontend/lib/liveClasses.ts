@@ -83,10 +83,19 @@ export type LiveClassCreateInput = {
 
 export const AGORA_APP_ID = process.env.EXPO_PUBLIC_AGORA_APP_ID || '';
 const LIVE_API_URL = process.env.EXPO_PUBLIC_LIVE_API_URL || process.env.EXPO_PUBLIC_PUSH_API_URL || '';
+const LIVE_API_SETUP_MESSAGE = 'Live classes are not configured yet. Please set EXPO_PUBLIC_LIVE_API_URL in your Expo environment.';
 const ENROLLMENT_LOOKUP_LIMIT = 500;
 const MIN_LIVE_ATTENDANCE_SECONDS = 60;
 const MAX_LIVE_ATTENDANCE_SECONDS = 4 * 60 * 60;
 type JsonMap = Record<string, unknown>;
+
+export function isLiveApiConfigured(): boolean {
+  return Boolean(String(LIVE_API_URL || '').trim());
+}
+
+export function getLiveApiSetupMessage(): string {
+  return LIVE_API_SETUP_MESSAGE;
+}
 
 function asMap(value: unknown): JsonMap {
   return value && typeof value === 'object' ? (value as JsonMap) : {};
@@ -276,10 +285,10 @@ function getLiveApiBaseUrl(): string {
 
 async function requestLiveBackend<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const baseUrl = getLiveApiBaseUrl();
-  if (!baseUrl) throw new Error('Live API URL is not configured. Add EXPO_PUBLIC_LIVE_API_URL or EXPO_PUBLIC_PUSH_API_URL.');
+  if (!baseUrl) throw new Error(LIVE_API_SETUP_MESSAGE);
   if (!auth.currentUser) throw new Error('Please sign in again.');
   const idToken = await auth.currentUser.getIdToken();
-  const response = await fetch(`${baseUrl}${path}`, {
+  const runFetch = () => fetch(`${baseUrl}${path}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${idToken}`,
@@ -287,9 +296,15 @@ async function requestLiveBackend<T>(path: string, body: Record<string, unknown>
     },
     body: JSON.stringify(body),
   });
-  const payload = await response.json().catch(() => ({}));
+  let response: Response | null = await runFetch().catch(() => null);
+  if (!response) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    response = await runFetch();
+  }
+  const payload = await response.json().catch((): Record<string, unknown> => ({}));
   if (!response.ok) {
-    throw new Error(String((payload as any)?.detail || `Live API request failed (${response.status})`));
+    const detail = typeof payload.detail === 'string' ? payload.detail : '';
+    throw new Error(detail || `Live API request failed (${response.status})`);
   }
   return payload as T;
 }

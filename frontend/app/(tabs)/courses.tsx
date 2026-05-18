@@ -124,7 +124,7 @@ export default function CoursesScreen() {
       {loading ? (
         <EmptyState icon="hourglass-outline" message="Loading courses..." />
       ) : filteredCourses.length === 0 ? (
-        <EmptyState icon="search-outline" message="No courses match this search/filter." />
+        <EmptyState icon="search-outline" message={safeCourses.length === 0 ? 'No courses available' : 'No courses match this search/filter.'} />
       ) : (
         <FlatList
           data={filteredCourses}

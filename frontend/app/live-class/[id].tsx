@@ -32,6 +32,8 @@ import { useAuth } from '@/context/AuthContext';
 import {
   canCurrentUserJoinLiveClass,
   endLiveClassAndSyncAttendance,
+  getLiveApiSetupMessage,
+  isLiveApiConfigured,
   markParticipantJoined,
   markParticipantLeft,
   requestLiveClassToken,
@@ -116,6 +118,7 @@ export default function LiveClassroomScreen() {
   const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+  const liveApiReady = isLiveApiConfigured();
   const [joined, setJoined] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);

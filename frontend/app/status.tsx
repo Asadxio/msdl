@@ -86,6 +86,7 @@ export default function StatusScreen() {
   } | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [cleaningExpired, setCleaningExpired] = useState(false);
 
   useEffect(() => {
     const q = query(
@@ -130,13 +131,16 @@ export default function StatusScreen() {
 
         if (
           (profile?.role === "admin" || profile?.role === "teacher") &&
-          expiredIds.length > 0
+          expiredIds.length > 0 &&
+          !cleaningExpired
         ) {
+          setCleaningExpired(true);
           await Promise.all(
             expiredIds.map((statusId) =>
               deleteDoc(doc(db, "status_updates", statusId)).catch(() => {}),
             ),
           );
+          setCleaningExpired(false);
         }
       },
       (error) => {
@@ -145,7 +149,7 @@ export default function StatusScreen() {
       },
     );
     return unsub;
-  }, [profile?.role]);
+  }, [cleaningExpired, profile?.role]);
 
   const postStatus = async () => {
     console.log("[Status] Post button clicked");

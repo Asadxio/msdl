@@ -54,7 +54,7 @@ export default function TeachersScreen() {
       {loading ? (
         <EmptyState icon="hourglass-outline" message="Loading teachers..." />
       ) : teachers.length === 0 ? (
-        <EmptyState icon="people-outline" message="No teachers available yet." />
+        <EmptyState icon="people-outline" message="No teachers available" />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent} testID="teachers-list">
           {teachers.map((teacher) => (
