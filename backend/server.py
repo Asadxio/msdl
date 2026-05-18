@@ -45,6 +45,10 @@ class StatusCheckCreate(BaseModel):
     client_name: str
 
 # Add your routes to the router instead of directly to app
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
