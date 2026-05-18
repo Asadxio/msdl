@@ -42,8 +42,8 @@ export default function PaymentFlowScreen() {
     const globalSnap = await getDoc(doc(db, 'app_settings', 'global'));
     const platformSnap = await getDoc(doc(db, 'app_settings', 'platform'));
     const merged = {
-      ...(platformSnap.exists() ? (platformSnap.data() as any) : {}),
-      ...(globalSnap.exists() ? (globalSnap.data() as any) : {}),
+      ...(platformSnap.exists() ? (platformSnap.data() as Record<string, unknown>) : {}),
+      ...(globalSnap.exists() ? (globalSnap.data() as Record<string, unknown>) : {}),
     };
     const fee = Number(merged.fees_amount || 0);
     const link = String(merged.razorpay_link || '');
@@ -61,7 +61,7 @@ export default function PaymentFlowScreen() {
         if (!user?.uid) return;
         const paymentsSnap = await getDocs(query(collection(db, 'payments'), where('user_id', '==', user.uid), orderBy('created_at', 'desc')));
         if (!paymentsSnap.empty) {
-          const latest = paymentsSnap.docs[0].data() as any;
+          const latest = paymentsSnap.docs[0].data() as { status?: string; type?: string; amount?: number };
           setStatusText(`${latest.status || 'pending'} • ${latest.type || 'fees'} • ₹${Number(latest.amount || 0).toFixed(2)}`);
         }
       } catch (err) {

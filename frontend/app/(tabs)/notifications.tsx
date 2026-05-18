@@ -69,7 +69,7 @@ export default function NotificationsScreen() {
       collection(db, 'notifications'),
       where('user_id', 'in', [user.uid, 'all', 'role_targeted']),
       orderBy('created_at', 'desc'),
-      limit(100),
+      limit(50),
     );
     const unsub = onSnapshot(q, (snap) => {
       const next: NotificationItem[] = [];
@@ -132,9 +132,10 @@ export default function NotificationsScreen() {
         setFeedback({ type: 'success', text: 'Notification sent successfully.' });
         Alert.alert('Success', 'Notification sent.');
       }
-    } catch (err: any) {
-      setFeedback({ type: 'error', text: err?.message || 'Failed to send notification.' });
-      Alert.alert('Error', err?.message || 'Failed to send notification');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to send notification.';
+      setFeedback({ type: 'error', text: message });
+      Alert.alert('Error', message);
     } finally {
       setSending(false);
     }
@@ -166,8 +167,8 @@ export default function NotificationsScreen() {
       setEditingTitle('');
       setEditingMessage('');
       setShowEditModal(false);
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update notification.');
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update notification.');
     } finally {
       setUpdating(false);
     }
@@ -189,8 +190,8 @@ export default function NotificationsScreen() {
               setShowEditModal(false);
             }
             setFeedback({ type: 'success', text: 'Notification deleted successfully.' });
-          } catch (err: any) {
-            Alert.alert('Error', err?.message || 'Failed to delete notification.');
+          } catch (err: unknown) {
+            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete notification.');
           }
         },
       },

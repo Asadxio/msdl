@@ -45,6 +45,10 @@ class StatusCheckCreate(BaseModel):
     client_name: str
 
 # Add your routes to the router instead of directly to app
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
@@ -61,12 +65,21 @@ async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
 
+def _env_list(name: str, default: str = "") -> list[str]:
+    raw = os.environ.get(name, default)
+    return [v.strip() for v in str(raw).split(",") if v.strip()]
+
+
+cors_origins = _env_list("CORS_ALLOW_ORIGINS", "http://localhost:8081,http://localhost:19006")
+cors_methods = _env_list("CORS_ALLOW_METHODS", "GET,POST,OPTIONS")
+cors_headers = _env_list("CORS_ALLOW_HEADERS", "Authorization,Content-Type")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cors_origins,
+    allow_methods=cors_methods,
+    allow_headers=cors_headers,
 )
 
 # Configure logging

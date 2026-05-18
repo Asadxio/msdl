@@ -352,9 +352,9 @@ export default function ChatDetailScreen() {
           data: { type: 'chat_message', chat_id: id },
         }).catch(() => {});
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessages((prev) => prev.map((m) => (m.client_id === clientId ? { ...m, failed: true, localOnly: false } : m)));
-      setSendError(error?.message || 'Could not send message. Please try again.');
+      setSendError(error instanceof Error ? error.message : 'Could not send message. Please try again.');
     } finally {
       setSending(false);
     }
