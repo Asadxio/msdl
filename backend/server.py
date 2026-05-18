@@ -154,6 +154,16 @@ class LiveClassRecordingRequest(BaseModel):
     live_class_id: str
 
 
+class StatusReactRequest(BaseModel):
+    status_id: str
+    reaction: str
+
+
+class StatusCommentRequest(BaseModel):
+    status_id: str
+    text: str
+
+
 def _agora_uid(firebase_uid: str) -> int:
     value = 0
     for char in firebase_uid:
@@ -652,6 +662,19 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
     if not target_user_ids:
         return {"ok": True, "sent": 0}
 
+    dedupe_id = str((payload.data or {}).get("push_dedupe_id", "")).strip()
+    if dedupe_id:
+        dedupe_ref = firebase_db.collection("push_dedupe").document(dedupe_id)
+        dedupe_snap = dedupe_ref.get()
+        if dedupe_snap.exists:
+            return {"ok": True, "sent": 0, "deduped": True}
+        dedupe_ref.set({
+            "created_at": admin_firestore.SERVER_TIMESTAMP,
+            "requester_uid": requester_uid,
+            "event_type": str((payload.data or {}).get("type", "")),
+            "target_count": len(target_user_ids),
+        }, merge=True)
+
     # Non-admin push guard: allow chat participant pushes and teacher-owned live-class start pushes.
     if not is_admin:
         event_type = str((payload.data or {}).get("type", "")).strip()
@@ -669,6 +692,9 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
             for uid in target_user_ids:
                 if uid not in participants:
                     raise HTTPException(status_code=403, detail="Recipient outside chat participants")
+            muted_by = set(chat_data.get("muted_by") or [])
+            if muted_by:
+                target_user_ids = [uid for uid in target_user_ids if uid not in muted_by]
         elif event_type == "live_class_started" and requester_role in {"teacher", "admin"}:
             live_class_id = str((payload.data or {}).get("live_class_id", "")).strip()
             if not live_class_id:
@@ -721,6 +747,110 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
         "stale_removed": len(stale_tokens) + expo_result["stale_removed"],
         "expo_retried": expo_result["retried"],
     }
+
+
+@api_router.post("/jobs/cleanup-expired-status")
+async def cleanup_expired_statuses(authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    uid, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    now_ms = int(time.time() * 1000)
+    expired = firebase_db.collection("status_updates").where("expires_at_ms", "<=", now_ms).limit(200).stream()
+    deleted = 0
+    for snap in expired:
+        ref = snap.reference
+        for sub_name in ("views", "comments", "reactions"):
+            docs = ref.collection(sub_name).limit(500).stream()
+            for d in docs:
+                d.reference.delete()
+        ref.delete()
+        deleted += 1
+    logger.info("cleanup_expired_statuses by %s deleted=%s", uid, deleted)
+    return {"ok": True, "deleted": deleted, "ts": now_ms}
+
+
+@api_router.post("/status/react")
+async def react_status(payload: StatusReactRequest, authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    uid, _ = _verify_firebase_request(authorization)
+    if payload.reaction not in {"❤️", "🔥", "👏"}:
+        raise HTTPException(status_code=400, detail="Unsupported reaction")
+    now_ms = int(time.time() * 1000)
+    rate_ref = firebase_db.collection("status_rate_limits").document(f"react:{uid}")
+    rate_snap = rate_ref.get()
+    last_ms = int((rate_snap.to_dict() or {}).get("last_ms", 0)) if rate_snap.exists else 0
+    if now_ms - last_ms < 800:
+        raise HTTPException(status_code=429, detail="Reaction throttled")
+    rate_ref.set({"last_ms": now_ms, "updated_at": admin_firestore.SERVER_TIMESTAMP}, merge=True)
+    status_ref = firebase_db.collection("status_updates").document(str(payload.status_id).strip())
+    snap = status_ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Status not found")
+    data = snap.to_dict() or {}
+    owner_id = str(data.get("user_id") or "")
+    reaction_ref = status_ref.collection("reactions").document(uid)
+    prev = reaction_ref.get()
+    prev_reaction = ""
+    if prev.exists:
+        prev_reaction = str((prev.to_dict() or {}).get("reaction") or "")
+    updates = {}
+    if prev_reaction and prev_reaction != payload.reaction:
+        updates[f"reaction_counts.{prev_reaction}"] = admin_firestore.Increment(-1)
+    if prev_reaction != payload.reaction:
+        updates[f"reaction_counts.{payload.reaction}"] = admin_firestore.Increment(1)
+    reaction_ref.set({"reaction": payload.reaction, "user_id": uid, "updated_at": admin_firestore.SERVER_TIMESTAMP}, merge=True)
+    if updates:
+        status_ref.update(updates)
+    if owner_id and owner_id != uid:
+        dedupe_id = f"status_react:{payload.status_id}:{uid}:{payload.reaction}"
+        firebase_db.collection("notifications").document(dedupe_id).set({
+            "type": "status_reaction",
+            "owner_id": owner_id,
+            "actor_id": uid,
+            "status_id": payload.status_id,
+            "reaction": payload.reaction,
+            "read": False,
+            "created_at": admin_firestore.SERVER_TIMESTAMP,
+            "created_at_ms": int(time.time() * 1000),
+            "dedupe_id": dedupe_id,
+        }, merge=True)
+    return {"ok": True}
+
+
+@api_router.post("/jobs/repair-status-reaction-counts")
+async def repair_status_reaction_counts(authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    _, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    repaired = 0
+    scanned = 0
+    docs = firebase_db.collection("status_updates").limit(200).stream()
+    for snap in docs:
+        scanned += 1
+        counts = {"❤️": 0, "🔥": 0, "👏": 0}
+        for r in snap.reference.collection("reactions").limit(2000).stream():
+            reaction = str((r.to_dict() or {}).get("reaction") or "")
+            if reaction in counts:
+                counts[reaction] += 1
+        current = (snap.to_dict() or {}).get("reaction_counts") or {}
+        if any(int(current.get(k, 0)) != v for k, v in counts.items()):
+            snap.reference.update({"reaction_counts": counts, "reaction_repaired_at": admin_firestore.SERVER_TIMESTAMP})
+            repaired += 1
+    logger.info("repair_status_reaction_counts scanned=%s repaired=%s", scanned, repaired)
+    return {"ok": True, "scanned": scanned, "repaired": repaired}
+
+
+@api_router.post("/jobs/run-status-maintenance")
+async def run_status_maintenance(authorization: str | None = Header(default=None)):
+    cleanup = await cleanup_expired_statuses(authorization)
+    repair = await repair_status_reaction_counts(authorization)
+    logger.info("run_status_maintenance cleanup=%s repair=%s", cleanup, repair)
+    return {"ok": True, "cleanup": cleanup, "repair": repair}
 
 
 # Include routes after every endpoint has been attached to the router.
