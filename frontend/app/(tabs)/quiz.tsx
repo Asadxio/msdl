@@ -8,6 +8,8 @@ import { useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { QUIZ_SESSION_TTL_MS, clearQuizSession, loadQuizSession, saveQuizSession } from '@/lib/lmsHardening';
+import { trackSecurity } from '@/lib/securityMonitor';
 
 type QuizQuestion = {
   id: string;
@@ -43,6 +45,7 @@ export default function QuizScreen() {
   const [correctAnswer, setCorrectAnswer] = useState('');
   const [category, setCategory] = useState('');
   const [savingQuestion, setSavingQuestion] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const loadQuiz = useCallback(async () => {
     setLoading(true);
@@ -68,7 +71,17 @@ export default function QuizScreen() {
         setQuestions([]);
         setError('No quiz questions available yet. Admin can add questions.');
       } else {
-        setQuestions(shuffle(all));
+        const shuffled = shuffle(all);
+        setQuestions(shuffled);
+        if (user?.uid) {
+          const quizKey = String(shuffled.map((q) => q.id).join('-')).slice(0, 180);
+          const prior = await loadQuizSession(user.uid, quizKey).catch(() => null);
+          if (prior) {
+            setAnswers(prior.answers || {});
+            const idx = Math.max(0, shuffled.findIndex((q) => !prior.answers?.[q.id]));
+            setIndex(idx === -1 ? 0 : idx);
+          }
+        }
       }
     } catch (e: any) {
       setError(e?.message || 'Failed to load quiz.');
@@ -100,6 +113,11 @@ export default function QuizScreen() {
 
   const submitQuiz = async () => {
     if (!user?.uid) return;
+    if (sessionExpired) {
+      setError('Quiz session expired. Please restart attempt.');
+      trackSecurity('quiz_session_expired_submit', { uid: user.uid });
+      return;
+    }
     if (questions.some((q) => !answers[q.id])) {
       setError('Please answer all questions before submitting.');
       return;
@@ -120,6 +138,8 @@ export default function QuizScreen() {
         created_at: serverTimestamp(),
       });
       setResult({ score, total: questions.length });
+      const quizKey = String(questions.map((q) => q.id).join('-')).slice(0, 180);
+      await clearQuizSession(user.uid, quizKey).catch(() => {});
     } catch (e: any) {
       setError(e?.message || 'Failed to submit quiz.');
     } finally {
@@ -179,6 +199,32 @@ export default function QuizScreen() {
       setError(e?.message || 'Failed to delete question.');
     }
   };
+
+
+  useEffect(() => {
+    if (!user?.uid || questions.length === 0 || result) return;
+    const quizKey = String(questions.map((q) => q.id).join('-')).slice(0, 180);
+    saveQuizSession(user.uid, {
+      quiz_key: quizKey,
+      started_at_ms: Date.now(),
+      expires_at_ms: Date.now() + QUIZ_SESSION_TTL_MS,
+      answers,
+      question_order: questions.map((q) => q.id),
+      submitted: false,
+    }).catch(() => {});
+  }, [answers, questions, user?.uid, result]);
+
+  useEffect(() => {
+    if (loading || result || questions.length === 0) return;
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - startedAt > QUIZ_SESSION_TTL_MS) {
+        setSessionExpired(true);
+        clearInterval(timer);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [loading, result, questions.length]);
 
   return (
     <View style={styles.container}>

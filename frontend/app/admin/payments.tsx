@@ -5,12 +5,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, onSnapshot, orderBy, query, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, updateDoc, doc, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { createAdminLog } from '@/lib/adminLogs';
+import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 
 type PaymentItem = {
   id: string;
@@ -42,6 +43,9 @@ export default function AdminPaymentsScreen() {
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | PaymentItem['status']>('all');
+  const [fetching, setFetching] = useState(false);
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -49,19 +53,27 @@ export default function AdminPaymentsScreen() {
       return;
     }
     if (!isAdmin) return;
-    const q = query(collection(db, 'payments'), orderBy('created_at', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const arr: PaymentItem[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
-      setPayments(arr);
-      setError('');
-      setLoading(false);
-    }, () => {
-      setError('Could not load payments. Please refresh and try again.');
-      setLoading(false);
-    });
-    return unsub;
-  }, [profile, isAdmin, router]);
+    const load = async (direction: 'reset' | 'next' | 'prev' = 'reset') => {
+      if (fetching) return;
+      setFetching(true);
+      if (direction === 'reset') setLoading(true);
+      try {
+        const extra: any[] = [];
+        if (statusFilter !== 'all') extra.push(where('status', '==', statusFilter));
+        const page = await fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, cursor: direction === 'reset' ? null : cursor, direction: direction === 'reset' ? 'next' : direction, extra });
+        setPayments(page.items as PaymentItem[]);
+        setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
+        setError('');
+      } catch {
+        setError('Could not load payments. Please refresh and try again.');
+      } finally {
+        setLoading(false);
+        setFetching(false);
+      }
+    };
+    load('reset');
+    return () => {};
+  }, [profile, isAdmin, router, statusFilter]);
 
   const setStatus = async (id: string, status: 'approved' | 'rejected') => {
     setUpdatingId(id);
@@ -97,8 +109,8 @@ export default function AdminPaymentsScreen() {
           <Ionicons name="close" size={22} color={COLORS.textMain} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Manage Payments</Text>
-        <TouchableOpacity onPress={() => setLoading(true)}>
-          <Ionicons name="refresh" size={20} color={COLORS.primary} />
+        <TouchableOpacity onPress={() => setStatusFilter(statusFilter === 'all' ? 'pending' : 'all')}>
+          <Ionicons name="funnel" size={20} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -106,6 +118,7 @@ export default function AdminPaymentsScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
+        <Text style={{ paddingHorizontal: 16, color: COLORS.textMuted }}>Filter status: {statusFilter}</Text>
         <FlatList
           data={payments}
           keyExtractor={(item) => item.id}

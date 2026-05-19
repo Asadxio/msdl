@@ -1,6 +1,7 @@
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
+import { normalizeRole } from '@/lib/roles';
 
 type AdminLogInput = {
   action: string;
@@ -10,7 +11,8 @@ type AdminLogInput = {
 };
 
 export async function createAdminLog(profile: UserProfile | null, input: AdminLogInput): Promise<void> {
-  if (profile?.role !== 'admin') return;
+  const actorRole = normalizeRole(profile?.role, 'adminLogs.actor');
+  if (!['admin', 'super_admin'].includes(actorRole)) return;
   if (!input.action || !input.performed_by) return;
 
   await addDoc(collection(db, 'admin_logs'), {

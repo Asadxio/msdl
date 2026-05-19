@@ -1,7 +1,41 @@
-import { writeBatch, doc, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, writeBatch, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { createAdminLog } from '@/lib/adminLogs';
+
+import { canAssignRole, normalizeRole, type AppRole } from '@/lib/roles';
+
+export async function updateUserRoleSecure(input: {
+  actorProfile: UserProfile | null;
+  actorId: string;
+  targetUserId: string;
+  previousRole: unknown;
+  nextRole: unknown;
+  reason?: string;
+  source?: string;
+  requestId?: string;
+}) {
+  const actorRole = normalizeRole(input.actorProfile?.role, 'adminOps.actor');
+  const prevRole = normalizeRole(input.previousRole, 'adminOps.prev');
+  const newRole = normalizeRole(input.nextRole, 'adminOps.next');
+  if (!canAssignRole(actorRole, newRole, input.targetUserId, input.actorId)) {
+    throw new Error('Insufficient permissions to assign this role');
+  }
+  await updateDoc(doc(db, 'users', input.targetUserId), { role: newRole, updated_at: serverTimestamp() });
+  await addDoc(collection(db, 'role_transition_audit_logs'), {
+    actor: input.actorId,
+    actor_role: actorRole,
+    target_user: input.targetUserId,
+    previous_role: prevRole,
+    new_role: newRole,
+    reason: input.reason || '',
+    timestamp: serverTimestamp(),
+    source: input.source || 'admin.users',
+    request_id: input.requestId || '',
+  });
+  return { previousRole: prevRole, newRole };
+}
+
 
 export async function bulkUpdateUserStatus(input: {
   profile: UserProfile | null;

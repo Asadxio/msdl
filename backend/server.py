@@ -14,7 +14,7 @@ from datetime import datetime
 import json
 import time
 import requests
-from fastapi import HTTPException, Header
+from fastapi import HTTPException, Header, Request
 from firebase_admin import auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
 import firebase_admin
 from agora_token_builder import RtcTokenBuilder
@@ -27,6 +27,9 @@ from services.fanout_worker import process_queue_once
 from services.stale_lease_reclaimer import reclaim_stale_leases
 from services.worker_scheduler import run_scheduler_tick
 from services.provider_weight_engine import update_provider_weight
+from security.rateLimiter import allow as allow_rate
+from security.securityLogs import log_security_event
+from security.quizSecurity import attempt_key, is_attempt_expired
 
 
 ROOT_DIR = Path(__file__).parent
@@ -97,6 +100,85 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+ALLOWED_ADMIN_ORIGINS = set(_env_list("ADMIN_ALLOWED_ORIGINS", ""))
+SECURITY_EVENT_RATE: dict[str, list[float]] = {}
+NONCE_CACHE: dict[str, float] = {}
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    return fwd or (request.client.host if request.client else "unknown")
+
+
+def _validate_admin_origin(request: Request) -> None:
+    if not ALLOWED_ADMIN_ORIGINS:
+        return
+    origin = request.headers.get("origin", "")
+    if origin and origin not in ALLOWED_ADMIN_ORIGINS:
+        _log_security_event("admin_origin_blocked", {"origin": origin, "ip": _client_ip(request)})
+        raise HTTPException(status_code=403, detail="Forbidden origin")
+
+
+def _enforce_rate_limit(key: str, limit_count: int, window_sec: int) -> None:
+    now = time.time()
+    bucket = [t for t in SECURITY_EVENT_RATE.get(key, []) if now - t <= window_sec]
+    if len(bucket) >= limit_count:
+        _log_security_event("failed_admin_rate_limit", {"key": key, "window_sec": window_sec, "count": len(bucket)})
+        raise HTTPException(status_code=429, detail="Too many privileged requests")
+    bucket.append(now)
+    SECURITY_EVENT_RATE[key] = bucket
+
+
+def _enforce_nonce(request: Request, uid: str) -> None:
+    nonce = request.headers.get("x-action-nonce", "").strip()
+    if not nonce:
+        raise HTTPException(status_code=400, detail="Missing action nonce")
+    key = f"{uid}:{nonce}"
+    now = time.time()
+    last = NONCE_CACHE.get(key, 0)
+    if now - last < 300:
+        raise HTTPException(status_code=409, detail="Replay detected")
+    NONCE_CACHE[key] = now
+
+
+def _classify_security_severity(event: str, payload: dict) -> str:
+    e = str(event)
+    if "mass_delete" in e or "role_escalation" in e:
+        return "critical"
+    if "denied" in e or "failed" in e:
+        return "high"
+    if "moderation" in e or "anomaly" in e:
+        return "medium"
+    return "low"
+
+
+def _log_security_event(event: str, payload: dict) -> None:
+    severity = _classify_security_severity(event, payload)
+    logger.warning("SECURITY_EVENT %s severity=%s %s", event, severity, json.dumps(payload, ensure_ascii=False))
+    if firebase_db is not None:
+        firebase_db.collection("security_events_immutable").add({
+            "event": event,
+            "severity": severity,
+            "payload": payload,
+            "created_at": admin_firestore.SERVER_TIMESTAMP,
+            "created_at_ms": int(time.time() * 1000),
+        })
+
+
+def _require_capability(request: Request, authorization: str | None, allowed_roles: set[str], action: str, confirm: str | None = None) -> tuple[str, str]:
+    uid, role = _verify_firebase_request(authorization)
+    _validate_admin_origin(request)
+    _enforce_rate_limit(f"{uid}:{action}", 30, 60)
+    _enforce_nonce(request, uid)
+    if confirm and request.headers.get("x-action-confirm", "") != confirm:
+        raise HTTPException(status_code=400, detail="Action confirmation required")
+    if role not in allowed_roles:
+        _log_security_event("capability_denied", {"uid": uid, "role": role, "action": action, "ip": _client_ip(request)})
+        raise HTTPException(status_code=403, detail="Insufficient privileges")
+    _log_security_event("capability_granted", {"uid": uid, "role": role, "action": action, "ip": _client_ip(request), "ua": request.headers.get("user-agent", "")[:120]})
+    return uid, role
+
 
 
 def _init_firebase_admin():
@@ -193,6 +275,14 @@ class StatusReactRequest(BaseModel):
 class StatusCommentRequest(BaseModel):
     status_id: str
     text: str
+
+
+class QuizSubmitRequest(BaseModel):
+    quiz_id: str
+    nonce: str
+    started_at_ms: int
+    score: int
+    total_questions: int
 
 
 class LiveOpsEventRequest(BaseModel):
@@ -372,6 +462,31 @@ def _bearer_token(authorization: str | None) -> str:
         raise HTTPException(status_code=401, detail="Missing authorization token")
     return authorization.split(" ", 1)[1].strip()
 
+
+
+APP_ROLES = {"super_admin", "admin", "moderator", "teacher", "assistant_teacher", "student"}
+ROLE_RANK = {"student": 10, "assistant_teacher": 30, "teacher": 40, "moderator": 60, "admin": 80, "super_admin": 100}
+
+
+def _normalize_role(value: str | None) -> str:
+    role = str(value or "").strip().lower()
+    if role in APP_ROLES:
+        return role
+    _log_security_event("invalid_role_payload", {"role": str(value or "")[:64]})
+    return "student"
+
+
+def _can_assign_role(actor_role: str, current_target_role: str, next_role: str, actor_uid: str = "", target_uid: str = "") -> bool:
+    actor = _normalize_role(actor_role)
+    current = _normalize_role(current_target_role)
+    nxt = _normalize_role(next_role)
+    if actor_uid and target_uid and actor_uid == target_uid:
+        return False
+    if actor == "super_admin":
+        return True
+    if actor == "admin":
+        return nxt in {"student", "teacher"} and current not in {"admin", "super_admin"}
+    return False
 
 def _fetch_user_role(uid: str) -> str:
     if firebase_db is None:
@@ -952,10 +1067,8 @@ async def enqueue_push(payload: QueueEnqueueRequest, authorization: str | None =
 
 
 @api_router.post("/jobs/token-health-maintenance")
-async def token_health_maintenance_job(authorization: str | None = Header(default=None)):
-    _, role = _verify_firebase_request(authorization)
-    if role != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
+async def token_health_maintenance_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "token_health_maintenance", confirm="token_health_maintenance")
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
     now_ms = int(time.time() * 1000)
@@ -975,50 +1088,38 @@ async def token_health_maintenance_job(authorization: str | None = Header(defaul
 
 
 @api_router.post("/jobs/poll-push-receipts")
-async def poll_push_receipts_job(authorization: str | None = Header(default=None)):
-    _, role = _verify_firebase_request(authorization)
-    if role != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
+async def poll_push_receipts_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "poll_push_receipts")
     return poll_push_receipts(firebase_db, logger, normalize_expo_receipt_status)
 
 
 @api_router.post("/jobs/aggregate-notification-health")
-async def aggregate_notification_health_job(authorization: str | None = Header(default=None)):
-    _, role = _verify_firebase_request(authorization)
-    if role != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
+async def aggregate_notification_health_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin", "moderator"}, "aggregate_notification_health")
     return aggregate_notification_health(firebase_db, logger)
 
 
 @api_router.post("/jobs/process-notification-queue")
-async def process_notification_queue_job(authorization: str | None = Header(default=None)):
-    _, role = _verify_firebase_request(authorization)
-    if role != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
+async def process_notification_queue_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "process_notification_queue")
     return process_queue_once(firebase_db, logger)
 
 
 @api_router.post("/jobs/reclaim-stale-leases")
-async def reclaim_stale_leases_job(authorization: str | None = Header(default=None)):
-    _, role = _verify_firebase_request(authorization)
-    if role != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
+async def reclaim_stale_leases_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "reclaim_stale_leases")
     return reclaim_stale_leases(firebase_db, logger)
 
 
 @api_router.post("/jobs/run-worker-scheduler")
-async def run_worker_scheduler_job(authorization: str | None = Header(default=None)):
-    _, role = _verify_firebase_request(authorization)
-    if role != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
+async def run_worker_scheduler_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "run_worker_scheduler")
     return run_scheduler_tick(firebase_db, logger)
 
 
 @api_router.post("/jobs/update-routing-weights")
-async def update_routing_weights_job(authorization: str | None = Header(default=None)):
-    _, role = _verify_firebase_request(authorization)
-    if role != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
+async def update_routing_weights_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "update_routing_weights")
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
     providers = ["expo", "fcm", "apns"]
@@ -1107,6 +1208,25 @@ async def react_status(payload: StatusReactRequest, authorization: str | None = 
             "dedupe_id": dedupe_id,
         }, merge=True)
     return {"ok": True}
+
+
+@api_router.post("/lms/quiz/submit")
+async def submit_quiz_authoritative(payload: QuizSubmitRequest, request: Request, authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    uid, _ = _verify_firebase_request(authorization)
+    if not allow_rate(f"quiz_submit:{uid}", 8, 60):
+        log_security_event(firebase_db, logger, 'quiz_submit_rate_limited', {'uid': uid})
+        raise HTTPException(status_code=429, detail='Too many quiz submissions')
+    if is_attempt_expired(payload.started_at_ms):
+        raise HTTPException(status_code=409, detail='Quiz attempt expired')
+    dedupe = attempt_key(uid, payload.quiz_id, payload.nonce)
+    existing = firebase_db.collection('quiz_attempt_locks').document(dedupe).get()
+    if existing.exists:
+        raise HTTPException(status_code=409, detail='Duplicate attempt submission')
+    firebase_db.collection('quiz_attempt_locks').document(dedupe).set({'uid': uid, 'quiz_id': payload.quiz_id, 'created_at_ms': int(time.time()*1000)})
+    firebase_db.collection('quiz_results').add({'user_id': uid, 'quiz_id': payload.quiz_id, 'score': int(payload.score), 'total_questions': int(payload.total_questions), 'created_at': admin_firestore.SERVER_TIMESTAMP, 'attempt_key': dedupe})
+    return {'ok': True, 'attempt_key': dedupe}
 
 
 @api_router.post("/jobs/repair-status-reaction-counts")
