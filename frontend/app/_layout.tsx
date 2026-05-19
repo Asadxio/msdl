@@ -145,6 +145,7 @@ export default function RootLayout() {
             <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="unauthorized" options={{ animation: 'fade' }} />
             <Stack.Screen name="status" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="status-player" options={{ animation: 'fade' }} />
             <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />

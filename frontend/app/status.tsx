@@ -549,6 +549,9 @@ export default function StatusScreen() {
                   : "Just now"}
               </Text>
               <View style={styles.row}>
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => router.push(`/status-player?data=${encodeURIComponent(JSON.stringify(visibleItems.map((s) => ({ id: s.id, user_name: s.user_name, text: s.text, media_url: s.media_url, media_type: s.media_type || '' }))))}`)}>
+                  <Text style={styles.ghostBtnText}>Open Story Player</Text>
+                </TouchableOpacity>
                 <Text style={styles.cardMeta}>
                   Likes: {(item.likes || []).length}
                 </Text>
