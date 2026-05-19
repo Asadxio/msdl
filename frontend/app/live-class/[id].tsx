@@ -37,16 +37,32 @@ import {
   markParticipantJoined,
   markParticipantLeft,
   requestLiveClassToken,
+  setLiveClassStatus,
   startCloudRecording,
   stopCloudRecording,
   subscribeLiveClass,
   subscribeLiveParticipants,
   updateParticipantMediaState,
+  updateParticipantModerationState,
+  writeParticipantHeartbeat,
+  cleanupStaleParticipants,
   type LiveClass,
   type LiveClassParticipant,
 } from '@/lib/liveClasses';
+import {
+  HEARTBEAT_INTERVAL_MS,
+  buildReconnectDiagnostics,
+  getReconnectDelayMs,
+  shallowChanged,
+  type ReconnectDiagnostics,
+} from '@/lib/liveClassReliability';
+import { applySingleModerationAction, runModerationBurst, type ModerationAction, type RecordingEngineState } from '@/lib/liveClassOps';
+import { clearLiveClassRecovery, loadLiveClassRecovery, saveLiveClassRecovery } from '@/lib/liveClassRecoveryCache';
+import { recordLiveMetric } from '@/lib/liveClassObservability';
+import { buildSyntheticModerationBurst } from '@/lib/liveClassDevLoadTools';
+import { LIVE_OPS } from '@/lib/liveOpsConfig';
 
-type RemoteUser = { uid: number; audioMuted?: boolean; videoMuted?: boolean };
+type RemoteUser = { uid: number; audioMuted?: boolean; videoMuted?: boolean; lastSpokeAtMs?: number };
 
 const MAX_REMOTE_VIDEO_TILES = 8;
 
@@ -112,6 +128,19 @@ export default function LiveClassroomScreen() {
   const appStateRef = useRef(AppState.currentState);
   const joinedRef = useRef(false);
   const leavingRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectingGuardRef = useRef(false);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectStartedAtRef = useRef(0);
+  const prevMediaSyncRef = useRef<{ audio_enabled?: boolean; video_enabled?: boolean } | null>(null);
+  const moderationQueueRef = useRef<ModerationAction[]>([]);
+  const moderationBusyRef = useRef(false);
+  const recordingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
+  const joiningLockRef = useRef(false);
+  const recordingRecoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatLastWriteRef = useRef(0);
 
   const [liveClass, setLiveClass] = useState<LiveClass | null>(null);
   const [participants, setParticipants] = useState<LiveClassParticipant[]>([]);
@@ -126,7 +155,19 @@ export default function LiveClassroomScreen() {
   const [recordingBusy, setRecordingBusy] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState('');
+  const [networkHint, setNetworkHint] = useState('');
+  const [reconnectDiag, setReconnectDiag] = useState<ReconnectDiagnostics>({
+    phase: 'idle',
+    lastReconnectReason: '',
+    lastReconnectAtMs: 0,
+    reconnectLatencyMs: 0,
+    reconnectAttemptCount: 0,
+  });
+  const [recordingState, setRecordingState] = useState<RecordingEngineState>('idle');
+  const [recordingMessage, setRecordingMessage] = useState('');
+  const [opsMessage, setOpsMessage] = useState('');
   const expoGo = isExpoGo();
+  const isLowEndAndroid = Platform.OS === 'android';
 
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
   const localParticipant = useMemo(
@@ -140,12 +181,42 @@ export default function LiveClassroomScreen() {
     });
     return map;
   }, [participants]);
+  const activeParticipants = useMemo(() => participants.filter((p) => p.joined), [participants]);
+  const participantPriority = useMemo(() => {
+    const teacherUid = liveClass?.teacher_id || '';
+    const speakerNow = new Set(remoteUsers.filter((r) => (r.lastSpokeAtMs || 0) > Date.now() - 12000).map((r) => r.uid));
+    return activeParticipants.slice().sort((a, b) => {
+      const rank = (p: LiveClassParticipant) => {
+        if (p.user_id === teacherUid || p.role === 'teacher') return 0;
+        if (speakerNow.has(p.agora_uid)) return 1;
+        if (p.role === 'admin') return 2;
+        return 3;
+      };
+      return rank(a) - rank(b);
+    });
+  }, [activeParticipants, liveClass?.teacher_id, remoteUsers]);
 
 
   const cleanupAgora = useCallback(() => {
     if (tokenRenewTimerRef.current) {
       clearTimeout(tokenRenewTimerRef.current);
       tokenRenewTimerRef.current = null;
+    }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    }
+    if (recordingPollRef.current) {
+      clearInterval(recordingPollRef.current);
+      recordingPollRef.current = null;
+    }
+    if (recordingRecoverTimerRef.current) {
+      clearTimeout(recordingRecoverTimerRef.current);
+      recordingRecoverTimerRef.current = null;
     }
     const engine = engineRef.current;
     if (!engine) return;
@@ -157,7 +228,23 @@ export default function LiveClassroomScreen() {
     engineRef.current = null;
     eventHandlerRef.current = null;
     setReconnecting(false);
+    recordLiveMetric('rtc_cleanup', { classId: classId || '' });
   }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cleanupAgora();
+    };
+  }, [cleanupAgora]);
+
+  const syncMediaState = useCallback(async (next: { audio_enabled?: boolean; video_enabled?: boolean }) => {
+    if (!classId || !user?.uid) return;
+    if (!shallowChanged(prevMediaSyncRef.current, next)) return;
+    prevMediaSyncRef.current = next;
+    await updateParticipantMediaState(classId, user.uid, next).catch(() => {});
+  }, [classId, user?.uid]);
 
   const leaveClass = useCallback(async (navigateBack = true, syncAttendance = true) => {
     if (leavingRef.current) return;
@@ -172,10 +259,58 @@ export default function LiveClassroomScreen() {
       setReconnecting(false);
       setRemoteUsers([]);
       if (navigateBack) router.back();
+      if (classId && user?.uid) void clearLiveClassRecovery(classId, user.uid);
+      setOpsMessage('');
     } finally {
       leavingRef.current = false;
     }
   }, [classId, cleanupAgora, localParticipant, router, user?.uid]);
+
+  const postOpsEvent = useCallback(async (event: string, payload: Record<string, unknown> = {}) => {
+    if (!LIVE_OPS.telemetryEnabled || !LIVE_OPS.opsEndpoint) return;
+    const base = String(LIVE_OPS.opsEndpoint || '').replace(/\/$/, '');
+    const body = {
+      event,
+      class_id: classId || '',
+      user_role: profile?.role || 'unknown',
+      participant_count: activeParticipants.length,
+      reconnect_phase: reconnectDiag.phase,
+      device_tier: isLowEndAndroid ? 'low_end_android' : Platform.OS,
+      ...payload,
+    };
+    fetch(`${base}/api/live-ops/event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  }, [activeParticipants.length, classId, isLowEndAndroid, profile?.role, reconnectDiag.phase]);
+
+  useEffect(() => {
+    if (!classId || !user?.uid) return;
+    loadLiveClassRecovery(classId, user.uid).then((cached) => {
+      if (!cached) return;
+      if (cached.handRaised && !localParticipant?.hand_raised) {
+        updateParticipantModerationState(classId, user.uid, { hand_raised: true }).catch(() => {});
+      }
+      if (cached.recordingState === 'recovering' && isTeacher) {
+        setRecordingState('recovering');
+        setRecordingMessage('Recovering recording…');
+      }
+    });
+  }, [classId, isTeacher, localParticipant?.hand_raised, user?.uid]);
+
+  useEffect(() => {
+    if (!classId || !user?.uid) return;
+    saveLiveClassRecovery({
+      classId,
+      userId: user.uid,
+      reconnectPhase: reconnectDiag.phase,
+      handRaised: localParticipant?.hand_raised === true,
+      recordingState,
+      pendingModerationCount: moderationQueueRef.current.length,
+      savedAtMs: Date.now(),
+    }).catch(() => {});
+  }, [classId, localParticipant?.hand_raised, reconnectDiag.phase, recordingState, user?.uid]);
 
   useEffect(() => {
     if (!classId) return;
@@ -205,13 +340,18 @@ export default function LiveClassroomScreen() {
     Alert.alert('Muted by teacher', 'Your microphone was muted by the teacher.');
   }, [classId, joined, localParticipant?.force_muted, user?.uid]);
 
+  useEffect(() => {
+    if (!joined || !localParticipant?.moderation?.removed) return;
+    Alert.alert('Removed by teacher', 'You were removed from this class by the host.');
+    void leaveClass(true, false);
+  }, [joined, leaveClass, localParticipant?.moderation?.removed]);
+
   useEffect(() => () => {
-    cleanupAgora();
     if (joinedRef.current && classId && user?.uid) {
       markParticipantLeft(classId, user.uid, getParticipantJoinDate(localParticipant)).catch(() => {});
       joinedRef.current = false;
     }
-  }, [classId, cleanupAgora, localParticipant, user?.uid]);
+  }, [classId, localParticipant, user?.uid]);
 
   const scheduleTokenRenewal = useCallback((expiresAtEpoch: number) => {
     if (tokenRenewTimerRef.current) clearTimeout(tokenRenewTimerRef.current);
@@ -238,7 +378,7 @@ export default function LiveClassroomScreen() {
         try { engineRef.current?.muteLocalAudioStream(true); } catch {}
         setCameraOn(false);
         setMicOn(false);
-        await updateParticipantMediaState(classId, user.uid, { video_enabled: false, audio_enabled: false }).catch(() => {});
+        await syncMediaState({ video_enabled: false, audio_enabled: false });
       } else if (previous.match(/inactive|background/) && nextState === 'active') {
         try { engineRef.current?.setEnableSpeakerphone(speakerOn); } catch {}
         const resumeVideoOn = localParticipant?.video_enabled !== false;
@@ -247,21 +387,36 @@ export default function LiveClassroomScreen() {
         try { engineRef.current?.muteLocalAudioStream(!resumeAudioOn); } catch {}
         setCameraOn(resumeVideoOn);
         setMicOn(resumeAudioOn);
-        await updateParticipantMediaState(classId, user.uid, {
+        await syncMediaState({
           video_enabled: resumeVideoOn,
           audio_enabled: resumeAudioOn,
-        }).catch(() => {});
+        });
       }
     });
     return () => sub.remove();
-  }, [classId, localParticipant?.audio_enabled, localParticipant?.force_muted, localParticipant?.video_enabled, speakerOn, user?.uid]);
+  }, [classId, localParticipant?.audio_enabled, localParticipant?.force_muted, localParticipant?.video_enabled, speakerOn, syncMediaState, user?.uid]);
+
+  useEffect(() => {
+    if (!joined || !classId || !user?.uid) return;
+    heartbeatTimerRef.current = setInterval(() => {
+      const now = Date.now();
+      if (now - heartbeatLastWriteRef.current < HEARTBEAT_INTERVAL_MS - 1000) return;
+      heartbeatLastWriteRef.current = now;
+      writeParticipantHeartbeat(classId, user.uid).catch(() => {});
+    }, HEARTBEAT_INTERVAL_MS);
+    return () => {
+      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    };
+  }, [classId, joined, user?.uid]);
 
   const joinClass = useCallback(async () => {
     if (expoGo) {
       Alert.alert('Development Build Required', 'Live Classes require Development Build or APK.');
       return;
     }
-    if (!classId || !user?.uid || !profile || !liveClass || joining || joined) return;
+    if (!classId || !user?.uid || !profile || !liveClass || joining || joined || joiningLockRef.current) return;
+    joiningLockRef.current = true;
     setError('');
     setJoining(true);
     try {
@@ -291,13 +446,48 @@ export default function LiveClassroomScreen() {
           void markParticipantJoined(classId, profile, user.uid, rtcToken.agoraUid).catch(() => {});
         },
         onConnectionStateChanged: (_connection, state, reason) => {
-          if (state === 3) setReconnecting(true);
+          if (state === 3) {
+            reconnectAttemptsRef.current += 1;
+            reconnectStartedAtRef.current = Date.now();
+            setReconnecting(true);
+            setNetworkHint('Network unstable. Trying to reconnect…');
+            setReconnectDiag(buildReconnectDiagnostics('reconnecting', `state_${reason}`, reconnectStartedAtRef.current, reconnectAttemptsRef.current));
+            recordLiveMetric('reconnect_attempt', { reason, attempt: reconnectAttemptsRef.current });
+            void postOpsEvent('reconnect_attempt', { reason, attempt: reconnectAttemptsRef.current });
+            if (isTeacher) setLiveClassStatus(classId, 'reconnecting').catch(() => {});
+            if (!reconnectingGuardRef.current) {
+              reconnectingGuardRef.current = true;
+              const attempt = reconnectAttemptsRef.current;
+              const delay = getReconnectDelayMs(attempt);
+              reconnectTimerRef.current = setTimeout(() => {
+                reconnectingGuardRef.current = false;
+                if (!joinedRef.current || !engineRef.current) return;
+                if (attempt >= 8) {
+                  setReconnectDiag(buildReconnectDiagnostics('failed', 'max_attempts', reconnectStartedAtRef.current || Date.now(), attempt));
+                  setNetworkHint('Reconnect failed');
+                  recordLiveMetric('reconnect_failed', { attempt });
+                  void postOpsEvent('reconnect_failed', { attempt });
+                  return;
+                }
+                setReconnectDiag(buildReconnectDiagnostics('rejoining', 'scheduled_rejoin', reconnectStartedAtRef.current || Date.now(), attempt));
+                try { engineRef.current?.leaveChannel(); } catch {}
+              }, delay);
+            }
+          }
           if (state === 5) {
             setReconnecting(false);
-            setError(`Connection failed (${reason}). Rejoin the class to continue.`);
+            setError(`Connection failed (${reason}). Tap Join to re-enter safely.`);
             setRemoteUsers([]);
           }
-          if (state === 1 || state === 4) setReconnecting(false);
+          if (state === 1 || state === 4) {
+            setReconnecting(false);
+            setNetworkHint('Recovered connection');
+            reconnectAttemptsRef.current = 0;
+            setReconnectDiag(buildReconnectDiagnostics('recovered', 'connected', reconnectStartedAtRef.current || Date.now(), 0));
+            recordLiveMetric('reconnect_recovered', { latency_ms: Date.now() - (reconnectStartedAtRef.current || Date.now()) });
+            void postOpsEvent('reconnect_recovered', { latency_ms: Date.now() - (reconnectStartedAtRef.current || Date.now()) });
+            if (isTeacher && liveClass?.status === 'reconnecting') setLiveClassStatus(classId, 'live').catch(() => {});
+          }
         },
         onUserJoined: (_connection, remoteUid) => {
           setRemoteUsers((prev) => {
@@ -314,6 +504,9 @@ export default function LiveClassroomScreen() {
         },
         onUserMuteAudio: (_connection, remoteUid, muted) => {
           setRemoteUsers((prev) => prev.map((u) => (u.uid === remoteUid ? { ...u, audioMuted: muted } : u)));
+        },
+        onAudioVolumeIndication: (_connection, speakers) => {
+          setRemoteUsers((prev) => prev.map((u) => (speakers.some((s) => s.uid === u.uid && s.volume > 15) ? { ...u, lastSpokeAtMs: Date.now() } : u)));
         },
         onUserMuteVideo: (_connection, remoteUid, muted) => {
           setRemoteUsers((prev) => prev.map((u) => (u.uid === remoteUid ? { ...u, videoMuted: muted } : u)));
@@ -343,6 +536,9 @@ export default function LiveClassroomScreen() {
       assertAgoraResult('Enable audio', engine.enableAudio());
       assertAgoraResult('Enable video', engine.enableVideo());
       assertAgoraResult('Enable speaker', engine.setEnableSpeakerphone(true));
+      if (isLowEndAndroid) {
+        try { engine.setParameters(JSON.stringify({ "che.video.lowBitRateStreamParameter": { width: 160, height: 120, frameRate: 10, bitrate: 65 } })); } catch {}
+      }
       assertAgoraResult('Start camera preview', engine.startPreview());
       scheduleTokenRenewal(rtcToken.expiresAtEpoch);
       const joinResult = engine.joinChannel(rtcToken.rtcToken, rtcToken.channelName, rtcToken.agoraUid, {
@@ -359,9 +555,10 @@ export default function LiveClassroomScreen() {
       setError(err?.message || 'Could not join live class.');
       Alert.alert('Join failed', err?.message || 'Could not join live class.');
     } finally {
+      joiningLockRef.current = false;
       setJoining(false);
     }
-  }, [classId, cleanupAgora, expoGo, joining, joined, liveClass, profile, scheduleTokenRenewal, user?.uid]);
+  }, [classId, cleanupAgora, expoGo, isLowEndAndroid, isTeacher, joining, joined, liveClass, profile, scheduleTokenRenewal, user?.uid]);
 
   const toggleMic = useCallback(async () => {
     if (!classId || !user?.uid || localParticipant?.force_muted) {
@@ -371,16 +568,16 @@ export default function LiveClassroomScreen() {
     const next = !micOn;
     try { engineRef.current?.muteLocalAudioStream(!next); } catch {}
     setMicOn(next);
-    await updateParticipantMediaState(classId, user.uid, { audio_enabled: next }).catch(() => {});
-  }, [classId, localParticipant?.force_muted, micOn, user?.uid]);
+    await syncMediaState({ audio_enabled: next }).catch(() => {});
+  }, [classId, localParticipant?.force_muted, micOn, syncMediaState, user?.uid]);
 
   const toggleCamera = useCallback(async () => {
     if (!classId || !user?.uid) return;
     const next = !cameraOn;
     try { engineRef.current?.muteLocalVideoStream(!next); } catch {}
     setCameraOn(next);
-    await updateParticipantMediaState(classId, user.uid, { video_enabled: next }).catch(() => {});
-  }, [cameraOn, classId, user?.uid]);
+    await syncMediaState({ video_enabled: next }).catch(() => {});
+  }, [cameraOn, classId, syncMediaState, user?.uid]);
 
   const toggleSpeaker = useCallback(() => {
     const next = !speakerOn;
@@ -391,25 +588,104 @@ export default function LiveClassroomScreen() {
   const muteParticipant = useCallback(async (participant: LiveClassParticipant) => {
     if (!isTeacher || !classId || participant.user_id === user?.uid) return;
     try { engineRef.current?.muteRemoteAudioStream(participant.agora_uid, true); } catch {}
-    await updateParticipantMediaState(classId, participant.user_id, { force_muted: true, audio_enabled: false }).catch(() => {});
+    moderationQueueRef.current.push({ type: 'mute', classId, target: participant, reason: 'Teacher muted participant' });
   }, [classId, isTeacher, user?.uid]);
+
+  const removeParticipant = useCallback(async (participant: LiveClassParticipant) => {
+    if (!isTeacher || !classId || participant.user_id === user?.uid) return;
+    moderationQueueRef.current.push({ type: 'remove', classId, target: participant, reason: 'Teacher removed participant' });
+  }, [classId, isTeacher, user?.uid]);
+
+  const toggleHandRaise = useCallback(async () => {
+    if (!classId || !user?.uid) return;
+    await updateParticipantModerationState(classId, user.uid, { hand_raised: !localParticipant?.hand_raised }).catch(() => {});
+  }, [classId, localParticipant?.hand_raised, user?.uid]);
 
   const toggleRecording = useCallback(async () => {
     if (!classId || !isTeacher || recordingBusy) return;
+    if (LIVE_OPS.emergencyRecordingDisabled) {
+      setOpsMessage('Recording temporarily disabled by operations.');
+      return;
+    }
     setRecordingBusy(true);
     try {
       const status = liveClass?.recording?.status || 'not_started';
       if (status === 'recording' || status === 'starting') {
+        setRecordingState('stopping');
         await stopCloudRecording(classId);
+        setRecordingState('idle');
+        setRecordingMessage('Recording stopped');
       } else {
+        setRecordingState('starting');
         await startCloudRecording(classId);
+        setRecordingState('active');
+        setRecordingMessage('Recording restored');
+        void postOpsEvent('recording_restored');
       }
     } catch (err: any) {
+      setRecordingState('recovering');
+      setRecordingMessage('Recovering recording…');
+      recordingRecoverTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current || !classId) return;
+        startCloudRecording(classId).then(() => {
+          if (!mountedRef.current) return;
+          setRecordingState('active');
+          setRecordingMessage('Recording restored');
+        }).catch(() => {
+          if (!mountedRef.current) return;
+          setRecordingState('failed');
+          setRecordingMessage('Recording verification failed');
+          void postOpsEvent('recording_recovery_failed');
+        });
+      }, 1500);
+      void postOpsEvent('recording_toggle_failed', { error: String(err?.message || 'unknown') });
       Alert.alert('Recording failed', err?.message || 'Could not update cloud recording.');
     } finally {
       setRecordingBusy(false);
     }
-  }, [classId, isTeacher, liveClass?.recording?.status, recordingBusy]);
+  }, [classId, isTeacher, liveClass?.recording?.status, postOpsEvent, recordingBusy]);
+
+  useEffect(() => {
+    if (!isTeacher || !classId || !joined) return;
+    recordingPollRef.current = setInterval(() => {
+      const status = liveClass?.recording?.status || 'not_started';
+      if (status === 'recording' && recordingState !== 'active') setRecordingState('active');
+      if (status === 'failed' && recordingState !== 'failed') {
+        setRecordingState('recovering');
+        setRecordingMessage('Recovering recording…');
+      }
+    }, 20000);
+    return () => {
+      if (recordingPollRef.current) clearInterval(recordingPollRef.current);
+      recordingPollRef.current = null;
+    };
+  }, [classId, isTeacher, joined, liveClass?.recording?.status, recordingState]);
+
+  useEffect(() => {
+    if (!isTeacher || !classId) return;
+    const timer = setInterval(async () => {
+      if (moderationBusyRef.current || moderationQueueRef.current.length === 0) return;
+      moderationBusyRef.current = true;
+      const chunk = moderationQueueRef.current.splice(0, 20);
+      try {
+        if (chunk.length > 1) await runModerationBurst(chunk);
+        else await applySingleModerationAction(chunk[0]);
+      } catch {
+        moderationQueueRef.current.unshift(...chunk);
+      } finally {
+        moderationBusyRef.current = false;
+      }
+    }, 450);
+    return () => clearInterval(timer);
+  }, [classId, isTeacher]);
+
+  useEffect(() => {
+    if (!__DEV__ || !isTeacher || !classId || participants.length < 5) return;
+    const synthetic = buildSyntheticModerationBurst(classId, participants, 6);
+    if (synthetic.length > 0 && moderationQueueRef.current.length === 0) {
+      recordLiveMetric('dev_moderation_burst_seeded', { size: synthetic.length });
+    }
+  }, [classId, isTeacher, participants]);
 
   const endClass = useCallback(() => {
     if (!classId || !liveClass || !isTeacher) return;
@@ -445,7 +721,9 @@ export default function LiveClassroomScreen() {
       videoEnabled: cameraOn,
       forceMuted: localParticipant?.force_muted,
     } : null;
-    const remoteTiles = remoteUsers.map((remote) => {
+    const remoteTiles = remoteUsers
+      .slice(0, isLowEndAndroid ? 12 : 24)
+      .map((remote) => {
       const participant = participantsByAgoraUid[remote.uid];
       return {
         key: `remote-${remote.uid}`,
@@ -466,11 +744,11 @@ export default function LiveClassroomScreen() {
       if (a.isLocal !== b.isLocal) return a.isLocal ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
-  }, [cameraOn, joined, liveClass?.teacher_id, localParticipant?.force_muted, micOn, participants, participantsByAgoraUid, profile?.name, profile?.role, remoteUsers, user?.uid]);
+  }, [cameraOn, isLowEndAndroid, joined, liveClass?.teacher_id, localParticipant?.force_muted, micOn, participants, participantsByAgoraUid, profile?.name, profile?.role, remoteUsers, user?.uid]);
 
-  const renderTile = useCallback(({ item }: { item: TileItem }) => (
+  const renderTile = useCallback(({ item, index }: { item: TileItem; index: number }) => (
     <View style={[styles.tile, item.role === 'teacher' && styles.teacherTile]}>
-      {item.videoEnabled ? (
+      {item.videoEnabled && index < (isLowEndAndroid ? 6 : MAX_REMOTE_VIDEO_TILES) ? (
         <RtcSurfaceView
           style={styles.video}
           canvas={{
@@ -505,7 +783,13 @@ export default function LiveClassroomScreen() {
         </TouchableOpacity>
       ) : null}
     </View>
-  ), [isTeacher, muteParticipant, participantsByAgoraUid]);
+  ), [isLowEndAndroid, isTeacher, muteParticipant, participantsByAgoraUid]);
+
+  useEffect(() => {
+    if (!classId || !isTeacher) return;
+    const t = setInterval(() => { cleanupStaleParticipants(classId).catch(() => {}); }, 60000);
+    return () => clearInterval(t);
+  }, [classId, isTeacher]);
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator color={COLORS.primary} size="large" /></View>;
@@ -535,7 +819,12 @@ export default function LiveClassroomScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{liveClass.title}</Text>
-          <Text style={styles.subtitle}>{liveClass.status === 'live' ? 'Live now' : liveClass.status} • {participants.filter((p) => p.joined).length} joined</Text>
+          <Text style={styles.subtitle}>{liveClass.status === 'live' ? 'Live now' : liveClass.status} • {activeParticipants.length} joined</Text>
+          {!!reconnectDiag.lastReconnectReason ? (
+            <Text style={styles.diagText}>Reconnect: {reconnectDiag.phase} • attempts {reconnectDiag.reconnectAttemptCount}</Text>
+          ) : null}
+          {!!recordingMessage ? <Text style={styles.diagText}>{recordingMessage}</Text> : null}
+          {!!opsMessage ? <Text style={styles.diagText}>{opsMessage}</Text> : null}
         </View>
         {isTeacher ? (
           <TouchableOpacity style={styles.recordBtn} onPress={toggleRecording} disabled={recordingBusy}>
@@ -564,7 +853,7 @@ export default function LiveClassroomScreen() {
           {reconnecting ? (
             <View style={styles.reconnectBanner}>
               <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.reconnectText}>Reconnecting…</Text>
+              <Text style={styles.reconnectText}>{networkHint || 'Reconnecting…'}</Text>
             </View>
           ) : null}
           <FlatList
@@ -578,6 +867,8 @@ export default function LiveClassroomScreen() {
             initialNumToRender={6}
             maxToRenderPerBatch={6}
             windowSize={5}
+            updateCellsBatchingPeriod={60}
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           />
         </>
       )}
@@ -596,9 +887,25 @@ export default function LiveClassroomScreen() {
           <TouchableOpacity style={[styles.controlBtn, !speakerOn && styles.controlBtnOff]} onPress={toggleSpeaker}>
             <Ionicons name={speakerOn ? 'volume-high' : 'volume-mute'} size={22} color="#fff" />
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.controlBtn, localParticipant?.hand_raised && styles.controlBtnOff]} onPress={toggleHandRaise}>
+            <Ionicons name="hand-left" size={22} color="#fff" />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.leaveBtn} onPress={() => { void leaveClass(true); }}>
             <Ionicons name="call" size={22} color="#fff" />
           </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {isTeacher && joined ? (
+        <View style={styles.teacherDock}>
+          <Text style={styles.teacherDockTitle}>Raised hands: {participants.filter((p) => p.hand_raised && p.joined).length}</Text>
+          {participantPriority.filter((p) => p.user_id !== user?.uid).slice(0, 8).map((p) => (
+            <View key={p.user_id} style={styles.teacherRow}>
+              <Text style={styles.teacherName} numberOfLines={1}>{p.name}</Text>
+              <TouchableOpacity style={styles.smallDockBtn} onPress={() => { void muteParticipant(p); }}><Text style={styles.smallDockBtnText}>Mute</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.smallDockBtn, styles.smallDockDanger]} onPress={() => { void removeParticipant(p); }}><Text style={styles.smallDockBtnText}>Remove</Text></TouchableOpacity>
+            </View>
+          ))}
         </View>
       ) : null}
     </View>
@@ -612,6 +919,7 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   title: { color: '#fff', fontSize: 18, fontWeight: '800' },
   subtitle: { color: 'rgba(255,255,255,0.72)', fontSize: 12, marginTop: 2 },
+  diagText: { color: 'rgba(255,255,255,0.62)', fontSize: 10, marginTop: 2 },
   reconnectBanner: { marginHorizontal: SPACING.md, marginTop: SPACING.sm, borderRadius: RADIUS.full, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(180,83,9,0.95)', alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8 },
   reconnectText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   recordBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#B45309' },
@@ -641,4 +949,11 @@ const styles = StyleSheet.create({
   controlBtn: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)' },
   controlBtnOff: { backgroundColor: '#B91C1C' },
   leaveBtn: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.error, transform: [{ rotate: '135deg' }] },
+  teacherDock: { position: 'absolute', left: 12, right: 12, bottom: 92, backgroundColor: 'rgba(5,10,8,0.92)', borderRadius: 14, padding: 10, gap: 8 },
+  teacherDockTitle: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  teacherRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  teacherName: { flex: 1, color: '#fff', fontSize: 12, fontWeight: '700' },
+  smallDockBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: '#1F2937' },
+  smallDockBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  smallDockDanger: { backgroundColor: '#7F1D1D' },
 });
