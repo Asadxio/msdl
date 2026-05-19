@@ -165,7 +165,7 @@ export default function AdminUsersScreen() {
     const currentRole = normalizeRole(u.role, 'admin.users.current');
     const candidateRoles: AppRole[] = APP_ROLES.filter((role) => role !== currentRole && canAssignRole(actorRole, role));
     if (!candidateRoles.length) {
-      Alert.alert('Not Allowed', 'You cannot change this user's role.');
+      Alert.alert('Not Allowed', "You cannot change this user's role.");
       return;
     }
     const nextRole = candidateRoles.includes('teacher') ? 'teacher' : candidateRoles[0];

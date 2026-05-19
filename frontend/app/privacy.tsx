@@ -4,15 +4,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { LEGAL_DOCS } from '@/lib/legal';
 
 export default function PrivacyScreen() {
   const insets = useSafeAreaInsets();
+  const policy = LEGAL_DOCS.privacy;
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.title}>Privacy Policy</Text>
-        <Text style={styles.subtitle}>How your data is used and protected</Text>
+        <Text style={styles.subtitle}>Version {policy.version} • Effective {policy.effectiveAt.slice(0, 10)}</Text>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
@@ -23,7 +25,7 @@ export default function PrivacyScreen() {
           <Text style={styles.heading}>Safety</Text>
           <Text style={styles.body}>Role-based access is enforced for admin and teacher actions. Student data access is limited to authorized workflows.</Text>
           <Text style={styles.heading}>Contact</Text>
-          <Text style={styles.body}>For data removal or privacy requests, contact the school administrator.</Text>
+          <Text style={styles.body}>For data export/deletion requests, use Settings → Data & Privacy. Requests are tracked with lifecycle state and timestamped audit events.</Text>
         </View>
       </ScrollView>
     </View>

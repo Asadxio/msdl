@@ -17,6 +17,7 @@ import type { AppRole } from '@/lib/roles';
 import { createNotificationAsAdmin } from '@/lib/notifications';
 import { FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
 import { registerPerformanceSurface, scheduleLowPriorityTask, throttleRealtimeUpdates, trackPerformanceMetric } from '@/lib/performanceEngine';
+import { registerDevicePushToken, requestNotificationPermission } from '@/lib/pushNotifications';
 
 type NotificationItem = {
   id: string;
@@ -122,6 +123,15 @@ export default function NotificationsScreen() {
     ? items.filter((item) => !item.read?.[user.uid]).length
     : 0;
   const skeletonRows = useMemo(() => Array.from({ length: 5 }), []);
+  useEffect(() => {
+    if (!user?.uid) return;
+    const setup = async () => {
+      const permission = await requestNotificationPermission();
+      if (permission.granted) await registerDevicePushToken(user.uid);
+    };
+    setup().catch(() => {});
+  }, [user?.uid]);
+
 
   const sendNotification = async () => {
     if (!title.trim() || !message.trim()) {

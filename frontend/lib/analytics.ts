@@ -1,3 +1,4 @@
+import { verifyFrontendEnv } from '@/config/environments';
 import { logger } from '@/lib/logger';
 
 export type AnalyticsEventName =
@@ -33,9 +34,19 @@ function dedupe(events: AnalyticsEvent[]): AnalyticsEvent[] {
   });
 }
 
+function ingestUrl(): string {
+  const cfg = verifyFrontendEnv();
+  const base = cfg.apiBaseUrl.replace(/\/$/, '');
+  return `${base}/analytics/ingest`;
+}
+
 export function trackEvent(name: AnalyticsEventName, payload: Record<string, unknown> = {}, dedupeKey?: string) {
   queue.push({ name, ts: Date.now(), payload, dedupeKey });
   if (queue.length > BUFFER_LIMIT) queue = queue.slice(queue.length - BUFFER_LIMIT);
+}
+
+export function getAnalyticsQueueSize() {
+  return queue.length;
 }
 
 export async function flushAnalytics(force = false) {
@@ -43,18 +54,19 @@ export async function flushAnalytics(force = false) {
   const now = Date.now();
   if (!force && (now - lastFlushMs < FLUSH_MIN_INTERVAL_MS || queue.length === 0)) return;
   inFlight = true;
+  const batch = dedupe(queue.slice(0, 20));
   try {
-    const batch = dedupe(queue.splice(0, 20));
     if (!batch.length) return;
-    const res = await fetch('/api/analytics/ingest', {
+    const res = await fetch(ingestUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ events: batch }),
     });
     if (!res.ok) throw new Error(`Analytics flush failed (${res.status})`);
+    queue = queue.slice(batch.length);
     lastFlushMs = now;
   } catch (err) {
-    logger.warn('analytics.flush.failed', err);
+    logger.warn('analytics.flush.failed', { error: String((err as any)?.message || err), queued: queue.length });
   } finally {
     inFlight = false;
   }

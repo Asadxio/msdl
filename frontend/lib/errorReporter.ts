@@ -13,6 +13,7 @@ export type ErrorContext = {
 export function reportError(error: unknown, context: ErrorContext) {
   const message = error instanceof Error ? error.message : String(error);
   logger.warn('error.report', { message, ...context });
+  trackEvent('custom', { metric: 'operational_event', category: 'error', kind: context.kind, code: context.code || '', screen: context.screen || '' }, `ops:error:${context.kind}:${context.code || 'na'}`);
   trackEvent('api_error', {
     kind: context.kind,
     message,

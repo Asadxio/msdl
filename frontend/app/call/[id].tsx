@@ -204,7 +204,7 @@ export default function CallScreen() {
       const now = Date.now();
       if (now - lastHeartbeatWriteRef.current < 15000) return;
       lastHeartbeatWriteRef.current = now;
-      updateHeartbeat(callId).catch(() => {});
+      if (call) updateHeartbeat(callId, call.caller_id === user?.uid ? 'caller' : 'callee').catch(() => {});
     }, 17000);
     timeoutEvalRef.current = setInterval(() => {
       if (!call) return;
