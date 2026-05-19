@@ -1,19 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput,
-  KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Alert,
+  View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, AppState,
+  KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  addDoc, arrayUnion, collection, doc, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, updateDoc, where,
+  addDoc, arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, startAfter, updateDoc, where,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { sendPushToUserIds } from '@/lib/pushNotifications';
 import { EmptyState, ScalePressable, SkeletonCard } from '@/components/ui';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Network from 'expo-network';
+import { uploadUriFile } from '@/lib/storage';
+import { completeItem, enqueue, lockReadyItems, nextBackoffMs, patchItem, type QueueItem } from '@/lib/chatReliability';
+import { dedupeMessages, mergeServerAndLocal } from '@/lib/chatReconciliation';
+import { logChatMetric } from '@/lib/chatTelemetry';
 
 type ChatMeta = {
   id: string;
@@ -21,7 +28,9 @@ type ChatMeta = {
   name?: string;
   participants: string[];
   participant_names?: Record<string, string>;
-  typing?: Record<string, boolean>;
+  typing?: Record<string, { is_typing: boolean; updated_at?: { toDate?: () => Date } }>;
+  muted_by?: string[];
+  blocked_pairs?: string[];
   unread_counts?: Record<string, number>;
 };
 
@@ -37,6 +46,10 @@ type MessageItem = {
   failed?: boolean;
   deleted_for_everyone?: boolean;
   deleted_for?: string[];
+  message_type?: 'text' | 'image' | 'video' | 'audio';
+  media_url?: string;
+  media_name?: string;
+  media_size?: number;
 };
 
 function normalizeChatMeta(id: string, raw: any): ChatMeta {
@@ -66,6 +79,11 @@ function normalizeMessage(id: string, raw: any): MessageItem {
     failed: !!safe.failed,
     deleted_for_everyone: !!safe.deleted_for_everyone,
     deleted_for: Array.isArray(safe.deleted_for) ? safe.deleted_for.filter((v: unknown) => typeof v === 'string') : [],
+    message_type: safe.message_type === 'image' || safe.message_type === 'video' || safe.message_type === 'audio' ? safe.message_type : 'text',
+    media_url: typeof safe.media_url === 'string' ? safe.media_url : undefined,
+    media_name: typeof safe.media_name === 'string' ? safe.media_name : undefined,
+    media_size: typeof safe.media_size === 'number' ? safe.media_size : undefined,
+    status: 'sent',
   };
 }
 
@@ -102,11 +120,13 @@ const MessageBubble = React.memo(function MessageBubble({
       <View style={[styles.bubble, mine ? styles.mineBubble : styles.otherBubble, item.failed && styles.failedBubble]}>
         {showSender ? <Text style={styles.sender}>{item.sender_name || 'User'}</Text> : null}
         <Text style={[styles.msgText, mine && { color: '#fff' }]}>{item.text}</Text>
+        {item.message_type === 'image' && item.media_url ? <Image source={{ uri: item.media_url }} style={styles.msgImage} /> : null}
+        {item.message_type && item.message_type !== 'text' && item.message_type !== 'image' ? <Text style={[styles.attachmentText, mine && { color: 'rgba(255,255,255,0.88)' }]}>{item.message_type.toUpperCase()} attachment {item.media_name ? `• ${item.media_name}` : ''}</Text> : null}
         <View style={styles.metaRow}>
           <Text style={[styles.time, mine && { color: 'rgba(255,255,255,0.8)' }]}>{fmtTime(item)}</Text>
           {mine ? (
             <Ionicons
-              name={seenByOthers ? 'checkmark-done' : 'checkmark'}
+              name={item.failed ? 'alert-circle' : (seenByOthers ? 'checkmark-done' : 'checkmark')}
               size={13}
               color="rgba(255,255,255,0.85)"
             />
@@ -137,6 +157,11 @@ export default function ChatDetailScreen() {
   const listRef = useRef<FlatList<MessageItem>>(null);
   const chatUnsubRef = useRef<(() => void) | null>(null);
   const messagesUnsubRef = useRef<(() => void) | null>(null);
+  const flushingRef = useRef(false);
+  const onlineRef = useRef(true);
+  const lastFlushAtRef = useRef(0);
+  const lastSnapshotWasCacheRef = useRef(false);
+  const lastAckedRef = useRef<string>('');
 
   useEffect(() => {
     if (!id) return;
@@ -190,24 +215,29 @@ export default function ChatDetailScreen() {
     try {
       const unsub = onSnapshot(
         initialQ,
-        (snap) => {
+        async (snap) => {
           const latest = snap.docs.map((d) => normalizeMessage(d.id, d.data()));
-          setMessages((prev) => {
-            const confirmedClientIds = new Set(latest.map((m) => m.client_id).filter(Boolean));
-            const seen = new Set(latest.map((m) => m.id));
-            const older = prev.filter((m) => !seen.has(m.id) && !m.localOnly);
-            const pending = prev.filter((m) => m.localOnly && !confirmedClientIds.has(m.client_id));
-            return [...latest, ...older, ...pending].sort((a, b) => toMillis(b) - toMillis(a));
-          });
+          setMessages((prev) => dedupeMessages(mergeServerAndLocal(latest, prev)) as MessageItem[]);
           setLastCursor(snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
           setHasMore(snap.docs.length === PAGE_SIZE);
 
           if (user?.uid) {
-            const firstUnread = latest.find((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
-            if (firstUnread) {
-              updateDoc(doc(db, 'messages', firstUnread.id), { read_by: arrayUnion(user.uid) }).catch(() => {});
+            const unread = latest.filter((m) => m.sender_id !== user.uid && !m.read_by?.includes(user.uid));
+            if (unread.length > 0) {
+              const newest = unread[0].id;
+              if (lastAckedRef.current !== newest) {
+                lastAckedRef.current = newest;
+                await Promise.all(unread.slice(0, 10).map(async (m) => {
+                  await updateDoc(doc(db, 'messages', m.id), { read_by: arrayUnion(user.uid), status: 'seen', seen_at: serverTimestamp() }).catch(() => {});
+                }));
+                logChatMetric({ name: 'delivery_seen_written', chat_id: id, value: unread.slice(0, 10).length, ts: Date.now() });
+              }
             }
           }
+          if (lastSnapshotWasCacheRef.current && !snap.metadata.fromCache) {
+            void refreshMessages();
+          }
+          lastSnapshotWasCacheRef.current = snap.metadata.fromCache;
         },
         (error) => {
           console.log('[ChatDetail] messages listener ERROR', error);
@@ -274,17 +304,28 @@ export default function ChatDetailScreen() {
   const canSendMessages = useMemo(() => {
     if (!user?.uid || !chat) return false;
     if (chat.type === 'broadcast') return isAdmin;
+    if (chat.type === 'direct') {
+      const other = chatParticipants.find((p) => p !== user.uid) || '';
+      const pairA = `${user.uid}:${other}`;
+      const pairB = `${other}:${user.uid}`;
+      if ((chat.blocked_pairs || []).includes(pairA) || (chat.blocked_pairs || []).includes(pairB)) return false;
+    }
     return chatParticipants.includes(user.uid);
   }, [chat, chatParticipants, isAdmin, user?.uid]);
 
   const othersTyping = useMemo(() => {
     if (!chat?.typing || !user?.uid) return false;
-    return Object.entries(chat.typing).some(([uid, val]) => uid !== user.uid && !!val);
+    const now = Date.now();
+    return Object.entries(chat.typing).some(([uid, val]) => {
+      const typingVal = val as any;
+      const lastMs = typingVal?.updated_at?.toDate ? typingVal.updated_at.toDate().getTime() : 0;
+      return uid !== user.uid && typingVal?.is_typing === true && now - lastMs < 12000;
+    });
   }, [chat?.typing, user?.uid]);
 
   const setTyping = useCallback((isTyping: boolean) => {
     if (!chat || !id || !user?.uid || !canSendMessages) return;
-    updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: isTyping }).catch(() => {});
+    updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: { is_typing: isTyping, updated_at: serverTimestamp() } }).catch(() => {});
   }, [canSendMessages, chat, id, user?.uid]);
 
   const onType = useCallback((value: string) => {
@@ -321,7 +362,22 @@ export default function ChatDetailScreen() {
     setSending(true);
     setSendError('');
     try {
-      await addDoc(collection(db, 'messages'), {
+      const outboxItem: QueueItem = {
+        id: `${id}_${clientId}`,
+        chat_id: id,
+        created_at_ms: Date.now(),
+        status: 'pending',
+        retry_count: 0,
+        next_retry_at_ms: Date.now(),
+        message_type: 'text',
+        text: msg,
+        sender_id: user.uid,
+        sender_name: profile?.name || user.email || 'User',
+        read_by: [user.uid],
+        push_dedupe_id: `chat:${id}:${clientId}`,
+      };
+      await enqueue(id, outboxItem);
+      await setDoc(doc(db, 'messages', `${id}_${clientId}`), {
         chat_id: id,
         text: msg,
         sender_id: user.uid,
@@ -331,6 +387,10 @@ export default function ChatDetailScreen() {
         client_id: clientId,
         deleted_for: [],
         deleted_for_everyone: false,
+        message_type: 'text',
+        media_url: '',
+        media_name: '',
+        media_size: 0,
       });
       const participants = chatParticipants;
       const unreadUpdates: Record<string, any> = { [`unread_counts.${user.uid}`]: 0 };
@@ -341,15 +401,16 @@ export default function ChatDetailScreen() {
       await updateDoc(doc(db, 'chats', id), {
         last_message: msg,
         updated_at: serverTimestamp(),
-        [`typing.${user.uid}`]: false,
+        [`typing.${user.uid}`]: { is_typing: false, updated_at: serverTimestamp() },
         ...unreadUpdates,
       });
       const recipientIds = participants.filter((uid) => uid !== user.uid);
       if (recipientIds.length > 0) {
+        const pushDedupeId = `chat:${id}:${clientId}`;
         await sendPushToUserIds(recipientIds, {
           title: profile?.name || 'New message',
           body: msg,
-          data: { type: 'chat_message', chat_id: id },
+          data: { type: 'chat_message', chat_id: id, push_dedupe_id: pushDedupeId },
         }).catch(() => {});
       }
     } catch (error: unknown) {
@@ -359,6 +420,144 @@ export default function ChatDetailScreen() {
       setSending(false);
     }
   }, [canSendMessages, chatParticipants, id, profile?.name, sending, setTyping, text, user?.email, user?.uid]);
+
+
+  const sendMedia = useCallback(async (kind: 'image' | 'video' | 'audio') => {
+    if (!id || !user?.uid || sending) return;
+    try {
+      let fileUri = '';
+      let fileName = '';
+      let fileSize = 0;
+      let contentType = 'application/octet-stream';
+      if (kind === 'image' || kind === 'video') {
+        const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kind === 'image' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos, quality: 0.7 });
+        if (pick.canceled || !pick.assets?.[0]?.uri) return;
+        const a = pick.assets[0];
+        fileUri = a.uri; fileName = a.fileName || `${kind}_${Date.now()}`; fileSize = Number(a.fileSize || 0);
+        contentType = kind === 'image' ? 'image/jpeg' : 'video/mp4';
+      } else {
+        const pick = await DocumentPicker.getDocumentAsync({ type: ['audio/*'], copyToCacheDirectory: true, multiple: false });
+        if (pick.canceled || !pick.assets?.[0]?.uri) return;
+        const a = pick.assets[0];
+        fileUri = a.uri; fileName = a.name || `audio_${Date.now()}`; fileSize = Number(a.size || 0);
+        contentType = a.mimeType || 'audio/mpeg';
+      }
+      const maxBytes = kind === 'video' ? 30 * 1024 * 1024 : 10 * 1024 * 1024;
+      if (fileSize > maxBytes) { setSendError(`Selected ${kind} is too large.`); return; }
+      const ext = kind === 'image' ? 'jpg' : kind === 'video' ? 'mp4' : 'mp3';
+      const clientId = `${user.uid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await enqueue(id, {
+        id: `${id}_${clientId}`,
+        chat_id: id,
+        created_at_ms: Date.now(),
+        status: 'pending',
+        retry_count: 0,
+        next_retry_at_ms: Date.now(),
+        message_type: kind,
+        text: kind === 'audio' ? 'Audio message' : '',
+        sender_id: user.uid,
+        sender_name: profile?.name || user.email || 'User',
+        read_by: [user.uid],
+        media_local_uri: fileUri,
+        media_name: fileName,
+        media_size: fileSize,
+        content_type: contentType,
+        ext,
+        push_dedupe_id: `chat:${id}:${clientId}`,
+      });
+      const mediaUrl = await uploadUriFile({ uri: fileUri, path: `chat_media/${id}/${user.uid}/${Date.now()}.${ext}`, contentType });
+      await patchItem(id, `${id}_${clientId}`, { status: 'uploading', media_url: mediaUrl });
+      await setDoc(doc(db, 'messages', `${id}_${clientId}`), {
+        chat_id: id, text: kind === 'audio' ? 'Audio message' : '', sender_id: user.uid, sender_name: profile?.name || user.email || 'User',
+        created_at: serverTimestamp(), read_by: [user.uid], client_id: clientId, deleted_for: [], deleted_for_everyone: false,
+        message_type: kind, media_url: mediaUrl, media_name: fileName, media_size: fileSize,
+      });
+      await updateDoc(doc(db, 'chats', id), { last_message: kind.toUpperCase(), updated_at: serverTimestamp() });
+    } catch (error: any) { setSendError(error?.message || 'Media send failed.'); }
+  }, [id, profile?.name, sending, user?.email, user?.uid]);
+
+  const flushOutbox = useCallback(async () => {
+    if (!id || !user?.uid || flushingRef.current || !onlineRef.current) return;
+    const now = Date.now();
+    if (now - lastFlushAtRef.current < 1500) return;
+    lastFlushAtRef.current = now;
+    const started = Date.now();
+    flushingRef.current = true;
+    try {
+      const ready = await lockReadyItems(id, Date.now());
+      logChatMetric({ name: 'queue_size', chat_id: id, value: ready.length, ts: Date.now() });
+      logChatMetric({ name: 'flush_started', chat_id: id, value: ready.length, ts: Date.now() });
+      for (const item of ready) {
+        try {
+          if (item.message_type !== 'text' && !item.media_url && item.media_local_uri) {
+            await patchItem(id, item.id, { status: 'uploading' });
+            const mediaUrl = await uploadUriFile({ uri: item.media_local_uri, path: `chat_media/${id}/${user.uid}/${Date.now()}.${item.ext || 'bin'}`, contentType: item.content_type || 'application/octet-stream' });
+            await patchItem(id, item.id, { media_url: mediaUrl });
+            item.media_url = mediaUrl;
+          }
+          await setDoc(doc(db, 'messages', item.id), {
+            chat_id: id, text: item.text, sender_id: item.sender_id, sender_name: item.sender_name, created_at: serverTimestamp(),
+            read_by: item.read_by, client_id: item.id.replace(`${id}_`, ''), deleted_for: [], deleted_for_everyone: false,
+            message_type: item.message_type, media_url: item.media_url || '', media_name: item.media_name || '', media_size: item.media_size || 0,
+            status: 'sent', sent_at: serverTimestamp(), retry_count: item.retry_count, failed_reason: '', push_dedupe_id: item.push_dedupe_id,
+          }, { merge: true });
+          await completeItem(id, item.id);
+        } catch (e: any) {
+          const retryCount = (item.retry_count || 0) + 1;
+          const terminal = retryCount >= 5;
+          if (item.message_type !== 'text') {
+            logChatMetric({ name: 'upload_failed', chat_id: id, ts: Date.now(), meta: { type: item.message_type, retry_count: retryCount } });
+          }
+          if (terminal) {
+            logChatMetric({ name: 'retry_exhausted', chat_id: id, ts: Date.now(), meta: { message_id: item.id, retry_count: retryCount } });
+          }
+          await patchItem(id, item.id, {
+            retry_count: retryCount,
+            status: terminal ? 'failed' : 'retrying',
+            failed_reason: e?.message || 'flush_failed',
+            next_retry_at_ms: Date.now() + (terminal ? 0 : nextBackoffMs(retryCount)),
+            locked_until_ms: 0,
+          });
+        }
+      }
+      logChatMetric({ name: 'flush_finished', chat_id: id, duration_ms: Date.now() - started, ts: Date.now() });
+    } catch (error: any) {
+      logChatMetric({ name: 'flush_error', chat_id: id, ts: Date.now(), meta: { message: error?.message || 'unknown' } });
+    } finally {
+      flushingRef.current = false;
+    }
+  }, [id, user?.uid]);
+
+  useEffect(() => {
+    if (!id) return;
+    let netTimer: ReturnType<typeof setInterval> | null = null;
+    const timer = setInterval(() => { void flushOutbox(); }, 4000);
+    const hydrateNet = async () => {
+      try {
+        const state = await Network.getNetworkStateAsync();
+        const nextOnline = !!state.isConnected && state.isInternetReachable !== false;
+        const wasOnline = onlineRef.current;
+        onlineRef.current = nextOnline;
+        if (!wasOnline && nextOnline) void flushOutbox();
+      } catch {
+        onlineRef.current = true;
+      }
+    };
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void hydrateNet();
+        void flushOutbox();
+      }
+    });
+    netTimer = setInterval(() => { void hydrateNet(); }, 5000);
+    void hydrateNet();
+    void flushOutbox();
+    return () => {
+      clearInterval(timer);
+      if (netTimer) clearInterval(netTimer);
+      sub.remove();
+    };
+  }, [flushOutbox, id]);
 
   const refreshMessages = useCallback(async () => {
     if (!id || refreshing) return;
@@ -425,9 +624,27 @@ export default function ChatDetailScreen() {
     Alert.alert('Message options', 'Choose an action for this message.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete for me', onPress: () => { void deleteForMe(item); } },
+      { text: 'Report message', onPress: () => { void addDoc(collection(db, 'message_reports'), { reporter_id: user?.uid || '', target_user_id: item.sender_id, target_message_id: item.id, reason: 'inappropriate_message', created_at: serverTimestamp() }).catch(() => setSendError('Could not report message.')); } },
       ...(canUnsend ? [{ text: 'Unsend for everyone', style: 'destructive' as const, onPress: () => { void unsendForEveryone(item); } }] : []),
     ]);
   }, [deleteForMe, unsendForEveryone, user?.uid]);
+
+  const toggleMuteChat = useCallback(async () => {
+    if (!id || !user?.uid || !chat) return;
+    const muted = (chat.muted_by || []).includes(user.uid);
+    await updateDoc(doc(db, 'chats', id), { muted_by: muted ? arrayRemove(user.uid) : arrayUnion(user.uid) });
+  }, [chat, id, user?.uid]);
+
+  const blockOtherUser = useCallback(async () => {
+    if (!id || !user?.uid || !chat || chat.type !== 'direct') return;
+    const other = chatParticipants.find((p) => p !== user.uid);
+    if (!other) return;
+    await updateDoc(doc(db, 'chats', id), {
+      blocked_pairs: arrayUnion(`${user.uid}:${other}`),
+      hidden_by: arrayUnion(user.uid),
+    });
+    setSendError('User blocked. Messaging disabled for this chat.');
+  }, [chat, chatParticipants, id, user?.uid]);
 
   useEffect(() => {
     if (!id || !user?.uid || !chat || (chat.type === 'broadcast' && !isAdmin)) return;
@@ -437,7 +654,7 @@ export default function ChatDetailScreen() {
   useEffect(() => () => {
     if (typingTimer.current) clearTimeout(typingTimer.current);
     if (id && user?.uid && canSendMessages) {
-      updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: false }).catch(() => {});
+      updateDoc(doc(db, 'chats', id), { [`typing.${user.uid}`]: { is_typing: false, updated_at: serverTimestamp() } }).catch(() => {});
     }
   }, [canSendMessages, id, user?.uid]);
 
@@ -505,6 +722,14 @@ export default function ChatDetailScreen() {
         <ScalePressable style={styles.backBtn} onPress={refreshMessages} disabled={refreshing}>
           {refreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
         </ScalePressable>
+        <ScalePressable style={styles.backBtn} onPress={() => { void toggleMuteChat(); }}>
+          <Ionicons name={(chat.muted_by || []).includes(user?.uid || '') ? 'notifications-off-outline' : 'notifications-outline'} size={18} color={COLORS.primary} />
+        </ScalePressable>
+        {chat.type === 'direct' ? (
+          <ScalePressable style={styles.backBtn} onPress={() => { void blockOtherUser(); }}>
+            <Ionicons name="ban-outline" size={18} color="#B3261E" />
+          </ScalePressable>
+        ) : null}
       </View>
 
       <FlatList
@@ -538,6 +763,9 @@ export default function ChatDetailScreen() {
             editable={canSendMessages}
             multiline
           />
+          <ScalePressable style={styles.mediaBtn} onPress={() => { void sendMedia('image'); }}><Ionicons name="image-outline" size={18} color={COLORS.primary} /></ScalePressable>
+          <ScalePressable style={styles.mediaBtn} onPress={() => { void sendMedia('video'); }}><Ionicons name="videocam-outline" size={18} color={COLORS.primary} /></ScalePressable>
+          <ScalePressable style={styles.mediaBtn} onPress={() => { void sendMedia('audio'); }}><Ionicons name="mic-outline" size={18} color={COLORS.primary} /></ScalePressable>
           <ScalePressable style={[styles.sendBtn, (!text.trim() || sending || !canSendMessages) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending || !canSendMessages}>
             {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={18} color="#fff" />}
           </ScalePressable>
@@ -588,4 +816,7 @@ const styles = StyleSheet.create({
   },
   inputDisabled: { opacity: 0.7 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primary },
+  mediaBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt },
+  msgImage: { width: 180, height: 180, borderRadius: 10, marginTop: 6 },
+  attachmentText: { marginTop: 4, fontSize: 12, color: COLORS.textMuted },
 });
