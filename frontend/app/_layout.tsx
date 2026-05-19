@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet, I18nManager, Alert } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, StyleSheet, I18nManager, Alert } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -8,11 +8,25 @@ import * as Notifications from 'expo-notifications';
 import { initPushNotifications, registerDevicePushToken, requestNotificationPermission } from '@/lib/pushNotifications';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
+import { getConsentStatus } from '@/lib/legal';
+import { reportError } from '@/lib/errorReporter';
+import { getReleaseDiagnostics } from '@/lib/releaseDiagnostics';
+import { FullScreenLoader } from '@/components/ui';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
+  const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
   const segments = useSegments();
   const router = useRouter();
+
+
+  useEffect(() => {
+    if (!user?.uid || !profile || profile.status !== 'approved') {
+      setNeedsLegalAcceptance(false);
+      return;
+    }
+    getConsentStatus(user.uid).then((state) => setNeedsLegalAcceptance(state.needsAcceptance)).catch(() => setNeedsLegalAcceptance(true));
+  }, [user?.uid, profile?.status]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -21,9 +35,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const isAdmin = profile?.role === 'admin';
     const inAdmin = segments[0] === 'admin';
     const inUnauthorized = segments[0] === 'unauthorized';
+    const inLegalGate = segments[0] === 'legal-gate';
 
     if (!user) {
       if (!inAuth) router.replace('/auth/login');
+    } else if (needsLegalAcceptance && !inLegalGate) {
+      router.replace('/legal-gate');
+    } else if (!needsLegalAcceptance && inLegalGate) {
+      router.replace('/');
     } else if (inUnauthorized && profile?.status === 'approved') {
       router.replace('/');
     } else if (inAdmin && (profileOffline || !isAdmin)) {
@@ -41,7 +60,31 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } else if (user && (profile?.status === 'approved' || isAdmin)) {
       if (inAuth) router.replace('/');
     }
-  }, [user, profile, authLoading, emailVerified, segments, router, profileOffline]);
+  }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance]);
+
+
+  useEffect(() => {
+    try {
+      const diag = getReleaseDiagnostics();
+      if (__DEV__) {
+        console.log('[release_diagnostics]', diag);
+      }
+    } catch (error) {
+      reportError(error, { kind: 'ui', screen: 'root_layout', code: 'release_diag_failed' });
+    }
+  }, []);
+
+  useEffect(() => {
+    const globalHandler = (err: any, isFatal?: boolean) => {
+      reportError(err, { kind: 'ui', screen: 'global', code: isFatal ? 'fatal' : 'non_fatal' });
+    };
+    const maybe = (globalThis as any)?.ErrorUtils;
+    const original = maybe?.getGlobalHandler ? maybe.getGlobalHandler() : null;
+    if (maybe?.setGlobalHandler) maybe.setGlobalHandler(globalHandler);
+    return () => {
+      if (maybe?.setGlobalHandler && original) maybe.setGlobalHandler(original);
+    };
+  }, []);
 
   useEffect(() => {
     initPushNotifications().catch((error) => {
@@ -135,9 +178,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (authLoading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
+      <FullScreenLoader label="Loading account…" />
     );
   }
 
@@ -166,6 +207,10 @@ export default function RootLayout() {
             <Stack.Screen name="live-class/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="recordings" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="terms" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="community-guidelines" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="data-privacy" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="legal-gate" options={{ animation: 'fade' }} />
             <Stack.Screen name="unauthorized" options={{ animation: 'fade' }} />
             <Stack.Screen name="status" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="status-player" options={{ animation: 'fade' }} />
