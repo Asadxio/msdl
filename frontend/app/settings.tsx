@@ -94,6 +94,18 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Privacy & Legal</Text>
+        <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/data-privacy')}>
+          <Text style={styles.linkText}>Data export / deletion requests</Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/terms')}>
+          <Text style={styles.linkText}>Terms and policy versions</Text>
+          <Ionicons name="document-text-outline" size={16} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Profile Settings</Text>
         <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/about')}>
           <Text style={styles.linkText}>Edit profile details</Text>

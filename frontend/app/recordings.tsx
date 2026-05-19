@@ -10,6 +10,7 @@ import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { prepareExternalUrl } from '@/lib/links';
+import { EmptyState, FullScreenLoader, RetryState } from '@/components/ui';
 
 type RecordingItem = {
   id: string;
@@ -29,6 +30,7 @@ export default function RecordingsScreen() {
   const isAdmin = profile?.role === 'admin';
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [items, setItems] = useState<RecordingItem[]>([]);
   const [courseMap, setCourseMap] = useState<CourseMap>({});
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export default function RecordingsScreen() {
 
   const fetchRecordings = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const [recordingSnap, courseSnap] = await Promise.all([
         getDocs(query(collection(db, 'recordings'), orderBy('created_at', 'desc'))),
@@ -61,7 +64,7 @@ export default function RecordingsScreen() {
       setItems(next);
       setCourseMap(nextMap);
     } catch {
-      Alert.alert('Error', 'Could not load recordings. Please refresh.');
+      setLoadError('Could not load recordings. Please refresh.');
     } finally {
       setLoading(false);
     }
@@ -153,7 +156,9 @@ export default function RecordingsScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
+        <FullScreenLoader label="Loading recordings…" />
+      ) : loadError ? (
+        <RetryState title="Unable to load recordings" message={loadError} onRetry={() => { void fetchRecordings(); }} />
       ) : (
         <FlatList
           data={sortedItems}
@@ -189,7 +194,7 @@ export default function RecordingsScreen() {
               ) : null}
             </View>
           )}
-          ListEmptyComponent={<View style={styles.center}><Text style={styles.empty}>No recordings yet</Text></View>}
+          ListEmptyComponent={<EmptyState title="No recordings yet" message="Live class recordings will appear here once available." icon="videocam-outline" />}
         />
       )}
     </View>
