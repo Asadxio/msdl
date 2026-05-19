@@ -21,25 +21,34 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
-  deleteDoc,
   doc,
+  getDoc,
+  increment,
+  limit,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { COLORS, RADIUS, SHADOWS, SPACING } from "@/constants/theme";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { isHttpsUrl, uploadUriFile } from "@/lib/storage";
+import { auth } from "@/lib/firebase";
 
 type StatusComment = {
   id: string;
   user_id: string;
   user_name: string;
+  user_avatar?: string;
   text: string;
   created_at_ms: number;
+  edited_at?: { toDate?: () => Date };
+  deleted?: boolean;
 };
 
 type StatusItem = {
@@ -53,9 +62,16 @@ type StatusItem = {
   created_at?: { toDate?: () => Date };
   likes?: string[];
   comments?: StatusComment[];
+  audience?: "everyone" | "teachers" | "students" | "custom";
+  audience_user_ids?: string[];
+  hidden_user_ids?: string[];
+  muted_by?: string[];
+  expires_at_ms?: number;
+  reaction_counts?: Record<string, number>;
 };
 
 const STATUS_EXPIRY_MS = 24 * 60 * 60 * 1000;
+const STATUS_API_URL = (process.env.EXPO_PUBLIC_PUSH_API_URL || "").replace(/\/$/, "");
 
 export default function StatusScreen() {
   const insets = useSafeAreaInsets();
@@ -87,6 +103,10 @@ export default function StatusScreen() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [cleaningExpired, setCleaningExpired] = useState(false);
+  const [audience, setAudience] = useState<"everyone" | "teachers" | "students">("students");
+  const [seenTracker, setSeenTracker] = useState<Record<string, boolean>>({});
+  const [commentsByStatus, setCommentsByStatus] = useState<Record<string, StatusComment[]>>({});
+  const [expandedStatusId, setExpandedStatusId] = useState("");
 
   useEffect(() => {
     const q = query(
@@ -98,16 +118,25 @@ export default function StatusScreen() {
       async (snap) => {
         const now = Date.now();
         const next: StatusItem[] = [];
-        const expiredIds: string[] = [];
         snap.forEach((d) => {
           const data = d.data() as any;
           const createdAt = data.created_at?.toDate
             ? data.created_at.toDate().getTime()
             : 0;
-          if (!createdAt || now - createdAt > STATUS_EXPIRY_MS) {
-            expiredIds.push(d.id);
+          const expiresAt = Number(data.expires_at_ms || 0) || (createdAt ? (createdAt + STATUS_EXPIRY_MS) : 0);
+          if (!createdAt || (expiresAt > 0 && now > expiresAt)) {
             return;
           }
+          const hiddenUsers = Array.isArray(data.hidden_user_ids) ? data.hidden_user_ids : [];
+          if (user?.uid && hiddenUsers.includes(user.uid)) return;
+          const aud = data.audience === "teachers" || data.audience === "students" || data.audience === "custom" ? data.audience : "everyone";
+          const audUsers = Array.isArray(data.audience_user_ids) ? data.audience_user_ids : [];
+          const canView = aud === "everyone"
+            || (aud === "teachers" && profile?.role === "teacher")
+            || (aud === "students" && profile?.role === "student")
+            || (aud === "custom" && user?.uid && audUsers.includes(user.uid))
+            || profile?.role === "admin";
+          if (!canView) return;
           next.push({
             id: d.id,
             user_id: data.user_id || "",
@@ -124,24 +153,16 @@ export default function StatusScreen() {
             created_at: data.created_at || null,
             likes: Array.isArray(data.likes) ? data.likes : [],
             comments: Array.isArray(data.comments) ? data.comments : [],
+            audience: aud,
+            audience_user_ids: audUsers,
+            hidden_user_ids: hiddenUsers,
+            muted_by: Array.isArray(data.muted_by) ? data.muted_by : [],
+            expires_at_ms: expiresAt,
+            reaction_counts: data.reaction_counts && typeof data.reaction_counts === "object" ? data.reaction_counts : {},
           });
         });
         setItems(next);
         setLoading(false);
-
-        if (
-          (profile?.role === "admin" || profile?.role === "teacher") &&
-          expiredIds.length > 0 &&
-          !cleaningExpired
-        ) {
-          setCleaningExpired(true);
-          await Promise.all(
-            expiredIds.map((statusId) =>
-              deleteDoc(doc(db, "status_updates", statusId)).catch(() => {}),
-            ),
-          );
-          setCleaningExpired(false);
-        }
       },
       (error) => {
         console.log("[Status] onSnapshot ERROR", error);
@@ -149,7 +170,7 @@ export default function StatusScreen() {
       },
     );
     return unsub;
-  }, [cleaningExpired, profile?.role]);
+  }, [profile?.role, user?.uid]);
 
   const postStatus = async () => {
     console.log("[Status] Post button clicked");
@@ -189,6 +210,12 @@ export default function StatusScreen() {
         media_type: mediaType,
         likes: [],
         comments: [],
+        audience,
+        audience_user_ids: [],
+        hidden_user_ids: [],
+        muted_by: [],
+        reaction_counts: {},
+        expires_at_ms: Date.now() + STATUS_EXPIRY_MS,
         created_at: serverTimestamp(),
       });
       setStatusText("");
@@ -201,6 +228,66 @@ export default function StatusScreen() {
       setUploadingMedia(false);
       setPosting(false);
     }
+  };
+
+  const markViewed = async (item: StatusItem) => {
+    if (!user?.uid || seenTracker[item.id]) return;
+    setSeenTracker((prev) => ({ ...prev, [item.id]: true }));
+    await setDoc(doc(db, "status_updates", item.id, "views", user.uid), {
+      user_id: user.uid,
+      viewed_at: serverTimestamp(),
+      viewed_at_ms: Date.now(),
+    }, { merge: true }).catch(() => {});
+  };
+
+  const reactEmoji = async (item: StatusItem, emoji: "❤️" | "🔥" | "👏") => {
+    if (!user?.uid) return;
+    if (STATUS_API_URL && auth.currentUser) {
+      const token = await auth.currentUser.getIdToken().catch(() => "");
+      if (token) {
+        const response = await fetch(`${STATUS_API_URL}/api/status/react`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ status_id: item.id, reaction: emoji }),
+        }).catch(() => null);
+        if (response?.ok) return;
+      }
+    }
+    const reactionRef = doc(db, "status_updates", item.id, "reactions", user.uid);
+    const prevSnap = await getDoc(reactionRef).catch(() => null);
+    const prevReaction = prevSnap?.exists() ? String((prevSnap.data() as any).reaction || "") : "";
+    if (prevReaction === emoji) return;
+    const updates: Record<string, any> = {};
+    if (prevReaction) updates[`reaction_counts.${prevReaction}`] = increment(-1);
+    updates[`reaction_counts.${emoji}`] = increment(1);
+    await setDoc(reactionRef, { reaction: emoji, user_id: user.uid, updated_at: serverTimestamp() }, { merge: true });
+    await updateDoc(doc(db, "status_updates", item.id), updates).catch(() => Alert.alert("Reaction failed", "Could not react right now."));
+  };
+
+  const reportStatus = async (item: StatusItem) => {
+    if (!user?.uid) return;
+    await addDoc(collection(db, "status_reports"), {
+      reporter_id: user.uid,
+      status_id: item.id,
+      owner_id: item.user_id,
+      reason: "inappropriate_status",
+      created_at: serverTimestamp(),
+    }).catch(() => Alert.alert("Report failed", "Could not report status."));
+  };
+
+  const hideStatus = async (item: StatusItem) => {
+    if (!user?.uid) return;
+    await updateDoc(doc(db, "status_updates", item.id), {
+      hidden_user_ids: arrayUnion(user.uid),
+    }).catch(() => {});
+  };
+
+  const muteStatus = async (item: StatusItem) => {
+    if (!user?.uid) return;
+    const muted = (item.muted_by || []).includes(user.uid);
+    await updateDoc(doc(db, "status_updates", item.id), {
+      muted_by: muted ? arrayRemove(user.uid) : arrayUnion(user.uid),
+    }).catch(() => {});
   };
 
   const pickStatusMedia = async () => {
@@ -299,15 +386,33 @@ export default function StatusScreen() {
     if (!text) return;
     setUpdatingId(item.id);
     try {
+      if (STATUS_API_URL && auth.currentUser) {
+        const token = await auth.currentUser.getIdToken().catch(() => "");
+        if (token) {
+          const response = await fetch(`${STATUS_API_URL}/api/status/comment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ status_id: item.id, text }),
+          }).catch(() => null);
+          if (response?.ok) {
+            setCommentInputs((prev) => ({ ...prev, [item.id]: "" }));
+            return;
+          }
+        }
+      }
+      const commentId = `${user.uid}_${Date.now()}`;
       const comment: StatusComment = {
-        id: `${user.uid}_${Date.now()}`,
+        id: commentId,
         user_id: user.uid,
         user_name: profile.name || "Student",
+        user_avatar: profile.avatar || profile.photo_url || "",
         text,
         created_at_ms: Date.now(),
+        deleted: false,
       };
-      await updateDoc(doc(db, "status_updates", item.id), {
-        comments: arrayUnion(comment),
+      await setDoc(doc(db, "status_updates", item.id, "comments", commentId), {
+        ...comment,
+        created_at: serverTimestamp(),
       });
       setCommentInputs((prev) => ({ ...prev, [item.id]: "" }));
     } catch {
@@ -321,6 +426,25 @@ export default function StatusScreen() {
     () => (Array.isArray(items) ? items : []),
     [items],
   );
+
+  useEffect(() => {
+    if (!expandedStatusId) return;
+    const q = query(collection(db, "status_updates", expandedStatusId, "comments"), orderBy("created_at_ms", "desc"), limit(40));
+    const unsub = onSnapshot(q, (snap) => {
+      const arr: StatusComment[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setCommentsByStatus((prev) => ({ ...prev, [expandedStatusId]: arr }));
+    });
+    return unsub;
+  }, [expandedStatusId]);
+
+  const deleteCommentSoft = async (statusId: string, commentId: string, ownerId: string) => {
+    if (!user?.uid || ownerId !== user.uid) return;
+    await updateDoc(doc(db, "status_updates", statusId, "comments", commentId), {
+      deleted: true,
+      text: "",
+      edited_at: serverTimestamp(),
+    }).catch(() => Alert.alert("Delete failed", "Could not delete comment."));
+  };
 
   return (
     <View style={styles.container}>
@@ -371,6 +495,13 @@ export default function StatusScreen() {
           <TouchableOpacity style={styles.ghostBtn} onPress={pickStatusMedia}>
             <Text style={styles.ghostBtnText}>Add Image / Video</Text>
           </TouchableOpacity>
+          <View style={styles.row}>
+            {(["everyone", "students", "teachers"] as const).map((a) => (
+              <TouchableOpacity key={a} style={styles.ghostBtn} onPress={() => setAudience(a)}>
+                <Text style={[styles.ghostBtnText, audience === a && { color: COLORS.error }]}>{a}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={postStatus}
@@ -401,6 +532,7 @@ export default function StatusScreen() {
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <View style={styles.card}>
+              {void markViewed(item)}
               <Text style={styles.cardName}>{item.user_name}</Text>
               {item.text ? (
                 <Text style={styles.cardText}>{item.text}</Text>
@@ -428,12 +560,20 @@ export default function StatusScreen() {
                   : "Just now"}
               </Text>
               <View style={styles.row}>
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => router.push(`/status-player?data=${encodeURIComponent(JSON.stringify(visibleItems.map((s) => ({ id: s.id, user_name: s.user_name, text: s.text, media_url: s.media_url, media_type: s.media_type || '' }))))}`)}>
+                  <Text style={styles.ghostBtnText}>Open Story Player</Text>
+                </TouchableOpacity>
                 <Text style={styles.cardMeta}>
                   Likes: {(item.likes || []).length}
                 </Text>
                 <Text style={styles.cardMeta}>
                   Comments: {(item.comments || []).length}
                 </Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.cardMeta}>❤️ {item.reaction_counts?.["❤️"] || 0}</Text>
+                <Text style={styles.cardMeta}>🔥 {item.reaction_counts?.["🔥"] || 0}</Text>
+                <Text style={styles.cardMeta}>👏 {item.reaction_counts?.["👏"] || 0}</Text>
               </View>
 
               {isStudent ? (
@@ -450,6 +590,9 @@ export default function StatusScreen() {
                           : "Like"}
                       </Text>
                     </TouchableOpacity>
+                    <TouchableOpacity style={styles.ghostBtn} onPress={() => reactEmoji(item, "❤️")}><Text style={styles.ghostBtnText}>❤️</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.ghostBtn} onPress={() => reactEmoji(item, "🔥")}><Text style={styles.ghostBtnText}>🔥</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.ghostBtn} onPress={() => reactEmoji(item, "👏")}><Text style={styles.ghostBtnText}>👏</Text></TouchableOpacity>
                   </View>
                   <View style={styles.commentRow}>
                     <TextInput
@@ -482,6 +625,28 @@ export default function StatusScreen() {
                     • {comment.user_name}: {comment.text}
                   </Text>
                 ))}
+              <TouchableOpacity style={styles.ghostBtn} onPress={() => setExpandedStatusId(expandedStatusId === item.id ? "" : item.id)}>
+                <Text style={styles.ghostBtnText}>{expandedStatusId === item.id ? "Hide replies" : "View replies"}</Text>
+              </TouchableOpacity>
+              {expandedStatusId === item.id ? (
+                <View style={{ gap: 6 }}>
+                  {(commentsByStatus[item.id] || []).map((comment) => (
+                    <View key={comment.id} style={styles.row}>
+                      <Text style={styles.commentText}>• {comment.user_name}: {comment.deleted ? "Comment deleted" : comment.text}</Text>
+                      {comment.user_id === user?.uid && !comment.deleted ? (
+                        <TouchableOpacity onPress={() => deleteCommentSoft(item.id, comment.id, comment.user_id)}>
+                          <Text style={styles.cardMeta}>Delete</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              <View style={styles.row}>
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => hideStatus(item)}><Text style={styles.ghostBtnText}>Hide</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => muteStatus(item)}><Text style={styles.ghostBtnText}>{(item.muted_by || []).includes(user?.uid || "") ? "Unmute" : "Mute"}</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => reportStatus(item)}><Text style={styles.ghostBtnText}>Report</Text></TouchableOpacity>
+              </View>
             </View>
           )}
           ListEmptyComponent={
