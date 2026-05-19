@@ -239,7 +239,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       });
       setBooks(booksData);
-      perfEnd('data.fetchData', t0, { courses: courses.length, teachers: teachers.length });
     } catch (err: unknown) {
       logger.warn('Failed to fetch books:', normalizeFirebaseError(err, 'Failed to fetch books'));
       setBooks([]);

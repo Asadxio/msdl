@@ -167,14 +167,13 @@ export async function requestCallToken(callId: string): Promise<{ appId: string;
   };
 }
 
-export async function updateHeartbeat(callId: string): Promise<void> {
+export async function updateHeartbeat(callId: string, participantRole: 'caller' | 'callee'): Promise<void> {
   const uid = auth.currentUser?.uid || '';
   if (!uid) return;
   const now = Date.now();
   await updateDoc(doc(db, 'calls', callId), {
     last_heartbeat_at: now,
-    caller_last_seen: now,
-    callee_last_seen: now,
+    ...(participantRole === 'caller' ? { caller_last_seen: now } : { callee_last_seen: now }),
     updated_at: serverTimestamp(),
   }).catch(() => {});
   await setDoc(doc(db, 'calls', callId, 'participants', uid), {

@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger';
 import { sendPushToAllUsers, sendPushToUserIds } from '@/lib/pushNotifications';
 import { incrementRetryCount } from '@/lib/notificationTelemetryWriter';
+import { trackEvent } from '@/lib/analytics';
 
 type TransportInput = { title: string; body: string; data: Record<string, unknown>; recipientIds: string[]; sendToAll?: boolean; dedupeId: string };
 
@@ -31,6 +32,7 @@ export async function sendPushTransport(input: TransportInput): Promise<void> {
       }
       attempt += 1;
       await Promise.all(input.recipientIds.map((uid) => incrementRetryCount(input.dedupeId, uid).catch(() => {})));
+      trackEvent('custom', { metric: 'notification_retry', dedupe_id: input.dedupeId, attempt, recipients: input.recipientIds.length });
       logger.info('[notification_retry]', { dedupe_id: input.dedupeId, attempt, backoff_ms: waitMs });
       await new Promise((r) => setTimeout(r, waitMs));
       waitMs *= 2;

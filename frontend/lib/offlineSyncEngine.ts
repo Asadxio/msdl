@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { trackEvent } from '@/lib/analytics';
+import { logger } from '@/lib/logger';
 
 export type OfflineActionType =
   | 'chat_message'
@@ -215,6 +216,7 @@ export async function flushOfflineQueue() {
         const permanent = ['permission_denied', 'validation_failure', 'server_conflict', 'permanent_rejection'].includes(cat);
         if (permanent || retryCount >= queue[idx].maxRetries) {
           queue[idx] = { ...queue[idx], state: 'failed', retryCount, failureCategory: cat, failureReason: String(err), updatedAtMs: now() };
+          logger.warn('offline.action.failed', { id: action.id, type: action.type, category: cat, retry_count: retryCount });
         } else {
           queue[idx] = { ...queue[idx], state: 'pending', retryCount, failureCategory: cat, failureReason: String(err), updatedAtMs: now() };
         }
@@ -223,6 +225,7 @@ export async function flushOfflineQueue() {
 
     await persistQueue(sortByPriority(queue));
     trackEvent('custom', { metric: 'offline_flush', queue: state.queueLength, replay_count: state.replayCount });
+    logger.info('offline.flush.complete', { queue: state.queueLength, replay_count: state.replayCount });
   } finally {
     state.flushing = false;
     await persistState();

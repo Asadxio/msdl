@@ -16,9 +16,12 @@ export type ChatMetricEvent = {
   ts: number;
 };
 
+import { trackEvent } from '@/lib/analytics';
+
 const PREFIX = '[ChatTelemetry]';
 
 export function logChatMetric(event: ChatMetricEvent) {
   // Replace with Sentry/Datadog bridge in production runtime.
-  console.log(PREFIX, JSON.stringify(event));
+console.log(PREFIX, JSON.stringify(event));
+  trackEvent('custom', { metric: 'chat_metric', ...event }, `chat_metric:${event.name}:${event.chat_id || 'na'}`);
 }

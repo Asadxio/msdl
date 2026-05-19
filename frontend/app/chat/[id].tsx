@@ -36,6 +36,8 @@ type ChatMeta = {
   unread_counts?: Record<string, number>;
 };
 
+type MessageDeliveryStatus = 'pending' | 'uploading' | 'retrying' | 'failed' | 'sent' | 'seen';
+
 type MessageItem = {
   id: string;
   text: string;
@@ -52,6 +54,7 @@ type MessageItem = {
   media_url?: string;
   media_name?: string;
   media_size?: number;
+  status?: MessageDeliveryStatus;
 };
 
 function normalizeChatMeta(id: string, raw: any): ChatMeta {
@@ -85,7 +88,7 @@ function normalizeMessage(id: string, raw: any): MessageItem {
     media_url: typeof safe.media_url === 'string' ? safe.media_url : undefined,
     media_name: typeof safe.media_name === 'string' ? safe.media_name : undefined,
     media_size: typeof safe.media_size === 'number' ? safe.media_size : undefined,
-    status: 'sent',
+    status: safe.status === 'pending' || safe.status === 'uploading' || safe.status === 'retrying' || safe.status === 'failed' || safe.status === 'seen' ? safe.status : 'sent',
   };
 }
 

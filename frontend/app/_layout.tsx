@@ -5,7 +5,7 @@ import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
-import { initPushNotifications, registerDevicePushToken, requestNotificationPermission } from '@/lib/pushNotifications';
+import { initPushNotifications, registerDevicePushToken } from '@/lib/pushNotifications';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
 import { getConsentStatus } from '@/lib/legal';
@@ -103,25 +103,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user?.uid) return;
-    const setupPush = async () => {
-      console.log('[Notifications] setupPush started');
-      const permission = await requestNotificationPermission();
-      console.log('[Notifications] setupPush permission status', permission);
-      if (!permission.granted) {
-        Alert.alert(
-          'Notification Permission Required',
-          permission.canAskAgain
-            ? 'Please allow notifications to receive chat and class updates.'
-            : 'Notifications are disabled. Enable them from device settings to receive updates.',
-        );
-        return;
-      }
-      const token = await registerDevicePushToken(user.uid);
-      console.log('[Notifications] setupPush registerDevicePushToken result', { hasToken: Boolean(token) });
-    };
-    setupPush().catch((error) => {
-      console.log('[Notifications] setupPush ERROR', error);
-    });
+    registerDevicePushToken(user.uid).catch(() => {});
   }, [user?.uid]);
 
   useEffect(() => {
@@ -156,7 +138,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           if (dedupe && user?.uid) {
             void markNotificationOpened(dedupe, user.uid, route).catch(() => {});
           }
-          router.push(route as never);
+          if (route.startsWith('/')) router.push(route as Href);
         } catch (error) {
           console.log('[Notifications] response handler ERROR', error);
         }
