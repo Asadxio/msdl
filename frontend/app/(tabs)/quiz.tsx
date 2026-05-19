@@ -9,6 +9,9 @@ import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { QUIZ_SESSION_TTL_MS, clearQuizSession, loadQuizSession, saveQuizSession } from '@/lib/lmsHardening';
+import { FeedbackBanner, SkeletonCard } from '@/components/ui';
+import { UIButton } from '@/components/ui/Button';
+import { SectionCard } from '@/components/ui/SectionCard';
 import { trackSecurity } from '@/lib/securityMonitor';
 
 type QuizQuestion = {
@@ -235,7 +238,7 @@ export default function QuizScreen() {
       </View>
 
       {isAdmin ? (
-        <View style={styles.adminCard}>
+        <SectionCard style={styles.adminCard}>
           <Text style={styles.adminTitle}>{editingId ? 'Edit Quiz Question' : 'Add Quiz Question'}</Text>
           <TextInput style={styles.input} value={questionInput} onChangeText={setQuestionInput} placeholder="Question" />
           {optionInputs.map((option, i) => (
@@ -249,14 +252,18 @@ export default function QuizScreen() {
           ))}
           <TextInput style={styles.input} value={correctAnswer} onChangeText={setCorrectAnswer} placeholder="Correct answer" />
           <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="Category (optional)" />
-          <TouchableOpacity style={styles.btn} onPress={saveQuestion} disabled={savingQuestion}>
-            {savingQuestion ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnText}>{editingId ? 'Update Question' : 'Add Question'}</Text>}
-          </TouchableOpacity>
-        </View>
+          <UIButton label={editingId ? 'Update Question' : 'Add Question'} onPress={saveQuestion} loading={savingQuestion} accessibilityLabel="Save quiz question" />
+        </SectionCard>
       ) : null}
 
+      {error ? (<View style={styles.feedbackWrap}><FeedbackBanner type="error" message={error} /></View>) : null}
+
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
+        <View style={styles.center}>
+          <SkeletonCard lines={3} />
+          <View style={{ height: 12 }} />
+          <SkeletonCard lines={2} />
+        </View>
       ) : error && questions.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>{error}</Text>
@@ -356,6 +363,7 @@ const styles = StyleSheet.create({
   secondaryBtn: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, backgroundColor: COLORS.surface },
   secondaryBtnText: { color: COLORS.textMain, fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, gap: 10 },
+  feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   errorText: { color: COLORS.error, fontSize: 12, textAlign: 'center' },
   resultCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, alignItems: 'center', ...SHADOWS.card },
   resultTitle: { color: COLORS.textMuted, fontWeight: '600' },

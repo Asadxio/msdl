@@ -313,7 +313,7 @@ service cloud.firestore {
         && request.resource.data.review_mode == resource.data.review_mode
         && request.resource.data.currency == resource.data.currency
         && request.resource.data.created_at == resource.data.created_at
-        && request.resource.data.status in ['pending', 'submitted', 'verified', 'approved', 'rejected']
+        && request.resource.data.status in ['pending', 'submitted', 'verified', 'approved', 'rejected', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded', 'disputed', 'expired']
         && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar'])
         && (!('payment_ref' in request.resource.data) || request.resource.data.payment_ref == null || request.resource.data.payment_ref is string)
         && (!('transaction_ref' in request.resource.data) || request.resource.data.transaction_ref == null || request.resource.data.transaction_ref is string)
@@ -840,6 +840,23 @@ service cloud.firestore {
       allow update: if (isAdmin() && isValidPaymentUpdateByAdmin())
         || (isSignedIn() && resource.data.user_id == request.auth.uid && isValidPaymentUpdateByOwner());
       allow delete: if isAdmin();
+    }
+
+
+
+    match /payment_gateway_events/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /payment_processor_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /payment_verification_queue/{queueId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // modules/lessons/assignments and related learning data

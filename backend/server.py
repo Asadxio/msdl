@@ -25,11 +25,27 @@ from services.provider_router import route_tokens
 from services.token_health_engine import update_token_registry
 from services.fanout_worker import process_queue_once
 from services.stale_lease_reclaimer import reclaim_stale_leases
-from services.worker_scheduler import run_scheduler_tick
+from services.worker_scheduler import run_scheduler_tick as run_notification_scheduler_tick
 from services.provider_weight_engine import update_provider_weight
-from security.rateLimiter import allow as allow_rate
+from workers.maintenanceWorker import run_maintenance_once
+from jobs.storageCleanup import mark_orphan_media_for_cleanup
+from monitoring.health import build_health_snapshot
+from payments.webhook_verifier import verify_razorpay_signature, is_webhook_timestamp_valid
+from payments.payment_finalizer import finalize_successful_payment
+from jobs.payment_reconciliation import recover_stale_processing_payments, expire_abandoned_pending_payments
+from queues.queue_manager import enqueue_job
+from workers.worker_runtime import run_worker_loop_once
+from schedulers.job_scheduler import run_scheduler_tick as run_async_scheduler_tick
+from config.env_config import app_env
+from config.releaseConfig import release_channel
+from security.rateLimiter import allow as allow_rate, abuse_score, temporary_lock
 from security.securityLogs import log_security_event
-from security.quizSecurity import attempt_key, is_attempt_expired
+from security.quizSecurity import attempt_key, is_attempt_expired, operation_key, suspicious_timing
+from security.paymentSecurity import can_transition, payment_doc_id
+from validators.payment_validator import validate_payment_amount, validate_payment_type
+from validators.security_validator import validate_timestamp_fresh
+from analytics import write_error_event, aggregate_quiz_summary, summarize_moderation, detect_thresholds
+from ai import classify_text, summarize_operational_insights, log_ai_metric, cached_call
 
 
 ROOT_DIR = Path(__file__).parent
@@ -283,6 +299,44 @@ class QuizSubmitRequest(BaseModel):
     started_at_ms: int
     score: int
     total_questions: int
+
+
+class AnalyticsEventItem(BaseModel):
+    name: str
+    ts: int
+    dedupeKey: str | None = None
+    payload: dict | None = None
+
+
+class AnalyticsIngestRequest(BaseModel):
+    events: list[AnalyticsEventItem]
+
+
+class AIInferRequest(BaseModel):
+    feature: str
+    payload: dict
+
+
+
+
+class PaymentInitiateRequest(BaseModel):
+    operation_id: str
+    payment_type: str
+    amount: float
+    currency: str = "INR"
+
+
+class PaymentConfirmRequest(BaseModel):
+    payment_id: str
+    transaction_ref: str
+    provider_ref: str | None = None
+
+
+class PaymentAdminActionRequest(BaseModel):
+    payment_id: str
+    next_state: str
+    note: str
+    evidence: dict | None = None
 
 
 class LiveOpsEventRequest(BaseModel):
@@ -1114,7 +1168,7 @@ async def reclaim_stale_leases_job(request: Request, authorization: str | None =
 @api_router.post("/jobs/run-worker-scheduler")
 async def run_worker_scheduler_job(request: Request, authorization: str | None = Header(default=None)):
     _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "run_worker_scheduler")
-    return run_scheduler_tick(firebase_db, logger)
+    return run_notification_scheduler_tick(firebase_db, logger)
 
 
 @api_router.post("/jobs/update-routing-weights")
@@ -1215,18 +1269,41 @@ async def submit_quiz_authoritative(payload: QuizSubmitRequest, request: Request
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
     uid, _ = _verify_firebase_request(authorization)
+    now_ms = int(time.time() * 1000)
+    client_op = request.headers.get("x-op-id", "").strip() or payload.nonce
+
     if not allow_rate(f"quiz_submit:{uid}", 8, 60):
-        log_security_event(firebase_db, logger, 'quiz_submit_rate_limited', {'uid': uid})
+        score = abuse_score(f"quiz_submit:{uid}")
+        if score > 20:
+            temporary_lock(f"quiz_submit:{uid}", 300)
+        log_security_event(firebase_db, logger, 'quiz_submit_rate_limited', {'uid': uid, 'abuse_score': score})
         raise HTTPException(status_code=429, detail='Too many quiz submissions')
+
+    if not validate_timestamp_fresh(payload.started_at_ms):
+        log_security_event(firebase_db, logger, 'quiz_submit_timestamp_skew', {'uid': uid, 'quiz_id': payload.quiz_id})
+        raise HTTPException(status_code=400, detail='Invalid attempt timestamp')
+
     if is_attempt_expired(payload.started_at_ms):
         raise HTTPException(status_code=409, detail='Quiz attempt expired')
+
+    op_key = operation_key(uid, client_op)
+    op_ref = firebase_db.collection('operation_dedupe').document(op_key)
+    if op_ref.get().exists:
+        raise HTTPException(status_code=409, detail='Duplicate operation detected')
+
     dedupe = attempt_key(uid, payload.quiz_id, payload.nonce)
     existing = firebase_db.collection('quiz_attempt_locks').document(dedupe).get()
     if existing.exists:
         raise HTTPException(status_code=409, detail='Duplicate attempt submission')
-    firebase_db.collection('quiz_attempt_locks').document(dedupe).set({'uid': uid, 'quiz_id': payload.quiz_id, 'created_at_ms': int(time.time()*1000)})
-    firebase_db.collection('quiz_results').add({'user_id': uid, 'quiz_id': payload.quiz_id, 'score': int(payload.score), 'total_questions': int(payload.total_questions), 'created_at': admin_firestore.SERVER_TIMESTAMP, 'attempt_key': dedupe})
-    return {'ok': True, 'attempt_key': dedupe}
+
+    suspicious = suspicious_timing(payload.started_at_ms, now_ms)
+    firebase_db.collection('quiz_attempt_locks').document(dedupe).set({'uid': uid, 'quiz_id': payload.quiz_id, 'created_at_ms': now_ms, 'operation_key': op_key})
+    op_ref.set({'uid': uid, 'operation': 'quiz_submit', 'created_at_ms': now_ms, 'ttl_ms': now_ms + 24 * 60 * 60 * 1000})
+    firebase_db.collection('quiz_results').add({'user_id': uid, 'quiz_id': payload.quiz_id, 'score': int(payload.score), 'total_questions': int(payload.total_questions), 'created_at': admin_firestore.SERVER_TIMESTAMP, 'attempt_key': dedupe, 'submitted_at_ms': now_ms, 'suspicious_timing': suspicious})
+
+    if suspicious:
+        log_security_event(firebase_db, logger, 'quiz_submit_suspicious_timing', {'uid': uid, 'quiz_id': payload.quiz_id, 'started_at_ms': payload.started_at_ms, 'submitted_at_ms': now_ms})
+    return {'ok': True, 'attempt_key': dedupe, 'suspicious_timing': suspicious}
 
 
 @api_router.post("/jobs/repair-status-reaction-counts")
@@ -1260,6 +1337,331 @@ async def run_status_maintenance(authorization: str | None = Header(default=None
     repair = await repair_status_reaction_counts(authorization)
     logger.info("run_status_maintenance cleanup=%s repair=%s", cleanup, repair)
     return {"ok": True, "cleanup": cleanup, "repair": repair}
+
+
+@api_router.post("/analytics/ingest")
+async def analytics_ingest(payload: AnalyticsIngestRequest, authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    uid = "anonymous"
+    if authorization:
+        try:
+            uid, _ = _verify_firebase_request(authorization)
+        except Exception:
+            uid = "anonymous"
+
+    now_ms = int(time.time() * 1000)
+    accepted = 0
+    names: dict[str, int] = {}
+    for event in payload.events[:50]:
+        name = str(event.name or "custom")[:64]
+        names[name] = names.get(name, 0) + 1
+        if name == "api_error":
+            write_error_event(firebase_db, {**(event.payload or {}), "at_ms": event.ts})
+        accepted += 1
+
+    day = datetime.utcnow().strftime("%Y-%m-%d")
+    summary_ref = firebase_db.collection("analytics_daily_summary").document(day)
+    summary_ref.set({
+        "updated_at_ms": now_ms,
+        "event_count": admin_firestore.Increment(accepted),
+        "actors": admin_firestore.Increment(1 if uid != "anonymous" else 0),
+    }, merge=True)
+    for k, v in names.items():
+        summary_ref.set({f"by_name.{k}": admin_firestore.Increment(v)}, merge=True)
+    return {"ok": True, "accepted": accepted}
+
+
+@api_router.post("/jobs/aggregate-analytics")
+async def aggregate_analytics_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin", "moderator"}, "aggregate_analytics")
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+
+    quiz_rows = [(d.to_dict() or {}) for d in firebase_db.collection("quiz_results").limit(1000).stream()]
+    moderation_rows = [(d.to_dict() or {}) for d in firebase_db.collection("moderation_logs").limit(1000).stream()]
+    quiz_summary = aggregate_quiz_summary(quiz_rows)
+    moderation_summary = summarize_moderation(moderation_rows)
+
+    metrics = {
+        "quiz_suspicious": sum(int(v.get("suspicious", 0)) for v in quiz_summary.values()),
+        "moderation_reports": int(moderation_summary.get("reports", 0)),
+    }
+    alerts = detect_thresholds(metrics, {"quiz_suspicious": 30, "moderation_reports": 300})
+
+    stamp = int(time.time() * 1000)
+    firebase_db.collection("analytics_dashboards").document("lms").set({"updated_at_ms": stamp, "quiz_summary": quiz_summary}, merge=True)
+    firebase_db.collection("analytics_dashboards").document("moderation").set({"updated_at_ms": stamp, "summary": moderation_summary}, merge=True)
+    if alerts:
+        firebase_db.collection("analytics_alerts").document(str(stamp)).set({"created_at_ms": stamp, "alerts": alerts})
+
+    return {"ok": True, "quiz_count": len(quiz_rows), "moderation_count": len(moderation_rows), "alerts": len(alerts)}
+
+
+@api_router.post("/jobs/run-maintenance-worker")
+async def run_maintenance_worker_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "run_maintenance_worker")
+    return run_maintenance_once(firebase_db, logger)
+
+
+@api_router.post("/jobs/storage-cleanup")
+async def run_storage_cleanup_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "storage_cleanup")
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    return mark_orphan_media_for_cleanup(firebase_db, 200)
+
+
+@api_router.get("/ops/health")
+async def ops_health():
+    snap = build_health_snapshot(firebase_db)
+    snap["env"] = app_env()
+    snap["release_channel"] = release_channel()
+    return snap
+
+
+@api_router.post("/ai/infer")
+async def ai_infer(payload: AIInferRequest, authorization: str | None = Header(default=None)):
+    uid = "anonymous"
+    if authorization:
+        try:
+            uid, _ = _verify_firebase_request(authorization)
+        except Exception:
+            uid = "anonymous"
+
+    feature = str(payload.feature or "").strip().lower()
+    body = payload.payload or {}
+
+    if feature == "moderation_classify":
+        result = cached_call(feature, body, 120, lambda p: classify_text(str(p.get("text") or "")))
+    elif feature == "lms_summary":
+        text = str(body.get("content") or "")
+        summary = text[:280] + ("..." if len(text) > 280 else "")
+        result = {"summary": summary or "No content provided.", "assistive_only": True}
+    elif feature == "quiz_explain":
+        q = str(body.get("question") or "")
+        a = str(body.get("answer") or "")
+        result = {"explanation": f"Review the core concept in: {q[:120]}. Your selected answer: {a[:120]}.", "assistive_only": True}
+    elif feature == "ops_insight":
+        result = summarize_operational_insights(body)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported AI feature")
+
+    log_ai_metric(firebase_db, "inference", {"feature": feature, "uid": uid, "cache_hit": bool(result.get("cache_hit")), "result_size": len(str(result))})
+    return {"ok": True, "result": result, "cache_hit": bool(result.get("cache_hit", False))}
+
+
+@api_router.post("/payments/initiate")
+async def payments_initiate(payload: PaymentInitiateRequest, authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    uid, _ = _verify_firebase_request(authorization)
+
+    amount = validate_payment_amount(payload.amount)
+    ptype = validate_payment_type(payload.payment_type)
+    op_id = str(payload.operation_id or "").strip()
+    if len(op_id) < 6:
+        raise HTTPException(status_code=400, detail="operation_id too short")
+
+    pid = payment_doc_id(uid, op_id)
+    ref = firebase_db.collection("payments").document(pid)
+    snap = ref.get()
+    now_ms = int(time.time() * 1000)
+    if snap.exists:
+        data = snap.to_dict() or {}
+        return {"ok": True, "payment_id": pid, "state": data.get("state", "pending"), "idempotent": True}
+
+    ref.set({
+        "payment_id": pid,
+        "user_id": uid,
+        "amount": amount,
+        "currency": str(payload.currency or "INR"),
+        "type": ptype,
+        "provider": "razorpay",
+        "state": "pending",
+        "review_mode": "manual",
+        "operation_id": op_id,
+        "created_at": admin_firestore.SERVER_TIMESTAMP,
+        "created_at_ms": now_ms,
+        "updated_at": admin_firestore.SERVER_TIMESTAMP,
+        "updated_at_ms": now_ms,
+    }, merge=True)
+    firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": uid, "action": "initiate", "state": "pending", "created_at_ms": now_ms})
+    return {"ok": True, "payment_id": pid, "state": "pending", "idempotent": False}
+
+
+@api_router.post("/payments/confirm")
+async def payments_confirm(payload: PaymentConfirmRequest, authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    uid, _ = _verify_firebase_request(authorization)
+    pid = str(payload.payment_id or "").strip()
+    ref = firebase_db.collection("payments").document(pid)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    data = snap.to_dict() or {}
+    if data.get("user_id") != uid:
+        raise HTTPException(status_code=403, detail="Not owner")
+    cur = str(data.get("state") or "pending")
+    if not can_transition(cur, "processing") and cur != "processing":
+        raise HTTPException(status_code=409, detail="Invalid payment state transition")
+    now_ms = int(time.time() * 1000)
+    ref.set({
+        "state": "processing",
+        "transaction_ref": str(payload.transaction_ref or "")[:120],
+        "provider_ref": str(payload.provider_ref or "")[:120],
+        "submitted_at": admin_firestore.SERVER_TIMESTAMP,
+        "updated_at": admin_firestore.SERVER_TIMESTAMP,
+        "updated_at_ms": now_ms,
+    }, merge=True)
+    firebase_db.collection("payment_verification_queue").document(pid).set({"payment_id": pid, "status": "queued", "attempt": 0, "scheduled_at_ms": now_ms, "created_at_ms": now_ms}, merge=True)
+    firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": uid, "action": "confirm", "state": "processing", "created_at_ms": now_ms})
+    return {"ok": True, "payment_id": pid, "state": "processing"}
+
+
+@api_router.post("/payments/admin/action")
+async def payments_admin_action(payload: PaymentAdminActionRequest, request: Request, authorization: str | None = Header(default=None)):
+    admin_uid, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "payments_admin_action")
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    pid = str(payload.payment_id or "").strip()
+    nxt = str(payload.next_state or "").strip().lower()
+    reason = str(payload.note or "").strip()
+    if len(reason) < 4:
+        raise HTTPException(status_code=400, detail="Admin reason is required")
+    ref = firebase_db.collection("payments").document(pid)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    data = snap.to_dict() or {}
+    cur = str(data.get("state") or "pending")
+    if not can_transition(cur, nxt):
+        raise HTTPException(status_code=409, detail=f"Transition {cur} -> {nxt} not allowed")
+    now_ms = int(time.time() * 1000)
+    ref.set({"state": nxt, "reviewed_by": admin_uid, "review_note": reason[:500], "review_evidence": payload.evidence or {}, "reviewed_at": admin_firestore.SERVER_TIMESTAMP, "updated_at": admin_firestore.SERVER_TIMESTAMP, "updated_at_ms": now_ms}, merge=True)
+
+    if nxt == "succeeded":
+        finalize_successful_payment(firebase_db, pid, admin_uid, source_event_id="admin_action")
+
+    firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": admin_uid, "action": "state_change", "from": cur, "to": nxt, "reason": reason[:500], "evidence": payload.evidence or {}, "created_at_ms": now_ms})
+    return {"ok": True, "payment_id": pid, "from": cur, "to": nxt}
+
+
+@api_router.post("/payments/webhook")
+async def payments_webhook(request: Request):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+
+    body = await request.body()
+    sig = request.headers.get("x-razorpay-signature", "")
+    ts = request.headers.get("x-webhook-timestamp", "")
+    import os, json, hashlib, time
+    secret = str(os.environ.get("WEBHOOK_SECRET", "")).strip()
+    replay_window = int(os.environ.get("PAYMENT_REPLAY_WINDOW_SECONDS", "300") or 300)
+
+    ok_sig, sig_reason = verify_razorpay_signature(body, sig, secret)
+    ok_ts, ts_reason = is_webhook_timestamp_valid(ts, replay_window_seconds=replay_window)
+    recv_ms = int(time.time() * 1000)
+    payload_hash = hashlib.sha256(body or b"").hexdigest()
+
+    try:
+        data = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Malformed webhook payload")
+
+    event_id = str(data.get("event_id") or data.get("id") or "").strip()
+    if not event_id:
+        raise HTTPException(status_code=400, detail="Missing event id")
+    payment_id = str((data.get("payload") or {}).get("payment_id") or data.get("payment_id") or "").strip()
+    event_type = str(data.get("event") or data.get("event_type") or "unknown").strip()
+
+    ev_ref = firebase_db.collection("payment_gateway_events").document(event_id)
+    existing = ev_ref.get()
+    if existing.exists:
+        firebase_db.collection("payment_processor_audit_logs").add({"processor": "razorpay", "event_type": event_type, "event_id": event_id, "payment_id": payment_id, "verification_result": "duplicate", "replay_detected": True, "transition_applied": "none", "reconciliation_action": "skip_duplicate", "processing_latency_ms": 0, "failure_reason": "duplicate_event", "actor": "webhook", "processed_at": recv_ms})
+        return {"ok": True, "duplicate": True}
+
+    verified = ok_sig and ok_ts
+    ev_ref.set({"event_id": event_id, "event_type": event_type, "payment_id": payment_id, "payload_hash": payload_hash, "received_at": recv_ms, "verified": verified, "processor": "razorpay", "processing_status": "received", "replay_detected": False, "reconciliation_status": "queued", "timestamp_reason": ts_reason, "signature_reason": sig_reason, "raw": data})
+    if not verified:
+        firebase_db.collection("payment_processor_audit_logs").add({"processor": "razorpay", "event_type": event_type, "event_id": event_id, "payment_id": payment_id, "verification_result": "failed", "replay_detected": False, "transition_applied": "none", "reconciliation_action": "reject", "processing_latency_ms": 0, "failure_reason": f"sig={sig_reason};ts={ts_reason}", "actor": "webhook", "processed_at": recv_ms})
+        raise HTTPException(status_code=401, detail="Webhook verification failed")
+
+    transition = "none"
+    rec_action = "queued"
+    fail_reason = ""
+    try:
+        if payment_id:
+            if event_type in {"payment.captured", "order.paid", "payment.authorized"}:
+                finalize_successful_payment(firebase_db, payment_id, "webhook", source_event_id=event_id)
+                transition = "succeeded"
+                rec_action = "finalized"
+            elif event_type in {"payment.failed"}:
+                firebase_db.collection("payments").document(payment_id).set({"state": "failed", "updated_at_ms": recv_ms}, merge=True)
+                transition = "failed"
+                rec_action = "state_update"
+            elif event_type in {"payment.refunded"}:
+                firebase_db.collection("payments").document(payment_id).set({"state": "refunded", "updated_at_ms": recv_ms}, merge=True)
+                transition = "refunded"
+                rec_action = "state_update"
+        ev_ref.set({"processing_status": "processed", "reconciliation_status": rec_action}, merge=True)
+    except Exception as exc:
+        fail_reason = str(exc)
+        ev_ref.set({"processing_status": "failed", "reconciliation_status": "retry_needed"}, merge=True)
+
+    firebase_db.collection("payment_processor_audit_logs").add({"processor": "razorpay", "event_type": event_type, "event_id": event_id, "payment_id": payment_id, "verification_result": "verified", "replay_detected": False, "transition_applied": transition, "reconciliation_action": rec_action, "processing_latency_ms": max(0, int(time.time()*1000)-recv_ms), "failure_reason": fail_reason, "actor": "webhook", "processed_at": int(time.time()*1000)})
+    return {"ok": True, "event_id": event_id, "transition": transition}
+
+
+@api_router.post("/jobs/payments/recover-stale-processing")
+async def payments_recover_stale_processing_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "payments_recover_stale_processing")
+    return recover_stale_processing_payments(firebase_db, logger)
+
+
+@api_router.post("/jobs/payments/expire-pending")
+async def payments_expire_pending_job(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "payments_expire_pending")
+    return expire_abandoned_pending_payments(firebase_db, logger)
+
+
+class EnqueueAsyncJobRequest(BaseModel):
+    job_type: str
+    payload: dict = {}
+    dedupe_key: str = ""
+    priority: int = 5
+    scheduled_for_ms: int = 0
+    max_retries: int = 5
+
+
+@api_router.post("/jobs/async/enqueue")
+async def enqueue_async_job(payload: EnqueueAsyncJobRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, _ = _require_capability(request, authorization, {"admin", "super_admin", "moderator"}, "enqueue_async_job")
+    return enqueue_job(firebase_db, job_type=payload.job_type, payload=payload.payload or {}, dedupe_key=payload.dedupe_key, priority=payload.priority, scheduled_for=payload.scheduled_for_ms, max_retries=payload.max_retries, correlation_id=uid)
+
+
+@api_router.post("/jobs/async/worker-tick")
+async def async_worker_tick(request: Request, authorization: str | None = Header(default=None)):
+    uid, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "async_worker_tick")
+    return run_worker_loop_once(firebase_db, logger, worker_id=f"worker:{uid}")
+
+
+@api_router.post("/jobs/async/scheduler-tick")
+async def async_scheduler_tick(request: Request, authorization: str | None = Header(default=None)):
+    uid, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "async_scheduler_tick")
+    return run_async_scheduler_tick(firebase_db, logger, owner=f"scheduler:{uid}")
+
+
+@api_router.get("/jobs/async/metrics")
+async def async_metrics(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin", "moderator"}, "async_metrics")
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    queued = len(list(firebase_db.collection("async_jobs").where("status", "in", ["queued", "scheduled", "retrying"]).limit(500).stream()))
+    dead = len(list(firebase_db.collection("dead_letter_jobs").limit(500).stream()))
+    failed_recent = len(list(firebase_db.collection("worker_metrics").where("status", "==", "failed").limit(200).stream()))
+    return {"ok": True, "queue_depth": queued, "dead_letter": dead, "failed_recent": failed_recent}
 
 
 # Include routes after every endpoint has been attached to the router.

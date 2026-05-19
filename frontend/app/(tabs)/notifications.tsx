@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
 import {
   View, Text, StyleSheet, FlatList, StatusBar, TouchableOpacity,
@@ -16,6 +16,7 @@ import { useAuth } from '@/context/AuthContext';
 import type { AppRole } from '@/lib/roles';
 import { createNotificationAsAdmin } from '@/lib/notifications';
 import { FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
+import { registerPerformanceSurface, scheduleLowPriorityTask, throttleRealtimeUpdates, trackPerformanceMetric } from '@/lib/performanceEngine';
 
 type NotificationItem = {
   id: string;
@@ -62,6 +63,7 @@ export default function NotificationsScreen() {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [focusedField, setFocusedField] = useState<'title' | 'message' | 'recipient' | null>(null);
   const [focusedEditField, setFocusedEditField] = useState<'editTitle' | 'editMessage' | null>(null);
+  const perfRef = useRef(registerPerformanceSurface({ surface: 'notifications_screen', cleanupIntervalMs: 120000, lowEndSafe: true }));
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -87,13 +89,21 @@ export default function NotificationsScreen() {
           next.push({ id: d.id, ...safe });
         }
       });
-      setItems(next);
+      throttleRealtimeUpdates<NotificationItem[]>('notifications_stream', [next], (batches) => {
+        const latest = batches[batches.length - 1];
+        setItems(Array.isArray(latest) ? latest : next);
+      }, 180);
       setLoading(false);
+      perfRef.current.touch();
     }, (err) => {
       setLoadError(err?.message || 'Failed to load notifications.');
       setLoading(false);
     });
-    return unsub;
+    const cancelMetric = scheduleLowPriorityTask(() => trackPerformanceMetric('notifications_loaded', items.length, { role: profile?.role || 'unknown' }));
+    return () => {
+      cancelMetric();
+      unsub();
+    };
   }, [profile?.role, user?.uid, reloadKey]);
 
   const markAsRead = async (item: NotificationItem) => {
@@ -214,7 +224,7 @@ export default function NotificationsScreen() {
               </View>
             ) : null}
           </View>
-          <TouchableOpacity style={styles.refreshBtn} onPress={() => setReloadKey((v) => v + 1)}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Refresh notifications" style={styles.refreshBtn} onPress={() => setReloadKey((v) => v + 1)}>
             <Ionicons name="refresh" size={16} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
@@ -228,7 +238,7 @@ export default function NotificationsScreen() {
       {loadError ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{loadError}</Text>
-          <TouchableOpacity onPress={() => setReloadKey((v) => v + 1)}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retry loading notifications" onPress={() => setReloadKey((v) => v + 1)}>
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>

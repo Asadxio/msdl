@@ -4,9 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useEffect, useState } from 'react';
-import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import * as Notifications from 'expo-notifications';
+import { stableQueryKey, subscribeDeduped, getListenerMetrics } from '@/lib/queryPerformance';
+import { trackPerformanceMetric } from '@/lib/performanceEngine';
 
 type TabIconName =
   | 'home'
@@ -61,7 +63,8 @@ export default function TabLayout() {
       orderBy('created_at', 'desc'),
       limit(80),
     );
-    const unsubNotif = onSnapshot(notifQ, (snap) => {
+    const notifKey = stableQueryKey(['tabs_notif', user.uid, profile?.role || '']);
+    const unsubNotif = subscribeDeduped(notifKey, notifQ as any, (snap) => {
       let count = 0;
       snap.forEach((d) => {
         const data = d.data() as any;
@@ -77,7 +80,8 @@ export default function TabLayout() {
     }, () => setUnreadNotifications(0));
 
     const chatsQ = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), limit(200));
-    const unsubChats = onSnapshot(chatsQ, (snap) => {
+    const chatsKey = stableQueryKey(['tabs_chats_unread', user.uid]);
+    const unsubChats = subscribeDeduped(chatsKey, chatsQ as any, (snap) => {
       let count = 0;
       snap.forEach((d) => {
         const data = d.data() as any;
@@ -91,6 +95,15 @@ export default function TabLayout() {
       unsubChats();
     };
   }, [profile?.role, user?.uid]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    const t = setInterval(() => {
+      const m = getListenerMetrics();
+      trackPerformanceMetric('listener_metrics', m.active_subscriptions, { keys: m.active_keys, surface: 'tabs_layout' });
+    }, 15000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const total = unreadChats + unreadNotifications;

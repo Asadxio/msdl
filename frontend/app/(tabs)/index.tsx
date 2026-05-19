@@ -25,13 +25,13 @@ import {
   doc,
   getDoc,
   limit,
-  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
   where,
 } from "firebase/firestore";
+import { stableQueryKey, subscribeDeduped } from "@/lib/queryPerformance";
 import {
   COLORS,
   SPACING,
@@ -588,7 +588,7 @@ export default function HomeScreen() {
       orderBy("created_at", "desc"),
       limit(20),
     );
-    const unsub = onSnapshot(q, (snapshot) => {
+    const unsub = subscribeDeduped(stableQueryKey(["home_announcements"]), q as any, (snapshot) => {
       const latestAnnouncement = snapshot.docs
         .map(
           (docItem) =>
