@@ -386,20 +386,6 @@ export default function StatusScreen() {
     if (!text) return;
     setUpdatingId(item.id);
     try {
-      if (STATUS_API_URL && auth.currentUser) {
-        const token = await auth.currentUser.getIdToken().catch(() => "");
-        if (token) {
-          const response = await fetch(`${STATUS_API_URL}/api/status/comment`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ status_id: item.id, text }),
-          }).catch(() => null);
-          if (response?.ok) {
-            setCommentInputs((prev) => ({ ...prev, [item.id]: "" }));
-            return;
-          }
-        }
-      }
       const commentId = `${user.uid}_${Date.now()}`;
       const comment: StatusComment = {
         id: commentId,
@@ -534,6 +520,9 @@ export default function StatusScreen() {
             <View style={styles.card}>
               {void markViewed(item)}
               <Text style={styles.cardName}>{item.user_name}</Text>
+              <TouchableOpacity style={styles.ghostBtn} onPress={() => router.push({ pathname: "/status-player", params: { itemsJson: JSON.stringify(visibleItems), start: String(visibleItems.findIndex((x) => x.id === item.id)) } } as never)}>
+                <Text style={styles.ghostBtnText}>Open story</Text>
+              </TouchableOpacity>
               {item.text ? (
                 <Text style={styles.cardText}>{item.text}</Text>
               ) : null}
