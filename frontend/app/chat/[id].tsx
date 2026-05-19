@@ -21,6 +21,8 @@ import { uploadUriFile } from '@/lib/storage';
 import { completeItem, enqueue, lockReadyItems, nextBackoffMs, patchItem, type QueueItem } from '@/lib/chatReliability';
 import { dedupeMessages, mergeServerAndLocal } from '@/lib/chatReconciliation';
 import { logChatMetric } from '@/lib/chatTelemetry';
+import { submitReportSafe } from '@/lib/moderation';
+import { guardSensitiveAction } from '@/lib/securityHardening';
 
 type ChatMeta = {
   id: string;
@@ -628,7 +630,29 @@ export default function ChatDetailScreen() {
     Alert.alert('Message options', 'Choose an action for this message.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete for me', onPress: () => { void deleteForMe(item); } },
-      { text: 'Report message', onPress: () => { void addDoc(collection(db, 'message_reports'), { reporter_id: user?.uid || '', target_user_id: item.sender_id, target_message_id: item.id, reason: 'inappropriate_message', created_at: serverTimestamp() }).catch(() => setSendError('Could not report message.')); } },
+      { text: 'Report message', onPress: () => {
+        const run = async () => {
+          const uid = user?.uid || '';
+          const guarded = await guardSensitiveAction({
+            action: 'message_report',
+            actorId: uid,
+            sessionId: id || 'chat_unknown',
+            deviceId: `rn_${Platform.OS}`,
+            idempotencyKey: `report:${uid}:${item.id}`,
+            rateLimit: { key: `report:message:${uid}`, limit: 4, windowMs: 60_000 },
+          });
+          if (!guarded.ok) throw new Error('guard_denied');
+          await submitReportSafe({
+            collectionName: 'message_reports',
+            reporterId: uid,
+            accusedUserId: item.sender_id,
+            targetId: item.id,
+            reason: 'inappropriate_message',
+            evidenceSnapshot: { chat_id: id || '', message_type: item.message_type || 'text' },
+          });
+        };
+        void run().catch(() => setSendError('Could not report message.'));
+      } },
       ...(canUnsend ? [{ text: 'Unsend for everyone', style: 'destructive' as const, onPress: () => { void unsendForEveryone(item); } }] : []),
     ]);
   }, [deleteForMe, unsendForEveryone, user?.uid]);
@@ -672,6 +696,11 @@ export default function ChatDetailScreen() {
     () => messages.filter((m) => !m.deleted_for?.includes(user?.uid || '')),
     [messages, user?.uid],
   );
+  const keyExtractor = useCallback((item: MessageItem) => item.id, []);
+  const listFooter = useMemo(() => (loadingMore ? <ActivityIndicator size="small" color={COLORS.primary} /> : null), [loadingMore]);
+  const listEmpty = useMemo(() => (
+    <EmptyState icon="chatbubble-ellipses-outline" message="No messages yet. Start the conversation." />
+  ), []);
 
   const renderMessage = useCallback(({ item }: { item: MessageItem }) => {
     const mine = item.sender_id === user?.uid;
@@ -740,18 +769,17 @@ export default function ChatDetailScreen() {
         ref={listRef}
         inverted
         data={visibleMessages}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
         contentContainerStyle={styles.list}
         onEndReached={loadMore}
         onEndReachedThreshold={0.2}
-        initialNumToRender={20}
-        maxToRenderPerBatch={20}
-        windowSize={8}
+        initialNumToRender={14}
+        maxToRenderPerBatch={12}
+        updateCellsBatchingPeriod={40}
+        windowSize={6}
         removeClippedSubviews
-        ListFooterComponent={loadingMore ? <ActivityIndicator size="small" color={COLORS.primary} /> : null}
-        ListEmptyComponent={(
-          <EmptyState icon="chatbubble-ellipses-outline" message="No messages yet. Start the conversation." />
-        )}
+        ListFooterComponent={listFooter}
+        ListEmptyComponent={listEmpty}
         renderItem={renderMessage}
       />
 

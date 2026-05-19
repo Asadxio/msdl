@@ -5,7 +5,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { doc, getDoc, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
@@ -28,6 +28,8 @@ export default function PaymentFlowScreen() {
   const { user, profile } = useAuth();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [verificationState, setVerificationState] = useState<'idle' | 'verifying' | 'awaiting_confirmation' | 'reconciling' | 'recovery_pending'>('idle');
+  const [currentPaymentId, setCurrentPaymentId] = useState('');
   const [paymentType, setPaymentType] = useState<PaymentType>('fees');
   const [feesAmount, setFeesAmount] = useState(0);
   const [amount, setAmount] = useState('');
@@ -122,6 +124,27 @@ export default function PaymentFlowScreen() {
     }
   };
 
+
+  useEffect(() => {
+    if (!user?.uid || !currentPaymentId || verificationState !== 'reconciling') return;
+    const timer = setInterval(async () => {
+      try {
+        const snap = await getDoc(doc(db, 'payments', currentPaymentId));
+        if (!snap.exists()) return;
+        const data = snap.data() as any;
+        const st = String(data.state || data.status || 'processing');
+        setStatusText(`${st} • ${String(data.type || paymentType)} • ₹${Number(data.amount || parsedAmount).toFixed(2)}`);
+        if (['succeeded', 'failed', 'refunded', 'disputed', 'expired', 'cancelled'].includes(st)) {
+          setVerificationState('idle');
+          clearInterval(timer);
+        }
+      } catch {
+        setVerificationState('recovery_pending');
+      }
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [user?.uid, currentPaymentId, verificationState, paymentType, parsedAmount]);
+
   const onConfirmPayment = async () => {
     if (!user?.uid || !profile) return;
     const safeReference = sanitizeTransactionRef(reference);
@@ -136,22 +159,29 @@ export default function PaymentFlowScreen() {
     setError('');
     try {
       setSubmittingPayment(true);
-      await addDoc(collection(db, 'payments'), {
-        user_id: user.uid,
-        user_name: profile.name,
-        amount: parsedAmount,
-        status: 'pending',
-        provider: 'razorpay',
-        type: paymentType,
-        transaction_ref: safeReference,
-        review_mode: 'manual',
-        currency: 'INR',
-        submitted_at: serverTimestamp(),
-        created_at: serverTimestamp(),
+      const operationId = `pay_${paymentType}_${Math.round(parsedAmount*100)}_${Date.now()}`;
+      setVerificationState('verifying');
+      const initRes = await fetch('/api/payments/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+        body: JSON.stringify({ operation_id: operationId, payment_type: paymentType, amount: parsedAmount, currency: 'INR' }),
       });
-      setStatusText('pending • awaiting admin confirmation');
+      if (!initRes.ok) throw new Error('Payment initiation failed');
+      const initJson = await initRes.json();
+
+      setVerificationState('awaiting_confirmation');
+      const confirmRes = await fetch('/api/payments/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+        body: JSON.stringify({ payment_id: initJson.payment_id, transaction_ref: safeReference }),
+      });
+      if (!confirmRes.ok) throw new Error('Payment confirmation failed');
+      setCurrentPaymentId(initJson.payment_id);
+      setVerificationState('reconciling');
+      setStatusText('processing • awaiting admin verification');
       setStep(4);
     } catch (err) {
+      setVerificationState('recovery_pending');
       setError(normalizeFirebaseError(err, 'Failed to save payment confirmation.'));
     } finally {
       setSubmittingPayment(false);
@@ -233,6 +263,7 @@ export default function PaymentFlowScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>4) Status</Text>
             <Text style={styles.bodyText}>{statusText}</Text>
+            <Text style={styles.bodyText}>Verification: {verificationState.replace('_', ' ')}</Text>
             <Text style={[styles.bodyText, { marginTop: SPACING.xs }]}>Admin will verify and update your status shortly.</Text>
             <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep(1)}>
               <Text style={styles.primaryBtnText}>New Payment</Text>

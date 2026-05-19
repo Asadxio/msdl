@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, Alert,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, updateDoc, doc, serverTimestamp, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
@@ -18,7 +18,7 @@ type PaymentItem = {
   user_id: string;
   user_name: string;
   amount: number;
-  status: 'pending' | 'approved' | 'rejected' | 'verified' | 'submitted';
+  status: 'pending' | 'processing' | 'succeeded' | 'failed' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'rejected' | 'verified' | 'submitted';
   provider?: 'razorpay';
   type?: 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
   created_at?: { toDate?: () => Date };
@@ -43,6 +43,7 @@ export default function AdminPaymentsScreen() {
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [adminNote, setAdminNote] = useState('');
   const [cursor, setCursor] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | PaymentItem['status']>('all');
   const [fetching, setFetching] = useState(false);
@@ -75,10 +76,12 @@ export default function AdminPaymentsScreen() {
     return () => {};
   }, [profile, isAdmin, router, statusFilter]);
 
-  const setStatus = async (id: string, status: 'approved' | 'rejected') => {
+  const setStatus = async (id: string, status: 'succeeded' | 'failed' | 'refunded' | 'disputed') => {
     setUpdatingId(id);
     try {
-      await updateDoc(doc(db, 'payments', id), { status, reviewed_at: serverTimestamp() });
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/payments/admin/action', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' }, body: JSON.stringify({ payment_id: id, next_state: status, note: adminNote || `admin_${status}`, evidence: { panel: 'admin_payments' } }) });
+      if (!res.ok) throw new Error('admin payment action failed');
       await createAdminLog(profile, {
         action: `payment_${status}`,
         performed_by: profile?.email || profile?.name || 'admin',
@@ -91,11 +94,11 @@ export default function AdminPaymentsScreen() {
     }
   };
 
-  const confirmStatusChange = (id: string, status: 'approved' | 'rejected') => {
-    const label = status === 'approved' ? 'Approve' : 'Reject';
+  const confirmStatusChange = (id: string, status: 'succeeded' | 'failed' | 'refunded' | 'disputed') => {
+    const label = status === 'succeeded' ? 'Mark Succeeded' : status === 'failed' ? 'Mark Failed' : status === 'refunded' ? 'Mark Refunded' : 'Mark Disputed';
     Alert.alert(`${label} Payment`, `Are you sure you want to ${label.toLowerCase()} this payment?`, [
       { text: 'Cancel' },
-      { text: label, style: status === 'rejected' ? 'destructive' : 'default', onPress: () => setStatus(id, status) },
+      { text: label, style: status === 'failed' || status === 'disputed' ? 'destructive' : 'default', onPress: () => setStatus(id, status) },
     ]);
   };
 
@@ -114,10 +117,14 @@ export default function AdminPaymentsScreen() {
         </TouchableOpacity>
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+        <TextInput style={styles.noteInput} placeholder="Admin reason / evidence note" value={adminNote} onChangeText={setAdminNote} />
+      </View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
+        <>
         <Text style={{ paddingHorizontal: 16, color: COLORS.textMuted }}>Filter status: {statusFilter}</Text>
         <FlatList
           data={payments}
@@ -132,13 +139,15 @@ export default function AdminPaymentsScreen() {
               <Text style={styles.meta}>Provider: {item.provider || 'razorpay'}</Text>
               <Text style={styles.meta}>Status: {item.status}</Text>
               <Text style={styles.time}>{formatDate(item)}</Text>
+              <Text style={styles.meta}>Reconciliation: {(item as any).reconciliation?.finalized ? 'finalized' : ((item as any).reconciliation ? 'pending' : 'n/a')}</Text>
+              <Text style={styles.meta}>Replay detected: {(item as any).replay_detected ? 'yes' : 'no'}</Text>
 
-              {(item.status === 'submitted' || item.status === 'pending' || item.status === 'verified') && (
+              {(item.status === 'submitted' || item.status === 'pending' || item.status === 'verified' || item.status === 'processing') && (
                 <View style={styles.actions}>
-                  <TouchableOpacity style={[styles.verifyBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'approved')} disabled={updatingId === item.id}>
-                    {updatingId === item.id ? <ActivityIndicator size="small" color="#166534" /> : <Text style={styles.verifyText}>Approve</Text>}
+                  <TouchableOpacity style={[styles.verifyBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'succeeded')} disabled={updatingId === item.id}>
+                    {updatingId === item.id ? <ActivityIndicator size="small" color="#166534" /> : <Text style={styles.verifyText}>Succeed</Text>}
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'rejected')} disabled={updatingId === item.id}>
+                  <TouchableOpacity style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'failed')} disabled={updatingId === item.id}>
                     {updatingId === item.id ? <ActivityIndicator size="small" color={COLORS.error} /> : <Text style={styles.rejectText}>Reject</Text>}
                   </TouchableOpacity>
                 </View>
@@ -152,6 +161,7 @@ export default function AdminPaymentsScreen() {
             </View>
           )}
         />
+        </>
       )}
     </View>
   );
@@ -180,4 +190,5 @@ const styles = StyleSheet.create({
   rejectText: { color: COLORS.error, fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
   empty: { color: COLORS.textMuted, fontSize: 14 },
+  noteInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: COLORS.surface, color: COLORS.textMain },
 });

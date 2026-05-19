@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, StatusBar, TouchableOpacity, TextInput,
 } from 'react-native';
@@ -8,8 +8,9 @@ import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY, getCourseImage } from '@/constants/theme';
 import { useData, Course } from '@/context/DataContext';
 import { EmptyState, FadeInView, ScalePressable } from '@/components/ui';
+import { getPerformanceState, registerPerformanceSurface, trackPerformanceMetric } from '@/lib/performanceEngine';
 
-function CourseCard({ course, index }: { course: Course; index: number }) {
+const CourseCard = memo(function CourseCard({ course, index }: { course: Course; index: number }) {
   const router = useRouter();
   const { getCourseProgress } = useData();
   const progress = getCourseProgress(course.id);
@@ -52,7 +53,7 @@ function CourseCard({ course, index }: { course: Course; index: number }) {
       </View>
     </ScalePressable>
   );
-}
+});
 
 export default function CoursesScreen() {
   const insets = useSafeAreaInsets();
@@ -60,11 +61,13 @@ export default function CoursesScreen() {
   const safeCourses = useMemo(() => (Array.isArray(courses) ? courses : []), [courses]);
   const [search, setSearch] = useState('');
   const [teacherFilter, setTeacherFilter] = useState('all');
+  const perfRef = useRef(registerPerformanceSurface({ surface: 'courses_feed', maxRendersPerMinute: 90, lowEndSafe: true }));
   const teacherOptions = useMemo(
     () => ['all', ...Array.from(new Set(safeCourses.map((course) => String(course?.teacher_name || '').trim()).filter(Boolean)))],
     [safeCourses],
   );
   const filteredCourses = useMemo(() => {
+    perfRef.current.touch();
     const q = search.trim().toLowerCase();
     return safeCourses.filter((course) => {
       const safeName = String(course?.name || '').toLowerCase();
@@ -75,6 +78,8 @@ export default function CoursesScreen() {
       return matchesSearch && matchesTeacher;
     });
   }, [safeCourses, search, teacherFilter]);
+  const perfState = getPerformanceState();
+  if (perfState.lowEndMode && filteredCourses.length > 100) trackPerformanceMetric('courses_low_end_large_list', filteredCourses.length);
 
   return (
     <View style={styles.container}>
@@ -132,9 +137,10 @@ export default function CoursesScreen() {
           renderItem={({ item, index }) => <CourseCard course={item} index={index} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={6}
-          maxToRenderPerBatch={8}
-          windowSize={6}
+          initialNumToRender={5}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={40}
+          windowSize={5}
           removeClippedSubviews
           testID="courses-list"
         />

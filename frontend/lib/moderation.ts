@@ -30,16 +30,15 @@ export async function submitReportSafe(input: {
     if (data.target_id === input.targetId && data.reason === input.reason && now - ts < REPORT_DUP_WINDOW_MS) throw new Error('duplicate_report');
   }
 
-  return addDoc(collection(db, input.collectionName), {
+  const base = {
     reporter_id: input.reporterId,
-    accused_user_id: input.accusedUserId,
-    target_id: input.targetId,
     reason: input.reason,
-    evidence_snapshot: input.evidenceSnapshot || {},
-    state: 'pending',
-    severity: 'medium',
     created_at: serverTimestamp(),
-  });
+  } as Record<string, unknown>;
+  const payload = input.collectionName === 'status_reports'
+    ? { ...base, status_id: input.targetId, owner_id: input.accusedUserId }
+    : { ...base, target_user_id: input.accusedUserId, target_message_id: input.targetId };
+  return addDoc(collection(db, input.collectionName), payload);
 }
 
 export async function applyModerationAction(input: {

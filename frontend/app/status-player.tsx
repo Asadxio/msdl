@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableWithoutFeedback, Animated, PanResponder, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableWithoutFeedback, Animated, PanResponder, ActivityIndicator, Image, AppState } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Video, ResizeMode } from 'expo-av';
 import { COLORS } from '@/constants/theme';
+import { clearAsyncOp, clearMediaRef, clearTimerTrack, getLifecycleMetrics, trackAsyncOp, trackMediaRef, trackTimer } from '@/lib/lifecycleDiagnostics';
+import { trackPerformanceMetric } from '@/lib/performanceEngine';
 
 const DURATION_MS = 5000;
 
@@ -15,12 +17,17 @@ export default function StatusPlayer() {
   const [loading, setLoading] = useState(true);
   const progress = useRef(new Animated.Value(0)).current;
   const timerRef = useRef<any>(null);
+  const mountedRef = useRef(true);
+  const prefetchSeqRef = useRef(0);
 
   const current = items[index];
   useEffect(() => {
     setLoading(true);
     progress.setValue(0);
-    if (timerRef.current) clearTimeout(timerRef.current);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      clearTimerTrack('status_player_advance');
+    }
     if (!current) return;
     if (!paused) {
       Animated.timing(progress, { toValue: 1, duration: DURATION_MS, useNativeDriver: false }).start(({ finished }) => {
@@ -29,16 +36,51 @@ export default function StatusPlayer() {
       timerRef.current = setTimeout(() => {
         setIndex((i: number) => (i + 1 < items.length ? i + 1 : i));
       }, DURATION_MS);
+      trackTimer('status_player_advance');
     }
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        clearTimerTrack('status_player_advance');
+      }
+    };
   }, [index, paused, current, items.length, progress]);
 
   const pan = useRef(PanResponder.create({ onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 15, onPanResponderRelease: (_, g) => { if (g.dy > 80) router.back(); } })).current;
 
   useEffect(() => {
     const next = items[index + 1];
-    if (next?.media_type === 'image' && next?.media_url) Image.prefetch(next.media_url).catch(() => {});
+    if (next?.media_type === 'image' && next?.media_url) {
+      const opId = `status_player_prefetch_${++prefetchSeqRef.current}`;
+      trackAsyncOp(opId);
+      trackMediaRef(next.media_url);
+      Image.prefetch(next.media_url).catch(() => {}).finally(() => {
+        clearAsyncOp(opId);
+        clearMediaRef(next.media_url);
+      });
+    }
   }, [index, items]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') setPaused(true);
+    });
+    return () => {
+      mountedRef.current = false;
+      sub.remove();
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        clearTimerTrack('status_player_advance');
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    const m = getLifecycleMetrics();
+    trackPerformanceMetric('status_player_lifecycle', m.active_timers + m.active_async_ops + m.active_media_refs, m);
+  }, [index, paused]);
 
   if (!current) return <View style={styles.center}><Text>No story</Text></View>;
 

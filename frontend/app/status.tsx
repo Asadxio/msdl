@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -26,7 +26,6 @@ import {
   increment,
   limit,
   getDocs,
-  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -39,6 +38,10 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { isHttpsUrl, uploadUriFile } from "@/lib/storage";
 import { auth } from "@/lib/firebase";
+import { submitReportSafe } from "@/lib/moderation";
+import { guardSensitiveAction } from "@/lib/securityHardening";
+import { getListenerMetrics, stableQueryKey, subscribeDeduped } from "@/lib/queryPerformance";
+import { trackPerformanceMetric } from "@/lib/performanceEngine";
 
 type StatusComment = {
   id: string;
@@ -107,14 +110,17 @@ export default function StatusScreen() {
   const [seenTracker, setSeenTracker] = useState<Record<string, boolean>>({});
   const [commentsByStatus, setCommentsByStatus] = useState<Record<string, StatusComment[]>>({});
   const [expandedStatusId, setExpandedStatusId] = useState("");
+  const prefetchQueueRef = useRef<string[]>([]);
+  const prefetchInFlightRef = useRef(0);
 
   useEffect(() => {
     const q = query(
       collection(db, "status_updates"),
       orderBy("created_at", "desc"),
     );
-    const unsub = onSnapshot(
-      q,
+    const unsub = subscribeDeduped(
+      stableQueryKey(["status_feed", user?.uid || "", profile?.role || ""]),
+      q as any,
       async (snap) => {
         const now = Date.now();
         const next: StatusItem[] = [];
@@ -266,12 +272,25 @@ export default function StatusScreen() {
 
   const reportStatus = async (item: StatusItem) => {
     if (!user?.uid) return;
-    await addDoc(collection(db, "status_reports"), {
-      reporter_id: user.uid,
-      status_id: item.id,
-      owner_id: item.user_id,
+    const guard = await guardSensitiveAction({
+      action: "status_report",
+      actorId: user.uid,
+      sessionId: "status_feed",
+      deviceId: `rn_${Platform.OS}`,
+      idempotencyKey: `status_report:${user.uid}:${item.id}`,
+      rateLimit: { key: `report:status:${user.uid}`, limit: 4, windowMs: 60_000 },
+    });
+    if (!guard.ok) {
+      Alert.alert("Report blocked", "Too many report attempts. Try again shortly.");
+      return;
+    }
+    await submitReportSafe({
+      collectionName: "status_reports",
+      reporterId: user.uid,
+      accusedUserId: item.user_id,
+      targetId: item.id,
       reason: "inappropriate_status",
-      created_at: serverTimestamp(),
+      evidenceSnapshot: { audience: item.audience || "public" },
     }).catch(() => Alert.alert("Report failed", "Could not report status."));
   };
 
@@ -416,12 +435,40 @@ export default function StatusScreen() {
   useEffect(() => {
     if (!expandedStatusId) return;
     const q = query(collection(db, "status_updates", expandedStatusId, "comments"), orderBy("created_at_ms", "desc"), limit(40));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = subscribeDeduped(stableQueryKey(["status_comments", expandedStatusId]), q as any, (snap) => {
       const arr: StatusComment[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
       setCommentsByStatus((prev) => ({ ...prev, [expandedStatusId]: arr }));
     });
     return unsub;
   }, [expandedStatusId]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    const t = setInterval(() => {
+      const lm = getListenerMetrics();
+      trackPerformanceMetric("status_feed_listener_metrics", lm.active_subscriptions, { keys: lm.active_keys, prefetch_q: prefetchQueueRef.current.length, prefetch_in_flight: prefetchInFlightRef.current });
+    }, 12000);
+    return () => clearInterval(t);
+  }, []);
+
+  const keyExtractor = useCallback((item: StatusItem) => item.id, []);
+  const listEmpty = useMemo(() => <Text style={styles.empty}>No status updates right now.</Text>, []);
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    const visible = viewableItems.map((v: any) => v?.item).filter(Boolean) as StatusItem[];
+    const candidates = visible.filter((i) => i.media_type === "image" && i.media_url).slice(0, 3);
+    candidates.forEach((i) => {
+      if (i.media_url && !prefetchQueueRef.current.includes(i.media_url)) prefetchQueueRef.current.push(i.media_url);
+    });
+    const pump = () => {
+      while (prefetchInFlightRef.current < 2 && prefetchQueueRef.current.length > 0) {
+        const uri = prefetchQueueRef.current.shift();
+        if (!uri) break;
+        prefetchInFlightRef.current += 1;
+        Image.prefetch(uri).catch(() => {}).finally(() => { prefetchInFlightRef.current = Math.max(0, prefetchInFlightRef.current - 1); pump(); });
+      }
+    };
+    pump();
+  }).current;
 
   const deleteCommentSoft = async (statusId: string, commentId: string, ownerId: string) => {
     if (!user?.uid || ownerId !== user.uid) return;
@@ -514,8 +561,16 @@ export default function StatusScreen() {
       ) : (
         <FlatList
           data={visibleItems}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={styles.list}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={45}
+          windowSize={5}
+          removeClippedSubviews
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+          ListEmptyComponent={listEmpty}
           renderItem={({ item }) => (
             <View style={styles.card}>
               {void markViewed(item)}

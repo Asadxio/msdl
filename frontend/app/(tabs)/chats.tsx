@@ -7,12 +7,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
-  addDoc, arrayRemove, arrayUnion, collection, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
+  addDoc, arrayRemove, arrayUnion, collection, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
+import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
 
 type AppUser = { id: string; name: string; email?: string; role: string; status: string; photo_url?: string; avatar?: string };
 type ChatItem = {
@@ -109,7 +110,7 @@ export default function ChatsScreen() {
     const participantsQ = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updated_at', 'desc'));
     const broadcastQ = query(collection(db, 'chats'), where('type', '==', 'broadcast'), orderBy('updated_at', 'desc'));
 
-    const unsubA = onSnapshot(participantsQ, (snap) => {
+    const unsubA = subscribeDeduped(stableQueryKey(['chats_participants', user.uid]), participantsQ as any, (snap) => {
       const arr: ChatItem[] = [];
       snap.forEach((d) => arr.push(normalizeChatItem(d.id, d.data())));
       setChats((prev) => {
@@ -124,7 +125,7 @@ export default function ChatsScreen() {
       setError(err?.message || 'Failed to load chats.');
     });
 
-    const unsubB = onSnapshot(broadcastQ, (snap) => {
+    const unsubB = subscribeDeduped(stableQueryKey(['chats_broadcast', user.uid]), broadcastQ as any, (snap) => {
       const arr: ChatItem[] = [];
       snap.forEach((d) => arr.push(normalizeChatItem(d.id, d.data())));
       setChats((prev) => {

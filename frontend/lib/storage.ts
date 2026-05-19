@@ -1,5 +1,4 @@
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { storage } from "@/lib/firebase";
+import { runMediaUpload } from "@/lib/mediaPipeline";
 
 type UploadUriFileParams = {
   uri: string;
@@ -54,26 +53,7 @@ function normalizeStorageError(error: any): Error {
   return new Error(`${message}${serverMessage}`.trim());
 }
 
-async function readUriAsBlob(uri: string): Promise<Blob> {
-  try {
-    const res = await fetch(uri);
-    if (!res.ok) {
-      throw new Error(`Failed to read file URI (${res.status}).`);
-    }
-    return await res.blob();
-  } catch (fetchError) {
-    if (!isLocalFileUri(uri)) throw fetchError;
-    return await new Promise<Blob>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.onload = () => resolve(xhr.response as Blob);
-      xhr.onerror = () =>
-        reject(new Error("Unable to read the selected local file."));
-      xhr.responseType = "blob";
-      xhr.open("GET", uri, true);
-      xhr.send(null);
-    });
-  }
-}
+
 
 export async function uploadUriFile(
   params: UploadUriFileParams,
@@ -97,43 +77,20 @@ export async function uploadUriFile(
   }
 
   const uploadOnce = async () => {
-    params.onProgress?.(0.05);
-    const blob = await readUriAsBlob(params.uri);
-    if (!blob || blob.size === 0) {
-      throw new Error("Selected file is empty or unreadable.");
-    }
-    if (blob.size > maxBytes) {
-      throw new Error(
-        `Selected file is too large. Maximum allowed size is ${Math.round(maxBytes / 1024 / 1024)}MB.`,
-      );
-    }
-    const fileRef = ref(storage, params.path);
-    const task = uploadBytesResumable(fileRef, blob, {
+    const category = params.path.startsWith('chat_media/') ? 'chat'
+      : params.path.startsWith('status_updates/') ? 'status'
+      : params.path.startsWith('users/') ? 'profile'
+      : params.path.startsWith('assignment_submissions/') ? 'assignment'
+      : params.path.startsWith('course_materials/') ? 'course'
+      : 'recording';
+    return runMediaUpload({
+      uploadId: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      uri: params.uri,
+      path: params.path,
       contentType,
-      customMetadata: {
-        source: "expo",
-        uploaded_at_ms: String(Date.now()),
-        ...(params.customMetadata || {}),
-      },
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      task.on(
-        "state_changed",
-        (snapshot) => {
-          const ratio =
-            snapshot.totalBytes > 0
-              ? snapshot.bytesTransferred / snapshot.totalBytes
-              : 0;
-          params.onProgress?.(Math.min(0.95, Math.max(0.08, ratio * 0.95)));
-        },
-        (error) => reject(normalizeStorageError(error)),
-        () => resolve(),
-      );
-    });
-    const downloadUrl = await getDownloadURL(fileRef);
-    params.onProgress?.(1);
-    return downloadUrl;
+      category,
+      maxBytes,
+    }, (p) => params.onProgress?.(p.progress));
   };
 
   try {
