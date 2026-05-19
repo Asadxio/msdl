@@ -10,6 +10,9 @@ import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firesto
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { UserProfile, useAuth } from '@/context/AuthContext';
+import { createAdminLog } from '@/lib/adminLogs';
+import { hasPermission } from '@/lib/rbac';
+import { bulkUpdateUserStatus } from '@/lib/adminOps';
 
 type UserWithId = UserProfile & { id: string };
 
@@ -17,11 +20,13 @@ export default function AdminUsersScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = hasPermission(profile, 'admin.users.manage');
+  const canBulk = hasPermission(profile, 'admin.users.bulk');
   const [users, setUsers] = useState<UserWithId[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -50,10 +55,29 @@ export default function AdminUsersScreen() {
   const updateUser = async (uid: string, updates: Partial<UserProfile>) => {
     try {
       await updateDoc(doc(db, 'users', uid), updates);
+      await createAdminLog(profile, {
+        action: 'user_update',
+        performed_by: profile?.email || profile?.name || 'admin',
+        target_id: uid,
+        details: JSON.stringify(updates),
+      }).catch(() => {});
       await fetchUsers();
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to update');
     }
+  };
+  const toggleSelected = (uid: string) => setSelectedIds((prev) => (prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]));
+  const runBulkStatus = async (status: 'approved' | 'rejected' | 'deactivated' | 'pending') => {
+    if (!canBulk || selectedIds.length === 0) return;
+    const result = await bulkUpdateUserStatus({
+      profile,
+      performedBy: profile?.email || profile?.name || 'admin',
+      userIds: selectedIds,
+      status,
+    }).catch(() => ({ updated: 0 }));
+    setSelectedIds([]);
+    Alert.alert('Bulk Update', `Updated ${result.updated} users`);
+    await fetchUsers();
   };
 
   const handleApprove = (u: UserWithId) => {
@@ -136,6 +160,11 @@ export default function AdminUsersScreen() {
     const rc = ROLE_COLORS[item.role] || ROLE_COLORS.student;
     return (
       <View style={styles.userCard} testID={`user-card-${item.id}`}>
+        {canBulk ? (
+          <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8 }} onPress={() => toggleSelected(item.id)}>
+            <Ionicons name={selectedIds.includes(item.id) ? 'checkbox' : 'square-outline'} size={20} color={COLORS.primary} />
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.userTop}>
           {item.photo_url ? (
             <Image source={{ uri: item.photo_url }} style={styles.avatar} />
@@ -229,6 +258,13 @@ export default function AdminUsersScreen() {
           <Ionicons name="refresh" size={22} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
+      {canBulk ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, gap: 8, paddingBottom: 8 }}>
+          <TouchableOpacity style={styles.approveBtn} onPress={() => runBulkStatus('approved')}><Text style={styles.approveBtnText}>Bulk Approve ({selectedIds.length})</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.deactivateBtn} onPress={() => runBulkStatus('deactivated')}><Text style={styles.deactivateBtnText}>Bulk Deactivate</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.rejectBtn} onPress={() => runBulkStatus('rejected')}><Text style={styles.rejectBtnText}>Bulk Reject</Text></TouchableOpacity>
+        </ScrollView>
+      ) : null}
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (

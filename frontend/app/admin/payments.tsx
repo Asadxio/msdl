@@ -9,6 +9,8 @@ import { collection, onSnapshot, orderBy, query, updateDoc, doc, serverTimestamp
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { hasPermission } from '@/lib/rbac';
+import { createAdminLog } from '@/lib/adminLogs';
 
 type PaymentItem = {
   id: string;
@@ -35,7 +37,7 @@ export default function AdminPaymentsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = hasPermission(profile, 'admin.payments.review');
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [error, setError] = useState('');
@@ -65,6 +67,11 @@ export default function AdminPaymentsScreen() {
     setUpdatingId(id);
     try {
       await updateDoc(doc(db, 'payments', id), { status, reviewed_at: serverTimestamp() });
+      await createAdminLog(profile, {
+        action: `payment_${status}`,
+        performed_by: profile?.email || profile?.name || 'admin',
+        target_id: id,
+      }).catch(() => {});
     } catch {
       Alert.alert('Update Failed', 'Could not update payment status. Please try again.');
     } finally {

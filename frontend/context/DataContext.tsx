@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+import { dispatchNotification } from '@/lib/dispatchNotification';
 import { createRoleNotification } from '@/lib/notifications';
 
 export type Course = {
@@ -663,13 +664,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         reviewed_at: serverTimestamp(),
         updated_at: serverTimestamp(),
       }));
-      await withTimeout(addDoc(collection(db, 'notifications'), {
+      await dispatchNotification({
+        channel: 'assignments',
+        event: 'assignment_posted',
         title: 'Assignment Reviewed',
-        message: 'Your assignment has been reviewed. Open the lesson to view feedback and marks.',
-        user_id: target.user_id,
-        category: 'assignment_reviewed',
-        created_at: serverTimestamp(),
-      })).catch(() => {});
+        body: 'Your assignment has been reviewed. Open the lesson to view feedback and marks.',
+        recipientIds: [target.user_id],
+        dedupeId: `assignment_reviewed:${params.submissionId}`,
+      }).catch(() => {});
       await fetchLearning();
       return true;
     } catch (err: any) {

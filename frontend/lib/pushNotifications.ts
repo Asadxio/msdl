@@ -183,6 +183,7 @@ async function requestBackendPush(payload: {
 }
 
 export async function sendPushToUserIds(userIds: string[], payload: PushPayload): Promise<void> {
+  if (__DEV__) console.warn('Deprecated notification path. Use dispatchNotification.');
   if (userIds.length === 0) return;
   await requestBackendPush({
     user_ids: Array.from(new Set(userIds)),
@@ -193,6 +194,7 @@ export async function sendPushToUserIds(userIds: string[], payload: PushPayload)
 }
 
 export async function sendPushToAllUsers(payload: PushPayload): Promise<void> {
+  if (__DEV__) console.warn('Deprecated notification path. Use dispatchNotification.');
   await requestBackendPush({
     send_to_all: true,
     title: payload.title,

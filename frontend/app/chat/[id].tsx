@@ -12,7 +12,7 @@ import {
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { sendPushToUserIds } from '@/lib/pushNotifications';
+import { dispatchNotification } from '@/lib/dispatchNotification';
 import { EmptyState, ScalePressable, SkeletonCard } from '@/components/ui';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -407,10 +407,14 @@ export default function ChatDetailScreen() {
       const recipientIds = participants.filter((uid) => uid !== user.uid);
       if (recipientIds.length > 0) {
         const pushDedupeId = `chat:${id}:${clientId}`;
-        await sendPushToUserIds(recipientIds, {
+        await dispatchNotification({
+          channel: 'chat',
+          event: 'chat_message',
           title: profile?.name || 'New message',
           body: msg,
-          data: { type: 'chat_message', chat_id: id, push_dedupe_id: pushDedupeId },
+          recipientIds,
+          data: { chat_id: id },
+          dedupeId: pushDedupeId,
         }).catch(() => {});
       }
     } catch (error: unknown) {

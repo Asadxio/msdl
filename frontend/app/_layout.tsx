@@ -6,6 +6,8 @@ import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
 import { initPushNotifications, registerDevicePushToken, requestNotificationPermission } from '@/lib/pushNotifications';
+import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
+import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
@@ -91,27 +93,45 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const deliveredDedup = new Set<string>();
+      const markDeliveredFromNotification = (notification: Notifications.Notification | null) => {
+        if (!notification || !user?.uid) return;
+        const data = (notification.request.content.data || {}) as any;
+        const dedupe = String(data?.push_dedupe_id || notification.request.identifier || '').trim();
+        if (!dedupe || deliveredDedup.has(dedupe)) return;
+        deliveredDedup.add(dedupe);
+        void markNotificationDelivered(dedupe, user.uid).catch(() => {});
+      };
+      const openFromResponse = (response: Notifications.NotificationResponse | null) => {
+        if (!response) return;
         try {
           const data = (response.notification.request.content.data || {}) as any;
-          console.log('[Notifications] notification response received', data);
-          if (data?.chat_id) {
-            router.push(`/chat/${data.chat_id}`);
-          } else if (data?.live_class_id) {
-            router.push({ pathname: "/live-class/[id]", params: { id: String(data.live_class_id) } });
-          } else if (data?.call_id) {
-            router.push({ pathname: "/call/[id]", params: { id: String(data.call_id) } });
+          const dedupe = String(data?.push_dedupe_id || response.notification.request.identifier || '').trim();
+          if (dedupe && dedupeNotificationEvent(dedupe)) return;
+          const route = resolveRouteFromNotificationData(data || {});
+          if (!route) return;
+          if (dedupe && user?.uid) {
+            void markNotificationOpened(dedupe, user.uid, route).catch(() => {});
           }
+          router.push(route as never);
         } catch (error) {
           console.log('[Notifications] response handler ERROR', error);
         }
+      };
+      const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
+        markDeliveredFromNotification(notification);
       });
-      return () => sub.remove();
+      const sub = Notifications.addNotificationResponseReceivedListener((response) => openFromResponse(response));
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response?.notification) markDeliveredFromNotification(response.notification);
+        openFromResponse(response);
+      }).catch(() => {});
+      return () => { sub.remove(); receivedSub.remove(); };
     } catch (error) {
       console.log('[Notifications] addNotificationResponseReceivedListener ERROR', error);
       return () => {};
     }
-  }, [router]);
+  }, [router, user?.uid]);
 
   if (authLoading) {
     return (

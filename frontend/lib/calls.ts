@@ -1,7 +1,7 @@
-import { addDoc, collection, doc, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, type Unsubscribe } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, type Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { sendPushToUserIds } from '@/lib/pushNotifications';
 import { AGORA_APP_ID, getAgoraUid } from '@/lib/liveClasses';
+import { dispatchNotification } from '@/lib/dispatchNotification';
 
 export type CallState = 'initiating' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'failed' | 'ended' | 'declined' | 'missed';
 
@@ -20,7 +20,19 @@ export type CallSession = {
   callee_last_seen?: number;
   finalized_at?: { toDate?: () => Date } | null;
   termination_reason?: 'missed' | 'expired' | 'reconnect_timeout' | 'heartbeat_timeout' | 'remote_end' | 'local_end' | 'network_failure' | '';
+  cleanup_reason?: string;
 };
+export type CallFailureCategory =
+  | 'token_failure'
+  | 'rtc_disconnect'
+  | 'reconnect_timeout'
+  | 'heartbeat_timeout'
+  | 'remote_end'
+  | 'local_end'
+  | 'permission_denied'
+  | 'engine_init_failure'
+  | 'join_failure'
+  | 'unknown';
 
 const CALL_TRANSITIONS: Record<CallState, CallState[]> = {
   initiating: ['ringing', 'failed', 'ended'],
@@ -57,6 +69,7 @@ export function subscribeCallSession(callId: string, cb: (call: CallSession | nu
       callee_last_seen: Number(d.callee_last_seen || 0) || undefined,
       finalized_at: d.finalized_at || null,
       termination_reason: String(d.termination_reason || '') as CallSession['termination_reason'],
+      cleanup_reason: String(d.cleanup_reason || ''),
     });
   }, () => cb(null));
 }
@@ -88,11 +101,15 @@ export async function createOutgoingCall(calleeId: string, mode: 'audio' | 'vide
     created_at: serverTimestamp(),
     updated_at: serverTimestamp(),
   });
-  await addDoc(collection(db, 'notifications'), {
-    user_id: calleeId, category: 'incoming_call', title: 'Incoming call', message: mode === 'video' ? 'Video call incoming' : 'Voice call incoming',
-    data: { type: 'incoming_call', call_id: callRef.id }, created_at: serverTimestamp(),
+  await dispatchNotification({
+    channel: 'calls',
+    event: 'call_incoming',
+    title: 'Incoming call',
+    body: mode === 'video' ? 'Video call incoming' : 'Voice call incoming',
+    recipientIds: [calleeId],
+    data: { call_id: callRef.id },
+    dedupeId: `call_incoming:${callRef.id}`,
   }).catch(() => {});
-  await sendPushToUserIds([calleeId], { title: 'Incoming call', body: mode === 'video' ? 'Video call incoming' : 'Voice call incoming', data: { type: 'incoming_call', call_id: callRef.id } }).catch(() => {});
   return callRef.id;
 }
 
@@ -186,4 +203,19 @@ export function evaluateCallTimeout(call: CallSession): { nextState: CallState; 
     return { nextState: 'ended', reason: 'heartbeat_stale' };
   }
   return null;
+}
+
+export function classifyCallFailure(reason: string): CallFailureCategory {
+  const normalized = String(reason || '').toLowerCase();
+  if (!normalized) return 'unknown';
+  if (normalized.includes('token')) return 'token_failure';
+  if (normalized.includes('permission')) return 'permission_denied';
+  if (normalized.includes('heartbeat')) return 'heartbeat_timeout';
+  if (normalized.includes('reconnect')) return 'reconnect_timeout';
+  if (normalized.includes('remote_end')) return 'remote_end';
+  if (normalized.includes('local_end')) return 'local_end';
+  if (normalized.includes('engine')) return 'engine_init_failure';
+  if (normalized.includes('join')) return 'join_failure';
+  if (normalized.includes('disconnect') || normalized.includes('network')) return 'rtc_disconnect';
+  return 'unknown';
 }

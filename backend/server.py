@@ -18,6 +18,15 @@ from fastapi import HTTPException, Header
 from firebase_admin import auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
 import firebase_admin
 from agora_token_builder import RtcTokenBuilder
+from services.provider_receipt_normalizer import normalize_expo_receipt_status
+from services.push_receipt_ingestion import poll_push_receipts
+from services.notification_aggregation import aggregate_notification_health
+from services.provider_router import route_tokens
+from services.token_health_engine import update_token_registry
+from services.fanout_worker import process_queue_once
+from services.stale_lease_reclaimer import reclaim_stale_leases
+from services.worker_scheduler import run_scheduler_tick
+from services.provider_weight_engine import update_provider_weight
 
 
 ROOT_DIR = Path(__file__).parent
@@ -144,6 +153,7 @@ class PushSendRequest(BaseModel):
     data: dict | None = None
     user_ids: list[str] | None = None
     send_to_all: bool = False
+    priority: int = 5
 
 
 class LiveClassTokenRequest(BaseModel):
@@ -155,6 +165,24 @@ class LiveClassRecordingRequest(BaseModel):
 
 class CallTokenRequest(BaseModel):
     call_id: str
+
+
+class QueueEnqueueRequest(BaseModel):
+    dedupe_id: str
+    event: str
+    channel: str
+    payload: dict
+    recipients: list[str] = []
+    priority: int = 5
+    max_attempts: int = 5
+    scheduled_at: int | None = None
+    region: str = "global"
+    routing_zone: str = "default"
+    canary_percentage: int = 0
+    experiment_id: str = ""
+class CallCleanupRequest(BaseModel):
+    call_id: str
+    cleanup_reason: str = "scheduler_stale_timeout"
 
 
 class StatusReactRequest(BaseModel):
@@ -271,6 +299,15 @@ def _agora_auth_headers() -> dict[str, str]:
     return {"Authorization": f"Basic {auth}", "Content-Type": "application/json"}
 
 
+def _is_call_finalized(status: str) -> bool:
+    return status in {"ended", "declined", "missed", "failed"}
+
+
+def _normalize_cleanup_reason(reason: str) -> str:
+    cleaned = str(reason or "").strip().lower().replace(" ", "_")
+    return cleaned[:64] if cleaned else "scheduler_stale_timeout"
+
+
 @api_router.post("/live-ops/event")
 async def ingest_live_ops_event(payload: LiveOpsEventRequest):
     data = payload.dict()
@@ -376,6 +413,15 @@ def _collect_tokens(user_ids: list[str]) -> tuple[list[str], list[str], dict[str
     return _dedupe(fcm_tokens), _dedupe(expo_tokens), token_owners
 
 
+def _token_platform(token: str) -> str:
+    t = str(token or "")
+    if t.startswith("ExponentPushToken[") or t.startswith("ExpoPushToken["):
+        return "expo"
+    if ":" in t and len(t) > 80:
+        return "android"
+    return "ios"
+
+
 def _remove_token_from_users(token: str, owners: dict[str, list[str]], field: str) -> None:
     if firebase_db is None or not token:
         return
@@ -405,7 +451,7 @@ def _chunked(values: list, size: int):
         yield values[index:index + size]
 
 
-def _send_expo_push(tokens: list[str], payload: PushSendRequest, token_owners: dict[str, list[str]]) -> dict:
+def _send_expo_push(tokens: list[str], payload: PushSendRequest, token_owners: dict[str, list[str]], dedupe_id: str = "") -> dict:
     valid_tokens = [token for token in tokens if token.startswith("ExponentPushToken[") or token.startswith("ExpoPushToken[")]
     invalid_tokens = [token for token in tokens if token not in valid_tokens]
     for token in invalid_tokens:
@@ -442,6 +488,18 @@ def _send_expo_push(tokens: list[str], payload: PushSendRequest, token_owners: d
             if status == "ok" and ticket.get("id"):
                 sent += 1
                 receipt_ids.append(ticket["id"])
+                if firebase_db is not None and dedupe_id:
+                    owners = token_owners.get(message["to"], [])
+                    for owner_uid in owners:
+                        firebase_db.collection("notification_provider_receipts").document(f"{ticket['id']}:{owner_uid}").set({
+                            "provider": "expo",
+                            "provider_ticket_id": ticket["id"],
+                            "dedupe_id": dedupe_id,
+                            "recipient_id": owner_uid,
+                            "resolved": False,
+                            "sent_at_ms": int(time.time() * 1000),
+                            "created_at": admin_firestore.SERVER_TIMESTAMP,
+                        }, merge=True)
                 continue
             failed += 1
             error = ((ticket.get("details") or {}).get("error") or "")
@@ -520,7 +578,7 @@ async def issue_call_token(payload: CallTokenRequest, authorization: str | None 
         raise HTTPException(status_code=404, detail="Call not found")
     call_data = call_snap.to_dict() or {}
     status = str(call_data.get("status") or "")
-    if status in {"ended", "declined", "missed", "failed"}:
+    if _is_call_finalized(status):
         raise HTTPException(status_code=409, detail="Call already finalized")
     caller_id = str(call_data.get("caller_id") or "")
     callee_id = str(call_data.get("callee_id") or "")
@@ -541,6 +599,45 @@ async def issue_call_token(payload: CallTokenRequest, authorization: str | None 
         "agora_uid": agora_uid,
         "channel_name": channel_name,
     }
+
+
+@api_router.post("/call/cleanup")
+async def cleanup_call(payload: CallCleanupRequest, authorization: str | None = Header(default=None)):
+    uid, role = _verify_firebase_request(authorization)
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    if role not in {"admin", "teacher"}:
+        raise HTTPException(status_code=403, detail="Admin/teacher access required")
+    call_id = str(payload.call_id or "").strip()
+    if not call_id:
+        raise HTTPException(status_code=400, detail="call_id is required")
+    reason = _normalize_cleanup_reason(payload.cleanup_reason)
+    call_ref = firebase_db.collection("calls").document(call_id)
+    tx = firebase_db.transaction()
+
+    @admin_firestore.transactional
+    def _apply(transaction):
+        snap = call_ref.get(transaction=transaction)
+        if not snap.exists:
+            return {"ok": True, "changed": False, "state": "missing"}
+        data = snap.to_dict() or {}
+        status = str(data.get("status") or "")
+        if data.get("finalized_at") or _is_call_finalized(status):
+            return {"ok": True, "changed": False, "state": status or "finalized"}
+        next_state = "missed" if status in {"ringing", "initiating", "connecting"} else "ended"
+        transaction.update(call_ref, {
+            "status": next_state,
+            "finalized_at": admin_firestore.SERVER_TIMESTAMP,
+            "updated_at": admin_firestore.SERVER_TIMESTAMP,
+            "termination_reason": "heartbeat_timeout" if "heartbeat" in reason else "network_failure",
+            "cleanup_reason": reason,
+            "cleanup_source": "backend_scheduler",
+            "cleanup_by": uid,
+        })
+        return {"ok": True, "changed": True, "state": next_state}
+    result = _apply(tx)
+    logger.info("CALL_CLEANUP %s", json.dumps({"call_id": call_id, "result": result, "reason": reason}, ensure_ascii=False))
+    return result
 
 
 @api_router.post("/live-class/recording/start")
@@ -772,6 +869,9 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
             raise HTTPException(status_code=403, detail="Non-admin push is restricted to chat and live-class notifications")
 
     tokens, expo_tokens, token_owners = _collect_tokens(target_user_ids)
+    grouped = route_tokens(tokens + expo_tokens)
+    if grouped.get("unknown"):
+        logger.warning("[provider_health_warning] unknown_token_format=%s", len(grouped.get("unknown") or []))
     if not tokens and not expo_tokens:
         return {"ok": True, "sent": 0}
 
@@ -783,7 +883,7 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
             tokens=tokens,
         )
         result = messaging.send_each_for_multicast(message)
-    expo_result = _send_expo_push(expo_tokens, payload, token_owners)
+    expo_result = _send_expo_push(expo_tokens, payload, token_owners, dedupe_id)
     stale_codes = {
         "messaging/registration-token-not-registered",
         "messaging/invalid-registration-token",
@@ -792,8 +892,14 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
     if result:
         for idx, response in enumerate(result.responses):
             if response.success:
+                if idx < len(tokens):
+                    token = tokens[idx]
+                    update_token_registry(firebase_db, logger, token, "fcm", _token_platform(token), True)
                 continue
             code = getattr(response.exception, "code", "") or ""
+            if idx < len(tokens):
+                token = tokens[idx]
+                update_token_registry(firebase_db, logger, token, "fcm", _token_platform(token), False, code)
             if code in stale_codes and idx < len(tokens):
                 stale_tokens.append(tokens[idx])
     if stale_tokens:
@@ -806,6 +912,130 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
         "stale_removed": len(stale_tokens) + expo_result["stale_removed"],
         "expo_retried": expo_result["retried"],
     }
+
+
+@api_router.post("/push/enqueue")
+async def enqueue_push(payload: QueueEnqueueRequest, authorization: str | None = Header(default=None)):
+    uid, _ = _verify_firebase_request(authorization)
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Push service not configured")
+    now_ms = int(time.time() * 1000)
+    queue_id = str(uuid.uuid4())
+    firebase_db.collection("notification_dispatch_queue").document(queue_id).set({
+        "queue_id": queue_id,
+        "dedupe_id": str(payload.dedupe_id or "").strip(),
+        "event": str(payload.event or "").strip(),
+        "channel": str(payload.channel or "").strip(),
+        "payload": payload.payload or {},
+        "recipients": list(dict.fromkeys(payload.recipients or [])),
+        "provider_targets": {},
+        "status": "queued",
+        "priority": max(1, min(10, int(payload.priority or 5))),
+        "attempts": 0,
+        "max_attempts": max(1, min(12, int(payload.max_attempts or 5))),
+        "created_at": now_ms,
+        "scheduled_at": int(payload.scheduled_at or now_ms),
+        "processing_started_at": 0,
+        "completed_at": 0,
+        "failed_at": 0,
+        "lease_owner": "",
+        "lease_expires_at": 0,
+        "backoff_until": 0,
+        "requested_by": uid,
+        "region": str(payload.region or "global"),
+        "routing_zone": str(payload.routing_zone or "default"),
+        "canary_percentage": max(0, min(100, int(payload.canary_percentage or 0))),
+        "experiment_id": str(payload.experiment_id or ""),
+    }, merge=True)
+    logger.info("[queue_job_enqueued] queue_id=%s event=%s channel=%s recipients=%s priority=%s", queue_id, payload.event, payload.channel, len(payload.recipients or []), payload.priority)
+    return {"ok": True, "queue_id": queue_id}
+
+
+@api_router.post("/jobs/token-health-maintenance")
+async def token_health_maintenance_job(authorization: str | None = Header(default=None)):
+    _, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    now_ms = int(time.time() * 1000)
+    docs = list(firebase_db.collection("notification_token_registry").limit(2000).stream())
+    updated = 0
+    for d in docs:
+        data = d.to_dict() or {}
+        last_seen = int(data.get("last_seen_at") or 0)
+        status = str(data.get("token_status") or "active")
+        if status in {"invalid", "reactivated"}:
+            continue
+        age_days = (now_ms - last_seen) / (24 * 3600 * 1000) if last_seen else 999
+        if age_days > 45:
+            d.reference.set({"token_status": "stale", "invalidated_at": now_ms}, merge=True)
+            updated += 1
+    return {"ok": True, "updated": updated, "checked": len(docs)}
+
+
+@api_router.post("/jobs/poll-push-receipts")
+async def poll_push_receipts_job(authorization: str | None = Header(default=None)):
+    _, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return poll_push_receipts(firebase_db, logger, normalize_expo_receipt_status)
+
+
+@api_router.post("/jobs/aggregate-notification-health")
+async def aggregate_notification_health_job(authorization: str | None = Header(default=None)):
+    _, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return aggregate_notification_health(firebase_db, logger)
+
+
+@api_router.post("/jobs/process-notification-queue")
+async def process_notification_queue_job(authorization: str | None = Header(default=None)):
+    _, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return process_queue_once(firebase_db, logger)
+
+
+@api_router.post("/jobs/reclaim-stale-leases")
+async def reclaim_stale_leases_job(authorization: str | None = Header(default=None)):
+    _, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return reclaim_stale_leases(firebase_db, logger)
+
+
+@api_router.post("/jobs/run-worker-scheduler")
+async def run_worker_scheduler_job(authorization: str | None = Header(default=None)):
+    _, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return run_scheduler_tick(firebase_db, logger)
+
+
+@api_router.post("/jobs/update-routing-weights")
+async def update_routing_weights_job(authorization: str | None = Header(default=None)):
+    _, role = _verify_firebase_request(authorization)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    providers = ["expo", "fcm", "apns"]
+    out = {}
+    for p in providers:
+        breaker = firebase_db.collection("provider_circuit_breakers").document(f"provider:{p}").get().to_dict() or {}
+        state = str(breaker.get("state") or "closed")
+        latency = int(breaker.get("last_latency_ms") or 0)
+        metrics = {
+            "health_score": 0.4 if state == "open" else 0.7 if state == "half_open" else 1.0,
+            "latency_score": 0.5 if latency > 2500 else 0.8 if latency > 1200 else 1.0,
+            "throttling_score": 0.8,
+            "outage_score": 0.4 if state == "open" else 1.0,
+            "queue_pressure_score": 0.9,
+        }
+        out[p] = update_provider_weight(firebase_db, logger, p, metrics)
+    return {"ok": True, "providers": out}
 
 
 @api_router.post("/jobs/cleanup-expired-status")
