@@ -1,6 +1,5 @@
 import type { UserProfile } from '@/context/AuthContext';
-
-export type AppRole = 'super_admin' | 'admin' | 'moderator' | 'teacher' | 'assistant_teacher' | 'student';
+import { normalizeRole, type AppRole } from '@/lib/roles';
 export type Permission =
   | 'admin.dashboard.read'
   | 'admin.users.manage'
@@ -29,15 +28,6 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
   student: [],
 };
 
-export function normalizeRole(role: string | undefined): AppRole {
-  const r = String(role || '').toLowerCase();
-  if (r === 'super_admin') return 'super_admin';
-  if (r === 'admin') return 'admin';
-  if (r === 'moderator') return 'moderator';
-  if (r === 'assistant_teacher') return 'assistant_teacher';
-  if (r === 'teacher') return 'teacher';
-  return 'student';
-}
 
 export function hasPermission(profile: UserProfile | null, permission: Permission): boolean {
   if (!profile || profile.status !== 'approved') return false;

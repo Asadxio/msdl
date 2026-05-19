@@ -6,13 +6,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, deleteDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { UserProfile, useAuth } from '@/context/AuthContext';
 import { createAdminLog } from '@/lib/adminLogs';
 import { hasPermission } from '@/lib/rbac';
-import { bulkUpdateUserStatus } from '@/lib/adminOps';
+import { bulkUpdateUserStatus, updateUserRoleSecure } from '@/lib/adminOps';
+import { APP_ROLES, canAssignRole, normalizeRole, type AppRole } from '@/lib/roles';
+import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 
 type UserWithId = UserProfile & { id: string };
 
@@ -27,21 +29,38 @@ export default function AdminUsersScreen() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [cursor, setCursor] = useState<any>(null);
+  const [roleFilter, setRoleFilter] = useState<'all' | AppRole>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | UserWithId['status']>('all');
+  const [fetching, setFetching] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (direction: 'next' | 'prev' | 'reset' = 'reset') => {
+    if (fetching) return;
+    setFetching(true);
+    if (direction === 'reset') setLoading(true);
     try {
-      const snap = await getDocs(collection(db, 'users'));
-      const data: UserWithId[] = [];
-      snap.forEach((d) => { data.push({ id: d.id, ...d.data() } as UserWithId); });
-      setUsers(data.sort((a, b) => (a.status === 'pending' ? -1 : 1)));
+      const extra: any[] = [];
+      if (roleFilter !== 'all') extra.push(where('role', '==', roleFilter));
+      if (statusFilter !== 'all') extra.push(where('status', '==', statusFilter));
+      const page = await fetchCursorPage<UserWithId>({
+        ref: collection(db, 'users'),
+        orderField: 'created_at',
+        orderDirection: 'desc',
+        pageSize: ADMIN_DEFAULT_PAGE_SIZE,
+        cursor: direction === 'reset' ? null : cursor,
+        direction: direction === 'reset' ? 'next' : direction,
+        extra,
+      });
+      setUsers(page.items.map((u) => ({ ...u, role: normalizeRole((u as any).role, 'admin.users.list') })) as UserWithId[]);
+      setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
     } catch { setUsers([]); }
     setLoading(false);
+    setFetching(false);
   };
 
   useEffect(() => {
@@ -50,7 +69,7 @@ export default function AdminUsersScreen() {
       return;
     }
     if (isAdmin) fetchUsers();
-  }, [profile, isAdmin, router]);
+  }, [profile, isAdmin, router, roleFilter, statusFilter]);
 
   const updateUser = async (uid: string, updates: Partial<UserProfile>) => {
     try {
@@ -142,11 +161,34 @@ export default function AdminUsersScreen() {
   };
 
   const handleToggleRole = (u: UserWithId) => {
-    if (u.role === 'admin') return;
-    const nextRole = u.role === 'student' ? 'teacher' : 'student';
-    Alert.alert('Change Role', `Change ${u.name} to ${nextRole}?`, [
+    const actorRole = normalizeRole(profile?.role, 'admin.users.actor');
+    const currentRole = normalizeRole(u.role, 'admin.users.current');
+    const candidateRoles: AppRole[] = APP_ROLES.filter((role) => role !== currentRole && canAssignRole(actorRole, role));
+    if (!candidateRoles.length) {
+      Alert.alert('Not Allowed', 'You cannot change this user's role.');
+      return;
+    }
+    const nextRole = candidateRoles.includes('teacher') ? 'teacher' : candidateRoles[0];
+    Alert.alert('Change Role', `Change ${u.name} from ${currentRole} to ${nextRole}?`, [
       { text: 'Cancel' },
-      { text: 'Update', onPress: () => updateUser(u.id, { role: nextRole as any }) },
+      {
+        text: 'Update',
+        onPress: async () => {
+          try {
+            await updateUserRoleSecure({
+              actorProfile: profile,
+              actorId: profile?.email || profile?.name || 'admin',
+              targetUserId: u.id,
+              previousRole: u.role,
+              nextRole,
+            });
+            await createAdminLog(profile, { action: 'user_role_update', performed_by: profile?.email || profile?.name || 'admin', target_id: u.id, details: `${currentRole}->${nextRole}` });
+            await fetchUsers();
+          } catch (err: any) {
+            Alert.alert('Error', err?.message || 'Failed to update role');
+          }
+        },
+      },
     ]);
   };
 
@@ -160,7 +202,8 @@ export default function AdminUsersScreen() {
     const rc = ROLE_COLORS[item.role] || ROLE_COLORS.student;
     return (
       <View style={styles.userCard} testID={`user-card-${item.id}`}>
-        {canBulk ? (
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingBottom: 8 }}><TouchableOpacity style={styles.roleBtn} onPress={() => setRoleFilter(roleFilter === 'all' ? 'student' : 'all')}><Text style={styles.roleBtnText}>Role: {roleFilter}</Text></TouchableOpacity><TouchableOpacity style={styles.roleBtn} onPress={() => setStatusFilter(statusFilter === 'all' ? 'pending' : 'all')}><Text style={styles.roleBtnText}>Status: {statusFilter}</Text></TouchableOpacity></View>
+      {canBulk ? (
           <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8 }} onPress={() => toggleSelected(item.id)}>
             <Ionicons name={selectedIds.includes(item.id) ? 'checkbox' : 'square-outline'} size={20} color={COLORS.primary} />
           </TouchableOpacity>

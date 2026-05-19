@@ -5,25 +5,52 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function roleOf(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) ? userDoc(uid).role : 'student';
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && roleOf(request.auth.uid) == 'super_admin' && userDoc(request.auth.uid).status == 'approved';
+    }
+
+    function hasRole(uid, roles) {
+      return exists(/databases/$(database)/documents/users/$(uid)) && roleOf(uid) in roles;
+    }
+
+    function isModerator() {
+      return isSignedIn() && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin']) && userDoc(request.auth.uid).status == 'approved';
+    }
+
     function isAdmin() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+        && roleOf(request.auth.uid) in ['admin', 'super_admin']
+        && userDoc(request.auth.uid).status == 'approved';
     }
 
     function isTeacherOrAdmin() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'assistant_teacher', 'admin', 'super_admin', 'moderator']
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+        && roleOf(request.auth.uid) in ['teacher', 'assistant_teacher', 'admin', 'super_admin', 'moderator']
+        && userDoc(request.auth.uid).status == 'approved';
+    }
+
+
+
+    function isModeratorOrAbove() {
+      return isModerator();
     }
 
     function isStudent() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student'
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+        && roleOf(request.auth.uid) == 'student'
+        && userDoc(request.auth.uid).status == 'approved';
     }
 
     function isSelf(uid) {
@@ -54,7 +81,10 @@ service cloud.firestore {
         && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
         && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
-        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp);
+        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
+        && (request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
+        && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
+        && ((request.resource.data.role == 'assistant_teacher') ? roleOf(request.auth.uid) in ['admin', 'super_admin'] : true);
     }
 
     function isValidUserUpdateByAdmin() {
@@ -65,14 +95,17 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.email is string
-        && request.resource.data.role in ['student', 'teacher', 'admin']
+        && request.resource.data.role in ['student', 'teacher', 'assistant_teacher', 'moderator', 'admin', 'super_admin']
         && request.resource.data.status in ['pending', 'approved', 'deactivated', 'rejected']
         && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
         && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
         && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
         && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
-        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp);
+        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
+        && (request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
+        && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
+        && ((request.resource.data.role == 'assistant_teacher') ? isAdmin() : true);
     }
 
     function isValidSelfUserMetadataUpdate(uid) {
@@ -92,7 +125,10 @@ service cloud.firestore {
         && (!('fcm_token_updated_at' in request.resource.data) || request.resource.data.fcm_token_updated_at is timestamp)
         && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
         && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
-        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp);
+        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
+        && (request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
+        && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
+        && ((request.resource.data.role == 'assistant_teacher') ? isAdmin() : true);
     }
 
     function isValidReferralCountIncrement() {
@@ -605,7 +641,7 @@ service cloud.firestore {
         && request.resource.data.user_id == userId
         && request.resource.data.agora_uid is number
         && request.resource.data.name is string
-        && request.resource.data.role in ['student', 'teacher', 'admin']
+        && request.resource.data.role in ['student', 'teacher', 'assistant_teacher', 'moderator', 'admin', 'super_admin']
         && request.resource.data.joined is bool
         && request.resource.data.audio_enabled is bool
         && request.resource.data.video_enabled is bool
@@ -649,7 +685,7 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow create, update: if (isSelf(uid)
           && request.resource.data.uid == uid
-          && request.resource.data.role in ['student', 'teacher', 'admin']
+          && request.resource.data.role in ['student', 'teacher', 'assistant_teacher', 'moderator', 'admin', 'super_admin']
           && request.resource.data.status in ['approved', 'pending', 'deactivated', 'rejected']
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
@@ -960,9 +996,51 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+
+
+    match /security_events_immutable/{id} {
+      allow read: if isAdmin();
+      allow create: if false;
+      allow update, delete: if false;
+    }
     // Deny all other document access by default.
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    match /moderation_reports/{id} {
+      allow read: if isModeratorOrAbove() || (isSignedIn() && resource.data.reporter_id == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.reporter_id == request.auth.uid
+        && request.resource.data.state == 'pending'
+        && request.resource.data.severity in ['low','medium','high','critical']
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.created_at_ms is number;
+      allow update: if isModeratorOrAbove()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state','reviewed_at','reviewed_by','moderation_notes','priority','actioned_at','actioned_by','actioned_at_ms'])
+        && !(resource.data.accused_role in ['admin','super_admin'] && roleOf(request.auth.uid) == 'moderator');
+      allow delete: if false;
+    }
+
+    match /moderation_evidence/{id} {
+      allow read: if isModeratorOrAbove();
+      allow create: if isSignedIn() && request.resource.data.reporter_id == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /moderation_actions/{id} {
+      allow read: if isModeratorOrAbove();
+      allow create: if isModeratorOrAbove()
+        && request.resource.data.actor_uid == request.auth.uid
+        && request.resource.data.created_at is timestamp
+        && !(request.resource.data.target_role in ['admin','super_admin'] && roleOf(request.auth.uid) == 'moderator');
+      allow update, delete: if false;
+    }
+
+    match /moderation_analytics_daily/{id} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
     }
   }
 }

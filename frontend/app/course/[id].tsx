@@ -218,6 +218,20 @@ export default function CourseDetailScreen() {
     }
   };
 
+
+  useEffect(() => {
+    if (!user?.uid || !activeAssignmentId || !submissionModalVisible) return;
+    const t = setTimeout(() => {
+      saveAssignmentDraft(user.uid, {
+        assignment_id: activeAssignmentId,
+        text: submissionText,
+        external_file_url: externalFileUrl,
+        updated_at_ms: Date.now(),
+      }).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [user?.uid, activeAssignmentId, submissionText, externalFileUrl, submissionModalVisible]);
+
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -333,7 +347,7 @@ export default function CourseDetailScreen() {
     }
   };
 
-  const openSubmissionModal = (assignmentId: string) => {
+  const openSubmissionModal = async (assignmentId: string) => {
     try {
       if (!assignmentId) return;
       const current = getSubmissionForAssignment(assignmentId);
@@ -345,6 +359,13 @@ export default function CourseDetailScreen() {
           : null,
       );
       setExternalFileUrl(current?.file_url || "");
+      if (user?.uid) {
+        const draft = await loadAssignmentDraft(user.uid, assignmentId).catch(() => null);
+        if (draft) {
+          setSubmissionText(draft.text || current?.text_answer || "");
+          setExternalFileUrl(draft.external_file_url || current?.file_url || "");
+        }
+      }
       setSubmissionModalVisible(true);
     } catch (e) {
       console.log("[CourseDetail] openSubmissionModal ERROR:", e);
@@ -851,9 +872,7 @@ export default function CourseDetailScreen() {
                                           ) : null}
                                           <TouchableOpacity
                                             style={styles.assignmentActionBtn}
-                                            onPress={() =>
-                                              openSubmissionModal(assignment.id)
-                                            }
+                                            onPress={() => { void openSubmissionModal(assignment.id); }}
                                           >
                                             <Text
                                               style={

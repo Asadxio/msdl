@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
 import {
   View, Text, StyleSheet, FlatList, StatusBar, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, Modal,
@@ -6,12 +7,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where,
+  collection, doc, limit, orderBy, query, updateDoc, where,
   deleteDoc,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import type { AppRole } from '@/lib/roles';
 import { createNotificationAsAdmin } from '@/lib/notifications';
 import { FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
 
@@ -24,7 +26,7 @@ type NotificationItem = {
   sound?: 'default';
   read?: Record<string, boolean>;
   target_user_ids?: string[];
-  target_roles?: ('student' | 'teacher' | 'admin')[];
+  target_roles?: AppRole[];
   created_at?: { toDate?: () => Date };
 };
 
@@ -71,7 +73,8 @@ export default function NotificationsScreen() {
       orderBy('created_at', 'desc'),
       limit(50),
     );
-    const unsub = onSnapshot(q, (snap) => {
+    const lkey = stableQueryKey(['notifications', user?.uid || '', profile?.role || '']);
+    const unsub = subscribeDeduped(lkey, q as any, (snap) => {
       const next: NotificationItem[] = [];
       snap.forEach((d) => {
         const safe = d.data() as any;

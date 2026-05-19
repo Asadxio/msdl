@@ -9,6 +9,8 @@ import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { dispatchNotification } from '@/lib/dispatchNotification';
 import { createRoleNotification } from '@/lib/notifications';
+import { cacheGet, cacheSet } from '@/lib/cacheManager';
+import { perfStart, perfEnd } from '@/lib/performanceMonitor';
 
 export type Course = {
   id: string;
@@ -237,6 +239,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       });
       setBooks(booksData);
+      perfEnd('data.fetchData', t0, { courses: courses.length, teachers: teachers.length });
     } catch (err: unknown) {
       logger.warn('Failed to fetch books:', normalizeFirebaseError(err, 'Failed to fetch books'));
       setBooks([]);
@@ -249,6 +252,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
+      const t0 = perfStart('data.fetchData');
+      const cachedCourses = await cacheGet<Course[]>(COURSES_CACHE_KEY);
+      const cachedTeachers = await cacheGet<Teacher[]>(TEACHERS_CACHE_KEY);
+      if (cachedCourses?.length) setCourses(cachedCourses);
+      if (cachedTeachers?.length) setTeachers(cachedTeachers);
       const coursesSnap = await withTimeout(getDocs(collection(db, 'courses')));
       const coursesData: Course[] = [];
       coursesSnap.forEach((doc) => {
@@ -283,6 +291,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setTeachers(teachersData);
       await AsyncStorage.setItem(COURSES_CACHE_KEY, JSON.stringify(coursesData)).catch(() => {});
       await AsyncStorage.setItem(TEACHERS_CACHE_KEY, JSON.stringify(teachersData)).catch(() => {});
+      perfEnd('data.fetchData', t0, { courses: courses.length, teachers: teachers.length });
     } catch (err: unknown) {
       logger.warn('Firebase fetch failed, using local data:', normalizeFirebaseError(err, 'Failed to fetch data'));
       setError(normalizeFirebaseError(err, 'Failed to fetch data'));

@@ -16,11 +16,12 @@ import {
 import { auth, db } from '@/lib/firebase';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+import { normalizeRole, type AppRole, type OnboardingRole } from '@/lib/roles';
 
 export type UserProfile = {
   name: string;
   email: string;
-  role: 'student' | 'teacher' | 'admin';
+  role: AppRole;
   status: 'pending' | 'approved' | 'deactivated' | 'rejected';
   photo_url?: string;
   avatar?: string;
@@ -34,7 +35,7 @@ type AuthContextType = {
   authLoading: boolean;
   emailVerified: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (name: string, email: string, password: string, role: 'student' | 'teacher', referralCode?: string) => Promise<string | null>;
+  signUp: (name: string, email: string, password: string, role: OnboardingRole, referralCode?: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   resendVerification: () => Promise<string | null>;
@@ -80,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const snap = await getDoc(doc(db, 'users', uid));
       if (snap.exists()) {
-        const nextProfile = snap.data() as UserProfile;
+        const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
         setProfile(nextProfile);
         await AsyncStorage.setItem(getProfileCacheKey(uid), JSON.stringify(nextProfile)).catch(() => {});
       } else {
@@ -92,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const cached = await AsyncStorage.getItem(getProfileCacheKey(uid)).catch(() => null);
       if (cached) {
         try {
-          setProfile(JSON.parse(cached) as UserProfile);
+          setProfile({ ...(JSON.parse(cached) as UserProfile), role: normalizeRole((JSON.parse(cached) as any)?.role, 'auth.cachedProfile') } as UserProfile);
           return;
         } catch {
           // fall back to null profile
@@ -146,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const cachedProfile = await AsyncStorage.getItem(getProfileCacheKey(firebaseUser.uid)).catch(() => null);
         if (cachedProfile) {
           try {
-            setProfile(JSON.parse(cachedProfile) as UserProfile);
+            setProfile({ ...(JSON.parse(cachedProfile) as UserProfile), role: normalizeRole((JSON.parse(cachedProfile) as any)?.role, 'auth.cachedRealtime') } as UserProfile);
             setProfileOffline(true);
           } catch {
             // ignore invalid cached profile
@@ -160,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await firebaseSignOut(auth).catch(() => {});
             return;
           }
-          const nextProfile = snap.data() as UserProfile;
+          const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
           setProfile(nextProfile);
           await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
           await syncPublicProfile(firebaseUser.uid, nextProfile);
@@ -204,7 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (
-    name: string, email: string, password: string, role: 'student' | 'teacher', referralCode?: string
+    name: string, email: string, password: string, role: OnboardingRole, referralCode?: string
   ): Promise<string | null> => {
     // Role protection - only student or teacher allowed
     const safeRole = role === 'teacher' ? 'teacher' : 'student';
