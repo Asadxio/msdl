@@ -1,7 +1,7 @@
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from 'firebase/firestore';
+import { getDocs, query, where, collection } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
-import { sendPushToAllUsers, sendPushToUserIds } from '@/lib/pushNotifications';
+import { dispatchNotification } from '@/lib/dispatchNotification';
 
 export type NotificationPayload = {
   title: string;
@@ -28,29 +28,16 @@ export async function createNotificationAsAdmin(
   const sound = payload.sound || 'default';
   const channel = category === 'class_reminder' ? 'announcements' : 'default';
 
-  await addDoc(collection(db, 'notifications'), {
-    title,
-    message,
-    user_id: userId,
-    category,
-    sound,
-    read: {},
-    created_at: serverTimestamp(),
-  });
-
-  if (userId === 'all') {
-    await sendPushToAllUsers({
-      title: isAnnouncement ? 'New Announcement' : title,
-      body: pushBody,
-      data: { type: category, sound, channel, channelId: channel },
-    }).catch(() => {});
-  } else {
-    await sendPushToUserIds([userId], {
-      title,
-      body: pushBody,
-      data: { type: category, sound, channel, channelId: channel },
-    }).catch(() => {});
-  }
+  await dispatchNotification({
+    channel: 'announcements',
+    event: isAnnouncement ? 'announcement_posted' : 'system_alert',
+    title: isAnnouncement ? 'New Announcement' : title,
+    body: pushBody,
+    recipientIds: userId === 'all' ? [] : [userId],
+    data: { sound, channelId: channel },
+    dedupeId: `admin:${category}:${userId}:${title.toLowerCase().slice(0, 24)}`,
+    sendToAll: userId === 'all',
+  }).catch(() => {});
   return true;
 }
 
@@ -73,21 +60,14 @@ export async function createRoleNotificationAsAdmin(
     const userIds = roleSnapshots.flatMap((snap) => snap.docs.map((d) => d.id)).filter(Boolean);
     const dedupedUserIds = Array.from(new Set(userIds));
     if (dedupedUserIds.length === 0) return false;
-    await addDoc(collection(db, 'notifications'), {
-      title,
-      message,
-      user_id: 'role_targeted',
-      target_roles: uniqueRoles,
-      target_user_ids: dedupedUserIds,
-      category: payload.category || 'notification',
-      sound: payload.sound || 'default',
-      read: {},
-      created_at: serverTimestamp(),
-    });
-    await sendPushToUserIds(dedupedUserIds, {
+    await dispatchNotification({
+      channel: 'announcements',
+      event: payload.category === 'announcement' ? 'announcement_posted' : 'system_alert',
       title,
       body: message,
-      data: { type: payload.category || 'notification', sound: payload.sound || 'default', channel: 'announcements', channelId: 'announcements' },
+      recipientIds: dedupedUserIds,
+      data: { sound: payload.sound || 'default', channelId: 'announcements' },
+      dedupeId: `role_notice:${title.toLowerCase().slice(0, 20)}:${Date.now()}`,
     }).catch(() => {});
     return true;
   } catch (error) {
@@ -113,21 +93,14 @@ export async function createRoleNotification(
     const userIds = roleSnapshots.flatMap((snap) => snap.docs.map((d) => d.id)).filter(Boolean);
     const dedupedUserIds = Array.from(new Set(userIds));
     if (dedupedUserIds.length === 0) return false;
-    await addDoc(collection(db, 'notifications'), {
-      title,
-      message,
-      user_id: 'role_targeted',
-      target_roles: uniqueRoles,
-      target_user_ids: dedupedUserIds,
-      category: payload.category || 'notification',
-      sound: payload.sound || 'default',
-      read: {},
-      created_at: serverTimestamp(),
-    });
-    await sendPushToUserIds(dedupedUserIds, {
+    await dispatchNotification({
+      channel: 'announcements',
+      event: payload.category === 'announcement' ? 'announcement_posted' : 'system_alert',
       title,
       body: message,
-      data: { type: payload.category || 'notification', sound: payload.sound || 'default', channel: 'announcements', channelId: 'announcements' },
+      recipientIds: dedupedUserIds,
+      data: { sound: payload.sound || 'default', channelId: 'announcements' },
+      dedupeId: `role_notice:${title.toLowerCase().slice(0, 20)}:${Date.now()}`,
     }).catch(() => {});
     return true;
   } catch (error) {

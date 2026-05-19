@@ -19,7 +19,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
-import { sendPushToUserIds } from '@/lib/pushNotifications';
+import { dispatchNotification } from '@/lib/dispatchNotification';
 import { DELETE_HEARTBEAT_MS, STALE_HEARTBEAT_MS, heartbeatPayload } from '@/lib/liveClassReliability';
 
 export type LiveClassStatus = 'scheduled' | 'waiting_room' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'cancelled';
@@ -260,21 +260,14 @@ export async function startLiveClass(input: LiveClassCreateInput): Promise<strin
   });
 
   if (studentIds.length > 0) {
-    await addDoc(collection(db, 'notifications'), {
-      title: 'Live Class Started',
-      message: `${input.title || 'Live class'} has started. Join from the app now.`,
-      user_id: 'role_targeted',
-      target_user_ids: studentIds,
-      target_roles: ['student'],
-      category: 'live_class_started',
-      sound: 'default',
-      read: {},
-      created_at: serverTimestamp(),
-    }).catch(() => {});
-    await sendPushToUserIds(studentIds, {
+    await dispatchNotification({
+      channel: 'live_classes',
+      event: 'live_class_started',
       title: 'Live Class Started',
       body: `${input.title || 'Live class'} is live now.`,
-      data: { type: 'live_class_started', live_class_id: ref.id, course_id: input.courseId, channelId: 'announcements' },
+      recipientIds: studentIds,
+      data: { live_class_id: ref.id, course_id: input.courseId },
+      dedupeId: `live_class_started:${ref.id}`,
     }).catch(() => {});
   }
   return ref.id;

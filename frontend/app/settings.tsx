@@ -7,6 +7,8 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
+import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
 const LARGE_TEXT_PREF_KEY = 'settings_large_text';
@@ -14,8 +16,12 @@ const LARGE_TEXT_PREF_KEY = 'settings_large_text';
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [largeText, setLargeText] = useState(false);
+  const [channelPrefs, setChannelPrefs] = useState<Record<NotificationChannel, boolean>>({
+    chat: true, story: true, live_class: true, calls: true, assignments: true, announcements: true, attendance: true, admin: true,
+  });
 
   useEffect(() => {
     const loadPrefs = async () => {
@@ -33,9 +39,28 @@ export default function SettingsScreen() {
     loadPrefs().catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!user?.uid) return;
+    getNotificationPreferences(user.uid).then((prefs) => {
+      setChannelPrefs(prefs.channels);
+      setNotificationsEnabled(Object.values(prefs.channels).some(Boolean));
+    }).catch(() => {});
+  }, [user?.uid]);
+
   const toggleNotifications = async (value: boolean) => {
     setNotificationsEnabled(value);
     await AsyncStorage.setItem(NOTIFICATION_PREF_KEY, value ? 'true' : 'false').catch(() => {});
+    if (user?.uid) {
+      const channels = Object.keys(channelPrefs).reduce((acc, k) => ({ ...acc, [k]: value }), {} as Record<NotificationChannel, boolean>);
+      setChannelPrefs(channels);
+      await updateNotificationPreferences(user.uid, { channels }).catch(() => {});
+    }
+  };
+  const toggleChannel = async (channel: NotificationChannel, value: boolean) => {
+    const next = { ...channelPrefs, [channel]: value };
+    setChannelPrefs(next);
+    setNotificationsEnabled(Object.values(next).some(Boolean));
+    if (user?.uid) await updateNotificationPreferences(user.uid, { channels: next }).catch(() => {});
   };
 
   const toggleLargeText = async (value: boolean) => {
@@ -60,6 +85,12 @@ export default function SettingsScreen() {
           <Text style={styles.rowLabel}>Enable notifications</Text>
           <Switch value={notificationsEnabled} onValueChange={toggleNotifications} />
         </View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Chat</Text><Switch value={channelPrefs.chat} onValueChange={(v) => toggleChannel('chat', v)} /></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Live classes</Text><Switch value={channelPrefs.live_class} onValueChange={(v) => toggleChannel('live_class', v)} /></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Stories</Text><Switch value={channelPrefs.story} onValueChange={(v) => toggleChannel('story', v)} /></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Calls</Text><Switch value={channelPrefs.calls} onValueChange={(v) => toggleChannel('calls', v)} /></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Assignments</Text><Switch value={channelPrefs.assignments} onValueChange={(v) => toggleChannel('assignments', v)} /></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Announcements</Text><Switch value={channelPrefs.announcements} onValueChange={(v) => toggleChannel('announcements', v)} /></View>
       </View>
 
       <View style={styles.section}>

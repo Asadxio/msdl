@@ -13,6 +13,8 @@ import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { createNotificationAsAdmin, createRoleNotificationAsAdmin } from '@/lib/notifications';
 import { isValidHttpsUrl, normalizeMeetUrl } from '@/lib/links';
+import { createAdminLog } from '@/lib/adminLogs';
+import { hasPermission } from '@/lib/rbac';
 
 type CourseItem = {
   id: string;
@@ -61,7 +63,7 @@ export default function ManageAcademicsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = hasPermission(profile, 'admin.academics.manage');
 
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
@@ -225,11 +227,13 @@ export default function ManageAcademicsScreen() {
       setActionLoading(true);
       if (editingCourseId) {
         await updateDoc(doc(db, 'courses', editingCourseId), payload);
+        await createAdminLog(profile, { action: 'course_update', performed_by: profile?.email || profile?.name || 'admin', target_id: editingCourseId, details: payload.name }).catch(() => {});
       } else {
         await addDoc(collection(db, 'courses'), {
           ...payload,
           created_at: serverTimestamp(),
         });
+        await createAdminLog(profile, { action: 'course_create', performed_by: profile?.email || profile?.name || 'admin', details: payload.name }).catch(() => {});
       }
       setCourseForm(INITIAL_COURSE);
       setEditingCourseId(null);

@@ -4,7 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ChannelProfileType, ClientRoleType, RenderModeType, RtcSurfaceView, VideoSourceType, createAgoraRtcEngine, type IRtcEngine, type IRtcEngineEventHandler } from 'react-native-agora';
 import { useAuth } from '@/context/AuthContext';
-import { evaluateCallTimeout, requestCallToken, setCallState, subscribeCallSession, transitionCallState, updateHeartbeat, type CallSession } from '@/lib/calls';
+import { classifyCallFailure, evaluateCallTimeout, requestCallToken, setCallState, subscribeCallSession, transitionCallState, updateHeartbeat, type CallSession } from '@/lib/calls';
+import { trackCallMetric } from '@/lib/callTelemetry';
 
 async function grantPermissions(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
@@ -31,6 +32,11 @@ export default function CallScreen() {
   const mountedRef = useRef(true);
   const lastHeartbeatWriteRef = useRef(0);
   const tokenRetryRef = useRef(0);
+  const callRef = useRef<CallSession | null>(null);
+  const joinStartedAtRef = useRef(0);
+  const reconnectStartedAtRef = useRef(0);
+  const joinedAtRef = useRef(0);
+  const permissionLockRef = useRef(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
 
@@ -46,7 +52,11 @@ export default function CallScreen() {
     try { engineRef.current?.leaveChannel(); } catch {}
     try { engineRef.current?.release(); } catch {}
     engineRef.current = null;
-    if (callId) await setCallState(callId, finalState, { termination_reason: finalState === 'ended' ? 'local_end' : finalState }).catch(() => {});
+    if (callId) {
+      const durationMs = joinedAtRef.current > 0 ? Date.now() - joinedAtRef.current : 0;
+      trackCallMetric('avg_call_duration', callId, { duration_ms: durationMs, ended_as: finalState });
+      await setCallState(callId, finalState, { termination_reason: finalState === 'ended' ? 'local_end' : finalState }).catch(() => {});
+    }
     if (mountedRef.current) router.back();
     releaseLockRef.current = false;
   }, [callId, router]);
@@ -56,11 +66,13 @@ export default function CallScreen() {
     if (!callId) return;
     return subscribeCallSession(callId, (next) => {
       setCall(next);
+      callRef.current = next;
       if (!next) return;
       if (next.finalized_at) setStatusText(`Finalized: ${next.termination_reason || next.status}`);
       else setStatusText(next.status);
       const timeoutDecision = evaluateCallTimeout(next);
       if (timeoutDecision) {
+        trackCallMetric('cleanup_cause', next.id, { reason: timeoutDecision.reason, via: 'client_timeout_guard' });
         void transitionCallState(next.id, next.status, timeoutDecision.nextState, {
           timeout_reason: timeoutDecision.reason,
           termination_reason: timeoutDecision.reason === 'ring_timeout' ? 'expired' : timeoutDecision.reason === 'heartbeat_stale' ? 'heartbeat_timeout' : 'network_failure',
@@ -85,15 +97,26 @@ export default function CallScreen() {
     if (!call || !user?.uid || joined || joiningLockRef.current) return;
     (async () => {
       joiningLockRef.current = true;
+      joinStartedAtRef.current = Date.now();
       const ok = await grantPermissions();
-      if (!ok) return Alert.alert('Permissions required');
+      if (!ok) {
+        if (!permissionLockRef.current) {
+          permissionLockRef.current = true;
+          trackCallMetric('join_failure', callId, { category: classifyCallFailure('permission_denied') });
+          Alert.alert('Permissions required');
+        }
+        return;
+      }
       if (call.expires_at_epoch && Math.floor(Date.now() / 1000) > call.expires_at_epoch) {
         setStatusText('Call expired');
         await transitionCallState(callId, ['ringing', 'initiating', 'connecting'], 'missed', { termination_reason: 'expired' });
         return;
       }
       const token = await requestCallToken(callId).catch(() => null);
-      if (!token?.rtcToken || !token.channelName || !token.agoraUid) return;
+      if (!token?.rtcToken || !token.channelName || !token.agoraUid) {
+        trackCallMetric('token_renewal_failure', callId, { category: classifyCallFailure('token_failure') });
+        return;
+      }
       await transitionCallState(callId, ['ringing', 'initiating'], 'connecting').catch(() => false);
       if (engineRef.current) return;
       const engine = createAgoraRtcEngine();
@@ -107,6 +130,10 @@ export default function CallScreen() {
         },
         onConnectionStateChanged: async (_c, state) => {
           if (state === 3) {
+            if (reconnectStartedAtRef.current === 0) {
+              reconnectStartedAtRef.current = Date.now();
+              trackCallMetric('reconnect_frequency', callId, { attempt: reconnectAttemptRef.current + 1 });
+            }
             reconnectAttemptRef.current += 1;
             setStatusText('Reconnecting…');
             await transitionCallState(callId, ['connected', 'connecting'], 'reconnecting').catch(() => false);
@@ -116,7 +143,15 @@ export default function CallScreen() {
               void leave('ended');
             }
           }
-          if (state === 4) setStatusText('Connected');
+          if (state === 4) {
+            setStatusText('Connected');
+            if (reconnectStartedAtRef.current > 0) {
+              const durationMs = Date.now() - reconnectStartedAtRef.current;
+              reconnectStartedAtRef.current = 0;
+              trackCallMetric('reconnect_duration', callId, { duration_ms: durationMs });
+              trackCallMetric('rtc_reconnect_recovered', callId, { recovered: true });
+            }
+          }
           if (state === 5) {
             setStatusText('Connection failed');
             await transitionCallState(callId, ['connecting', 'reconnecting', 'connected'], 'failed', { termination_reason: 'network_failure' }).catch(() => false);
@@ -131,7 +166,12 @@ export default function CallScreen() {
           tokenRetryRef.current = 0;
         },
       };
-      engine.initialize({ appId: token.appId });
+      try {
+        engine.initialize({ appId: token.appId });
+      } catch {
+        trackCallMetric('join_failure', callId, { category: classifyCallFailure('engine_init_failure') });
+        throw new Error('engine_init_failure');
+      }
       engine.registerEventHandler(h);
       engine.enableAudio();
       if (call.mode === 'video') engine.enableVideo();
@@ -139,7 +179,10 @@ export default function CallScreen() {
         channelProfile: ChannelProfileType.ChannelProfileCommunication,
         clientRoleType: ClientRoleType.ClientRoleBroadcaster,
       });
-    })().catch(() => setStatusText('Failed')).finally(() => { joiningLockRef.current = false; });
+    })().catch(() => {
+      trackCallMetric('join_failure', callId, { category: classifyCallFailure('join_failure') });
+      setStatusText('Failed');
+    }).finally(() => { joiningLockRef.current = false; });
   }, [call, callId, joined, user?.uid]);
 
   useEffect(() => {
@@ -147,13 +190,16 @@ export default function CallScreen() {
       const prev = appStateRef.current;
       appStateRef.current = next;
       if (next === 'background') engineRef.current?.muteLocalAudioStream(true);
-      if (prev !== 'active' && next === 'active') engineRef.current?.muteLocalAudioStream(!micOn);
+      if (prev !== 'active' && next === 'active') {
+        engineRef.current?.muteLocalAudioStream(!micOn);
+        if (callRef.current?.mode === 'video') engineRef.current?.muteLocalVideoStream(!camOn);
+      }
     });
     return () => sub.remove();
   }, [micOn]);
 
   useEffect(() => {
-    if (!callId || !joined) return;
+    if (!callId || !joined || heartbeatRef.current || timeoutEvalRef.current) return;
     heartbeatRef.current = setInterval(() => {
       const now = Date.now();
       if (now - lastHeartbeatWriteRef.current < 15000) return;
@@ -164,6 +210,7 @@ export default function CallScreen() {
       if (!call) return;
       const timeoutDecision = evaluateCallTimeout(call);
       if (timeoutDecision) {
+        trackCallMetric('heartbeat_miss', call.id, { reason: timeoutDecision.reason });
         transitionCallState(call.id, call.status, timeoutDecision.nextState, { timeout_reason: timeoutDecision.reason }).catch(() => false);
       }
     }, 10000);
@@ -174,6 +221,12 @@ export default function CallScreen() {
       timeoutEvalRef.current = null;
     };
   }, [call, callId, joined]);
+
+  useEffect(() => {
+    if (!joined || !callId) return;
+    joinedAtRef.current = Date.now();
+    trackCallMetric('call_setup_latency', callId, { latency_ms: joinedAtRef.current - joinStartedAtRef.current });
+  }, [joined, callId]);
 
   if (!call) return <View style={styles.center}><ActivityIndicator /></View>;
   return (

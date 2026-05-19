@@ -8,14 +8,14 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
     function isTeacherOrAdmin() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin']
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'assistant_teacher', 'admin', 'super_admin', 'moderator']
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 

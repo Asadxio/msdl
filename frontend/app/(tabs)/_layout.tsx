@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useEffect, useState } from 'react';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import * as Notifications from 'expo-notifications';
 
 type TabIconName =
   | 'home'
@@ -90,6 +91,11 @@ export default function TabLayout() {
       unsubChats();
     };
   }, [profile?.role, user?.uid]);
+
+  useEffect(() => {
+    const total = unreadChats + unreadNotifications;
+    Notifications.setBadgeCountAsync(total).catch(() => {});
+  }, [unreadChats, unreadNotifications]);
 
   return (
     <Tabs
