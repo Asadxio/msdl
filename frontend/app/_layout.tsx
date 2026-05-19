@@ -99,6 +99,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             router.push(`/chat/${data.chat_id}`);
           } else if (data?.live_class_id) {
             router.push({ pathname: "/live-class/[id]", params: { id: String(data.live_class_id) } });
+          } else if (data?.call_id) {
+            router.push({ pathname: "/call/[id]", params: { id: String(data.call_id) } });
           }
         } catch (error) {
           console.log('[Notifications] response handler ERROR', error);
@@ -140,6 +142,7 @@ export default function RootLayout() {
             <Stack.Screen name="teacher/[id]" />
             <Stack.Screen name="book/[id]" />
             <Stack.Screen name="chat/[id]" />
+            <Stack.Screen name="call/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="live-class/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="recordings" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />

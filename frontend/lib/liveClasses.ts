@@ -20,8 +20,9 @@ import {
 import { auth, db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { sendPushToUserIds } from '@/lib/pushNotifications';
+import { DELETE_HEARTBEAT_MS, STALE_HEARTBEAT_MS, heartbeatPayload } from '@/lib/liveClassReliability';
 
-export type LiveClassStatus = 'scheduled' | 'live' | 'ended' | 'cancelled';
+export type LiveClassStatus = 'scheduled' | 'waiting_room' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'cancelled';
 
 export type LiveClass = {
   id: string;
@@ -69,6 +70,20 @@ export type LiveClassParticipant = {
   last_joined_at?: { toDate?: () => Date } | null;
   left_at?: { toDate?: () => Date } | null;
   total_duration_seconds?: number;
+  reconnect_count?: number;
+  hand_raised?: boolean;
+  last_seen_at?: { toDate?: () => Date } | null;
+  moderation?: {
+    mic_allowed?: boolean;
+    camera_allowed?: boolean;
+    removed?: boolean;
+  };
+  heartbeat_at?: { toDate?: () => Date } | null;
+  disconnected?: boolean;
+  session_id?: string;
+  joined_session_at?: { toDate?: () => Date } | null;
+  last_reconnected_at?: { toDate?: () => Date } | null;
+  total_connected_duration?: number;
 };
 
 export type LiveClassCreateInput = {
@@ -128,7 +143,9 @@ function normalizeLiveClass(id: string, raw: unknown): LiveClass {
     teacher_id: String(data.teacher_id || ''),
     teacher_name: String(data.teacher_name || 'Teacher'),
     title: String(data.title || 'Live Class'),
-    status: status === 'ended' || status === 'cancelled' || status === 'scheduled' ? status : 'live',
+    status: status === 'scheduled' || status === 'waiting_room' || status === 'live' || status === 'paused' || status === 'reconnecting' || status === 'ended' || status === 'cancelled'
+      ? status
+      : 'live',
     channel_name: String(data.channel_name || ''),
     agora_app_id: data.agora_app_id ? String(data.agora_app_id) : '',
     meet_fallback_url: data.meet_fallback_url ? String(data.meet_fallback_url) : '',
@@ -162,7 +179,24 @@ export function normalizeLiveClassParticipant(id: string, raw: unknown): LiveCla
     last_joined_at: (data.last_joined_at as LiveClassParticipant['last_joined_at']) || null,
     left_at: (data.left_at as LiveClassParticipant['left_at']) || null,
     total_duration_seconds: Number(data.total_duration_seconds || 0),
+    reconnect_count: Number(data.reconnect_count || 0),
+    hand_raised: data.hand_raised === true,
+    last_seen_at: (data.last_seen_at as LiveClassParticipant['last_seen_at']) || null,
+    moderation: asMap(data.moderation),
+    heartbeat_at: (data.heartbeat_at as LiveClassParticipant['heartbeat_at']) || null,
+    disconnected: data.disconnected === true,
+    session_id: data.session_id ? String(data.session_id) : '',
+    joined_session_at: (data.joined_session_at as LiveClassParticipant['joined_session_at']) || null,
+    last_reconnected_at: (data.last_reconnected_at as LiveClassParticipant['last_reconnected_at']) || null,
+    total_connected_duration: Number(data.total_connected_duration || 0),
   };
+}
+
+export async function setLiveClassStatus(classId: string, status: LiveClassStatus): Promise<void> {
+  await updateDoc(doc(db, 'live_classes', classId), {
+    status,
+    updated_at: serverTimestamp(),
+  });
 }
 
 async function getEligibleStudentIds(courseId: string): Promise<{ ids: string[]; source: LiveClass['enrollment_source'] }> {
@@ -331,6 +365,7 @@ export async function stopCloudRecording(classId: string): Promise<Record<string
 }
 
 export async function markParticipantJoined(classId: string, profile: UserProfile, userId: string, agoraUid = getAgoraUid(userId)): Promise<void> {
+  const sessionId = `${classId}_${userId}`;
   const participantRef = doc(db, 'live_classes', classId, 'participants', userId);
   await setDoc(participantRef, {
     user_id: userId,
@@ -341,8 +376,21 @@ export async function markParticipantJoined(classId: string, profile: UserProfil
     audio_enabled: true,
     video_enabled: true,
     force_muted: false,
+    hand_raised: false,
+    moderation: {
+      mic_allowed: true,
+      camera_allowed: true,
+      removed: false,
+    },
+    reconnect_count: increment(1),
+    disconnected: false,
+    session_id: sessionId,
+    joined_session_at: serverTimestamp(),
+    last_reconnected_at: serverTimestamp(),
+    total_connected_duration: increment(0),
     joined_at: serverTimestamp(),
     last_joined_at: serverTimestamp(),
+    ...heartbeatPayload(),
     updated_at: serverTimestamp(),
   }, { merge: true });
   await addDoc(collection(db, 'live_classes', classId, 'attendance_events'), {
@@ -360,7 +408,10 @@ export async function markParticipantLeft(classId: string, userId: string, joine
     audio_enabled: false,
     video_enabled: false,
     left_at: serverTimestamp(),
+    disconnected: true,
+    ...heartbeatPayload(),
     total_duration_seconds: increment(duration),
+    total_connected_duration: increment(duration),
     updated_at: serverTimestamp(),
   }, { merge: true });
   await addDoc(collection(db, 'live_classes', classId, 'attendance_events'), {
@@ -380,6 +431,56 @@ export async function updateParticipantMediaState(
     ...updates,
     updated_at: serverTimestamp(),
   });
+}
+
+export async function updateParticipantModerationState(
+  classId: string,
+  userId: string,
+  updates: { mic_allowed?: boolean; camera_allowed?: boolean; removed?: boolean; force_muted?: boolean; hand_raised?: boolean },
+): Promise<void> {
+  const payload: Record<string, unknown> = {
+    updated_at: serverTimestamp(),
+    last_seen_at: serverTimestamp(),
+  };
+  if (typeof updates.mic_allowed === 'boolean') payload['moderation.mic_allowed'] = updates.mic_allowed;
+  if (typeof updates.camera_allowed === 'boolean') payload['moderation.camera_allowed'] = updates.camera_allowed;
+  if (typeof updates.removed === 'boolean') payload['moderation.removed'] = updates.removed;
+  if (typeof updates.force_muted === 'boolean') payload.force_muted = updates.force_muted;
+  if (typeof updates.hand_raised === 'boolean') payload.hand_raised = updates.hand_raised;
+  payload['moderation.moderated_at'] = serverTimestamp();
+  payload['moderation.moderated_by'] = auth.currentUser?.uid || '';
+  await updateDoc(doc(db, 'live_classes', classId, 'participants', userId), payload);
+}
+
+export async function writeParticipantHeartbeat(classId: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, 'live_classes', classId, 'participants', userId), {
+    disconnected: false,
+    ...heartbeatPayload(),
+    updated_at: serverTimestamp(),
+  }).catch(() => {});
+}
+
+export async function cleanupStaleParticipants(classId: string): Promise<void> {
+  const snap = await getDocs(collection(db, 'live_classes', classId, 'participants')).catch(() => null);
+  if (!snap) return;
+  const now = Date.now();
+  const batch = writeBatch(db);
+  let changed = 0;
+  snap.docs.forEach((d) => {
+    const p = normalizeLiveClassParticipant(d.id, d.data());
+    const heartbeatAt = p.heartbeat_at?.toDate ? p.heartbeat_at.toDate().getTime() : 0;
+    const gap = heartbeatAt ? now - heartbeatAt : Number.MAX_SAFE_INTEGER;
+    if (!p.joined && gap > DELETE_HEARTBEAT_MS) {
+      batch.delete(d.ref);
+      changed += 1;
+      return;
+    }
+    if (p.joined && !p.disconnected && gap > STALE_HEARTBEAT_MS && gap <= DELETE_HEARTBEAT_MS) {
+      batch.set(d.ref, { disconnected: true, joined: false, updated_at: serverTimestamp() }, { merge: true });
+      changed += 1;
+    }
+  });
+  if (changed > 0) await batch.commit();
 }
 
 function getDateKey(date: Date): string {

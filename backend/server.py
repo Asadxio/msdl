@@ -153,6 +153,9 @@ class LiveClassTokenRequest(BaseModel):
 class LiveClassRecordingRequest(BaseModel):
     live_class_id: str
 
+class CallTokenRequest(BaseModel):
+    call_id: str
+
 
 class StatusReactRequest(BaseModel):
     status_id: str
@@ -162,6 +165,19 @@ class StatusReactRequest(BaseModel):
 class StatusCommentRequest(BaseModel):
     status_id: str
     text: str
+
+
+class LiveOpsEventRequest(BaseModel):
+    event: str
+    class_id: str = ""
+    user_role: str = "unknown"
+    participant_count: int = 0
+    reconnect_phase: str = ""
+    device_tier: str = ""
+    error: str | None = None
+    attempt: int | None = None
+    latency_ms: int | None = None
+    timestamp_ms: int | None = None
 
 
 def _agora_uid(firebase_uid: str) -> int:
@@ -253,6 +269,14 @@ def _agora_auth_headers() -> dict[str, str]:
         raise HTTPException(status_code=500, detail="Agora recording credentials are not configured")
     auth = base64.b64encode(f"{AGORA_CUSTOMER_ID}:{AGORA_CUSTOMER_SECRET}".encode("utf-8")).decode("utf-8")
     return {"Authorization": f"Basic {auth}", "Content-Type": "application/json"}
+
+
+@api_router.post("/live-ops/event")
+async def ingest_live_ops_event(payload: LiveOpsEventRequest):
+    data = payload.dict()
+    data["received_at"] = int(time.time() * 1000)
+    logger.info("LIVE_OPS_EVENT %s", json.dumps(data, ensure_ascii=False))
+    return {"ok": True}
 
 
 def _agora_recording_url(path: str) -> str:
@@ -479,6 +503,41 @@ async def issue_live_class_token(payload: LiveClassTokenRequest, authorization: 
         "app_id": AGORA_APP_ID,
         "rtc_token": token,
         "expires_at_epoch": expires_at,
+        "agora_uid": agora_uid,
+        "channel_name": channel_name,
+    }
+
+
+@api_router.post("/call/token")
+async def issue_call_token(payload: CallTokenRequest, authorization: str | None = Header(default=None)):
+    uid, role = _verify_firebase_request(authorization)
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    call_id = str(payload.call_id or "").strip()
+    call_ref = firebase_db.collection("calls").document(call_id)
+    call_snap = call_ref.get()
+    if not call_snap.exists:
+        raise HTTPException(status_code=404, detail="Call not found")
+    call_data = call_snap.to_dict() or {}
+    status = str(call_data.get("status") or "")
+    if status in {"ended", "declined", "missed", "failed"}:
+        raise HTTPException(status_code=409, detail="Call already finalized")
+    caller_id = str(call_data.get("caller_id") or "")
+    callee_id = str(call_data.get("callee_id") or "")
+    if uid not in {caller_id, callee_id} and role != "admin":
+        raise HTTPException(status_code=403, detail="No call access")
+    channel_name = str(call_data.get("channel_name") or "").strip()
+    if not channel_name:
+        raise HTTPException(status_code=409, detail="Call channel is missing")
+    agora_uid = _agora_uid(uid)
+    expire_at = int(time.time()) + max(60, min(600, AGORA_RTC_TOKEN_TTL_SECONDS))
+    rtc_role = getattr(RtcTokenBuilder, "Role_Publisher", 1)
+    token = RtcTokenBuilder.buildTokenWithUid(AGORA_APP_ID, AGORA_APP_CERTIFICATE, channel_name, agora_uid, rtc_role, expire_at)
+    return {
+        "ok": True,
+        "app_id": AGORA_APP_ID,
+        "rtc_token": token,
+        "expires_at_epoch": expire_at,
         "agora_uid": agora_uid,
         "channel_name": channel_name,
     }
