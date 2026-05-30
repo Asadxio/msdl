@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { fetchSecurityEvents, detectAnomalies, buildIncidentTimeline, toCsvIncidentReport, type SecuritySeverity } from '@/lib/securityMonitoring';
 import { useAuth } from '@/context/AuthContext';

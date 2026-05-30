@@ -667,6 +667,137 @@ service cloud.firestore {
         && request.resource.data.updated_at is timestamp;
     }
 
+
+
+    function isValidLegalAcceptance(uid) {
+      return isSelf(uid)
+        && hasOnlyAllowedKeys(request.resource.data, ['accepted', 'acceptance_updated_at', 'policy_bundle_version'])
+        && request.resource.data.accepted is map
+        && request.resource.data.accepted.keys().hasOnly(['terms', 'privacy', 'community'])
+        && (!('terms' in request.resource.data.accepted)
+          || (request.resource.data.accepted.terms is map
+            && request.resource.data.accepted.terms.version is string
+            && request.resource.data.accepted.terms.acceptedAt is timestamp))
+        && (!('privacy' in request.resource.data.accepted)
+          || (request.resource.data.accepted.privacy is map
+            && request.resource.data.accepted.privacy.version is string
+            && request.resource.data.accepted.privacy.acceptedAt is timestamp))
+        && (!('community' in request.resource.data.accepted)
+          || (request.resource.data.accepted.community is map
+            && request.resource.data.accepted.community.version is string
+            && request.resource.data.accepted.community.acceptedAt is timestamp))
+        && request.resource.data.acceptance_updated_at is timestamp
+        && request.resource.data.policy_bundle_version is string;
+    }
+
+    function isValidLegalAuditCreate() {
+      return isSignedIn()
+        && hasOnlyAllowedKeys(request.resource.data, ['user_id', 'event', 'accepted_docs', 'accepted_versions', 'created_at'])
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.event == 'legal_acceptance'
+        && request.resource.data.accepted_docs is list
+        && request.resource.data.accepted_docs.size() <= 3
+        && request.resource.data.accepted_docs.hasOnly(['terms', 'privacy', 'community'])
+        && request.resource.data.accepted_versions is list
+        && request.resource.data.accepted_versions.size() <= 3
+        && request.resource.data.created_at is timestamp;
+    }
+
+    function isValidPrivacyRequestCreate() {
+      return isSignedIn()
+        && hasOnlyAllowedKeys(request.resource.data, ['user_id', 'type', 'reason', 'state', 'lifecycle', 'created_at', 'updated_at'])
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.type in ['deletion', 'export']
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() >= 8
+        && request.resource.data.reason.size() <= 600
+        && request.resource.data.state == 'requested'
+        && request.resource.data.lifecycle is list
+        && request.resource.data.lifecycle.size() <= 10
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.updated_at is timestamp;
+    }
+
+    function isValidNotificationSettings(uid) {
+      return isSelf(uid)
+        && hasOnlyAllowedKeys(request.resource.data, ['channels', 'muted_chat_ids', 'quiet_hours', 'sound_enabled', 'vibration_enabled', 'updated_at_ms', 'updated_at'])
+        && (!('channels' in request.resource.data) || request.resource.data.channels is map)
+        && (!('muted_chat_ids' in request.resource.data) || (request.resource.data.muted_chat_ids is list && request.resource.data.muted_chat_ids.size() <= 200))
+        && (!('quiet_hours' in request.resource.data) || request.resource.data.quiet_hours is map)
+        && (!('sound_enabled' in request.resource.data) || request.resource.data.sound_enabled is bool)
+        && (!('vibration_enabled' in request.resource.data) || request.resource.data.vibration_enabled is bool)
+        && request.resource.data.updated_at_ms is number
+        && request.resource.data.updated_at is timestamp;
+    }
+
+    function hasValidCallKeys(data) {
+      return hasOnlyAllowedKeys(data, [
+        'caller_id', 'callee_id', 'status', 'mode', 'channel_name', 'agora_app_id',
+        'caller_agora_uid', 'callee_agora_uid', 'expires_at_epoch', 'last_heartbeat_at',
+        'caller_last_seen', 'callee_last_seen', 'created_at', 'updated_at', 'finalized_at',
+        'termination_reason', 'cleanup_reason', 'timeout_reason', 'failed_reason'
+      ]);
+    }
+
+    function isCallParticipantData(data) {
+      return isSignedIn() && (data.caller_id == request.auth.uid || data.callee_id == request.auth.uid || isAdmin());
+    }
+
+    function isValidCallCreate() {
+      return isSignedIn()
+        && hasValidCallKeys(request.resource.data)
+        && request.resource.data.caller_id == request.auth.uid
+        && request.resource.data.callee_id is string
+        && request.resource.data.callee_id != request.auth.uid
+        && request.resource.data.status == 'ringing'
+        && request.resource.data.mode in ['audio', 'video']
+        && request.resource.data.channel_name is string
+        && request.resource.data.channel_name.size() > 0
+        && request.resource.data.channel_name.size() <= 160
+        && (!('agora_app_id' in request.resource.data) || request.resource.data.agora_app_id is string)
+        && request.resource.data.caller_agora_uid is number
+        && request.resource.data.callee_agora_uid is number
+        && request.resource.data.expires_at_epoch is number
+        && request.resource.data.last_heartbeat_at is number
+        && request.resource.data.caller_last_seen is number
+        && request.resource.data.callee_last_seen is number
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.updated_at is timestamp;
+    }
+
+    function isValidCallUpdate() {
+      return isCallParticipantData(resource.data)
+        && hasValidCallKeys(request.resource.data)
+        && request.resource.data.caller_id == resource.data.caller_id
+        && request.resource.data.callee_id == resource.data.callee_id
+        && request.resource.data.mode == resource.data.mode
+        && request.resource.data.channel_name == resource.data.channel_name
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.status in ['initiating', 'ringing', 'connecting', 'connected', 'reconnecting', 'failed', 'ended', 'declined', 'missed']
+        && request.resource.data.updated_at is timestamp
+        && (!('last_heartbeat_at' in request.resource.data) || request.resource.data.last_heartbeat_at is number)
+        && (!('caller_last_seen' in request.resource.data) || request.resource.data.caller_last_seen is number)
+        && (!('callee_last_seen' in request.resource.data) || request.resource.data.callee_last_seen is number)
+        && (!('finalized_at' in request.resource.data) || request.resource.data.finalized_at is timestamp)
+        && (!('termination_reason' in request.resource.data) || request.resource.data.termination_reason is string)
+        && (!('cleanup_reason' in request.resource.data) || request.resource.data.cleanup_reason is string)
+        && (!('timeout_reason' in request.resource.data) || request.resource.data.timeout_reason is string)
+        && (!('failed_reason' in request.resource.data) || request.resource.data.failed_reason is string);
+    }
+
+    function isValidCallParticipantWrite(callId, uid) {
+      return isSelf(uid)
+        && exists(/databases/$(database)/documents/calls/$(callId))
+        && isCallParticipantData(get(/databases/$(database)/documents/calls/$(callId)).data)
+        && hasOnlyAllowedKeys(request.resource.data, ['joined', 'reconnecting', 'muted', 'last_seen', 'device_platform', 'updated_at'])
+        && request.resource.data.joined is bool
+        && request.resource.data.reconnecting is bool
+        && request.resource.data.muted is bool
+        && request.resource.data.last_seen is number
+        && request.resource.data.device_platform is string
+        && request.resource.data.updated_at is timestamp;
+    }
+
     // users collection
     match /users/{uid} {
       // Users can read their own profile; signed-in users can list users for app pickers/referrals.
@@ -678,6 +809,12 @@ service cloud.firestore {
 
       // Admin can fully update users; users can update own push/profile/login metadata.
       allow update: if (isAdmin() && isValidUserUpdateByAdmin()) || isValidSelfUserMetadataUpdate(uid) || isValidReferralCountIncrement();
+      allow delete: if isAdmin();
+    }
+
+    match /users/{uid}/compliance/{docId} {
+      allow read: if isAdmin() || isSelf(uid);
+      allow create, update: if docId == 'legal_acceptance' && isValidLegalAcceptance(uid);
       allow delete: if isAdmin();
     }
 
@@ -997,6 +1134,45 @@ service cloud.firestore {
       match /recordings/{recordingId} {
         allow read: if canReadLiveClassData(liveClassDoc(classId).data);
         allow write: if isLiveClassTeacherOrAdmin(liveClassDoc(classId).data);
+      }
+    }
+
+
+    match /legal_audit_events/{eventId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create: if isValidLegalAuditCreate();
+      allow update, delete: if false;
+    }
+
+    match /privacy_requests/{requestId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create: if isValidPrivacyRequestCreate();
+      allow update: if isAdmin()
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.state in ['requested', 'reviewing', 'processing', 'completed', 'rejected']
+        && request.resource.data.updated_at is timestamp;
+      allow delete: if false;
+    }
+
+    match /user_notification_settings/{uid} {
+      allow read: if isAdmin() || isSelf(uid);
+      allow create, update: if isValidNotificationSettings(uid);
+      allow delete: if isSelf(uid) || isAdmin();
+    }
+
+    match /calls/{callId} {
+      allow read: if isCallParticipantData(resource.data);
+      allow create: if isValidCallCreate();
+      allow update: if isValidCallUpdate();
+      allow delete: if isAdmin();
+
+      match /participants/{uid} {
+        allow read: if exists(/databases/$(database)/documents/calls/$(callId))
+          && isCallParticipantData(get(/databases/$(database)/documents/calls/$(callId)).data);
+        allow create, update: if isValidCallParticipantWrite(callId, uid);
+        allow delete: if isAdmin();
       }
     }
 

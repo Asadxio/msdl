@@ -19,6 +19,49 @@ service firebase.storage {
         && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'];
     }
 
+
+
+    function isSafeChatMediaUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 20971520
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime', 'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/wav'];
+    }
+
+    function canReadChatMedia(chatId) {
+      return isSignedIn()
+        && exists(/databases/(default)/documents/chats/$(chatId))
+        && request.auth.uid in get(/databases/(default)/documents/chats/$(chatId)).data.participants;
+    }
+
+    function canReadLiveClassStorage(classId) {
+      return isSignedIn()
+        && exists(/databases/(default)/documents/live_classes/$(classId))
+        && (
+          get(/databases/(default)/documents/live_classes/$(classId)).data.teacher_id == request.auth.uid
+          || (get(/databases/(default)/documents/live_classes/$(classId)).data.student_ids is list
+            && request.auth.uid in get(/databases/(default)/documents/live_classes/$(classId)).data.student_ids)
+          || (exists(/databases/(default)/documents/users/$(request.auth.uid))
+            && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+        );
+    }
+
+    function isSafeCourseMaterialUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 52428800
+        && request.resource.contentType in [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+          'video/mp4',
+          'video/quicktime'
+        ];
+    }
+
     function isTeacherOrAdmin() {
       return isSignedIn()
         && exists(/databases/(default)/documents/users/$(request.auth.uid))
@@ -48,6 +91,28 @@ service firebase.storage {
     match /status_updates/{userId}/{fileName} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && request.auth.uid == userId && isSafeStatusUpload();
+    }
+
+
+    match /chat_media/{chatId}/{userId}/{fileName} {
+      allow read: if canReadChatMedia(chatId);
+      allow write: if isSignedIn()
+        && request.auth.uid == userId
+        && fileName.matches('^[A-Za-z0-9._-]{6,160}$')
+        && canReadChatMedia(chatId)
+        && isSafeChatMediaUpload();
+    }
+
+    match /course_materials/{courseId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isTeacherOrAdmin()
+        && fileName.matches('^[A-Za-z0-9._-]{6,160}$')
+        && isSafeCourseMaterialUpload();
+    }
+
+    match /live_classes/{classId}/{allPaths=**} {
+      allow read: if canReadLiveClassStorage(classId);
+      allow write: if false;
     }
 
     match /assignment_submissions/{userId}/{fileName} {

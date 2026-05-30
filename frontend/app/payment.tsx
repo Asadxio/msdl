@@ -5,12 +5,13 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 import { normalizeFirebaseError } from '@/lib/errors';
 import { isValidHttpsUrl, prepareExternalUrl } from '@/lib/links';
+import { apiUrl } from '@/lib/api';
 
 type PaymentType = 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
@@ -64,7 +65,7 @@ export default function PaymentFlowScreen() {
         const paymentsSnap = await getDocs(query(collection(db, 'payments'), where('user_id', '==', user.uid), orderBy('created_at', 'desc')));
         if (!paymentsSnap.empty) {
           const latest = paymentsSnap.docs[0].data() as { status?: string; type?: string; amount?: number };
-          setStatusText(`${latest.status || 'pending'} • ${latest.type || 'fees'} • ₹${Number(latest.amount || 0).toFixed(2)}`);
+          setStatusText(`${latest.status || (latest as any).state || 'pending'} • ${latest.type || 'fees'} • ₹${Number(latest.amount || 0).toFixed(2)}`);
         }
       } catch (err) {
         setError(normalizeFirebaseError(err, 'Could not load payment settings.'));
@@ -161,7 +162,7 @@ export default function PaymentFlowScreen() {
       setSubmittingPayment(true);
       const operationId = `pay_${paymentType}_${Math.round(parsedAmount*100)}_${Date.now()}`;
       setVerificationState('verifying');
-      const initRes = await fetch('/api/payments/initiate', {
+      const initRes = await fetch(apiUrl('/payments/initiate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
         body: JSON.stringify({ operation_id: operationId, payment_type: paymentType, amount: parsedAmount, currency: 'INR' }),
@@ -170,7 +171,7 @@ export default function PaymentFlowScreen() {
       const initJson = await initRes.json();
 
       setVerificationState('awaiting_confirmation');
-      const confirmRes = await fetch('/api/payments/confirm', {
+      const confirmRes = await fetch(apiUrl('/payments/confirm'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
         body: JSON.stringify({ payment_id: initJson.payment_id, transaction_ref: safeReference }),

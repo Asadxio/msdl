@@ -1,6 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type VideoPreset = 'low' | 'medium' | 'high' | 'recording';
@@ -40,13 +40,15 @@ export function createMediaCacheKey(input: { uri: string; category: string; vers
 }
 
 async function quickHashFromFile(uri: string): Promise<string> {
-  const info = await FileSystem.getInfoAsync(uri, { size: true, md5: true });
-  return String((info as any).md5 || `${info.size || 0}_${uri.length}`);
+  const info = await FileSystem.getInfoAsync(uri, { md5: true });
+  if (!info.exists) return String(uri.length);
+  const sizeBytes = 'size' in info ? Number(info.size || 0) : 0;
+  return String(('md5' in info && info.md5) || `${sizeBytes}_${uri.length}`);
 }
 
 export async function extractMediaMetadata(uri: string): Promise<{ sizeBytes: number; width?: number; height?: number; durationMs?: number }> {
-  const info = await FileSystem.getInfoAsync(uri, { size: true });
-  return { sizeBytes: Number(info.size || 0) };
+  const info = await FileSystem.getInfoAsync(uri);
+  return { sizeBytes: info.exists && 'size' in info ? Number(info.size || 0) : 0 };
 }
 
 export async function generateVideoThumbnail(uri: string, captureTimeMs = 1200): Promise<{ thumbnailUri: string; generatedAtMs: number }> {

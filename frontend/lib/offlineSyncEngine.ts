@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiUrl } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 
@@ -119,7 +120,7 @@ async function dispatchAction(action: OfflineAction): Promise<void> {
   // centralized route handler; preserve feature compatibility by delegating to existing APIs
   switch (action.type) {
     case 'analytics':
-      await fetch('/api/analytics/ingest', {
+      await fetch(apiUrl('/analytics/ingest'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ events: [action.payload] }),
       });
@@ -186,7 +187,7 @@ export function getSyncQueueState() {
 
 export async function retryFailedSyncs() {
   const queue = await loadQueue();
-  const next = queue.map((q) => q.state === 'failed' ? { ...q, state: 'pending', updatedAtMs: now() } : q);
+  const next: OfflineAction[] = queue.map((q) => q.state === 'failed' ? { ...q, state: 'pending' as const, updatedAtMs: now() } : q);
   await persistQueue(sortByPriority(next));
   if (state.online && !state.paused) void flushOfflineQueue();
 }

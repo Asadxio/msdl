@@ -297,7 +297,7 @@ export default function AdminUsersScreen() {
           <Ionicons name="close" size={22} color={COLORS.textMain} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Manage Users</Text>
-        <TouchableOpacity onPress={fetchUsers} testID="refresh-users-btn">
+        <TouchableOpacity onPress={() => { void fetchUsers(); }} testID="refresh-users-btn">
           <Ionicons name="refresh" size={22} color={COLORS.primary} />
         </TouchableOpacity>
       </View>

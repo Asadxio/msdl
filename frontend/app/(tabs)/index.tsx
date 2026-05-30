@@ -92,6 +92,8 @@ type IslamicTheme = {
   name: string;
   accent: string;
   secondary: string;
+  image: string;
+  tint: string;
 };
 
 const PRAYER_METHODS: Record<string, PrayerCalculationSettings> = {

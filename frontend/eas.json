@@ -8,21 +8,24 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "development"
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "madrasa-app-50d6c"
       }
     },
     "preview": {
       "distribution": "internal",
       "channel": "staging",
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "staging"
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "madrasa-app-50d6c"
       }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "production"
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "madrasa-app-50d6c"
       }
     }
   },

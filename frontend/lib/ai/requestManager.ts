@@ -1,11 +1,12 @@
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { trackAiMetric } from '@/lib/ai/aiMonitor';
+import { apiUrl } from '@/lib/api';
 
 export async function requestAI<T>(feature: string, payload: Record<string, unknown>, fallback: T): Promise<T> {
   if (!isFeatureEnabled(`ai_${feature}`, true)) return fallback;
   const started = Date.now();
   try {
-    const res = await fetch('/api/ai/infer', {
+    const res = await fetch(apiUrl('/ai/infer'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ feature, payload }),

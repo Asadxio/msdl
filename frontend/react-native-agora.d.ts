@@ -4,6 +4,7 @@ declare module 'react-native-agora' {
 
   export type RtcConnection = { channelId?: string; localUid?: number };
   export type RtcStats = Record<string, unknown>;
+  export type AudioVolumeInfo = { uid: number; volume: number; vad?: number; channelId?: string };
 
   export type IRtcEngineEventHandler = {
     onJoinChannelSuccess?: (connection: RtcConnection, elapsed: number) => void;
@@ -15,6 +16,7 @@ declare module 'react-native-agora' {
     onTokenPrivilegeWillExpire?: (connection: RtcConnection, token: string) => void;
     onRequestToken?: (connection: RtcConnection) => void;
     onConnectionStateChanged?: (connection: RtcConnection, state: number, reason: number) => void;
+    onAudioVolumeIndication?: (connection: RtcConnection, speakers: AudioVolumeInfo[], speakerNumber?: number, totalVolume?: number) => void;
   };
 
   export type IRtcEngine = {
@@ -32,6 +34,7 @@ declare module 'react-native-agora' {
     muteLocalVideoStream: (muted: boolean) => number | void;
     switchCamera: () => number | void;
     setEnableSpeakerphone: (enabled: boolean) => number | void;
+    setParameters: (parameters: string) => number | void;
     renewToken: (token: string) => number | void;
     muteRemoteAudioStream: (uid: number, muted: boolean) => number | void;
     muteRemoteVideoStream: (uid: number, muted: boolean) => number | void;
