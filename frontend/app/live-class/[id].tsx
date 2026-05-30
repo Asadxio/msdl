@@ -916,6 +916,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#07130D' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.background },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm, backgroundColor: '#0B1F14' },
+  expoGoBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: SPACING.md, paddingVertical: 8, backgroundColor: '#FED7AA' },
+  expoGoBannerText: { color: '#7C2D12', fontSize: 12, fontWeight: '800' },
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   title: { color: '#fff', fontSize: 18, fontWeight: '800' },
   subtitle: { color: 'rgba(255,255,255,0.72)', fontSize: 12, marginTop: 2 },

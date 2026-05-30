@@ -4,11 +4,20 @@ const required = [
   'EXPO_PUBLIC_APP_ENV',
   'EXPO_PUBLIC_API_BASE_URL',
   'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
+  'EXPO_PUBLIC_LIVE_API_URL',
+  'EXPO_PUBLIC_PUSH_API_URL',
+  'EXPO_PUBLIC_AGORA_APP_ID',
 ];
 
 const missing = required.filter((k) => !process.env[k]);
 if (missing.length) {
   console.error('[release-check] missing env:', missing.join(', '));
+  process.exitCode = 1;
+}
+
+const placeholderValues = required.filter((k) => /YOUR-|your_|localhost|127\.0\.0\.1/i.test(String(process.env[k] || '')));
+if (process.env.EXPO_PUBLIC_APP_ENV === 'production' && placeholderValues.length) {
+  console.error('[release-check] production env contains placeholder/local values:', placeholderValues.join(', '));
   process.exitCode = 1;
 }
 

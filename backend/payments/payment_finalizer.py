@@ -42,9 +42,11 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
         tx.set(e_ref, {
             "user_id": uid,
             "course_id": p.get("course_id", "general"),
+            "status": "active",
             "source": "payment",
             "payment_id": payment_id,
             "created_at": admin_firestore.SERVER_TIMESTAMP,
+            "updated_at": admin_firestore.SERVER_TIMESTAMP,
         }, merge=True)
         tx.set(s_ref, {
             "user_id": uid,

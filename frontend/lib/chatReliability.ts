@@ -62,7 +62,7 @@ export async function patchItem(chatId: string, id: string, patch: Partial<Queue
 
 export async function completeItem(chatId: string, id: string) {
   const q = await getQueue(chatId);
-  const next = q.map((x) => (x.id === id ? { ...x, status: 'completed', locked_until_ms: 0 } : x));
+  const next: QueueItem[] = q.map((x) => (x.id === id ? { ...x, status: 'completed' as const, locked_until_ms: 0 } : x));
   await setQueue(chatId, next);
 }
 

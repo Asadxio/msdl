@@ -76,10 +76,11 @@ export function AppCard({ children, style }: PropsWithChildren<{ style?: StylePr
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
-export function EmptyState({ icon, message }: { icon: keyof typeof Ionicons.glyphMap; message: string }) {
+export function EmptyState({ icon, title, message }: { icon: keyof typeof Ionicons.glyphMap; title?: string; message: string }) {
   return (
     <View style={styles.emptyState}>
       <Ionicons name={icon} size={36} color={COLORS.textMuted} />
+      {title ? <Text style={styles.emptyTitle}>{title}</Text> : null}
       <Text style={styles.emptyText}>{message}</Text>
     </View>
   );
@@ -174,6 +175,12 @@ export const AppInput = React.memo(function AppInput({
   );
 });
 
+
+export { UIButton } from './ui/Button';
+export { FullScreenLoader, InlineError, RetryState } from './ui/ScreenState';
+export { LegalDocScreen } from './ui/LegalDocScreen';
+export { SectionCard } from './ui/SectionCard';
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.surface,
@@ -187,6 +194,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
     padding: SPACING.lg,
+  },
+  emptyTitle: {
+    ...TYPOGRAPHY.heading,
+    color: COLORS.textMain,
+    textAlign: 'center',
   },
   emptyText: {
     ...TYPOGRAPHY.body,

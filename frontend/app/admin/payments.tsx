@@ -5,13 +5,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, updateDoc, doc, serverTimestamp, where } from 'firebase/firestore';
+import { collection, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { createAdminLog } from '@/lib/adminLogs';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
+import { actionNonce, apiUrl } from '@/lib/api';
 
 type PaymentItem = {
   id: string;
@@ -60,9 +61,9 @@ export default function AdminPaymentsScreen() {
       if (direction === 'reset') setLoading(true);
       try {
         const extra: any[] = [];
-        if (statusFilter !== 'all') extra.push(where('status', '==', statusFilter));
+        if (statusFilter !== 'all') extra.push(where('state', '==', statusFilter));
         const page = await fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, cursor: direction === 'reset' ? null : cursor, direction: direction === 'reset' ? 'next' : direction, extra });
-        setPayments(page.items as PaymentItem[]);
+        setPayments(page.items.map((item: any) => ({ ...item, status: item.status || item.state || 'pending' })) as PaymentItem[]);
         setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
         setError('');
       } catch {
@@ -80,7 +81,7 @@ export default function AdminPaymentsScreen() {
     setUpdatingId(id);
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/payments/admin/action', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' }, body: JSON.stringify({ payment_id: id, next_state: status, note: adminNote || `admin_${status}`, evidence: { panel: 'admin_payments' } }) });
+      const res = await fetch(apiUrl('/payments/admin/action'), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '', 'x-action-nonce': actionNonce('payment_admin') }, body: JSON.stringify({ payment_id: id, next_state: status, note: adminNote || `admin_${status}`, evidence: { panel: 'admin_payments' } }) });
       if (!res.ok) throw new Error('admin payment action failed');
       await createAdminLog(profile, {
         action: `payment_${status}`,

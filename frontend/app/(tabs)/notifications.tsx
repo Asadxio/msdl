@@ -96,8 +96,8 @@ export default function NotificationsScreen() {
       }, 180);
       setLoading(false);
       perfRef.current.touch();
-    }, (err) => {
-      setLoadError(err?.message || 'Failed to load notifications.');
+    }, (err: unknown) => {
+      setLoadError(err instanceof Error ? err.message : 'Failed to load notifications.');
       setLoading(false);
     });
     const cancelMetric = scheduleLowPriorityTask(() => trackPerformanceMetric('notifications_loaded', items.length, { role: profile?.role || 'unknown' }));

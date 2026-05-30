@@ -16,6 +16,17 @@ import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/comp
 import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
 
 type AppUser = { id: string; name: string; email?: string; role: string; status: string; photo_url?: string; avatar?: string };
+
+function recordOfStrings(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+}
+
+function recordOfNumbers(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object') return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === 'number'));
+}
+
 type ChatItem = {
   id: string;
   type: 'direct' | 'group' | 'broadcast';
@@ -36,10 +47,10 @@ function normalizeChatItem(id: string, raw: unknown): ChatItem {
     type: safe.type === 'group' || safe.type === 'broadcast' ? safe.type : 'direct',
     name: typeof safe.name === 'string' ? safe.name : '',
     participants: Array.isArray(safe.participants) ? safe.participants.filter((p: unknown) => typeof p === 'string') : [],
-    participant_names: safe.participant_names && typeof safe.participant_names === 'object' ? safe.participant_names : {},
+    participant_names: recordOfStrings(safe.participant_names),
     last_message: typeof safe.last_message === 'string' ? safe.last_message : '',
     updated_at: safe.updated_at || null,
-    unread_counts: safe.unread_counts && typeof safe.unread_counts === 'object' ? safe.unread_counts : {},
+    unread_counts: recordOfNumbers(safe.unread_counts),
     pinned_by: Array.isArray(safe.pinned_by) ? safe.pinned_by.filter((v: unknown) => typeof v === 'string') : [],
     hidden_by: Array.isArray(safe.hidden_by) ? safe.hidden_by.filter((v: unknown) => typeof v === 'string') : [],
   };
@@ -120,9 +131,9 @@ export default function ChatsScreen() {
       });
       setLoading(false);
       setError('');
-    }, (err) => {
+    }, (err: unknown) => {
       setLoading(false);
-      setError(err?.message || 'Failed to load chats.');
+      setError(err instanceof Error ? err.message : 'Failed to load chats.');
     });
 
     const unsubB = subscribeDeduped(stableQueryKey(['chats_broadcast', user.uid]), broadcastQ as any, (snap) => {

@@ -34,6 +34,7 @@ import { useAuth } from "@/context/AuthContext";
 import { uploadUriFile } from "@/lib/storage";
 import { normalizeMeetUrl, prepareExternalUrl } from "@/lib/links";
 import { startLiveClass, subscribeActiveLiveClass, type LiveClass } from "@/lib/liveClasses";
+import { loadAssignmentDraft, saveAssignmentDraft } from "@/lib/lmsHardening";
 
 const MAX_ASSIGNMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_ASSIGNMENT_MIME_TYPES = new Set([
@@ -514,6 +515,15 @@ export default function CourseDetailScreen() {
       Alert.alert("Error", "Something went wrong");
     } finally {
       setReviewing(false);
+    }
+  };
+
+  const safePush = (path: string) => {
+    try {
+      if (!path) return;
+      router.push(path as never);
+    } catch {
+      // no-op: keep app responsive
     }
   };
 

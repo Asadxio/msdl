@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "release:check": "node ./scripts/release-readiness-check.mjs"
+    "release:check": "node ./scripts/release-readiness-check.mjs",
+    "test": "jest"
   },
   "dependencies": {
     "@babel/runtime": "^7.20.6",

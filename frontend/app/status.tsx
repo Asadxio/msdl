@@ -11,6 +11,7 @@ import {
   Alert,
   Linking,
   Image,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -693,11 +694,6 @@ export default function StatusScreen() {
               </View>
             </View>
           )}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.empty}>No active status updates.</Text>
-            </View>
-          }
         />
       )}
     </View>
