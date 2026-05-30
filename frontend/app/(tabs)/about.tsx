@@ -1,6 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
+  Pressable,
   View,
   Text,
   StyleSheet,
@@ -12,6 +15,7 @@ import {
   Linking,
   Share,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,6 +71,14 @@ type PaymentItem = {
   type?: 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
 };
 
+type DrawerItem = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  route?: string;
+  action?: 'feedback' | 'logout';
+  danger?: boolean;
+};
+
 const DEFAULT_SETTINGS: AppSettings = {
   fees_amount: 0,
   razorpay_link: '',
@@ -97,9 +109,15 @@ function SectionCard({ title, icon, children }: { title: string; icon: string; c
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const router = useRouter();
   const isAdmin = profile?.role === 'admin';
+  const scrollRef = useRef<ScrollView>(null);
+  const drawerProgress = useRef(new Animated.Value(0)).current;
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [feedbackY, setFeedbackY] = useState(0);
+  const drawerWidth = Math.min(Math.max(width * 0.78, 260), 330);
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
@@ -118,6 +136,53 @@ export default function AboutScreen() {
   const [socialError, setSocialError] = useState('');
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const testimonials = useMemo(() => feedback.slice(0, 6), [feedback]);
+
+  const drawerItems: DrawerItem[] = [
+    { label: 'Dashboard', icon: 'home-outline', route: '/' },
+    { label: 'Courses', icon: 'book-outline', route: '/courses' },
+    { label: 'Teachers', icon: 'people-outline', route: '/teachers' },
+    { label: 'Payments', icon: 'card-outline', route: '/payment' },
+    { label: 'Feedback', icon: 'chatbox-ellipses-outline', action: 'feedback' },
+    { label: 'Settings', icon: 'settings-outline', route: '/settings' },
+    { label: 'Logout', icon: 'log-out-outline', action: 'logout', danger: true },
+  ];
+
+  const openDrawer = () => {
+    setDrawerVisible(true);
+    Animated.timing(drawerProgress, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeDrawer = (afterClose?: () => void) => {
+    Animated.timing(drawerProgress, {
+      toValue: 0,
+      duration: 220,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setDrawerVisible(false);
+      afterClose?.();
+    });
+  };
+
+  const handleDrawerItem = (item: DrawerItem) => {
+    if (item.action === 'logout') {
+      closeDrawer(() => { void signOut(); });
+      return;
+    }
+    if (item.action === 'feedback') {
+      closeDrawer(() => {
+        requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, feedbackY - 24), animated: true }));
+      });
+      return;
+    }
+    const route = item.route;
+    if (route) closeDrawer(() => safePush(route));
+  };
 
   const serialize = (value: any): any => {
     if (value?.toDate && typeof value.toDate === 'function') {
@@ -595,13 +660,13 @@ export default function AboutScreen() {
             <Text style={styles.headerTitle}>Profile</Text>
             <Text style={styles.headerSubtitle}>Madars tus salikat Lilbanat • مدرسۃ السالکات للبنات</Text>
           </View>
-          <TouchableOpacity style={styles.moreBtn} onPress={() => safePush('/more')} testID="goto-more-btn">
+          <TouchableOpacity style={styles.moreBtn} onPress={openDrawer} activeOpacity={0.82} testID="goto-more-btn">
             <Ionicons name="grid-outline" size={16} color={COLORS.primary} />
             <Text style={styles.moreBtnText}>More</Text>
           </TouchableOpacity>
         </View>
       </View>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
         {profile && (
           <View style={styles.profileCard} testID="user-profile-card">
             <View style={styles.profileIconCircle}>
@@ -813,7 +878,8 @@ export default function AboutScreen() {
         </>
         )}
 
-        <SectionCard title="Feedback & Testimonials" icon="chatbox-ellipses-outline">
+        <View onLayout={(event) => setFeedbackY(event.nativeEvent.layout.y)}>
+          <SectionCard title="Feedback & Testimonials" icon="chatbox-ellipses-outline">
           <Text style={styles.inputLabel}>Feedback Message</Text>
           <TextInput
             style={[styles.input, styles.textArea, focusedInput === 'feedback_message' && styles.inputFocused]}
@@ -878,6 +944,7 @@ export default function AboutScreen() {
             </View>
           ))}
         </SectionCard>
+        </View>
 
         <SectionCard title="Social & Help" icon="globe-outline">
           {isAdmin ? (
@@ -932,13 +999,6 @@ export default function AboutScreen() {
           </Text>
         </SectionCard>
 
-        <View style={styles.bismillahCard} testID="bismillah-section">
-          <Text style={styles.bismillah}>بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</Text>
-          <Text style={styles.bismillahTranslation}>
-            In the name of Allah, the Most Gracious, the Most Merciful
-          </Text>
-        </View>
-
         <SectionCard title="Introduction" icon="sparkles">
           <Text style={styles.bodyText}>{settings.introduction_content}</Text>
           {isAdmin ? (
@@ -966,6 +1026,61 @@ export default function AboutScreen() {
           <Text style={styles.bodyText}>Ya Allah, increase me in knowledge and guide me to the right path.</Text>
         </SectionCard>
       </ScrollView>
+
+      {drawerVisible ? (
+        <View pointerEvents="box-none" style={styles.drawerLayer}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close menu"
+            style={styles.drawerBackdropHitbox}
+            onPress={() => closeDrawer()}
+          >
+            <Animated.View
+              style={[
+                styles.drawerBackdrop,
+                {
+                  opacity: drawerProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 0.32] }),
+                },
+              ]}
+            />
+          </Pressable>
+          <Animated.View
+            accessibilityViewIsModal
+            style={[
+              styles.drawer,
+              {
+                width: drawerWidth,
+                paddingTop: insets.top + SPACING.lg,
+                transform: [{
+                  translateX: drawerProgress.interpolate({ inputRange: [0, 1], outputRange: [-drawerWidth, 0] }),
+                }],
+              },
+            ]}
+          >
+            <View style={styles.drawerHandle} />
+            <Text style={styles.drawerTitle}>More</Text>
+            <Text style={styles.drawerSubtitle}>Navigate Madrasa tools</Text>
+            <View style={styles.drawerList}>
+              {drawerItems.map((item) => (
+                <TouchableOpacity
+                  key={item.label}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
+                  activeOpacity={0.76}
+                  style={[styles.drawerItem, item.danger && styles.drawerItemDanger]}
+                  onPress={() => handleDrawerItem(item)}
+                >
+                  <View style={[styles.drawerIconCircle, item.danger && styles.drawerIconCircleDanger]}>
+                    <Ionicons name={item.icon as any} size={18} color={item.danger ? COLORS.error : COLORS.primary} />
+                  </View>
+                  <Text style={[styles.drawerItemText, item.danger && styles.drawerItemTextDanger]}>{item.label}</Text>
+                  {!item.danger ? <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} /> : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Animated.View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -980,17 +1095,83 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.textMain },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
   moreBtn: {
+    minHeight: 42,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
+    gap: 7,
+    borderRadius: RADIUS.full,
+    backgroundColor: '#F5EEDC',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  moreBtnText: { fontSize: 13, fontWeight: '800', color: COLORS.goldText },
+  drawerLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 50,
+    elevation: 50,
+  },
+  drawerBackdropHitbox: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  drawerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+  },
+  drawer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: COLORS.surface,
+    borderTopRightRadius: RADIUS.xxl,
+    borderBottomRightRadius: RADIUS.xxl,
+    paddingHorizontal: SPACING.lg,
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 8, height: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  drawerHandle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.secondary,
+    opacity: 0.75,
+    marginBottom: SPACING.md,
+  },
+  drawerTitle: { fontSize: 24, fontWeight: '900', color: COLORS.primary },
+  drawerSubtitle: { fontSize: 13, color: COLORS.textMuted, marginTop: 2, marginBottom: SPACING.lg },
+  drawerList: { gap: 8 },
+  drawerItem: {
+    minHeight: 50,
+    borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.surfaceAlt,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.goldBg,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  moreBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.goldText },
+  drawerItemDanger: { backgroundColor: '#FFF5F4', borderColor: '#F9C7C3', marginTop: SPACING.sm },
+  drawerIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5EEDC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerIconCircleDanger: { backgroundColor: '#FDECEC' },
+  drawerItemText: { flex: 1, fontSize: 15, fontWeight: '800', color: COLORS.textMain },
+  drawerItemTextDanger: { color: COLORS.error },
   scrollContent: { padding: SPACING.lg, paddingBottom: 40, gap: SPACING.lg },
   sectionCard: {
     backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg,
@@ -1027,11 +1208,6 @@ const styles = StyleSheet.create({
   feedbackRating: { fontSize: 12, color: COLORS.goldText, fontWeight: '700' },
   feedbackActions: { flexDirection: 'row', gap: 14, marginTop: 4 },
   actionLink: { fontSize: 12, color: COLORS.primary, fontWeight: '700' },
-  bismillahCard: {
-    backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.xxl, padding: SPACING.lg, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border,
-  },
-  bismillah: { fontSize: 28, color: COLORS.primary, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
-  bismillahTranslation: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', fontStyle: 'italic' },
   profileCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12, ...SHADOWS.card,
   },
