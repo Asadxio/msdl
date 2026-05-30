@@ -1,7 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View, StyleSheet, I18nManager, Alert } from 'react-native';
+import { I18nManager } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -16,18 +16,20 @@ import { FullScreenLoader } from '@/components/ui';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
+  const profileStatus = profile?.status;
   const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
   const segments = useSegments();
+  const segmentKey = segments.join('/');
   const router = useRouter();
 
 
   useEffect(() => {
-    if (!user?.uid || !profile || profile.status !== 'approved') {
+    if (!user?.uid || profileStatus !== 'approved') {
       setNeedsLegalAcceptance(false);
       return;
     }
     getConsentStatus(user.uid).then((state) => setNeedsLegalAcceptance(state.needsAcceptance)).catch(() => setNeedsLegalAcceptance(true));
-  }, [user?.uid, profile?.status]);
+  }, [user?.uid, profileStatus, segmentKey]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -36,11 +38,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const isAdmin = profile?.role === 'admin';
     const inAdmin = segments[0] === 'admin';
     const inUnauthorized = segments[0] === 'unauthorized';
+    const legalConsentRoutes = ['legal-gate', 'terms', 'privacy', 'community-guidelines'];
+    const inLegalConsentRoute = legalConsentRoutes.includes(String(segments[0] || ''));
     const inLegalGate = segments[0] === 'legal-gate';
 
     if (!user) {
       if (!inAuth) router.replace('/auth/login');
-    } else if (needsLegalAcceptance && !inLegalGate) {
+    } else if (needsLegalAcceptance && !inLegalConsentRoute) {
       router.replace('/legal-gate');
     } else if (!needsLegalAcceptance && inLegalGate) {
       router.replace('/');
@@ -216,6 +220,3 @@ export default function RootLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.background },
-});
