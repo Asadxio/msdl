@@ -64,13 +64,13 @@ export async function getConsentStatus(userId: string): Promise<ConsentStatus> {
 }
 
 export async function acceptLegalDocs(userId: string, keys: LegalDocKey[]): Promise<void> {
-  const accepted = keys.reduce<Record<string, unknown>>((acc, key) => {
-    acc[`accepted.${key}`] = { version: LEGAL_DOCS[key].version, acceptedAt: serverTimestamp() };
+  const accepted = keys.reduce<Partial<Record<LegalDocKey, { version: string; acceptedAt: unknown }>>>((acc, key) => {
+    acc[key] = { version: LEGAL_DOCS[key].version, acceptedAt: serverTimestamp() };
     return acc;
   }, {});
 
   await setDoc(doc(db, 'users', userId, 'compliance', 'legal_acceptance'), {
-    ...accepted,
+    accepted,
     acceptance_updated_at: serverTimestamp(),
     policy_bundle_version: `${LEGAL_DOCS.terms.version}|${LEGAL_DOCS.privacy.version}|${LEGAL_DOCS.community.version}`,
   }, { merge: true });
