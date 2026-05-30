@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDownloadURL, ref, uploadBytesResumable, UploadTask } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
-import { optimizeImageForUpload, optimizeVideoForUpload, validateOptimizedMedia, registerCacheEntry, updateUploadHeartbeat, scheduleRetry, isDuplicateWindow } from '@/lib/mediaOptimization';
+import { optimizeImageForUpload, optimizeVideoForUpload, validateOptimizedMedia, registerCacheEntry, updateUploadHeartbeat, scheduleRetry, isDuplicateWindow, clearDuplicateWindow } from '@/lib/mediaOptimization';
 
 export type MediaCategory = 'chat' | 'status' | 'profile' | 'assignment' | 'course' | 'recording';
 export type MediaState = 'queued' | 'uploading' | 'paused' | 'failed' | 'completed' | 'cancelled';
@@ -68,29 +68,29 @@ export async function runMediaUpload(
   const isVideo = req.contentType.startsWith('video/') || ext.endsWith('.mp4') || ext.endsWith('.mov');
   const optimized = isVideo ? await optimizeVideoForUpload(req.uri, req.category === 'recording' ? 'recording' : 'medium', (req.category as any)) : await optimizeImageForUpload(req.uri, { quality: req.category === 'chat' ? 0.65 : 0.72 });
   validateOptimizedMedia(optimized, req.maxBytes || DEFAULT_MAX);
-  const dup = await isDuplicateWindow(optimized.integrityHash);
+  const dup = await isDuplicateWindow(optimized.integrityHash, req.uploadId);
   if (dup) throw new Error('Duplicate upload suppressed.');
 
-  const res = await fetch(optimized.uri);
-  if (!res.ok) throw new Error(`Could not read media file (${res.status}).`);
-  const blob = await res.blob();
-  if (!blob || !blob.size) throw new Error('Media file is empty/corrupted.');
-  if (blob.size > (req.maxBytes || DEFAULT_MAX)) throw new Error('Media file too large for upload policy.');
-
-  const fileRef = ref(storage, req.path);
-  const task = uploadBytesResumable(fileRef, blob, {
-    contentType: req.contentType,
-    customMetadata: {
-      upload_id: req.uploadId,
-      category: req.category,
-      uploaded_at_ms: String(Date.now()),
-      integrity_hash: optimized.integrityHash,
-      optimized_cache_key: optimized.cacheKey,
-    },
-  });
-  activeTasks.set(req.uploadId, task);
-
   try {
+    const res = await fetch(optimized.uri);
+    if (!res.ok) throw new Error(`Could not read media file (${res.status}).`);
+    const blob = await res.blob();
+    if (!blob || !blob.size) throw new Error('Media file is empty/corrupted.');
+    if (blob.size > (req.maxBytes || DEFAULT_MAX)) throw new Error('Media file too large for upload policy.');
+
+    const fileRef = ref(storage, req.path);
+    const task = uploadBytesResumable(fileRef, blob, {
+      contentType: req.contentType,
+      customMetadata: {
+        upload_id: req.uploadId,
+        category: req.category,
+        uploaded_at_ms: String(Date.now()),
+        integrity_hash: optimized.integrityHash,
+        optimized_cache_key: optimized.cacheKey,
+      },
+    });
+    activeTasks.set(req.uploadId, task);
+
     await new Promise<void>((resolve, reject) => {
       task.on('state_changed',
         (snap) => {
@@ -110,6 +110,7 @@ export async function runMediaUpload(
     activeTasks.delete(req.uploadId);
     return url;
   } catch (err) {
+    await clearDuplicateWindow(optimized.integrityHash, req.uploadId).catch(() => {});
     const msg = classifyMediaError(err);
     scheduleRetry(req.uploadId).catch(() => {});
     onProgress?.({ uploadId: req.uploadId, state: 'failed', progress: 0, error: msg });

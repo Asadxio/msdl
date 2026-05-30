@@ -19,6 +19,8 @@ import { useAuth } from '@/context/AuthContext';
 import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
 import { prepareExternalUrl } from '@/lib/links';
 
+const VERIFICATION_EMAIL_NOTE = "Didn't receive the verification email? Please check your Spam/Junk folder.";
+
 /**
  * Production-safe Login UI:
  * - SafeAreaView + ScrollView for small devices
@@ -102,6 +104,7 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 testID="login-email-input"
               />
+              <Text style={styles.verificationNote}>{VERIFICATION_EMAIL_NOTE}</Text>
 
               <View>
                 <AppInput
@@ -197,6 +200,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1, textAlign: 'left' },
+  verificationNote: { ...TYPOGRAPHY.label, color: COLORS.textMuted, lineHeight: 18 },
   eyeBtn: { position: 'absolute', right: SPACING.sm, top: 34, height: 40, justifyContent: 'center' },
   primaryBtn: {
     backgroundColor: COLORS.primary,

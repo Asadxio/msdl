@@ -146,11 +146,34 @@ export async function scheduleRetry(uploadId: string) {
   return { allowed: true, nextInMs };
 }
 
-export async function isDuplicateWindow(hash: string) {
+export async function isDuplicateWindow(hash: string, uploadId?: string) {
   const key = `dup_${hash}`;
   const raw = await AsyncStorage.getItem(key);
   const t = now();
-  if (raw && t - Number(raw) <= DUP_WINDOW_MS) return true;
-  await AsyncStorage.setItem(key, String(t));
+  let previous: { at: number; uploadId?: string } | null = null;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as { at?: number; uploadId?: string };
+      previous = { at: Number(parsed.at || 0), uploadId: parsed.uploadId };
+    } catch {
+      previous = { at: Number(raw), uploadId: undefined };
+    }
+  }
+  const sameUploadRetry = Boolean(uploadId && previous?.uploadId === uploadId);
+  if (previous && !sameUploadRetry && t - previous.at <= DUP_WINDOW_MS) return true;
+  await AsyncStorage.setItem(key, JSON.stringify({ at: t, uploadId }));
   return false;
+}
+
+export async function clearDuplicateWindow(hash: string, uploadId?: string) {
+  if (!hash || !uploadId) return;
+  const key = `dup_${hash}`;
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as { uploadId?: string };
+    if (parsed.uploadId === uploadId) await AsyncStorage.removeItem(key);
+  } catch {
+    await AsyncStorage.removeItem(key);
+  }
 }

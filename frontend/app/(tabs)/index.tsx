@@ -42,8 +42,10 @@ import {
   getTeacherAvatar,
 } from "@/constants/theme";
 import { useData } from "@/context/DataContext";
+import type { Course, CourseProgressSummary } from "@/context/DataContext";
 import { db } from "@/lib/firebase";
 import { EmptyState, ScalePressable, SkeletonCard } from "@/components/ui";
+import { ExpandableSection } from "@/components/ExpandableSection";
 import { useAuth } from "@/context/AuthContext";
 import { normalizeGoogleDriveFileUrl } from "@/lib/links";
 
@@ -158,6 +160,67 @@ const ISLAMIC_THEMES: IslamicTheme[] = [
     secondary: "#FED7AA",
   },
 ];
+
+let featuredCoursesExpandedPreference = false;
+
+type FeaturedCourseCardProps = {
+  course: Course;
+  imageUri: string;
+  progress: CourseProgressSummary;
+  onContinue: () => void;
+  testID?: string;
+};
+
+const FeaturedCourseCard = React.memo(function FeaturedCourseCard({
+  course,
+  imageUri,
+  progress,
+  onContinue,
+  testID,
+}: FeaturedCourseCardProps) {
+  const completionPercent = Math.min(
+    100,
+    Math.max(0, progress.completionPercent),
+  );
+
+  return (
+    <View style={styles.courseCard} testID={testID}>
+      <Image source={{ uri: imageUri }} style={styles.courseCardImage} />
+      <View style={styles.courseCardContent}>
+        <Text style={styles.courseCardName} numberOfLines={2}>
+          {course.name}
+        </Text>
+        <Text style={styles.courseCardTeacher} numberOfLines={1}>
+          {course.teacher_name}
+        </Text>
+        <Text style={styles.courseCardDescription} numberOfLines={2}>
+          {course.description || "Continue your Islamic learning journey."}
+        </Text>
+        <View style={styles.courseProgressRow}>
+          <Text style={styles.courseProgressLabel}>
+            Progress {completionPercent}%
+          </Text>
+        </View>
+        <View style={styles.courseProgressTrack}>
+          <View
+            style={[
+              styles.courseProgressFill,
+              { width: `${completionPercent}%` },
+            ]}
+          />
+        </View>
+        <TouchableOpacity
+          activeOpacity={0.86}
+          style={styles.courseContinueButton}
+          onPress={onContinue}
+        >
+          <Text style={styles.courseContinueText}>Continue</Text>
+          <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+});
 
 const FALLBACK_LOCATION: LocationDetails = {
   city: "Location unavailable",
@@ -440,9 +503,12 @@ export default function HomeScreen() {
     useData();
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
-  const safeCourses = Array.isArray(courses) ? courses : [];
+  const safeCourses = useMemo(
+    () => (Array.isArray(courses) ? courses : []),
+    [courses],
+  );
   const safeTeachers = Array.isArray(teachers) ? teachers : [];
-  const featuredCourses = safeCourses.slice(0, 5);
+  const featuredCourses = useMemo(() => safeCourses.slice(0, 5), [safeCourses]);
   const [announcementTitle, setAnnouncementTitle] = useState(
     DEFAULT_ANNOUNCEMENT_TITLE,
   );
@@ -457,6 +523,9 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const [now, setNow] = useState(() => new Date());
   const [themeIndex, setThemeIndex] = useState(0);
+  const [featuredCoursesExpanded, setFeaturedCoursesExpanded] = useState(
+    featuredCoursesExpandedPreference,
+  );
   const [locationDetails, setLocationDetails] =
     useState<LocationDetails>(FALLBACK_LOCATION);
   const pulseAnim = useRef(new Animated.Value(0)).current;
@@ -737,7 +806,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* Featured Courses */}
+        {/* Resume Learning */}
         {resumeLearning ? (
           <View style={[styles.section, { paddingHorizontal: SPACING.lg }]}>
             <Text style={[styles.sectionTitle, { marginBottom: SPACING.md }]}>
@@ -774,9 +843,21 @@ export default function HomeScreen() {
         ) : null}
 
         {/* Featured Courses */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Courses</Text>
+        <ExpandableSection
+          title="Featured Courses"
+          count={featuredCourses.length}
+          expanded={featuredCoursesExpanded}
+          testID="featured-courses-section"
+          contentStyle={styles.featuredCoursesContent}
+          onExpandedChange={(expanded) => {
+            featuredCoursesExpandedPreference = expanded;
+            setFeaturedCoursesExpanded(expanded);
+          }}
+        >
+          <View style={styles.expandableTopRow}>
+            <Text style={styles.expandableHint}>
+              Continue your guided learning with recommended Islamic courses.
+            </Text>
             <TouchableOpacity
               testID="view-all-courses-btn"
               onPress={() => safePush("/courses")}
@@ -785,57 +866,25 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
           {featuredCourses.length === 0 ? (
-            <EmptyState
-              icon="book-outline"
-              message="No featured courses available."
-            />
+            <EmptyState icon="book-outline" message="No courses available yet" />
           ) : (
             <View style={styles.verticalList}>
-              {featuredCourses.map((item, index) => {
-                const progress = getCourseProgress(item.id);
-                return (
-                  <ScalePressable
-                    key={item.id}
-                    style={styles.courseCard}
-                    testID={`featured-course-card-${item.id}`}
-                    onPress={() => {
-                      if (!item?.id) return;
-                      safePush(`/course/${item.id}`);
-                    }}
-                  >
-                    <Image
-                      source={{ uri: getCourseImage(index) }}
-                      style={styles.courseCardImage}
-                    />
-                    <View style={styles.courseCardContent}>
-                      <Text style={styles.courseCardName} numberOfLines={2}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.courseCardTeacher} numberOfLines={1}>
-                        {item.teacher_name}
-                      </Text>
-                      <View style={styles.courseProgressRow}>
-                        <Text style={styles.courseProgressLabel}>
-                          Progress {progress.completionPercent}%
-                        </Text>
-                      </View>
-                      <View style={styles.courseProgressTrack}>
-                        <View
-                          style={[
-                            styles.courseProgressFill,
-                            {
-                              width: `${Math.min(100, Math.max(0, progress.completionPercent))}%`,
-                            },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  </ScalePressable>
-                );
-              })}
+              {featuredCourses.map((item, index) => (
+                <FeaturedCourseCard
+                  key={item.id}
+                  course={item}
+                  imageUri={getCourseImage(index)}
+                  progress={getCourseProgress(item.id)}
+                  testID={`featured-course-card-${item.id}`}
+                  onContinue={() => {
+                    if (!item?.id) return;
+                    safePush(`/course/${item.id}`);
+                  }}
+                />
+              ))}
             </View>
           )}
-        </View>
+        </ExpandableSection>
 
         {/* Teachers Preview */}
         <View style={styles.section}>
@@ -1067,16 +1116,37 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   sectionTitle: { fontSize: 20, fontWeight: "700", color: COLORS.textMain },
-  viewAllText: { fontSize: 14, fontWeight: "600", color: COLORS.secondary },
+  viewAllText: { fontSize: 14, fontWeight: "700", color: COLORS.secondary },
+  featuredCoursesContent: {
+    padding: SPACING.md,
+    paddingTop: SPACING.sm,
+    backgroundColor: COLORS.surfaceAlt,
+    gap: SPACING.md,
+  },
+  expandableTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: SPACING.md,
+  },
+  expandableHint: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.textMuted,
+    fontWeight: "500",
+  },
   horizontalList: {
     paddingLeft: SPACING.lg,
     paddingRight: SPACING.sm,
     gap: SPACING.md,
   },
-  verticalList: { paddingHorizontal: SPACING.lg, gap: SPACING.md },
+  verticalList: { gap: SPACING.md },
   courseCard: {
-    borderRadius: RADIUS.xl,
+    borderRadius: 16,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: COLORS.border,
     ...SHADOWS.card,
     backgroundColor: COLORS.surface,
   },
@@ -1092,6 +1162,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textMuted,
     fontWeight: "500",
+  },
+  courseCardDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.textMuted,
+    marginTop: 4,
   },
   courseProgressRow: {
     flexDirection: "row",
@@ -1114,6 +1190,21 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: RADIUS.full,
     backgroundColor: COLORS.primary,
+  },
+  courseContinueButton: {
+    minHeight: 42,
+    marginTop: SPACING.sm,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  courseContinueText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
   },
   teacherPreviewCard: { alignItems: "center", width: 110, gap: 8 },
   teacherAvatar: {

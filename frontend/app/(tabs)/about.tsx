@@ -88,22 +88,105 @@ const DEFAULT_SETTINGS: AppSettings = {
   youtube_link: '',
   telegram_link: '',
   donation_content: 'Your sadaqah, zakat, fitrah and langar support help students access Islamic education with dignity and consistency.',
-  introduction_content: 'Madrasa Tus Salikat Lilbanat is a modern Islamic learning platform dedicated to quality Islamic education for girls.',
+  introduction_content: 'Madarsa Tus Salikat Lil Banat is a modern Islamic learning platform dedicated to quality Islamic education for girls.',
 };
 const HELP_WHATSAPP_URL = 'https://wa.link/mrtyi1';
+const HELP_WHATSAPP_NUMBER = 'mrtyi1';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
+const SOCIAL_HELP_CONFIG = {
+  appName: 'Madars tus salikat Lilbanat - مدرسۃ السالکات للبنات',
+  appShareLink: 'https://play.google.com/store/apps/details?id=com.madrasatussalikat.lilbanat',
+  helpMessage: 'Assalamu Alaikum, I need help regarding the app.',
+};
 const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
 
-function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+function SectionCard({ title, icon, children }: { title: string; icon?: string; children: React.ReactNode }) {
   return (
     <View style={styles.sectionCard}>
       <View style={styles.sectionCardHeader}>
-        <Ionicons name={icon as any} size={22} color={COLORS.secondary} />
+        {icon ? <Ionicons name={icon as any} size={22} color={COLORS.secondary} /> : null}
         <Text style={styles.sectionCardTitle}>{title}</Text>
       </View>
       <View style={styles.goldAccent} />
       {children}
     </View>
+  );
+}
+
+type SocialHelpCardProps = {
+  isAdmin: boolean;
+  settings: AppSettings;
+  focusedInput: string | null;
+  socialError: string;
+  openingSocialLabel: string;
+  onSettingChange: (key: keyof AppSettings, value: string) => void;
+  onFocusInput: (key: string | null) => void;
+  onOpenSocialLink: (url: string, label: string) => void;
+  onOpenHelp: (prefilled?: boolean) => void;
+  onShareApp: () => void;
+  onSaveSocialSettings: () => void;
+};
+
+function SocialHelpCard({
+  isAdmin,
+  settings,
+  focusedInput,
+  socialError,
+  openingSocialLabel,
+  onSettingChange,
+  onFocusInput,
+  onOpenSocialLink,
+  onOpenHelp,
+  onShareApp,
+  onSaveSocialSettings,
+}: SocialHelpCardProps) {
+  const isOpening = (label: string) => openingSocialLabel === label;
+
+  return (
+    <SectionCard title="🌐 Social & Help">
+      {isAdmin ? (
+        <>
+          <Text style={styles.inputLabel}>WhatsApp Channel Link</Text>
+          <TextInput style={[styles.input, focusedInput === 'social_channel' && styles.inputFocused]} placeholder="WhatsApp Channel Link" placeholderTextColor={COLORS.textMuted} value={settings.whatsapp_channel} onChangeText={(v) => onSettingChange('whatsapp_channel', v)} keyboardType="url" onFocus={() => onFocusInput('social_channel')} onBlur={() => onFocusInput(null)} />
+          <Text style={styles.inputLabel}>WhatsApp Contact</Text>
+          <TextInput style={[styles.input, focusedInput === 'social_contact' && styles.inputFocused]} placeholder="WhatsApp Contact (URL or number)" placeholderTextColor={COLORS.textMuted} value={settings.whatsapp_contact} onChangeText={(v) => onSettingChange('whatsapp_contact', v)} keyboardType="url" onFocus={() => onFocusInput('social_contact')} onBlur={() => onFocusInput(null)} />
+          <Text style={styles.inputLabel}>Instagram Link</Text>
+          <TextInput style={[styles.input, focusedInput === 'social_instagram' && styles.inputFocused]} placeholder="Instagram Link" placeholderTextColor={COLORS.textMuted} value={settings.instagram} onChangeText={(v) => onSettingChange('instagram', v)} keyboardType="url" onFocus={() => onFocusInput('social_instagram')} onBlur={() => onFocusInput(null)} />
+          <Text style={styles.inputLabel}>YouTube Link</Text>
+          <TextInput style={[styles.input, focusedInput === 'social_youtube' && styles.inputFocused]} placeholder="YouTube Link" placeholderTextColor={COLORS.textMuted} value={settings.youtube_link} onChangeText={(v) => onSettingChange('youtube_link', v)} keyboardType="url" onFocus={() => onFocusInput('social_youtube')} onBlur={() => onFocusInput(null)} />
+          <Text style={styles.inputLabel}>Telegram Link</Text>
+          <TextInput style={[styles.input, focusedInput === 'social_telegram' && styles.inputFocused]} placeholder="Telegram Link" placeholderTextColor={COLORS.textMuted} value={settings.telegram_link} onChangeText={(v) => onSettingChange('telegram_link', v)} keyboardType="url" onFocus={() => onFocusInput('social_telegram')} onBlur={() => onFocusInput(null)} />
+          {socialError ? <Text style={styles.inputError}>{socialError}</Text> : null}
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onSaveSocialSettings}>
+            <Text style={styles.secondaryBtnText}>Save Social Links</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+
+      <View style={styles.socialButtonRow}>
+        {[
+          { label: 'WhatsApp Channel', url: settings.whatsapp_channel },
+          { label: 'Instagram', url: settings.instagram },
+          { label: 'YouTube', url: settings.youtube_link },
+          { label: 'Telegram', url: settings.telegram_link },
+        ].map((item) => (
+          <TouchableOpacity key={item.label} style={styles.socialPillBtn} onPress={() => onOpenSocialLink(item.url, item.label)} disabled={isOpening(item.label)}>
+            {isOpening(item.label) ? <ActivityIndicator size="small" color={COLORS.textMain} /> : <Text style={styles.linkBtnText}>{item.label}</Text>}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <TouchableOpacity style={styles.fullWidthSupportBtn} onPress={() => onOpenHelp(false)} disabled={isOpening('WhatsApp Support')}>
+        {isOpening('WhatsApp Support') ? <ActivityIndicator size="small" color={COLORS.goldText} /> : <Text style={styles.primaryBtnText}>WhatsApp Support</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.fullWidthSupportBtn} onPress={onShareApp} disabled={isOpening('Share App')} testID="share-app-btn">
+        {isOpening('Share App') ? <ActivityIndicator size="small" color={COLORS.goldText} /> : <Text style={styles.primaryBtnText}>Share App</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.fullWidthSupportBtn} onPress={() => onOpenHelp(true)} disabled={isOpening('Help (WhatsApp)')} testID="help-btn">
+        {isOpening('Help (WhatsApp)') ? <ActivityIndicator size="small" color={COLORS.goldText} /> : <Text style={styles.primaryBtnText}>Help (WhatsApp)</Text>}
+      </TouchableOpacity>
+      <Text style={styles.socialFooterText}>Need Help? Contact us on WhatsApp</Text>
+    </SectionCard>
   );
 }
 
@@ -115,6 +198,7 @@ export default function AboutScreen() {
   const isAdmin = profile?.role === 'admin';
   const scrollRef = useRef<ScrollView>(null);
   const drawerProgress = useRef(new Animated.Value(0)).current;
+  const aboutFadeAnim = useRef(new Animated.Value(0)).current;
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [feedbackY, setFeedbackY] = useState(0);
   const drawerWidth = Math.min(Math.max(width * 0.78, 260), 330);
@@ -134,6 +218,7 @@ export default function AboutScreen() {
   const [donationError, setDonationError] = useState('');
   const [feedbackError, setFeedbackError] = useState('');
   const [socialError, setSocialError] = useState('');
+  const [openingSocialLabel, setOpeningSocialLabel] = useState('');
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const testimonials = useMemo(() => feedback.slice(0, 6), [feedback]);
 
@@ -223,6 +308,16 @@ export default function AboutScreen() {
       setExportingCollection(null);
     }
   };
+
+
+  useEffect(() => {
+    Animated.timing(aboutFadeAnim, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [aboutFadeAnim]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -350,26 +445,52 @@ export default function AboutScreen() {
     }
   };
 
-  const openHelp = async () => {
+  const getConfiguredHelpUrl = (prefilled = false) => {
+    const configured = String(settings.whatsapp_contact || '').trim();
+    const baseUrl = configured || HELP_WHATSAPP_URL;
+    const isWaMeNumber = configured && /^[+]?[0-9]{8,15}$/.test(configured);
+    if (!prefilled) return baseUrl;
+    if (isWaMeNumber) {
+      const phone = configured.replace(/\D/g, '');
+      return `https://wa.me/${phone}?text=${encodeURIComponent(SOCIAL_HELP_CONFIG.helpMessage)}`;
+    }
+    if (!configured && HELP_WHATSAPP_NUMBER !== 'mrtyi1') {
+      return `https://wa.me/${HELP_WHATSAPP_NUMBER}?text=${encodeURIComponent(SOCIAL_HELP_CONFIG.helpMessage)}`;
+    }
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${separator}text=${encodeURIComponent(SOCIAL_HELP_CONFIG.helpMessage)}`;
+  };
+
+  const openHelp = async (prefilled = false) => {
+    const label = prefilled ? 'Help (WhatsApp)' : 'WhatsApp Support';
+    setOpeningSocialLabel(label);
     try {
-      const canOpen = await Linking.canOpenURL(HELP_WHATSAPP_URL);
+      const helpUrl = prepareExternalUrl(getConfiguredHelpUrl(prefilled));
+      if (!helpUrl) {
+        Alert.alert('Unavailable', 'WhatsApp support is not configured yet.');
+        return;
+      }
+      const canOpen = await Linking.canOpenURL(helpUrl);
       if (!canOpen) {
         Alert.alert('Unavailable', 'Could not open WhatsApp right now.');
         return;
       }
-      await Linking.openURL(HELP_WHATSAPP_URL);
+      await Linking.openURL(helpUrl);
     } catch {
       Alert.alert('Unavailable', 'Could not open WhatsApp right now.');
+    } finally {
+      setOpeningSocialLabel('');
     }
   };
 
   const openSocialLink = async (url: string, label: string) => {
+    setOpeningSocialLabel(label);
     try {
-      if (!url?.trim()) {
+      const clean = prepareExternalUrl(url);
+      if (!clean) {
         Alert.alert('Not set', `${label} link is not configured yet.`);
         return;
       }
-      const clean = url.trim();
       const canOpen = await Linking.canOpenURL(clean);
       if (!canOpen) {
         Alert.alert('Unavailable', `Could not open ${label} right now.`);
@@ -378,13 +499,24 @@ export default function AboutScreen() {
       await Linking.openURL(clean);
     } catch {
       Alert.alert('Unavailable', `Could not open ${label} right now.`);
+    } finally {
+      setOpeningSocialLabel('');
     }
   };
 
   const shareApp = async () => {
-    await Share.share({
-      message: 'Join Madars tus salikat Lilbanat (مدرسۃ السالکات للبنات) app for courses, library and updates.',
-    });
+    setOpeningSocialLabel('Share App');
+    try {
+      await Share.share({
+        title: SOCIAL_HELP_CONFIG.appName,
+        message: `${SOCIAL_HELP_CONFIG.appName}
+${SOCIAL_HELP_CONFIG.appShareLink}`,
+      });
+    } catch {
+      Alert.alert('Unavailable', 'Could not open share sheet right now.');
+    } finally {
+      setOpeningSocialLabel('');
+    }
   };
 
   const getLatestPaymentSettings = async () => {
@@ -946,85 +1078,55 @@ export default function AboutScreen() {
         </SectionCard>
         </View>
 
-        <SectionCard title="Social & Help" icon="globe-outline">
-          {isAdmin ? (
-            <>
-              <Text style={styles.inputLabel}>WhatsApp Channel Link</Text>
-              <TextInput style={[styles.input, focusedInput === 'social_channel' && styles.inputFocused]} placeholder="WhatsApp Channel Link" placeholderTextColor={COLORS.textMuted} value={settings.whatsapp_channel} onChangeText={(v) => setSettings((p) => ({ ...p, whatsapp_channel: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_channel')} onBlur={() => setFocusedInput(null)} />
-              <Text style={styles.inputLabel}>WhatsApp Contact</Text>
-              <TextInput style={[styles.input, focusedInput === 'social_contact' && styles.inputFocused]} placeholder="WhatsApp Contact (URL or number)" placeholderTextColor={COLORS.textMuted} value={settings.whatsapp_contact} onChangeText={(v) => setSettings((p) => ({ ...p, whatsapp_contact: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_contact')} onBlur={() => setFocusedInput(null)} />
-              <Text style={styles.inputLabel}>Instagram Link</Text>
-              <TextInput style={[styles.input, focusedInput === 'social_instagram' && styles.inputFocused]} placeholder="Instagram Link" placeholderTextColor={COLORS.textMuted} value={settings.instagram} onChangeText={(v) => setSettings((p) => ({ ...p, instagram: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_instagram')} onBlur={() => setFocusedInput(null)} />
-              <Text style={styles.inputLabel}>YouTube Link</Text>
-              <TextInput style={[styles.input, focusedInput === 'social_youtube' && styles.inputFocused]} placeholder="YouTube Link" placeholderTextColor={COLORS.textMuted} value={settings.youtube_link} onChangeText={(v) => setSettings((p) => ({ ...p, youtube_link: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_youtube')} onBlur={() => setFocusedInput(null)} />
-              <Text style={styles.inputLabel}>Telegram Link</Text>
-              <TextInput style={[styles.input, focusedInput === 'social_telegram' && styles.inputFocused]} placeholder="Telegram Link" placeholderTextColor={COLORS.textMuted} value={settings.telegram_link} onChangeText={(v) => setSettings((p) => ({ ...p, telegram_link: v }))} keyboardType="url" onFocus={() => setFocusedInput('social_telegram')} onBlur={() => setFocusedInput(null)} />
-              {socialError ? <Text style={styles.inputError}>{socialError}</Text> : null}
-              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSocialSettings}>
-                <Text style={styles.secondaryBtnText}>Save Social Links</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <View style={styles.row}>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.whatsapp_channel, 'WhatsApp Channel'); }}>
-                  <Text style={styles.linkBtnText}>WhatsApp Channel</Text>
+        <Animated.View
+          style={{
+            opacity: aboutFadeAnim,
+            transform: [{
+              translateY: aboutFadeAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }),
+            }],
+          }}
+        >
+          <SectionCard title="🌿 About Our Madrasa">
+            <Text style={styles.bodyText}>{settings.introduction_content}</Text>
+            {isAdmin ? (
+              <>
+                <Text style={styles.inputLabel}>Editable Introduction</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea, focusedInput === 'intro_content' && styles.inputFocused]}
+                  value={settings.introduction_content}
+                  onChangeText={(v) => setSettings((p) => ({ ...p, introduction_content: v }))}
+                  multiline
+                  placeholder="Write introduction content..."
+                  placeholderTextColor={COLORS.textMuted}
+                  onFocus={() => setFocusedInput('intro_content')}
+                  onBlur={() => setFocusedInput(null)}
+                />
+                <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
+                  <Text style={styles.secondaryBtnText}>Save Introduction</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.instagram, 'Instagram'); }}>
-                  <Text style={styles.linkBtnText}>Instagram</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.youtube_link, 'YouTube'); }}>
-                  <Text style={styles.linkBtnText}>YouTube</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.telegram_link, 'Telegram'); }}>
-                  <Text style={styles.linkBtnText}>Telegram</Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={styles.linkBtn} onPress={openHelp}>
-                <Text style={styles.linkBtnText}>WhatsApp Support</Text>
-              </TouchableOpacity>
-            </>
-          )}
+              </>
+            ) : null}
+            <Text style={styles.bodyText}>
+              Our curriculum covers Quran, Hadith, Fiqh, Arabic, and practical Islamic lifestyle learning.
+            </Text>
+            <Text style={styles.bodyText}>اللهم زدني علما</Text>
+            <Text style={styles.bodyText}>Ya Allah, increase me in knowledge and guide me to the right path.</Text>
+          </SectionCard>
+        </Animated.View>
+        <SocialHelpCard
+          isAdmin={isAdmin}
+          settings={settings}
+          focusedInput={focusedInput}
+          socialError={socialError}
+          openingSocialLabel={openingSocialLabel}
+          onSettingChange={(key, value) => setSettings((prev) => ({ ...prev, [key]: value }))}
+          onFocusInput={setFocusedInput}
+          onOpenSocialLink={(url, label) => { void openSocialLink(url, label); }}
+          onOpenHelp={(prefilled) => { void openHelp(prefilled); }}
+          onShareApp={() => { void shareApp(); }}
+          onSaveSocialSettings={saveSocialSettings}
+        />
 
-          <View style={styles.row}>
-            <TouchableOpacity style={styles.primaryBtnSmall} onPress={shareApp} testID="share-app-btn">
-              <Text style={styles.primaryBtnText}>Share App</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.primaryBtnSmall} onPress={openHelp} testID="help-btn">
-              <Text style={styles.primaryBtnText}>Help (WhatsApp)</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={[styles.bodyText, { marginTop: 10, fontSize: 12 }]}>
-            Need Help? Contact us on WhatsApp
-          </Text>
-        </SectionCard>
-
-        <SectionCard title="Introduction" icon="sparkles">
-          <Text style={styles.bodyText}>{settings.introduction_content}</Text>
-          {isAdmin ? (
-            <>
-              <Text style={styles.inputLabel}>Editable Introduction</Text>
-              <TextInput
-                style={[styles.input, styles.textArea, focusedInput === 'intro_content' && styles.inputFocused]}
-                value={settings.introduction_content}
-                onChangeText={(v) => setSettings((p) => ({ ...p, introduction_content: v }))}
-                multiline
-                placeholder="Write introduction content..."
-                placeholderTextColor={COLORS.textMuted}
-                onFocus={() => setFocusedInput('intro_content')}
-                onBlur={() => setFocusedInput(null)}
-              />
-              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
-                <Text style={styles.secondaryBtnText}>Save Introduction</Text>
-              </TouchableOpacity>
-            </>
-          ) : null}
-          <Text style={styles.bodyText}>
-            Our curriculum covers Quran, Hadith, Fiqh, Arabic, and practical Islamic lifestyle learning.
-          </Text>
-          <Text style={styles.bodyText}>اللهم زدني علماً</Text>
-          <Text style={styles.bodyText}>Ya Allah, increase me in knowledge and guide me to the right path.</Text>
-        </SectionCard>
       </ScrollView>
 
       {drawerVisible ? (
@@ -1196,6 +1298,10 @@ const styles = StyleSheet.create({
   secondaryBtn: { borderWidth: 1, borderColor: COLORS.goldText, borderRadius: RADIUS.full, paddingVertical: 10, alignItems: 'center' },
   secondaryBtnText: { color: COLORS.goldText, fontWeight: '700' },
   linkBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center', marginBottom: 8 },
+  socialButtonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4, marginBottom: 8 },
+  socialPillBtn: { flexGrow: 1, minWidth: 135, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
+  fullWidthSupportBtn: { width: '100%', backgroundColor: COLORS.goldBg, borderRadius: RADIUS.full, paddingVertical: 12, alignItems: 'center', marginTop: 8 },
+  socialFooterText: { fontSize: 12, color: COLORS.textMuted, lineHeight: 18, marginTop: 10 },
   linkBtnText: { color: COLORS.textMain, fontWeight: '600' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   statusCard: { backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: 10, marginVertical: 8 },

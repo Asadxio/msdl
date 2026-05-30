@@ -76,6 +76,7 @@ export async function uploadUriFile(
     );
   }
 
+  const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const uploadOnce = async () => {
     const category = params.path.startsWith('chat_media/') ? 'chat'
       : params.path.startsWith('status_updates/') ? 'status'
@@ -84,7 +85,7 @@ export async function uploadUriFile(
       : params.path.startsWith('course_materials/') ? 'course'
       : 'recording';
     return runMediaUpload({
-      uploadId: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      uploadId,
       uri: params.uri,
       path: params.path,
       contentType,

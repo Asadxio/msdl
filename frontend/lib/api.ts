@@ -2,6 +2,7 @@ const API_BASE_URL = String(
   process.env.EXPO_PUBLIC_API_BASE_URL
   || process.env.EXPO_PUBLIC_LIVE_API_URL
   || process.env.EXPO_PUBLIC_PUSH_API_URL
+  || process.env.EXPO_PUBLIC_LIVE_APL_URL
   || '',
 ).trim().replace(/\/$/, '');
 
