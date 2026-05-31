@@ -14,6 +14,8 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
 import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
+import { ReportReasonModal } from '@/components/ReportReasonModal';
+import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 
 type AppUser = { id: string; name: string; email?: string; role: string; status: string; photo_url?: string; avatar?: string };
 
@@ -98,6 +100,28 @@ export default function ChatsScreen() {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [reportChat, setReportChat] = useState<ChatItem | null>(null);
+
+  const submitChatReport = useCallback(async (reason: ReportReason) => {
+    if (!user?.uid || !reportChat) return;
+    const target = reportChat;
+    setReportChat(null);
+    try {
+      const otherId = target.participants.find((p) => p !== user.uid) || '';
+      await submitUgcReport({
+        reportedBy: user.uid,
+        targetType: 'chat_thread',
+        targetId: target.id,
+        reason,
+        accusedUserId: otherId,
+        metadata: { chat_type: target.type, last_message: target.last_message || '' },
+      });
+      setFeedback({ type: 'success', text: 'Report submitted. An admin will review this chat.' });
+    } catch {
+      setFeedback({ type: 'error', text: 'Could not submit report. Please try again.' });
+    }
+  }, [reportChat, user?.uid]);
+
   const safeUsers = useMemo(() => (Array.isArray(users) ? users : []), [users]);
   const safeChats = useMemo(() => (Array.isArray(chats) ? chats : []), [chats]);
   const usersMap = useMemo(() => Object.fromEntries(safeUsers.map((u) => [u.id, u.name])), [safeUsers]);
@@ -469,6 +493,13 @@ export default function ChatsScreen() {
         </View>
       )}
 
+      <ReportReasonModal
+        visible={!!reportChat}
+        title="Report chat"
+        onClose={() => setReportChat(null)}
+        onSelectReason={(reason) => { void submitChatReport(reason); }}
+      />
+
       {loading ? (
         <View style={styles.loadingList}>
           <SkeletonCard lines={3} />
@@ -523,6 +554,9 @@ export default function ChatsScreen() {
               </View>
               </View>
               <View style={styles.chatActions}>
+                <TouchableOpacity onPress={() => setReportChat(item)} style={styles.actionBtn} accessibilityLabel="Report chat">
+                  <Ionicons name="flag-outline" size={16} color={COLORS.textMuted} />
+                </TouchableOpacity>
                 <TouchableOpacity onPress={() => togglePinChat(item)} style={styles.actionBtn}>
                   <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={16} color={COLORS.primary} />
                 </TouchableOpacity>

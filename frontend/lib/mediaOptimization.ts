@@ -150,7 +150,10 @@ export async function isDuplicateWindow(hash: string) {
   const key = `dup_${hash}`;
   const raw = await AsyncStorage.getItem(key);
   const t = now();
-  if (raw && t - Number(raw) <= DUP_WINDOW_MS) return true;
-  await AsyncStorage.setItem(key, String(t));
-  return false;
+  return Boolean(raw && t - Number(raw) <= DUP_WINDOW_MS);
+}
+
+export async function registerDuplicateWindow(hash: string) {
+  const key = `dup_${hash}`;
+  await AsyncStorage.setItem(key, String(now()));
 }

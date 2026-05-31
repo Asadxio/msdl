@@ -61,6 +61,8 @@ import { clearLiveClassRecovery, loadLiveClassRecovery, saveLiveClassRecovery } 
 import { recordLiveMetric } from '@/lib/liveClassObservability';
 import { buildSyntheticModerationBurst } from '@/lib/liveClassDevLoadTools';
 import { LIVE_OPS } from '@/lib/liveOpsConfig';
+import { ReportReasonModal } from '@/components/ReportReasonModal';
+import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 
 type RemoteUser = { uid: number; audioMuted?: boolean; videoMuted?: boolean; lastSpokeAtMs?: number };
 
@@ -166,6 +168,7 @@ export default function LiveClassroomScreen() {
   const [recordingState, setRecordingState] = useState<RecordingEngineState>('idle');
   const [recordingMessage, setRecordingMessage] = useState('');
   const [opsMessage, setOpsMessage] = useState('');
+  const [reportParticipant, setReportParticipant] = useState<LiveClassParticipant | null>(null);
   const expoGo = isExpoGo();
   const isLowEndAndroid = Platform.OS === 'android';
 
@@ -746,6 +749,27 @@ export default function LiveClassroomScreen() {
     });
   }, [cameraOn, isLowEndAndroid, joined, liveClass?.teacher_id, localParticipant?.force_muted, micOn, participants, participantsByAgoraUid, profile?.name, profile?.role, remoteUsers, user?.uid]);
 
+
+  const submitParticipantReport = useCallback(async (reason: ReportReason) => {
+    if (!classId || !user?.uid || !reportParticipant) return;
+    const target = reportParticipant;
+    setReportParticipant(null);
+    try {
+      await submitUgcReport({
+        reportedBy: user.uid,
+        targetType: 'live_class_participant',
+        targetId: `${classId}:${target.user_id}`,
+        reason,
+        accusedUserId: target.user_id,
+        accusedRole: target.role,
+        metadata: { class_id: classId, participant_name: target.name || '', agora_uid: target.agora_uid || 0 },
+      });
+      Alert.alert('Report submitted', 'Thank you. An admin will review this live class report.');
+    } catch {
+      Alert.alert('Report failed', 'Could not submit report right now.');
+    }
+  }, [classId, reportParticipant, user?.uid]);
+
   const renderTile = useCallback(({ item, index }: { item: TileItem; index: number }) => (
     <View style={[styles.tile, item.role === 'teacher' && styles.teacherTile]}>
       {item.videoEnabled && index < (isLowEndAndroid ? 6 : MAX_REMOTE_VIDEO_TILES) ? (
@@ -771,6 +795,18 @@ export default function LiveClassroomScreen() {
           <Ionicons name={item.videoEnabled ? 'videocam' : 'videocam-off'} size={14} color="#fff" />
         </View>
       </View>
+      {!item.isLocal ? (
+        <TouchableOpacity
+          style={styles.reportSmallBtn}
+          onPress={() => {
+            const target = participantsByAgoraUid[item.uid];
+            if (target) setReportParticipant(target);
+          }}
+          accessibilityLabel="Report participant"
+        >
+          <Ionicons name="flag-outline" size={14} color="#fff" />
+        </TouchableOpacity>
+      ) : null}
       {isTeacher && !item.isLocal ? (
         <TouchableOpacity
           style={styles.muteSmallBtn}
@@ -873,6 +909,13 @@ export default function LiveClassroomScreen() {
         </>
       )}
 
+      <ReportReasonModal
+        visible={!!reportParticipant}
+        title="Report participant"
+        onClose={() => setReportParticipant(null)}
+        onSelectReason={(reason) => { void submitParticipantReport(reason); }}
+      />
+
       {joined ? (
         <View style={[styles.controls, { paddingBottom: insets.bottom + 12 }]}> 
           <TouchableOpacity style={[styles.controlBtn, !micOn && styles.controlBtnOff]} onPress={toggleMic}>
@@ -903,6 +946,7 @@ export default function LiveClassroomScreen() {
             <View key={p.user_id} style={styles.teacherRow}>
               <Text style={styles.teacherName} numberOfLines={1}>{p.name}</Text>
               <TouchableOpacity style={styles.smallDockBtn} onPress={() => { void muteParticipant(p); }}><Text style={styles.smallDockBtnText}>Mute</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.smallDockBtn} onPress={() => setReportParticipant(p)}><Text style={styles.smallDockBtnText}>Report</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.smallDockBtn, styles.smallDockDanger]} onPress={() => { void removeParticipant(p); }}><Text style={styles.smallDockBtnText}>Remove</Text></TouchableOpacity>
             </View>
           ))}
@@ -947,6 +991,7 @@ const styles = StyleSheet.create({
   tileIcons: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   teacherBadge: { color: '#111827', backgroundColor: COLORS.secondary, borderRadius: 8, overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 2, fontSize: 10, fontWeight: '800' },
   muteSmallBtn: { position: 'absolute', top: 10, right: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(239,68,68,0.9)', alignItems: 'center', justifyContent: 'center' },
+  reportSmallBtn: { position: 'absolute', top: 10, left: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(17,24,39,0.82)', alignItems: 'center', justifyContent: 'center' },
   controls: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 14, paddingHorizontal: SPACING.md, backgroundColor: 'rgba(7,19,13,0.95)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   controlBtn: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)' },
   controlBtnOff: { backgroundColor: '#B91C1C' },

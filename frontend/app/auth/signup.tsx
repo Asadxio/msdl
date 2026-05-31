@@ -103,6 +103,9 @@ export default function SignupScreen() {
 
               <AppInput label="Full Name" leftIcon="person-outline" placeholder="Enter your name" value={name} onChangeText={handleNameChange} testID="signup-name-input" />
               <AppInput label="Email" leftIcon="mail-outline" placeholder="Enter your email" value={email} onChangeText={handleEmailChange} autoCapitalize="none" keyboardType="email-address" testID="signup-email-input" />
+              <Text style={styles.verificationNote}>
+                Didn{'\''}t receive the verification email? Please check your Spam/Junk folder.
+              </Text>
 
               <View>
                 <AppInput label="Password" leftIcon="lock-closed-outline" placeholder="Min 6 characters" value={password} onChangeText={handlePasswordChange} secureTextEntry={!showPass} testID="signup-password-input" />
@@ -187,6 +190,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1, textAlign: 'left' },
+  verificationNote: { ...TYPOGRAPHY.label, color: COLORS.textMuted, marginTop: -SPACING.xs, lineHeight: 18 },
   eyeBtn: { position: 'absolute', right: SPACING.sm, top: 34, height: 40, justifyContent: 'center' },
   field: { gap: SPACING.xs },
   label: { ...TYPOGRAPHY.label, color: '#6A6A6A', fontSize: 12, fontWeight: '500', textAlign: 'left' },

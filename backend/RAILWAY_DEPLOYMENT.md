@@ -56,9 +56,10 @@ Verify authenticated requests to:
 Set in frontend `.env` / EAS variables:
 
 ```env
-EXPO_PUBLIC_LIVE_API_URL=https://YOUR-RAILWAY-URL.up.railway.app
-EXPO_PUBLIC_PUSH_API_URL=https://YOUR-RAILWAY-URL.up.railway.app
-EXPO_PUBLIC_AGORA_APP_ID=your_agora_app_id
+EXPO_PUBLIC_API_BASE_URL=https://msdl-production-9afb.up.railway.app/api
+EXPO_PUBLIC_LIVE_API_URL=https://msdl-production-9afb.up.railway.app
+EXPO_PUBLIC_PUSH_API_URL=https://msdl-production-9afb.up.railway.app
+EXPO_PUBLIC_AGORA_APP_ID=<set in EAS/deployment secrets>
 ```
 
 Rebuild APK/dev build after updating `EXPO_PUBLIC_*` variables.

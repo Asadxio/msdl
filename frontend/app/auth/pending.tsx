@@ -71,6 +71,9 @@ export default function PendingScreen() {
             <Text style={styles.subtitle}>
               We sent a verification email to your inbox.{'\n'}Please verify your email to continue.
             </Text>
+            <Text style={styles.verificationNote}>
+              Didn{'\''}t receive the verification email? Please check your Spam/Junk folder.
+            </Text>
             <TouchableOpacity
               style={styles.resendBtn}
               onPress={handleResendVerification}
@@ -149,6 +152,7 @@ const styles = StyleSheet.create({
   iconCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: COLORS.goldBg, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.textMain },
   subtitle: { fontSize: 15, color: COLORS.textMuted, textAlign: 'center', lineHeight: 24 },
+  verificationNote: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
   resendBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 24, paddingVertical: 14, marginTop: 4 },
   resendBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.secondary },
   infoCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, width: '100%', gap: SPACING.sm, marginTop: 8 },

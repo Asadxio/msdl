@@ -97,7 +97,11 @@ export type LiveClassCreateInput = {
 };
 
 export const AGORA_APP_ID = process.env.EXPO_PUBLIC_AGORA_APP_ID || '';
-const LIVE_API_URL = process.env.EXPO_PUBLIC_LIVE_API_URL || process.env.EXPO_PUBLIC_PUSH_API_URL || '';
+const LIVE_API_URL = (
+  process.env.EXPO_PUBLIC_LIVE_API_URL
+  || process.env.EXPO_PUBLIC_PUSH_API_URL
+  || String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '')
+);
 const LIVE_API_SETUP_MESSAGE = 'Live classes are not configured yet. Please set EXPO_PUBLIC_LIVE_API_URL in your Expo environment.';
 const ENROLLMENT_LOOKUP_LIMIT = 500;
 const MIN_LIVE_ATTENDANCE_SECONDS = 60;

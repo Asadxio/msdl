@@ -11,7 +11,6 @@ import {
   Alert,
   Linking,
   Image,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -26,21 +25,18 @@ import {
   getDoc,
   increment,
   limit,
-  getDocs,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import { COLORS, RADIUS, SHADOWS, SPACING } from "@/constants/theme";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { isHttpsUrl, uploadUriFile } from "@/lib/storage";
-import { auth } from "@/lib/firebase";
-import { submitReportSafe } from "@/lib/moderation";
-import { guardSensitiveAction } from "@/lib/securityHardening";
+import { ReportReasonModal } from "@/components/ReportReasonModal";
+import { submitUgcReport, type ReportReason } from "@/lib/ugcReports";
 import { getListenerMetrics, stableQueryKey, subscribeDeduped } from "@/lib/queryPerformance";
 import { trackPerformanceMetric } from "@/lib/performanceEngine";
 
@@ -75,7 +71,11 @@ type StatusItem = {
 };
 
 const STATUS_EXPIRY_MS = 24 * 60 * 60 * 1000;
-const STATUS_API_URL = (process.env.EXPO_PUBLIC_PUSH_API_URL || "").replace(/\/$/, "");
+const STATUS_API_URL = String(
+  process.env.EXPO_PUBLIC_PUSH_API_URL
+  || process.env.EXPO_PUBLIC_LIVE_API_URL
+  || String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, ''),
+).replace(/\/$/, '');
 
 export default function StatusScreen() {
   const insets = useSafeAreaInsets();
@@ -111,6 +111,7 @@ export default function StatusScreen() {
   const [seenTracker, setSeenTracker] = useState<Record<string, boolean>>({});
   const [commentsByStatus, setCommentsByStatus] = useState<Record<string, StatusComment[]>>({});
   const [expandedStatusId, setExpandedStatusId] = useState("");
+  const [reportStatusTarget, setReportStatusTarget] = useState<StatusItem | null>(null);
   const prefetchQueueRef = useRef<string[]>([]);
   const prefetchInFlightRef = useRef(0);
 
@@ -271,28 +272,24 @@ export default function StatusScreen() {
     await updateDoc(doc(db, "status_updates", item.id), updates).catch(() => Alert.alert("Reaction failed", "Could not react right now."));
   };
 
-  const reportStatus = async (item: StatusItem) => {
-    if (!user?.uid) return;
-    const guard = await guardSensitiveAction({
-      action: "status_report",
-      actorId: user.uid,
-      sessionId: "status_feed",
-      deviceId: `rn_${Platform.OS}`,
-      idempotencyKey: `status_report:${user.uid}:${item.id}`,
-      rateLimit: { key: `report:status:${user.uid}`, limit: 4, windowMs: 60_000 },
-    });
-    if (!guard.ok) {
-      Alert.alert("Report blocked", "Too many report attempts. Try again shortly.");
-      return;
+  const submitStatusReport = async (reason: ReportReason) => {
+    if (!user?.uid || !reportStatusTarget) return;
+    const target = reportStatusTarget;
+    setReportStatusTarget(null);
+    try {
+      await submitUgcReport({
+        reportedBy: user.uid,
+        targetType: "status_post",
+        targetId: target.id,
+        reason,
+        accusedUserId: target.user_id,
+        accusedRole: target.role,
+        metadata: { audience: target.audience || "public", media_type: target.media_type || "" },
+      });
+      Alert.alert("Report submitted", "Thank you. An admin will review this status post.");
+    } catch {
+      Alert.alert("Report failed", "Could not report status.");
     }
-    await submitReportSafe({
-      collectionName: "status_reports",
-      reporterId: user.uid,
-      accusedUserId: item.user_id,
-      targetId: item.id,
-      reason: "inappropriate_status",
-      evidenceSnapshot: { audience: item.audience || "public" },
-    }).catch(() => Alert.alert("Report failed", "Could not report status."));
   };
 
   const hideStatus = async (item: StatusItem) => {
@@ -690,12 +687,18 @@ export default function StatusScreen() {
               <View style={styles.row}>
                 <TouchableOpacity style={styles.ghostBtn} onPress={() => hideStatus(item)}><Text style={styles.ghostBtnText}>Hide</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.ghostBtn} onPress={() => muteStatus(item)}><Text style={styles.ghostBtnText}>{(item.muted_by || []).includes(user?.uid || "") ? "Unmute" : "Mute"}</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.ghostBtn} onPress={() => reportStatus(item)}><Text style={styles.ghostBtnText}>Report</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => setReportStatusTarget(item)}><Text style={styles.ghostBtnText}>Report</Text></TouchableOpacity>
               </View>
             </View>
           )}
         />
       )}
+      <ReportReasonModal
+        visible={!!reportStatusTarget}
+        title="Report status post"
+        onClose={() => setReportStatusTarget(null)}
+        onSelectReason={(reason) => { void submitStatusReport(reason); }}
+      />
     </View>
   );
 }
