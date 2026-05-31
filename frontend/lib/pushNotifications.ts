@@ -7,7 +7,11 @@ import { auth, db } from '@/lib/firebase';
 import { isExpoGo } from '@/lib/runtime';
 import { withTimeout } from '@/lib/errors';
 
-const PUSH_API_URL = process.env.EXPO_PUBLIC_PUSH_API_URL || '';
+const PUSH_API_URL = (
+  process.env.EXPO_PUBLIC_PUSH_API_URL
+  || process.env.EXPO_PUBLIC_LIVE_API_URL
+  || String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '')
+);
 
 export type NotificationPermissionResult = {
   granted: boolean;

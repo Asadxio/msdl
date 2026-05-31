@@ -143,7 +143,11 @@ export async function transitionCallState(
 export async function requestCallToken(callId: string): Promise<{ appId: string; rtcToken: string; expiresAtEpoch: number; agoraUid: number; channelName: string }> {
   if (!auth.currentUser) throw new Error('Please sign in again.');
   const idToken = await auth.currentUser.getIdToken();
-  const base = String(process.env.EXPO_PUBLIC_LIVE_API_URL || process.env.EXPO_PUBLIC_PUSH_API_URL || '').replace(/\/$/, '');
+  const base = String(
+    process.env.EXPO_PUBLIC_LIVE_API_URL
+    || process.env.EXPO_PUBLIC_PUSH_API_URL
+    || String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, ''),
+  ).replace(/\/$/, '');
   if (!base) throw new Error('Live API unavailable');
   const runFetch = () => fetch(`${base}/api/call/token`, {
     method: 'POST',

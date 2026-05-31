@@ -10,5 +10,5 @@ export const LIVE_OPS = {
   crashReportingEnabled: truthy.has(env('EXPO_PUBLIC_LIVE_CRASH_REPORTING_ENABLED', 'true').toLowerCase()),
   emergencyRecordingDisabled: truthy.has(env('EXPO_PUBLIC_LIVE_EMERGENCY_RECORDING_DISABLED', 'false').toLowerCase()),
   reconnectMaxAttempts: Number(env('EXPO_PUBLIC_LIVE_RECONNECT_MAX_ATTEMPTS', '8')) || 8,
-  opsEndpoint: env('EXPO_PUBLIC_LIVE_OPS_ENDPOINT', env('EXPO_PUBLIC_LIVE_API_URL', '')),
+  opsEndpoint: env('EXPO_PUBLIC_LIVE_OPS_ENDPOINT', env('EXPO_PUBLIC_LIVE_API_URL', env('EXPO_PUBLIC_API_BASE_URL', '').replace(/\/api\/?$/, ''))),
 };

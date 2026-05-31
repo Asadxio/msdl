@@ -210,12 +210,29 @@ export default function PaymentFlowScreen() {
         {step === 1 ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>1) Select Payment Type</Text>
-            <View style={styles.choiceRow}>
-              {(['fees', 'sadqa', 'zakat', 'fitra', 'langar'] as PaymentType[]).map((type) => (
-                <TouchableOpacity key={type} style={[styles.choiceChip, paymentType === type && styles.choiceChipActive]} onPress={() => setPaymentType(type)}>
-                  <Text style={[styles.choiceText, paymentType === type && styles.choiceTextActive]}>{type.toUpperCase()}</Text>
+            <View style={styles.paymentCategory}>
+              <View style={styles.paymentCategoryHeader}>
+                <Ionicons name="school-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.paymentCategoryTitle}>Fees</Text>
+              </View>
+              <View style={styles.choiceRow}>
+                <TouchableOpacity style={[styles.choiceChip, paymentType === 'fees' && styles.choiceChipActive]} onPress={() => setPaymentType('fees')}>
+                  <Text style={[styles.choiceText, paymentType === 'fees' && styles.choiceTextActive]}>FEES</Text>
                 </TouchableOpacity>
-              ))}
+              </View>
+            </View>
+            <View style={styles.paymentCategory}>
+              <View style={styles.paymentCategoryHeader}>
+                <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.paymentCategoryTitle}>Donations</Text>
+              </View>
+              <View style={styles.choiceRow}>
+                {(['sadqa', 'zakat', 'fitra', 'langar'] as PaymentType[]).map((type) => (
+                  <TouchableOpacity key={type} style={[styles.choiceChip, paymentType === type && styles.choiceChipActive]} onPress={() => setPaymentType(type)}>
+                    <Text style={[styles.choiceText, paymentType === type && styles.choiceTextActive]}>{type.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
             <Text style={styles.label}>Amount</Text>
             <TextInput
@@ -291,6 +308,9 @@ const styles = StyleSheet.create({
   stepDotActive: { backgroundColor: COLORS.primary },
   card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, ...SHADOWS.card, gap: SPACING.sm },
   cardTitle: { ...TYPOGRAPHY.heading, fontSize: 18, color: COLORS.text },
+  paymentCategory: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: SPACING.sm, gap: SPACING.xs, backgroundColor: COLORS.surfaceAlt },
+  paymentCategoryHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  paymentCategoryTitle: { ...TYPOGRAPHY.label, color: COLORS.text, fontWeight: '700' },
   choiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
   choiceChip: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, paddingHorizontal: 12, paddingVertical: 8 },
   choiceChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceAlt },

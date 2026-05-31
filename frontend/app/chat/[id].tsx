@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  addDoc, arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, startAfter, updateDoc, where,
+  arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, startAfter, updateDoc, where,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -21,8 +21,8 @@ import { uploadUriFile } from '@/lib/storage';
 import { completeItem, enqueue, lockReadyItems, nextBackoffMs, patchItem, type QueueItem } from '@/lib/chatReliability';
 import { dedupeMessages, mergeServerAndLocal } from '@/lib/chatReconciliation';
 import { logChatMetric } from '@/lib/chatTelemetry';
-import { submitReportSafe } from '@/lib/moderation';
-import { guardSensitiveAction } from '@/lib/securityHardening';
+import { ReportReasonModal } from '@/components/ReportReasonModal';
+import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 
 type ChatMeta = {
   id: string;
@@ -114,11 +114,13 @@ const MessageBubble = React.memo(function MessageBubble({
   mine,
   showSender,
   seenByOthers,
+  onReport,
 }: {
   item: MessageItem;
   mine: boolean;
   showSender: boolean;
   seenByOthers: boolean;
+  onReport: () => void;
 }) {
   return (
     <View style={[styles.bubbleWrap, mine ? styles.mineWrap : styles.otherWrap]}>
@@ -129,6 +131,9 @@ const MessageBubble = React.memo(function MessageBubble({
         {item.message_type && item.message_type !== 'text' && item.message_type !== 'image' ? <Text style={[styles.attachmentText, mine && { color: 'rgba(255,255,255,0.88)' }]}>{item.message_type.toUpperCase()} attachment {item.media_name ? `• ${item.media_name}` : ''}</Text> : null}
         <View style={styles.metaRow}>
           <Text style={[styles.time, mine && { color: 'rgba(255,255,255,0.8)' }]}>{fmtTime(item)}</Text>
+          <TouchableOpacity onPress={onReport} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Report message">
+            <Ionicons name="flag-outline" size={13} color={mine ? 'rgba(255,255,255,0.85)' : COLORS.textMuted} />
+          </TouchableOpacity>
           {mine ? (
             <Ionicons
               name={item.failed ? 'alert-circle' : (seenByOthers ? 'checkmark-done' : 'checkmark')}
@@ -157,6 +162,7 @@ export default function ChatDetailScreen() {
   const [lastCursor, setLastCursor] = useState<any>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [reportTarget, setReportTarget] = useState<MessageItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<MessageItem>>(null);
@@ -633,32 +639,29 @@ export default function ChatDetailScreen() {
     Alert.alert('Message options', 'Choose an action for this message.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete for me', onPress: () => { void deleteForMe(item); } },
-      { text: 'Report message', onPress: () => {
-        const run = async () => {
-          const uid = user?.uid || '';
-          const guarded = await guardSensitiveAction({
-            action: 'message_report',
-            actorId: uid,
-            sessionId: id || 'chat_unknown',
-            deviceId: `rn_${Platform.OS}`,
-            idempotencyKey: `report:${uid}:${item.id}`,
-            rateLimit: { key: `report:message:${uid}`, limit: 4, windowMs: 60_000 },
-          });
-          if (!guarded.ok) throw new Error('guard_denied');
-          await submitReportSafe({
-            collectionName: 'message_reports',
-            reporterId: uid,
-            accusedUserId: item.sender_id,
-            targetId: item.id,
-            reason: 'inappropriate_message',
-            evidenceSnapshot: { chat_id: id || '', message_type: item.message_type || 'text' },
-          });
-        };
-        void run().catch(() => setSendError('Could not report message.'));
-      } },
+      { text: 'Report message', onPress: () => setReportTarget(item) },
       ...(canUnsend ? [{ text: 'Unsend for everyone', style: 'destructive' as const, onPress: () => { void unsendForEveryone(item); } }] : []),
     ]);
   }, [deleteForMe, unsendForEveryone, user?.uid]);
+
+  const submitMessageReport = useCallback(async (reason: ReportReason) => {
+    if (!user?.uid || !reportTarget) return;
+    const target = reportTarget;
+    setReportTarget(null);
+    try {
+      await submitUgcReport({
+        reportedBy: user.uid,
+        targetType: 'chat_message',
+        targetId: target.id,
+        reason,
+        accusedUserId: target.sender_id,
+        metadata: { chat_id: id || '', message_type: target.message_type || 'text' },
+      });
+      Alert.alert('Report submitted', 'Thank you. An admin will review this message.');
+    } catch {
+      setSendError('Could not report message.');
+    }
+  }, [id, reportTarget, user?.uid]);
 
   const toggleMuteChat = useCallback(async () => {
     if (!id || !user?.uid || !chat) return;
@@ -716,6 +719,7 @@ export default function ChatDetailScreen() {
           mine={mine}
           showSender={!mine && chat?.type !== 'direct'}
           seenByOthers={seenByOthers}
+          onReport={() => setReportTarget(item)}
         />
       </TouchableOpacity>
     );
@@ -784,6 +788,13 @@ export default function ChatDetailScreen() {
         ListFooterComponent={listFooter}
         ListEmptyComponent={listEmpty}
         renderItem={renderMessage}
+      />
+
+      <ReportReasonModal
+        visible={!!reportTarget}
+        title="Report message"
+        onClose={() => setReportTarget(null)}
+        onSelectReason={(reason) => { void submitMessageReport(reason); }}
       />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

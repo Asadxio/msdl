@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   View,
@@ -12,6 +12,7 @@ import {
   Linking,
   Share,
   Image,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -76,22 +77,32 @@ const DEFAULT_SETTINGS: AppSettings = {
   youtube_link: '',
   telegram_link: '',
   donation_content: 'Your sadaqah, zakat, fitrah and langar support help students access Islamic education with dignity and consistency.',
-  introduction_content: 'Madrasa Tus Salikat Lilbanat is a modern Islamic learning platform dedicated to quality Islamic education for girls.',
+  introduction_content: 'Madarsa Tus Salikat Lil Banat is a modern Islamic learning platform dedicated to quality Islamic education for girls.',
 };
 const HELP_WHATSAPP_URL = 'https://wa.link/mrtyi1';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
 
 function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 450,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+
   return (
-    <View style={styles.sectionCard}>
+    <Animated.View style={[styles.sectionCard, { opacity: fadeAnim }]}>
       <View style={styles.sectionCardHeader}>
         <Ionicons name={icon as any} size={22} color={COLORS.secondary} />
         <Text style={styles.sectionCardTitle}>{title}</Text>
       </View>
       <View style={styles.goldAccent} />
       {children}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -595,10 +606,6 @@ export default function AboutScreen() {
             <Text style={styles.headerTitle}>Profile</Text>
             <Text style={styles.headerSubtitle}>Madars tus salikat Lilbanat • مدرسۃ السالکات للبنات</Text>
           </View>
-          <TouchableOpacity style={styles.moreBtn} onPress={() => safePush('/more')} testID="goto-more-btn">
-            <Ionicons name="grid-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.moreBtnText}>More</Text>
-          </TouchableOpacity>
         </View>
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
@@ -668,6 +675,11 @@ export default function AboutScreen() {
             <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/payments')} testID="manage-payments-btn">
               <Ionicons name="card-outline" size={20} color={COLORS.primary} />
               <Text style={styles.adminItemText}>Manage Payments</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/privacy-requests')} testID="privacy-requests-btn">
+              <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Privacy Requests</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/analytics')}>
@@ -879,7 +891,32 @@ export default function AboutScreen() {
           ))}
         </SectionCard>
 
-        <SectionCard title="Social & Help" icon="globe-outline">
+        <SectionCard title="🌿 About Our Madrasa" icon="leaf-outline">
+          <Text style={styles.bodyText}>{settings.introduction_content}</Text>
+          {isAdmin ? (
+            <>
+              <Text style={styles.inputLabel}>Editable Introduction</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, focusedInput === 'intro_content' && styles.inputFocused]}
+                value={settings.introduction_content}
+                onChangeText={(v) => setSettings((p) => ({ ...p, introduction_content: v }))}
+                multiline
+                placeholder="Write introduction content..."
+                placeholderTextColor={COLORS.textMuted}
+                onFocus={() => setFocusedInput('intro_content')}
+                onBlur={() => setFocusedInput(null)}
+              />
+              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
+                <Text style={styles.secondaryBtnText}>Save Introduction</Text>
+              </TouchableOpacity>
+            </>
+          ) : null}
+          <Text style={styles.bodyText}>
+            Our curriculum covers Quran, Hadith, Fiqh, Arabic, and practical Islamic lifestyle learning.
+          </Text>
+        </SectionCard>
+
+        <SectionCard title="🌐 Social & Help" icon="globe-outline">
           {isAdmin ? (
             <>
               <Text style={styles.inputLabel}>WhatsApp Channel Link</Text>
@@ -937,34 +974,11 @@ export default function AboutScreen() {
           <Text style={styles.bismillahTranslation}>
             In the name of Allah, the Most Gracious, the Most Merciful
           </Text>
-        </View>
-
-        <SectionCard title="Introduction" icon="sparkles">
-          <Text style={styles.bodyText}>{settings.introduction_content}</Text>
-          {isAdmin ? (
-            <>
-              <Text style={styles.inputLabel}>Editable Introduction</Text>
-              <TextInput
-                style={[styles.input, styles.textArea, focusedInput === 'intro_content' && styles.inputFocused]}
-                value={settings.introduction_content}
-                onChangeText={(v) => setSettings((p) => ({ ...p, introduction_content: v }))}
-                multiline
-                placeholder="Write introduction content..."
-                placeholderTextColor={COLORS.textMuted}
-                onFocus={() => setFocusedInput('intro_content')}
-                onBlur={() => setFocusedInput(null)}
-              />
-              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
-                <Text style={styles.secondaryBtnText}>Save Introduction</Text>
-              </TouchableOpacity>
-            </>
-          ) : null}
-          <Text style={styles.bodyText}>
-            Our curriculum covers Quran, Hadith, Fiqh, Arabic, and practical Islamic lifestyle learning.
+          <Text style={styles.bismillahDua}>اللهم زدني علما</Text>
+          <Text style={styles.bismillahTranslation}>
+            Ya Allah, increase me in knowledge and guide me to the right path.
           </Text>
-          <Text style={styles.bodyText}>اللهم زدني علماً</Text>
-          <Text style={styles.bodyText}>Ya Allah, increase me in knowledge and guide me to the right path.</Text>
-        </SectionCard>
+        </View>
       </ScrollView>
     </View>
   );
@@ -979,18 +993,6 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.textMain },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
-  moreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.goldBg,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  moreBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.goldText },
   scrollContent: { padding: SPACING.lg, paddingBottom: 40, gap: SPACING.lg },
   sectionCard: {
     backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg,
@@ -1031,6 +1033,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.xxl, padding: SPACING.lg, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border,
   },
   bismillah: { fontSize: 28, color: COLORS.primary, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
+  bismillahDua: { fontSize: 20, color: COLORS.primary, fontWeight: '700', textAlign: 'center', marginTop: 12, marginBottom: 6 },
   bismillahTranslation: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', fontStyle: 'italic' },
   profileCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12, ...SHADOWS.card,

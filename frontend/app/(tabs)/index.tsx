@@ -41,9 +41,10 @@ import {
   getCourseImage,
   getTeacherAvatar,
 } from "@/constants/theme";
-import { useData } from "@/context/DataContext";
+import { type Course, useData } from "@/context/DataContext";
 import { db } from "@/lib/firebase";
 import { EmptyState, ScalePressable, SkeletonCard } from "@/components/ui";
+import { ExpandableSection } from "@/components/ExpandableSection";
 import { useAuth } from "@/context/AuthContext";
 import { normalizeGoogleDriveFileUrl } from "@/lib/links";
 
@@ -217,6 +218,56 @@ function asrZenith(date: Date, latitude: number, asrFactor: 1 | 2) {
 }
 function formatClock(date: Date) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+let featuredCoursesExpandedCache = false;
+
+function FeaturedCourseCard({
+  course,
+  imageUri,
+  progressPercent,
+  onPress,
+}: {
+  course: Course;
+  imageUri: string;
+  progressPercent: number;
+  onPress: () => void;
+}) {
+  const safeProgress = Math.min(100, Math.max(0, progressPercent));
+
+  return (
+    <ScalePressable
+      style={styles.courseCard}
+      testID={`featured-course-card-${course.id}`}
+      onPress={onPress}
+    >
+      <Image source={{ uri: imageUri }} style={styles.courseCardImage} />
+      <View style={styles.courseCardContent}>
+        <Text style={styles.courseCardName} numberOfLines={2}>
+          {course.name}
+        </Text>
+        <Text style={styles.courseCardDescription} numberOfLines={2}>
+          {course.description || "Course details coming soon."}
+        </Text>
+        <View style={styles.courseProgressRow}>
+          <Text style={styles.courseProgressLabel}>Progress {safeProgress}%</Text>
+        </View>
+        <View style={styles.courseProgressTrack}>
+          <View
+            style={[styles.courseProgressFill, { width: `${safeProgress}%` }]}
+          />
+        </View>
+        <TouchableOpacity
+          style={styles.continueBtn}
+          onPress={onPress}
+          testID={`continue-course-${course.id}`}
+        >
+          <Text style={styles.continueBtnText}>Continue</Text>
+          <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+    </ScalePressable>
+  );
 }
 function formatDuration(ms: number) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -461,6 +512,14 @@ export default function HomeScreen() {
     useState<LocationDetails>(FALLBACK_LOCATION);
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const locationRequestRef = useRef(false);
+  const [featuredCoursesExpanded, setFeaturedCoursesExpanded] = useState(
+    featuredCoursesExpandedCache,
+  );
+
+  const updateFeaturedCoursesExpanded = (expanded: boolean) => {
+    featuredCoursesExpandedCache = expanded;
+    setFeaturedCoursesExpanded(expanded);
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -728,6 +787,14 @@ export default function HomeScreen() {
               <View style={styles.goldLine} />
             </View>
           </View>
+          <TouchableOpacity
+            style={[styles.moreBtn, { top: insets.top + 12 }]}
+            onPress={() => safePush("/more")}
+            testID="goto-more-btn"
+          >
+            <Ionicons name="grid-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.moreBtnText}>More</Text>
+          </TouchableOpacity>
         </View>
 
                 {/* Loading State */}
@@ -774,68 +841,35 @@ export default function HomeScreen() {
         ) : null}
 
         {/* Featured Courses */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Courses</Text>
-            <TouchableOpacity
-              testID="view-all-courses-btn"
-              onPress={() => safePush("/courses")}
-            >
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
+        <ExpandableSection
+          title="Featured Courses"
+          count={featuredCourses.length}
+          initiallyExpanded={featuredCoursesExpanded}
+          onExpandedChange={updateFeaturedCoursesExpanded}
+          testID="featured-courses-accordion"
+        >
           {featuredCourses.length === 0 ? (
-            <EmptyState
-              icon="book-outline"
-              message="No featured courses available."
-            />
+            <EmptyState icon="book-outline" message="No courses available yet" />
           ) : (
             <View style={styles.verticalList}>
               {featuredCourses.map((item, index) => {
                 const progress = getCourseProgress(item.id);
                 return (
-                  <ScalePressable
+                  <FeaturedCourseCard
                     key={item.id}
-                    style={styles.courseCard}
-                    testID={`featured-course-card-${item.id}`}
+                    course={item}
+                    imageUri={getCourseImage(index)}
+                    progressPercent={progress.completionPercent}
                     onPress={() => {
                       if (!item?.id) return;
                       safePush(`/course/${item.id}`);
                     }}
-                  >
-                    <Image
-                      source={{ uri: getCourseImage(index) }}
-                      style={styles.courseCardImage}
-                    />
-                    <View style={styles.courseCardContent}>
-                      <Text style={styles.courseCardName} numberOfLines={2}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.courseCardTeacher} numberOfLines={1}>
-                        {item.teacher_name}
-                      </Text>
-                      <View style={styles.courseProgressRow}>
-                        <Text style={styles.courseProgressLabel}>
-                          Progress {progress.completionPercent}%
-                        </Text>
-                      </View>
-                      <View style={styles.courseProgressTrack}>
-                        <View
-                          style={[
-                            styles.courseProgressFill,
-                            {
-                              width: `${Math.min(100, Math.max(0, progress.completionPercent))}%`,
-                            },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  </ScalePressable>
+                  />
                 );
               })}
             </View>
           )}
-        </View>
+        </ExpandableSection>
 
         {/* Teachers Preview */}
         <View style={styles.section}>
@@ -1014,6 +1048,21 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     backgroundColor: "rgba(6,78,59,0.82)",
   },
+  moreBtn: {
+    position: "absolute",
+    left: SPACING.lg,
+    zIndex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.goldBg,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  moreBtnText: { fontSize: 12, fontWeight: "700", color: COLORS.goldText },
   greeting: {
     fontSize: 28,
     color: COLORS.secondary,
@@ -1073,24 +1122,27 @@ const styles = StyleSheet.create({
     paddingRight: SPACING.sm,
     gap: SPACING.md,
   },
-  verticalList: { paddingHorizontal: SPACING.lg, gap: SPACING.md },
+  verticalList: { paddingHorizontal: SPACING.md, gap: SPACING.md },
   courseCard: {
     borderRadius: RADIUS.xl,
     overflow: "hidden",
     ...SHADOWS.card,
     backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  courseCardImage: { width: "100%", height: 118 },
-  courseCardContent: { padding: SPACING.md, gap: 4 },
+  courseCardImage: { width: "100%", height: 128 },
+  courseCardContent: { padding: SPACING.md, gap: 6 },
   courseCardName: {
     fontSize: 16,
     fontWeight: "700",
     color: COLORS.textMain,
     marginBottom: 2,
   },
-  courseCardTeacher: {
+  courseCardDescription: {
     fontSize: 13,
     color: COLORS.textMuted,
+    lineHeight: 19,
     fontWeight: "500",
   },
   courseProgressRow: {
@@ -1115,6 +1167,18 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     backgroundColor: COLORS.primary,
   },
+  continueBtn: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  continueBtnText: { fontSize: 12, fontWeight: "800", color: "#FFFFFF" },
   teacherPreviewCard: { alignItems: "center", width: 110, gap: 8 },
   teacherAvatar: {
     width: 80,

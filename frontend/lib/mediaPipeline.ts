@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDownloadURL, ref, uploadBytesResumable, UploadTask } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
-import { optimizeImageForUpload, optimizeVideoForUpload, validateOptimizedMedia, registerCacheEntry, updateUploadHeartbeat, scheduleRetry, isDuplicateWindow } from '@/lib/mediaOptimization';
+import { optimizeImageForUpload, optimizeVideoForUpload, validateOptimizedMedia, registerCacheEntry, updateUploadHeartbeat, scheduleRetry, isDuplicateWindow, registerDuplicateWindow } from '@/lib/mediaOptimization';
 
 export type MediaCategory = 'chat' | 'status' | 'profile' | 'assignment' | 'course' | 'recording';
 export type MediaState = 'queued' | 'uploading' | 'paused' | 'failed' | 'completed' | 'cancelled';
@@ -105,6 +105,7 @@ export async function runMediaUpload(
     });
     const url = await getDownloadURL(fileRef);
     registerCacheEntry(optimized.cacheKey, 24 * 3600 * 1000).catch(() => {});
+    registerDuplicateWindow(optimized.integrityHash).catch(() => {});
     onProgress?.({ uploadId: req.uploadId, state: 'completed', progress: 1, downloadUrl: url });
     await removeQueuedUpload(req.uploadId);
     activeTasks.delete(req.uploadId);

@@ -75,7 +75,11 @@ export async function dispatchNotification(input: DispatchNotificationInput): Pr
   })));
   await Promise.all(allowed.map((uid) => updateTelemetryStatus({ dedupeId, recipientId: uid, status: 'queued' }).catch(() => {})));
   try {
-    const base = String(process.env.EXPO_PUBLIC_PUSH_API_URL || process.env.EXPO_PUBLIC_LIVE_API_URL || '').replace(/\/$/, '');
+    const base = String(
+      process.env.EXPO_PUBLIC_PUSH_API_URL
+      || process.env.EXPO_PUBLIC_LIVE_API_URL
+      || String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, ''),
+    ).replace(/\/$/, '');
     if (!base) throw new Error('Queue API unavailable');
     const idToken = await auth.currentUser?.getIdToken?.();
     const res = await withTimeout(fetch(`${base}/api/push/enqueue`, {
