@@ -33,6 +33,7 @@ declare module 'react-native-agora' {
     muteLocalAudioStream: (muted: boolean) => number | void;
     muteLocalVideoStream: (muted: boolean) => number | void;
     switchCamera: () => number | void;
+    setDefaultAudioRouteToSpeakerphone: (enabled: boolean) => number | void;
     setEnableSpeakerphone: (enabled: boolean) => number | void;
     setParameters: (parameters: string) => number | void;
     renewToken: (token: string) => number | void;
