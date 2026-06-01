@@ -408,8 +408,12 @@ def _is_live_class_member(uid: str, role: str, live_class: dict) -> bool:
     return False
 
 
+def _is_joinable_live_status(status: str) -> bool:
+    return status in {"live", "reconnecting"}
+
+
 def _require_live_class_access(uid: str, role: str, live_class: dict, require_live: bool = True) -> None:
-    if require_live and live_class.get("status") != "live":
+    if require_live and not _is_joinable_live_status(str(live_class.get("status") or "")):
         raise HTTPException(status_code=409, detail="Live class is not active")
     if not _is_live_class_member(uid, role, live_class):
         raise HTTPException(status_code=403, detail="Not enrolled for this live class")
@@ -815,7 +819,7 @@ async def start_live_class_recording(payload: LiveClassRecordingRequest, authori
     live_ref, live_class = _get_live_class(payload.live_class_id)
     _require_live_class_access(uid, role, live_class)
     _require_teacher_for_live_class(uid, role, live_class)
-    if live_class.get("status") != "live":
+    if not _is_joinable_live_status(str(live_class.get("status") or "")):
         raise HTTPException(status_code=409, detail="Live class is not active")
     recording = live_class.get("recording") or {}
     if recording.get("status") in {"starting", "recording"} and recording.get("resource_id") and recording.get("sid"):
@@ -1536,13 +1540,17 @@ async def payments_admin_action(payload: PaymentAdminActionRequest, request: Req
         raise HTTPException(status_code=404, detail="Payment not found")
     data = snap.to_dict() or {}
     cur = str(data.get("state") or "pending")
-    if not can_transition(cur, nxt):
+    if nxt == "succeeded":
+        if cur not in {"pending", "processing", "succeeded"} and not can_transition(cur, nxt):
+            raise HTTPException(status_code=409, detail=f"Transition {cur} -> {nxt} not allowed")
+    elif not can_transition(cur, nxt):
         raise HTTPException(status_code=409, detail=f"Transition {cur} -> {nxt} not allowed")
     now_ms = int(time.time() * 1000)
-    ref.set({"state": nxt, "reviewed_by": admin_uid, "review_note": reason[:500], "review_evidence": payload.evidence or {}, "reviewed_at": admin_firestore.SERVER_TIMESTAMP, "updated_at": admin_firestore.SERVER_TIMESTAMP, "updated_at_ms": now_ms}, merge=True)
-
     if nxt == "succeeded":
         finalize_successful_payment(firebase_db, pid, admin_uid, source_event_id="admin_action")
+        ref.set({"reviewed_by": admin_uid, "review_note": reason[:500], "review_evidence": payload.evidence or {}, "reviewed_at": admin_firestore.SERVER_TIMESTAMP, "updated_at": admin_firestore.SERVER_TIMESTAMP, "updated_at_ms": now_ms}, merge=True)
+    else:
+        ref.set({"state": nxt, "reviewed_by": admin_uid, "review_note": reason[:500], "review_evidence": payload.evidence or {}, "reviewed_at": admin_firestore.SERVER_TIMESTAMP, "updated_at": admin_firestore.SERVER_TIMESTAMP, "updated_at_ms": now_ms}, merge=True)
 
     firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": admin_uid, "action": "state_change", "from": cur, "to": nxt, "reason": reason[:500], "evidence": payload.evidence or {}, "created_at_ms": now_ms})
     return {"ok": True, "payment_id": pid, "from": cur, "to": nxt}

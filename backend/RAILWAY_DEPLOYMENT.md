@@ -19,14 +19,16 @@ Copy from `backend/.env.example` and configure in Railway Variables:
 - `FIREBASE_SERVICE_ACCOUNT_JSON` (recommended on Railway)
 - `AGORA_APP_ID`
 - `AGORA_APP_CERTIFICATE`
+
+Optional:
+- `AGORA_RTC_TOKEN_TTL_SECONDS`
+
+Legacy Agora Cloud Recording variables are no longer required for the Phase 1 Audio Lessons system. Only set these if you intentionally re-enable the old cloud-recording endpoints:
 - `AGORA_CUSTOMER_ID`
 - `AGORA_CUSTOMER_SECRET`
 - `AGORA_RECORDING_BUCKET`
 - `AGORA_RECORDING_ACCESS_KEY`
 - `AGORA_RECORDING_SECRET_KEY`
-
-Optional:
-- `AGORA_RTC_TOKEN_TTL_SECONDS`
 - `AGORA_RECORDING_UID_BASE`
 - `AGORA_RECORDING_VENDOR`
 - `AGORA_RECORDING_REGION`
@@ -48,9 +50,9 @@ Expected:
 ## 5) Live API endpoint checks
 Verify authenticated requests to:
 - `POST /api/live-class/token`
-- `POST /api/live-class/recording/start`
-- `POST /api/live-class/recording/stop`
 - `POST /api/push/send`
+
+Phase 1 recorded lessons use Firebase Storage + Firestore from the mobile app, not Agora Cloud Recording.
 
 ## 6) Frontend configuration
 Set in frontend `.env` / EAS variables:

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   StatusBar,
   Linking,
   ActivityIndicator,
+  AppState,
   Modal,
   TextInput,
 } from "react-native";
@@ -17,6 +18,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import { Audio } from "expo-av";
 import { WebView } from "react-native-webview";
 import {
   COLORS,
@@ -35,6 +39,15 @@ import { uploadUriFile } from "@/lib/storage";
 import { normalizeMeetUrl, prepareExternalUrl } from "@/lib/links";
 import { startLiveClass, subscribeActiveLiveClass, type LiveClass } from "@/lib/liveClasses";
 import { loadAssignmentDraft, saveAssignmentDraft } from "@/lib/lmsHardening";
+import {
+  AUDIO_LESSON_MAX_BYTES,
+  deleteAudioLesson,
+  fetchAudioLessonsPage,
+  updateAudioLesson,
+  uploadAudioLesson,
+  validateAudioLessonFile,
+  type AudioLesson,
+} from "@/lib/audioLessons";
 
 const MAX_ASSIGNMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_ASSIGNMENT_MIME_TYPES = new Set([
@@ -54,6 +67,35 @@ function sanitizeFileName(fileName?: string | null): string {
     .replace(/_+/g, "_")
     .slice(0, 90);
   return base.length >= 3 ? base : `submission_${Date.now()}`;
+}
+
+
+function formatAudioDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds || 0));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+function formatFileSize(bytes: number): string {
+  if (!bytes) return "Unknown size";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatAudioUploadDate(value?: { toDate?: () => Date } | null): string {
+  try {
+    const date = value?.toDate ? value.toDate() : null;
+    if (!date) return "Recently uploaded";
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return "Recently uploaded";
+  }
+}
+
+function getPickerAsset(result: DocumentPicker.DocumentPickerResult): DocumentPicker.DocumentPickerAsset | null {
+  if (result.canceled) return null;
+  return result.assets?.[0] || null;
 }
 
 function getAssignmentUploadError(error: any): string {
@@ -125,6 +167,30 @@ export default function CourseDetailScreen() {
   const [activeLiveClass, setActiveLiveClass] = useState<LiveClass | null>(null);
   const [startingLiveClass, setStartingLiveClass] = useState(false);
   const [fatalError] = useState<string>("");
+  const [audioLessons, setAudioLessons] = useState<AudioLesson[]>([]);
+  const [audioSearch, setAudioSearch] = useState("");
+  const [audioCursor, setAudioCursor] = useState<any>(null);
+  const [audioHasMore, setAudioHasMore] = useState(false);
+  const [loadingAudioLessons, setLoadingAudioLessons] = useState(false);
+  const [audioLessonModalVisible, setAudioLessonModalVisible] = useState(false);
+  const [editingAudioLesson, setEditingAudioLesson] = useState<AudioLesson | null>(null);
+  const [audioTitle, setAudioTitle] = useState("");
+  const [audioDescription, setAudioDescription] = useState("");
+  const [selectedAudioUpload, setSelectedAudioUpload] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [selectedAudioDuration, setSelectedAudioDuration] = useState(0);
+  const [audioUploadProgress, setAudioUploadProgress] = useState(0);
+  const [audioUploading, setAudioUploading] = useState(false);
+  const [audioUploadError, setAudioUploadError] = useState("");
+  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused" | "stopped">("idle");
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordedAudioUri, setRecordedAudioUri] = useState("");
+  const [recordedAudioSize, setRecordedAudioSize] = useState(0);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const [activeAudioLesson, setActiveAudioLesson] = useState<AudioLesson | null>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioPosition, setAudioPosition] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const audioSoundRef = useRef<Audio.Sound | null>(null);
 
   const course = courses.find((c) => c.id === courseId);
   const classTimeLabel = course?.class_time || course?.time || "";
@@ -171,6 +237,44 @@ export default function CourseDetailScreen() {
     }
   }, [courseId]);
 
+  const loadAudioLessons = async (reset = true) => {
+    if (!courseId) return;
+    setLoadingAudioLessons(true);
+    try {
+      const page = await fetchAudioLessonsPage(courseId, audioSearch, reset ? null : audioCursor);
+      setAudioLessons((prev) => (reset ? page.lessons : [...prev, ...page.lessons]));
+      setAudioCursor(page.cursor);
+      setAudioHasMore(page.hasMore);
+    } catch (e) {
+      console.log("[CourseDetail] loadAudioLessons ERROR", e);
+      if (reset) setAudioLessons([]);
+    } finally {
+      setLoadingAudioLessons(false);
+    }
+  };
+
+  useEffect(() => {
+    const t = setTimeout(() => { void loadAudioLessons(true); }, 250);
+    return () => clearTimeout(t);
+  }, [courseId, audioSearch]);
+
+  useEffect(() => () => {
+    audioSoundRef.current?.unloadAsync().catch(() => {});
+    audioSoundRef.current = null;
+    recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+    recordingRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active" && recordingState === "recording") {
+        void pauseInAppRecording();
+        setAudioUploadError("Recording paused because the app went to the background. Resume when ready.");
+      }
+    });
+    return () => sub.remove();
+  }, [recordingState]);
+
   const showJoinNow = useMemo(() => {
     if (!classTimeLabel) return true;
     const [hh, mm] = classTimeLabel.split(":").map((n) => Number(n));
@@ -216,6 +320,296 @@ export default function CourseDetailScreen() {
       setPlayerVisible(true);
     } catch {
       Alert.alert("Error", "Unable to open recording right now.");
+    }
+  };
+
+  const resetAudioLessonForm = () => {
+    recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+    recordingRef.current = null;
+    setEditingAudioLesson(null);
+    setAudioTitle("");
+    setAudioDescription("");
+    setSelectedAudioUpload(null);
+    setSelectedAudioDuration(0);
+    setAudioUploadProgress(0);
+    setAudioUploadError("");
+    setRecordingState("idle");
+    setRecordingDuration(0);
+    setRecordedAudioUri("");
+    setRecordedAudioSize(0);
+  };
+
+  const openAudioUploadModal = () => {
+    resetAudioLessonForm();
+    setAudioLessonModalVisible(true);
+  };
+
+  const openAudioRecordingModal = () => {
+    resetAudioLessonForm();
+    setAudioLessonModalVisible(true);
+  };
+
+  const openAudioEditModal = (lesson: AudioLesson) => {
+    setEditingAudioLesson(lesson);
+    setAudioTitle(lesson.title);
+    setAudioDescription(lesson.description || "");
+    setSelectedAudioUpload(null);
+    setSelectedAudioDuration(lesson.duration || 0);
+    setAudioUploadProgress(0);
+    setAudioUploadError("");
+    setAudioLessonModalVisible(true);
+  };
+
+  const setPlaybackAudioMode = async () => {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+  };
+
+  const startInAppRecording = async () => {
+    try {
+      if (recordingRef.current) await recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Microphone permission required", "Please allow microphone access to record audio lessons.");
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+      });
+      const recording = new Audio.Recording();
+      recording.setProgressUpdateInterval(500);
+      recording.setOnRecordingStatusUpdate((status) => {
+        setRecordingDuration(Math.round((status.durationMillis || 0) / 1000));
+        if (status.isRecording) setRecordingState("recording");
+      });
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+      recordingRef.current = recording;
+      setSelectedAudioUpload(null);
+      setRecordedAudioUri("");
+      setRecordedAudioSize(0);
+      setRecordingState("recording");
+      setAudioUploadError("");
+    } catch (e: any) {
+      setAudioUploadError(e?.message || "Could not start recording. Please check microphone access and retry.");
+      await setPlaybackAudioMode().catch(() => {});
+    }
+  };
+
+  const pauseInAppRecording = async () => {
+    try {
+      await recordingRef.current?.pauseAsync();
+      setRecordingState("paused");
+    } catch (e: any) {
+      setAudioUploadError(e?.message || "Pause is not supported on this device. Stop the recording to save it.");
+    }
+  };
+
+  const resumeInAppRecording = async () => {
+    try {
+      await recordingRef.current?.startAsync();
+      setRecordingState("recording");
+    } catch (e: any) {
+      setAudioUploadError(e?.message || "Could not resume recording.");
+    }
+  };
+
+  const stopInAppRecording = async () => {
+    try {
+      const recording = recordingRef.current;
+      if (!recording) return;
+      const status = await recording.stopAndUnloadAsync();
+      const uri = recording.getURI() || "";
+      recordingRef.current = null;
+      await setPlaybackAudioMode().catch(() => {});
+      if (!uri) throw new Error("Recording file was not created.");
+      const info = await FileSystem.getInfoAsync(uri);
+      const durationSeconds = Math.max(recordingDuration, Math.round((status.durationMillis || 0) / 1000));
+      setRecordedAudioUri(uri);
+      setRecordedAudioSize(info.exists && typeof info.size === "number" ? info.size : 0);
+      setSelectedAudioDuration(durationSeconds);
+      setRecordingDuration(durationSeconds);
+      setRecordingState("stopped");
+      setSelectedAudioUpload(null);
+      if (!audioTitle.trim()) setAudioTitle(`Audio Lesson ${new Date().toLocaleDateString()}`);
+    } catch (e: any) {
+      setAudioUploadError(e?.message || "Could not stop and save recording.");
+      await setPlaybackAudioMode().catch(() => {});
+    }
+  };
+
+  const pickAudioFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["audio/mpeg", "audio/mp4", "audio/aac", "audio/x-m4a"],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      const asset = getPickerAsset(result);
+      if (!asset) return;
+      validateAudioLessonFile(asset.name, asset.mimeType, asset.size);
+      let durationSeconds = 0;
+      try {
+        const sound = new Audio.Sound();
+        await sound.loadAsync({ uri: asset.uri }, {}, false);
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded && status.durationMillis) durationSeconds = Math.round(status.durationMillis / 1000);
+        await sound.unloadAsync();
+      } catch {}
+      recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+      recordingRef.current = null;
+      setRecordingState("idle");
+      setRecordingDuration(0);
+      setRecordedAudioUri("");
+      setRecordedAudioSize(0);
+      setSelectedAudioUpload(asset);
+      setSelectedAudioDuration(durationSeconds);
+      if (!audioTitle.trim()) setAudioTitle(asset.name.replace(/\.[^.]+$/, ""));
+      setAudioUploadError("");
+    } catch (e: any) {
+      Alert.alert("Audio file rejected", e?.message || "Please choose an MP3, M4A, or AAC file.");
+    }
+  };
+
+  const saveAudioLesson = async () => {
+    if (!courseId || !user?.uid) return;
+    if (!audioTitle.trim()) {
+      Alert.alert("Title required", "Please enter an audio lesson title.");
+      return;
+    }
+    if (!editingAudioLesson && !selectedAudioUpload && !recordedAudioUri) {
+      Alert.alert("Audio required", "Please record audio in the app or choose an MP3, M4A, or AAC file to upload.");
+      return;
+    }
+    if (!editingAudioLesson && recordingState === "recording") {
+      Alert.alert("Stop recording first", "Please stop the recording before uploading it.");
+      return;
+    }
+    setAudioUploading(true);
+    setAudioUploadError("");
+    try {
+      if (editingAudioLesson) {
+        await updateAudioLesson(editingAudioLesson.id, { title: audioTitle, description: audioDescription });
+      } else {
+        const source = selectedAudioUpload
+          ? {
+            uri: selectedAudioUpload.uri,
+            name: selectedAudioUpload.name,
+            mimeType: selectedAudioUpload.mimeType,
+            size: selectedAudioUpload.size,
+            duration: selectedAudioDuration,
+          }
+          : {
+            uri: recordedAudioUri,
+            name: `${audioTitle.trim().replace(/[^A-Za-z0-9._-]/g, "_") || "recorded_lesson"}.m4a`,
+            mimeType: "audio/mp4",
+            size: recordedAudioSize,
+            duration: recordingDuration,
+          };
+        await uploadAudioLesson({
+          courseId,
+          teacherId: user.uid,
+          title: audioTitle,
+          description: audioDescription,
+          duration: source.duration,
+          uri: source.uri,
+          fileName: source.name,
+          mimeType: source.mimeType,
+          fileSize: source.size,
+        }, setAudioUploadProgress);
+      }
+      setAudioLessonModalVisible(false);
+      resetAudioLessonForm();
+      await loadAudioLessons(true);
+    } catch (e: any) {
+      setAudioUploadError(e?.message || "Audio lesson save failed. Please retry.");
+    } finally {
+      setAudioUploading(false);
+    }
+  };
+
+  const confirmDeleteAudioLesson = (lesson: AudioLesson) => {
+    Alert.alert("Delete audio lesson", `Delete “${lesson.title}”? Students will no longer see this audio.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            if (activeAudioLesson?.id === lesson.id) {
+              await audioSoundRef.current?.unloadAsync().catch(() => {});
+              audioSoundRef.current = null;
+              setActiveAudioLesson(null);
+              setAudioPlaying(false);
+            }
+            await deleteAudioLesson(lesson);
+            await loadAudioLessons(true);
+          } catch (e: any) {
+            Alert.alert("Delete failed", e?.message || "Could not delete this audio lesson.");
+          }
+        },
+      },
+    ]);
+  };
+
+  const playAudioLesson = async (lesson: AudioLesson) => {
+    try {
+      if (activeAudioLesson?.id !== lesson.id) {
+        await audioSoundRef.current?.unloadAsync().catch(() => {});
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: lesson.audio_url },
+          { shouldPlay: true },
+          (status) => {
+            if (!status.isLoaded) return;
+            setAudioPlaying(status.isPlaying);
+            setAudioPosition(Math.round((status.positionMillis || 0) / 1000));
+            setAudioDuration(Math.round((status.durationMillis || lesson.duration * 1000 || 0) / 1000));
+          },
+        );
+        audioSoundRef.current = sound;
+        setActiveAudioLesson(lesson);
+        setAudioPlaying(true);
+        return;
+      }
+      await audioSoundRef.current?.playAsync();
+    } catch (e: any) {
+      Alert.alert("Playback failed", e?.message || "Could not stream this audio lesson.");
+    }
+  };
+
+  const pauseAudioLesson = async () => {
+    await audioSoundRef.current?.pauseAsync().catch(() => {});
+    setAudioPlaying(false);
+  };
+
+  const seekAudioLesson = async (deltaSeconds: number) => {
+    const sound = audioSoundRef.current;
+    if (!sound) return;
+    const nextPosition = Math.max(0, Math.min((audioDuration || activeAudioLesson?.duration || 0) * 1000, (audioPosition + deltaSeconds) * 1000));
+    await sound.setPositionAsync(nextPosition).catch(() => {});
+  };
+
+  const downloadAudioLesson = async (lesson: AudioLesson) => {
+    try {
+      const fileName = lesson.file_name || `${lesson.title.replace(/[^A-Za-z0-9._-]/g, "_")}.mp3`;
+      const destination = `${FileSystem.documentDirectory}${fileName}`;
+      const result = await FileSystem.downloadAsync(lesson.audio_url, destination);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(result.uri, { mimeType: lesson.mime_type || "audio/mpeg", dialogTitle: lesson.title });
+      } else {
+        await Linking.openURL(result.uri);
+      }
+    } catch (e: any) {
+      Alert.alert("Download failed", e?.message || "Could not download this audio lesson.");
     }
   };
 
@@ -279,6 +673,10 @@ export default function CourseDetailScreen() {
       (t.name || "").split(" ").slice(-2).join(" "),
     ),
   );
+  const getAudioLessonTeacherName = (teacherId: string) => {
+    const match = teachers.find((t) => t.id === teacherId || (t as any).user_id === teacherId || (t as any).uid === teacherId);
+    return match?.name || course.teacher_name || "Teacher";
+  };
   const courseIndex = courses.findIndex((c) => c.id === courseId);
 
   const openExternalLink = async (url?: string) => {
@@ -658,6 +1056,101 @@ export default function CourseDetailScreen() {
                 </TouchableOpacity>
               ))
             )}
+          </View>
+
+          <View style={styles.infoCard} testID="course-audio-lessons">
+            <View style={styles.infoCardHeader}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="headset-outline" size={20} color={COLORS.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.infoCardTitle}>Audio Lessons</Text>
+                <Text style={styles.infoCardSubValue}>Teacher-uploaded lectures for revision</Text>
+              </View>
+              {isReviewer ? (
+                <View style={styles.audioHeaderActions}>
+                  <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioRecordingModal}>
+                    <Ionicons name="mic-outline" size={16} color={COLORS.goldText} />
+                    <Text style={styles.audioUploadBtnText}>Record</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioUploadModal}>
+                    <Ionicons name="cloud-upload-outline" size={16} color={COLORS.goldText} />
+                    <Text style={styles.audioUploadBtnText}>Upload</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+            <TextInput
+              value={audioSearch}
+              onChangeText={setAudioSearch}
+              placeholder="Search audio lessons by title"
+              placeholderTextColor={COLORS.textMuted}
+              style={styles.audioSearchInput}
+            />
+            {activeAudioLesson ? (
+              <View style={styles.audioPlayerCard}>
+                <Text style={styles.audioPlayerTitle} numberOfLines={1}>{activeAudioLesson.title}</Text>
+                <Text style={styles.audioPlayerMeta}>{formatAudioDuration(audioPosition)} / {formatAudioDuration(audioDuration || activeAudioLesson.duration)}</Text>
+                <View style={styles.audioProgressTrack}>
+                  <View style={[styles.audioProgressFill, { width: `${Math.min(100, Math.max(0, (audioPosition / Math.max(1, audioDuration || activeAudioLesson.duration)) * 100))}%` }]} />
+                </View>
+                <View style={styles.audioControlRow}>
+                  <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(-15)}>
+                    <Ionicons name="play-back" size={18} color={COLORS.primary} />
+                    <Text style={styles.audioControlText}>15s</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.audioMainControlBtn} onPress={audioPlaying ? pauseAudioLesson : () => playAudioLesson(activeAudioLesson)}>
+                    <Ionicons name={audioPlaying ? "pause" : "play"} size={20} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(15)}>
+                    <Text style={styles.audioControlText}>15s</Text>
+                    <Ionicons name="play-forward" size={18} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.audioControlBtn} onPress={() => downloadAudioLesson(activeAudioLesson)}>
+                    <Ionicons name="download-outline" size={18} color={COLORS.primary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+            {loadingAudioLessons && audioLessons.length === 0 ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : audioLessons.length === 0 ? (
+              <Text style={styles.infoCardSubValue}>No audio lessons yet. Teachers can upload MP3, M4A, or AAC lectures after class.</Text>
+            ) : (
+              audioLessons.map((lesson) => (
+                <View key={lesson.id} style={styles.audioLessonRow}>
+                  <TouchableOpacity style={styles.audioLessonPlayArea} onPress={() => playAudioLesson(lesson)}>
+                    <Ionicons name={activeAudioLesson?.id === lesson.id && audioPlaying ? "pause-circle" : "play-circle-outline"} size={28} color={COLORS.primary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.recordingTitle}>{lesson.title}</Text>
+                      <Text style={styles.recordingDesc}>By {getAudioLessonTeacherName(lesson.teacher_id)} • {formatAudioUploadDate(lesson.upload_date)}</Text>
+                      <Text style={styles.recordingDesc}>{formatAudioDuration(lesson.duration)} • {formatFileSize(lesson.file_size)}</Text>
+                      {lesson.description ? <Text style={styles.recordingDesc} numberOfLines={2}>{lesson.description}</Text> : null}
+                    </View>
+                  </TouchableOpacity>
+                  <View style={styles.audioLessonActions}>
+                    <TouchableOpacity style={styles.audioIconBtn} onPress={() => downloadAudioLesson(lesson)}>
+                      <Ionicons name="download-outline" size={18} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    {isReviewer ? (
+                      <>
+                        <TouchableOpacity style={styles.audioIconBtn} onPress={() => openAudioEditModal(lesson)}>
+                          <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.audioIconBtn} onPress={() => confirmDeleteAudioLesson(lesson)}>
+                          <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+                        </TouchableOpacity>
+                      </>
+                    ) : null}
+                  </View>
+                </View>
+              ))
+            )}
+            {audioHasMore ? (
+              <TouchableOpacity style={styles.loadMoreBtn} disabled={loadingAudioLessons} onPress={() => { void loadAudioLessons(false); }}>
+                {loadingAudioLessons ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.loadMoreText}>Load more audio lessons</Text>}
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           <View style={styles.infoCard} testID="course-learning-structure">
@@ -1187,6 +1680,106 @@ export default function CourseDetailScreen() {
       </Modal>
 
       <Modal
+        visible={audioLessonModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setAudioLessonModalVisible(false); resetAudioLessonForm(); }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{editingAudioLesson ? "Edit Audio Lesson" : "Upload Audio Lesson"}</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={audioTitle}
+              onChangeText={setAudioTitle}
+              placeholder="Lesson title"
+              placeholderTextColor={COLORS.textMuted}
+            />
+            <TextInput
+              style={[styles.modalInput, styles.modalTextArea]}
+              value={audioDescription}
+              onChangeText={setAudioDescription}
+              placeholder="Description (optional)"
+              placeholderTextColor={COLORS.textMuted}
+              multiline
+            />
+            {!editingAudioLesson ? (
+              <View style={styles.recorderPanel}>
+                <Text style={styles.recorderTitle}>Record directly in the app (M4A)</Text>
+                <Text style={styles.recorderTimer}>{formatAudioDuration(recordingDuration)}</Text>
+                <View style={styles.recorderButtonRow}>
+                  {recordingState === "idle" || recordingState === "stopped" ? (
+                    <TouchableOpacity style={styles.recorderPrimaryBtn} onPress={startInAppRecording} disabled={audioUploading}>
+                      <Ionicons name="mic" size={16} color="#fff" />
+                      <Text style={styles.recorderPrimaryText}>Start Recording</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {recordingState === "recording" ? (
+                    <TouchableOpacity style={styles.recorderSecondaryBtn} onPress={pauseInAppRecording} disabled={audioUploading}>
+                      <Ionicons name="pause" size={16} color={COLORS.primary} />
+                      <Text style={styles.recorderSecondaryText}>Pause</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {recordingState === "paused" ? (
+                    <TouchableOpacity style={styles.recorderSecondaryBtn} onPress={resumeInAppRecording} disabled={audioUploading}>
+                      <Ionicons name="play" size={16} color={COLORS.primary} />
+                      <Text style={styles.recorderSecondaryText}>Resume</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {recordingState === "recording" || recordingState === "paused" ? (
+                    <TouchableOpacity style={styles.recorderStopBtn} onPress={stopInAppRecording} disabled={audioUploading}>
+                      <Ionicons name="stop" size={16} color="#fff" />
+                      <Text style={styles.recorderStopText}>Stop</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {recordedAudioUri ? (
+                  <Text style={styles.infoCardSubValue}>Recorded M4A ready • {formatAudioDuration(recordingDuration)} • {formatFileSize(recordedAudioSize)}</Text>
+                ) : (
+                  <Text style={styles.infoCardSubValue}>If the app goes to background, recording pauses automatically to protect the file.</Text>
+                )}
+              </View>
+            ) : null}
+            {!editingAudioLesson ? (
+              <>
+                <TouchableOpacity style={styles.secondaryModalBtn} onPress={pickAudioFile} disabled={audioUploading || recordingState === "recording"}>
+                  <Text style={styles.secondaryModalBtnText}>
+                    {selectedAudioUpload ? selectedAudioUpload.name : "Choose MP3, M4A, or AAC file"}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.infoCardSubValue}>Recommended max size: {Math.round(AUDIO_LESSON_MAX_BYTES / (1024 * 1024))} MB. Detected duration: {formatAudioDuration(selectedAudioDuration)}</Text>
+              </>
+            ) : null}
+            {audioUploading ? (
+              <Text style={styles.assignmentUploadProgress}>Uploading audio... {Math.round(audioUploadProgress * 100)}%</Text>
+            ) : null}
+            {audioUploadError ? (
+              <View style={styles.retryBox}>
+                <Text style={styles.errorTextSmall}>{audioUploadError}</Text>
+                {!editingAudioLesson && selectedAudioUpload ? (
+                  <TouchableOpacity style={styles.secondaryModalBtn} onPress={saveAudioLesson} disabled={audioUploading}>
+                    <Text style={styles.secondaryModalBtnText}>Retry Upload</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
+            <View style={styles.modalActionRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => { setAudioLessonModalVisible(false); resetAudioLessonForm(); }}
+                disabled={audioUploading}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSubmitBtn} onPress={saveAudioLesson} disabled={audioUploading}>
+                {audioUploading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalSubmitText}>{editingAudioLesson ? "Save" : "Upload"}</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={playerVisible}
         animationType="slide"
         onRequestClose={() => setPlayerVisible(false)}
@@ -1491,6 +2084,129 @@ const styles = StyleSheet.create({
   },
   recordingTitle: { fontSize: 13, fontWeight: "700", color: COLORS.textMain },
   recordingDesc: { fontSize: 12, color: COLORS.textMuted },
+  audioHeaderActions: { flexDirection: "row", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" },
+  audioUploadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.goldText,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  audioUploadBtnText: { color: COLORS.goldText, fontWeight: "800", fontSize: 12 },
+  audioSearchInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    color: COLORS.textMain,
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  audioPlayerCard: {
+    borderWidth: 1,
+    borderColor: "#B7E4CC",
+    borderRadius: RADIUS.lg,
+    padding: 10,
+    gap: 8,
+    backgroundColor: "#F2FBF6",
+  },
+  audioPlayerTitle: { color: COLORS.textMain, fontWeight: "800", fontSize: 14 },
+  audioPlayerMeta: { color: COLORS.textMuted, fontSize: 12, fontWeight: "600" },
+  audioProgressTrack: { height: 6, borderRadius: 3, backgroundColor: "#DCEFE5", overflow: "hidden" },
+  audioProgressFill: { height: 6, borderRadius: 3, backgroundColor: COLORS.primary },
+  audioControlRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  audioControlBtn: {
+    minHeight: 34,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 4,
+  },
+  audioControlText: { color: COLORS.primary, fontWeight: "800", fontSize: 12 },
+  audioMainControlBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
+  },
+  audioLessonRow: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.surfaceAlt,
+    padding: 10,
+    gap: 8,
+    marginTop: 8,
+  },
+  audioLessonPlayArea: { flexDirection: "row", alignItems: "center", gap: 10 },
+  audioLessonActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
+  audioIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadMoreBtn: { alignItems: "center", paddingVertical: 10 },
+  loadMoreText: { color: COLORS.primary, fontWeight: "800", fontSize: 13 },
+  retryBox: { gap: 8 },
+  errorTextSmall: { color: COLORS.error, fontSize: 12, fontWeight: "700" },
+  recorderPanel: {
+    borderWidth: 1,
+    borderColor: "#CFE9DB",
+    borderRadius: RADIUS.lg,
+    padding: 10,
+    gap: 8,
+    backgroundColor: "#F7FBF9",
+  },
+  recorderTitle: { color: COLORS.textMain, fontWeight: "800", fontSize: 13 },
+  recorderTimer: { color: COLORS.primary, fontWeight: "900", fontSize: 28, textAlign: "center" },
+  recorderButtonRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
+  recorderPrimaryBtn: {
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  recorderPrimaryText: { color: "#fff", fontWeight: "800", fontSize: 12 },
+  recorderSecondaryBtn: {
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  recorderSecondaryText: { color: COLORS.primary, fontWeight: "800", fontSize: 12 },
+  recorderStopBtn: {
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.error,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  recorderStopText: { color: "#fff", fontWeight: "800", fontSize: 12 },
 
   modalBackdrop: {
     flex: 1,

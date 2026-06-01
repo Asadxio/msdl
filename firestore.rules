@@ -46,6 +46,14 @@ service cloud.firestore {
       return isModerator();
     }
 
+
+    function isApprovedTeacher() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && roleOf(request.auth.uid) == 'teacher'
+        && userDoc(request.auth.uid).status == 'approved';
+    }
+
     function isStudent() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -611,16 +619,52 @@ service cloud.firestore {
         && request.resource.data.course_id is string
         && request.resource.data.teacher_id is string
         && request.resource.data.title is string
-        && request.resource.data.status in ['scheduled', 'live', 'ended', 'cancelled']
+        && request.resource.data.status in ['scheduled', 'waiting_room', 'live', 'paused', 'reconnecting', 'ended', 'cancelled']
         && request.resource.data.channel_name is string
         && (!('lesson_id' in request.resource.data) || request.resource.data.lesson_id is string)
         && (!('student_ids' in request.resource.data) || (request.resource.data.student_ids is list && request.resource.data.student_ids.size() <= 500))
-        && (!('participant_count' in request.resource.data) || request.resource.data.participant_count is number)
+        && (!('participant_count' in request.resource.data) || (request.resource.data.participant_count is number && request.resource.data.participant_count >= 0 && request.resource.data.participant_count <= 500))
         && (!('started_at' in request.resource.data) || request.resource.data.started_at is timestamp)
         && (!('ended_at' in request.resource.data) || request.resource.data.ended_at is timestamp)
         && request.resource.data.updated_at is timestamp;
     }
 
+
+
+    function isValidAudioLessonWrite() {
+      return hasOnlyAllowedKeys(request.resource.data, [
+          'title', 'title_lower', 'description', 'course_id', 'teacher_id', 'duration',
+          'upload_date', 'updated_at', 'audio_url', 'file_size', 'file_name', 'mime_type', 'storage_path'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 140
+        && request.resource.data.title_lower is string
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 2000
+        && request.resource.data.course_id is string
+        && request.resource.data.course_id.size() > 0
+        && exists(/databases/$(database)/documents/courses/$(request.resource.data.course_id))
+        && request.resource.data.teacher_id is string
+        && request.resource.data.duration is number
+        && request.resource.data.duration >= 0
+        && request.resource.data.duration <= 21600
+        && request.resource.data.upload_date is timestamp
+        && request.resource.data.updated_at is timestamp
+        && request.resource.data.audio_url is string
+        && request.resource.data.audio_url.matches('^https://.*$')
+        && request.resource.data.file_size is number
+        && request.resource.data.file_size > 0
+        && request.resource.data.file_size <= 104857600
+        && request.resource.data.file_name is string
+        && request.resource.data.mime_type in ['audio/mpeg', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac', 'audio/aacp']
+        && request.resource.data.storage_path is string
+        && request.resource.data.storage_path.matches('^audio_lessons/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$');
+    }
+
+    function canManageAudioLesson(data) {
+      return isAdmin() || (isApprovedTeacher() && data.teacher_id == request.auth.uid);
+    }
 
     function canReadRecordingData(data) {
       return isSignedIn()
@@ -633,38 +677,83 @@ service cloud.firestore {
         );
     }
 
-    function isValidLiveParticipantWrite(classId, userId) {
-      return hasOnlyAllowedKeys(request.resource.data, [
+    function isValidLiveParticipantShape(data, classId, userId) {
+      return hasOnlyAllowedKeys(data, [
           'user_id', 'agora_uid', 'name', 'role', 'joined', 'audio_enabled', 'video_enabled',
-          'force_muted', 'is_speaking', 'joined_at', 'last_joined_at', 'left_at', 'total_duration_seconds', 'updated_at'
+          'force_muted', 'is_speaking', 'joined_at', 'last_joined_at', 'left_at', 'total_duration_seconds',
+          'updated_at', 'hand_raised', 'moderation', 'reconnect_count', 'disconnected', 'session_id',
+          'joined_session_at', 'last_reconnected_at', 'total_connected_duration', 'heartbeat_at', 'last_seen_at'
         ])
-        && request.resource.data.user_id == userId
-        && request.resource.data.agora_uid is number
-        && request.resource.data.name is string
-        && request.resource.data.role in ['student', 'teacher', 'assistant_teacher', 'moderator', 'admin', 'super_admin']
-        && request.resource.data.joined is bool
-        && request.resource.data.audio_enabled is bool
-        && request.resource.data.video_enabled is bool
-        && (!('force_muted' in request.resource.data) || request.resource.data.force_muted is bool)
-        && (!('is_speaking' in request.resource.data) || request.resource.data.is_speaking is bool)
-        && (!('total_duration_seconds' in request.resource.data) || (request.resource.data.total_duration_seconds is number && request.resource.data.total_duration_seconds >= 0 && request.resource.data.total_duration_seconds <= 43200))
-        && request.resource.data.updated_at is timestamp
+        && data.user_id == userId
+        && data.agora_uid is number
+        && data.name is string
+        && data.name.size() > 0
+        && data.role in ['student', 'teacher', 'assistant_teacher', 'moderator', 'admin', 'super_admin']
+        && data.joined is bool
+        && data.audio_enabled is bool
+        && data.video_enabled is bool
+        && (!('force_muted' in data) || data.force_muted is bool)
+        && (!('is_speaking' in data) || data.is_speaking is bool)
+        && (!('hand_raised' in data) || data.hand_raised is bool)
+        && (!('reconnect_count' in data) || data.reconnect_count is number)
+        && (!('disconnected' in data) || data.disconnected is bool)
+        && (!('session_id' in data) || data.session_id is string)
+        && (!('total_duration_seconds' in data) || (data.total_duration_seconds is number && data.total_duration_seconds >= 0 && data.total_duration_seconds <= 43200))
+        && (!('total_connected_duration' in data) || (data.total_connected_duration is number && data.total_connected_duration >= 0 && data.total_connected_duration <= 43200))
+        && (!('moderation' in data) || (data.moderation is map
+          && data.moderation.keys().hasOnly(['mic_allowed', 'camera_allowed', 'removed', 'moderated_at', 'moderated_by', 'moderation_reason'])
+          && (!('mic_allowed' in data.moderation) || data.moderation.mic_allowed is bool)
+          && (!('camera_allowed' in data.moderation) || data.moderation.camera_allowed is bool)
+          && (!('removed' in data.moderation) || data.moderation.removed is bool)
+          && (!('moderated_at' in data.moderation) || data.moderation.moderated_at is timestamp)
+          && (!('moderated_by' in data.moderation) || data.moderation.moderated_by is string)
+          && (!('moderation_reason' in data.moderation) || data.moderation.moderation_reason is string)))
+        && (!('joined_at' in data) || data.joined_at is timestamp)
+        && (!('last_joined_at' in data) || data.last_joined_at is timestamp)
+        && (!('left_at' in data) || data.left_at is timestamp)
+        && (!('joined_session_at' in data) || data.joined_session_at is timestamp)
+        && (!('last_reconnected_at' in data) || data.last_reconnected_at is timestamp)
+        && (!('heartbeat_at' in data) || data.heartbeat_at is timestamp)
+        && (!('last_seen_at' in data) || data.last_seen_at is timestamp)
+        && data.updated_at is timestamp;
+    }
+
+    function isValidLiveParticipantWrite(classId, userId) {
+      return isValidLiveParticipantShape(request.resource.data, classId, userId)
         && canJoinLiveClassData(liveClassDoc(classId).data);
     }
 
-    function isValidLiveParticipantModeration(classId) {
+    function isValidParticipantCountOnlyUpdate(classId) {
+      return isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participant_count', 'updated_at'])
+        && request.resource.data.participant_count is number
+        && request.resource.data.participant_count >= 0
+        && request.resource.data.participant_count <= 500
+        && request.resource.data.updated_at is timestamp
+        && canJoinLiveClassData(resource.data);
+    }
+
+    function isValidLiveParticipantModeration(classId, userId) {
       return isLiveClassTeacherOrAdmin(liveClassDoc(classId).data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['force_muted', 'audio_enabled', 'updated_at'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'force_muted', 'audio_enabled', 'video_enabled', 'joined', 'hand_raised', 'moderation', 'updated_at', 'last_seen_at'
+        ])
+        && isValidLiveParticipantShape(request.resource.data, classId, userId)
         && request.resource.data.user_id == resource.data.user_id
         && request.resource.data.agora_uid == resource.data.agora_uid
         && request.resource.data.name == resource.data.name
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.joined == resource.data.joined
-        && request.resource.data.video_enabled == resource.data.video_enabled
-        && (!('total_duration_seconds' in resource.data) || request.resource.data.total_duration_seconds == resource.data.total_duration_seconds)
-        && request.resource.data.force_muted is bool
-        && request.resource.data.audio_enabled is bool
-        && request.resource.data.updated_at is timestamp;
+        && request.resource.data.role == resource.data.role;
+    }
+
+    function isValidLiveModerationEventCreate(classId) {
+      return isLiveClassTeacherOrAdmin(liveClassDoc(classId).data)
+        && hasOnlyAllowedKeys(request.resource.data, ['type', 'target_user', 'moderated_by', 'timestamp', 'reason', 'success'])
+        && request.resource.data.type in ['mute', 'remove']
+        && request.resource.data.target_user is string
+        && request.resource.data.moderated_by == request.auth.uid
+        && request.resource.data.timestamp is timestamp
+        && request.resource.data.success is bool
+        && (!('reason' in request.resource.data) || request.resource.data.reason is string);
     }
 
 
@@ -1094,6 +1183,22 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /audio_lessons/{lessonId} {
+      allow read, list: if isSignedIn();
+      allow create: if (isAdmin() || isApprovedTeacher())
+        && isValidAudioLessonWrite()
+        && (isAdmin() || request.resource.data.teacher_id == request.auth.uid);
+      allow update: if canManageAudioLesson(resource.data)
+        && isValidAudioLessonWrite()
+        && request.resource.data.course_id == resource.data.course_id
+        && request.resource.data.teacher_id == resource.data.teacher_id
+        && request.resource.data.audio_url == resource.data.audio_url
+        && request.resource.data.storage_path == resource.data.storage_path
+        && request.resource.data.file_size == resource.data.file_size
+        && request.resource.data.upload_date == resource.data.upload_date;
+      allow delete: if canManageAudioLesson(resource.data);
+    }
+
     match /recordings/{recordingId} {
       allow read: if canReadRecordingData(resource.data);
       allow create, update, delete: if isAdmin();
@@ -1105,17 +1210,19 @@ service cloud.firestore {
         && isValidLiveClassWrite()
         && (isAdmin() || request.resource.data.teacher_id == request.auth.uid)
         && request.resource.data.status == 'live';
-      allow update: if isLiveClassTeacherOrAdmin(resource.data)
-        && isValidLiveClassWrite()
-        && request.resource.data.teacher_id == resource.data.teacher_id
-        && request.resource.data.course_id == resource.data.course_id
-        && request.resource.data.created_at == resource.data.created_at;
+      allow update: if (
+          isLiveClassTeacherOrAdmin(resource.data)
+          && isValidLiveClassWrite()
+          && request.resource.data.teacher_id == resource.data.teacher_id
+          && request.resource.data.course_id == resource.data.course_id
+          && request.resource.data.created_at == resource.data.created_at
+        ) || isValidParticipantCountOnlyUpdate(classId);
       allow delete: if isAdmin();
 
       match /participants/{userId} {
         allow read: if canReadLiveClassData(liveClassDoc(classId).data);
         allow create: if isSignedIn() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId);
-        allow update: if isValidLiveParticipantModeration(classId) || (isSignedIn() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId));
+        allow update: if isValidLiveParticipantModeration(classId, userId) || (isSignedIn() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId));
         allow delete: if isAdmin();
       }
 
@@ -1128,6 +1235,12 @@ service cloud.firestore {
           && request.resource.data.event in ['join', 'leave']
           && (!('duration_seconds' in request.resource.data) || (request.resource.data.duration_seconds is number && request.resource.data.duration_seconds >= 0 && request.resource.data.duration_seconds <= 43200))
           && request.resource.data.at is timestamp;
+        allow update, delete: if false;
+      }
+
+      match /moderation_events/{eventId} {
+        allow read: if isLiveClassTeacherOrAdmin(liveClassDoc(classId).data);
+        allow create: if isValidLiveModerationEventCreate(classId);
         allow update, delete: if false;
       }
 

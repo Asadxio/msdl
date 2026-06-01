@@ -364,6 +364,8 @@ export async function stopCloudRecording(classId: string): Promise<Record<string
 export async function markParticipantJoined(classId: string, profile: UserProfile, userId: string, agoraUid = getAgoraUid(userId)): Promise<void> {
   const sessionId = `${classId}_${userId}`;
   const participantRef = doc(db, 'live_classes', classId, 'participants', userId);
+  const existing = await getDoc(participantRef).catch(() => null);
+  const wasJoined = existing?.exists() && existing.data()?.joined === true;
   await setDoc(participantRef, {
     user_id: userId,
     agora_uid: agoraUid,
@@ -390,6 +392,9 @@ export async function markParticipantJoined(classId: string, profile: UserProfil
     ...heartbeatPayload(),
     updated_at: serverTimestamp(),
   }, { merge: true });
+  if (!wasJoined) {
+    await setDoc(doc(db, 'live_classes', classId), { participant_count: increment(1), updated_at: serverTimestamp() }, { merge: true });
+  }
   await addDoc(collection(db, 'live_classes', classId, 'attendance_events'), {
     user_id: userId,
     event: 'join',
@@ -400,7 +405,10 @@ export async function markParticipantJoined(classId: string, profile: UserProfil
 export async function markParticipantLeft(classId: string, userId: string, joinedAt?: Date | null): Promise<void> {
   const now = new Date();
   const duration = joinedAt ? Math.min(MAX_LIVE_ATTENDANCE_SECONDS, Math.max(0, Math.round((now.getTime() - joinedAt.getTime()) / 1000))) : 0;
-  await setDoc(doc(db, 'live_classes', classId, 'participants', userId), {
+  const participantRef = doc(db, 'live_classes', classId, 'participants', userId);
+  const existing = await getDoc(participantRef).catch(() => null);
+  const wasJoined = existing?.exists() && existing.data()?.joined === true;
+  await setDoc(participantRef, {
     joined: false,
     audio_enabled: false,
     video_enabled: false,
@@ -411,6 +419,9 @@ export async function markParticipantLeft(classId: string, userId: string, joine
     total_connected_duration: increment(duration),
     updated_at: serverTimestamp(),
   }, { merge: true });
+  if (wasJoined) {
+    await setDoc(doc(db, 'live_classes', classId), { participant_count: increment(-1), updated_at: serverTimestamp() }, { merge: true });
+  }
   await addDoc(collection(db, 'live_classes', classId, 'attendance_events'), {
     user_id: userId,
     event: 'leave',
