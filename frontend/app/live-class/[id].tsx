@@ -30,6 +30,7 @@ import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { isExpoGo } from '@/lib/runtime';
 import { useAuth } from '@/context/AuthContext';
 import {
+  AGORA_APP_ID,
   canCurrentUserJoinLiveClass,
   endLiveClassAndSyncAttendance,
   getLiveApiSetupMessage,
@@ -115,6 +116,12 @@ function getParticipantJoinDate(participant?: LiveClassParticipant | null): Date
 function assertAgoraResult(operation: string, result: number | void): void {
   if (typeof result === 'number' && result < 0) {
     throw new Error(`${operation} failed (${result}). Please restart the app and try again.`);
+  }
+}
+
+function logAgoraWarning(operation: string, result: number | void): void {
+  if (typeof result === 'number' && result < 0) {
+    console.log(`[LiveClass] ${operation} failed (${result})`);
   }
 }
 
@@ -439,10 +446,24 @@ export default function LiveClassroomScreen() {
         Alert.alert('Live token unavailable', 'Could not get a secure live class token.');
         return;
       }
+      const runtimeAgoraAppId = String(AGORA_APP_ID || '').trim();
+      if (!runtimeAgoraAppId) {
+        Alert.alert('Agora configuration missing', 'EXPO_PUBLIC_AGORA_APP_ID is not loaded in this app build.');
+        return;
+      }
+      if (runtimeAgoraAppId !== rtcToken.appId) {
+        Alert.alert('Agora configuration mismatch', 'The app build Agora App ID does not match the live class token App ID.');
+        return;
+      }
       const engine = createAgoraRtcEngine();
       engineRef.current = engine;
       const handler: IRtcEngineEventHandler = {
         onJoinChannelSuccess: () => {
+          try {
+            logAgoraWarning('Enable speaker after join', engineRef.current?.setEnableSpeakerphone(speakerOn));
+          } catch (err) {
+            console.log('[LiveClass] Enable speaker after join threw', err);
+          }
           setReconnecting(false);
           joinedRef.current = true;
           setJoined(true);
@@ -538,7 +559,7 @@ export default function LiveClassroomScreen() {
       engine.registerEventHandler(handler);
       assertAgoraResult('Enable audio', engine.enableAudio());
       assertAgoraResult('Enable video', engine.enableVideo());
-      assertAgoraResult('Enable speaker', engine.setEnableSpeakerphone(true));
+      assertAgoraResult('Set default speaker route', engine.setDefaultAudioRouteToSpeakerphone(true));
       if (isLowEndAndroid) {
         try { engine.setParameters(JSON.stringify({ "che.video.lowBitRateStreamParameter": { width: 160, height: 120, frameRate: 10, bitrate: 65 } })); } catch {}
       }
@@ -561,7 +582,7 @@ export default function LiveClassroomScreen() {
       joiningLockRef.current = false;
       setJoining(false);
     }
-  }, [classId, cleanupAgora, expoGo, isLowEndAndroid, isTeacher, joining, joined, liveClass, profile, scheduleTokenRenewal, user?.uid]);
+  }, [classId, cleanupAgora, expoGo, isLowEndAndroid, isTeacher, joining, joined, liveClass, postOpsEvent, profile, scheduleTokenRenewal, speakerOn, user?.uid]);
 
   const toggleMic = useCallback(async () => {
     if (!classId || !user?.uid || localParticipant?.force_muted) {
