@@ -1,3 +1,4 @@
+import pytest
 from payments.payment_finalizer import finalize_successful_payment
 
 
@@ -78,7 +79,7 @@ def test_succeeded_without_entitlement_is_finalized(monkeypatch):
     assert result["entitlement_granted"] is True
     assert db.root["payments"]["p1"]["entitlement_granted"] is True
     assert db.root["subscriptions"]["student_1"]["status"] == "active"
-    assert db.root["enrollments"]["student_1:fees"]["course_id"] == "course_1"
+    assert db.root["enrollments"]["student_1:course_1"]["course_id"] == "course_1"
 
 
 def test_finalized_payment_remains_idempotent(monkeypatch):
@@ -128,9 +129,9 @@ def test_processing_payment_success_grants_course_access(monkeypatch):
     assert result["ok"] is True
     assert db.root["payments"]["p3"]["state"] == "succeeded"
     assert db.root["payments"]["p3"]["entitlement_granted"] is True
-    assert db.root["enrollments"]["student_3:fees"]["status"] == "active"
-    assert db.root["enrollments"]["student_3:fees"]["user_id"] == "student_3"
-    assert db.root["enrollments"]["student_3:fees"]["course_id"] == "course_3"
+    assert db.root["enrollments"]["student_3:course_3"]["status"] == "active"
+    assert db.root["enrollments"]["student_3:course_3"]["user_id"] == "student_3"
+    assert db.root["enrollments"]["student_3:course_3"]["course_id"] == "course_3"
     assert db.root["subscriptions"]["student_3"]["status"] == "active"
 
 
@@ -156,6 +157,54 @@ def test_pending_manual_approval_grants_course_access(monkeypatch):
     assert result["ok"] is True
     assert db.root["payments"]["p4"]["state"] == "succeeded"
     assert db.root["payments"]["p4"]["entitlement_granted"] is True
-    assert db.root["enrollments"]["student_4:fees"]["status"] == "active"
-    assert db.root["enrollments"]["student_4:fees"]["course_id"] == "course_4"
+    assert db.root["enrollments"]["student_4:course_4"]["status"] == "active"
+    assert db.root["enrollments"]["student_4:course_4"]["course_id"] == "course_4"
     assert db.root["subscriptions"]["student_4"]["status"] == "active"
+
+
+def test_fee_payment_without_course_id_is_rejected(monkeypatch):
+    import payments.payment_finalizer as module
+
+    monkeypatch.setattr(module.admin_firestore, "transaction", lambda: FakeTransaction(), raising=False)
+    monkeypatch.setattr(module.admin_firestore, "transactional", fake_transactional)
+    monkeypatch.setattr(module.admin_firestore, "SERVER_TIMESTAMP", "SERVER_TIMESTAMP")
+
+    db = FakeDb()
+    db.root["payments"] = {
+        "p_missing_course": {
+            "state": "processing",
+            "user_id": "student_missing",
+            "type": "fees",
+        }
+    }
+
+    with pytest.raises(ValueError, match="missing_course_id"):
+        finalize_successful_payment(db, "p_missing_course", "admin", "manual_approve")
+
+    assert db.root.get("enrollments", {}) == {}
+
+
+def test_donation_payment_does_not_create_course_enrollment(monkeypatch):
+    import payments.payment_finalizer as module
+
+    monkeypatch.setattr(module.admin_firestore, "transaction", lambda: FakeTransaction(), raising=False)
+    monkeypatch.setattr(module.admin_firestore, "transactional", fake_transactional)
+    monkeypatch.setattr(module.admin_firestore, "SERVER_TIMESTAMP", "SERVER_TIMESTAMP")
+
+    db = FakeDb()
+    db.root["payments"] = {
+        "p_donation": {
+            "state": "processing",
+            "user_id": "donor_1",
+            "type": "sadqa",
+        }
+    }
+
+    result = finalize_successful_payment(db, "p_donation", "admin", "manual_approve")
+
+    assert result["ok"] is True
+    assert result["entitlement_granted"] is False
+    assert db.root["payments"]["p_donation"]["state"] == "succeeded"
+    assert db.root["payments"]["p_donation"]["entitlement_granted"] is False
+    assert db.root.get("enrollments", {}) == {}
+    assert db.root.get("subscriptions", {}) == {}

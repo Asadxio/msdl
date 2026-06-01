@@ -157,6 +157,10 @@ export default function QuizScreen() {
       setError('Question, at least 2 options, and correct answer are required.');
       return;
     }
+    if (!normalized.includes(correctAnswer.trim())) {
+      setError('Correct answer must exactly match one of the answer options.');
+      return;
+    }
     setSavingQuestion(true);
     try {
       const payload = {
@@ -233,27 +237,62 @@ export default function QuizScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>Quiz</Text>
-        <Text style={styles.subtitle}>Attempt with available questions</Text>
+        <View style={styles.headerTopRow}>
+          <View>
+            <Text style={styles.title}>Quiz</Text>
+            <Text style={styles.subtitle}>Attempt with available questions</Text>
+          </View>
+          <TouchableOpacity style={styles.refreshBtn} onPress={loadQuiz} disabled={loading} accessibilityRole="button" accessibilityLabel="Refresh quiz">
+            {loading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.refreshText}>Refresh</Text>}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {isAdmin ? (
         <SectionCard style={styles.adminCard}>
           <Text style={styles.adminTitle}>{editingId ? 'Edit Quiz Question' : 'Add Quiz Question'}</Text>
-          <TextInput style={styles.input} value={questionInput} onChangeText={setQuestionInput} placeholder="Question" />
+          <Text style={styles.inputLabel}>Question</Text>
+          <TextInput style={styles.input} value={questionInput} onChangeText={setQuestionInput} placeholder="Enter the quiz question" placeholderTextColor={COLORS.textMuted} />
+          <Text style={styles.inputLabel}>Answer Options</Text>
           {optionInputs.map((option, i) => (
             <TextInput
               key={String(i)}
               style={styles.input}
               value={option}
               onChangeText={(text) => setOptionInputs((prev) => prev.map((item, idx) => (idx === i ? text : item)))}
-              placeholder={`Option ${i + 1}`}
+              placeholder={`Option ${i + 1}${i < 2 ? ' (required)' : ' (optional)'}`}
+              placeholderTextColor={COLORS.textMuted}
             />
           ))}
-          <TextInput style={styles.input} value={correctAnswer} onChangeText={setCorrectAnswer} placeholder="Correct answer" />
-          <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="Category (optional)" />
+          <Text style={styles.inputLabel}>Correct Answer</Text>
+          <TextInput style={styles.input} value={correctAnswer} onChangeText={setCorrectAnswer} placeholder="Type the correct answer exactly as one option" placeholderTextColor={COLORS.textMuted} />
+          <Text style={styles.inputLabel}>Category</Text>
+          <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="Category (optional)" placeholderTextColor={COLORS.textMuted} />
           <UIButton label={editingId ? 'Update Question' : 'Add Question'} onPress={saveQuestion} loading={savingQuestion} accessibilityLabel="Save quiz question" />
+          {editingId ? (
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => { setEditingId(''); setQuestionInput(''); setOptionInputs(['', '', '', '']); setCorrectAnswer(''); setCategory(''); }}>
+              <Text style={styles.secondaryBtnText}>Cancel Edit</Text>
+            </TouchableOpacity>
+          ) : null}
         </SectionCard>
+      ) : null}
+
+      {isAdmin && questions.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adminQuestionList}>
+          {questions.map((q) => (
+            <View key={q.id} style={styles.adminQuestionChip}>
+              <Text style={styles.adminQuestionText} numberOfLines={2}>{q.question}</Text>
+              <View style={styles.row}>
+                <TouchableOpacity style={styles.compactBtn} onPress={() => editQuestion(q)}>
+                  <Text style={styles.compactBtnText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.compactBtn, styles.compactDeleteBtn]} onPress={() => removeQuestion(q.id)}>
+                  <Text style={[styles.compactBtnText, { color: COLORS.error }]}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       ) : null}
 
       {error ? (<View style={styles.feedbackWrap}><FeedbackBanner type="error" message={error} /></View>) : null}
@@ -344,11 +383,21 @@ export default function QuizScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: { backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.md },
+  refreshBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: COLORS.surfaceAlt },
+  refreshText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 13, color: COLORS.textMuted },
   body: { padding: SPACING.md, gap: 10 },
   adminCard: { margin: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, gap: 8, ...SHADOWS.card },
   adminTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
+  inputLabel: { color: COLORS.textMain, fontSize: 12, fontWeight: '700', marginTop: 4 },
+  adminQuestionList: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm, gap: 8 },
+  adminQuestionChip: { width: 220, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.sm, gap: 8 },
+  adminQuestionText: { color: COLORS.textMain, fontWeight: '700', fontSize: 12 },
+  compactBtn: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, alignItems: 'center', paddingVertical: 7, backgroundColor: COLORS.surfaceAlt },
+  compactDeleteBtn: { borderColor: '#F2B8B5', backgroundColor: '#FDECEC' },
+  compactBtnText: { color: COLORS.primary, fontSize: 12, fontWeight: '700' },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 10, paddingVertical: 9, color: COLORS.textMain, backgroundColor: COLORS.surfaceAlt, textAlign: 'left' },
   progress: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
   questionCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card, gap: 10 },

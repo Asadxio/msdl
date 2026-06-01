@@ -35,7 +35,7 @@ import {
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
-import { isValidHttpsUrl, prepareExternalUrl } from '@/lib/links';
+import { WHATSAPP_HELP_URL, isValidHttpsUrl, normalizeWhatsAppUrl, prepareExternalUrl } from '@/lib/links';
 import { isHttpsUrl, uploadUriFile } from '@/lib/storage';
 
 type AppSettings = {
@@ -79,7 +79,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   donation_content: 'Your sadaqah, zakat, fitrah and langar support help students access Islamic education with dignity and consistency.',
   introduction_content: 'Madarsa Tus Salikat Lil Banat is a modern Islamic learning platform dedicated to quality Islamic education for girls.',
 };
-const HELP_WHATSAPP_URL = 'https://wa.link/mrtyi1';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
 
@@ -297,15 +296,19 @@ export default function AboutScreen() {
   };
 
   const openHelp = async () => {
+    const url = normalizeWhatsAppUrl(settings.whatsapp_contact || WHATSAPP_HELP_URL);
+    if (!url) {
+      Alert.alert('Unavailable', 'WhatsApp support is not configured yet.');
+      return;
+    }
     try {
-      const canOpen = await Linking.canOpenURL(HELP_WHATSAPP_URL);
-      if (!canOpen) {
-        Alert.alert('Unavailable', 'Could not open WhatsApp right now.');
-        return;
-      }
-      await Linking.openURL(HELP_WHATSAPP_URL);
+      await Linking.openURL(url);
     } catch {
-      Alert.alert('Unavailable', 'Could not open WhatsApp right now.');
+      try {
+        await Linking.openURL(WHATSAPP_HELP_URL);
+      } catch {
+        Alert.alert('Unavailable', 'Could not open WhatsApp right now.');
+      }
     }
   };
 
@@ -937,7 +940,7 @@ export default function AboutScreen() {
           ) : (
             <>
               <View style={styles.row}>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.whatsapp_channel, 'WhatsApp Channel'); }}>
+                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(normalizeWhatsAppUrl(settings.whatsapp_channel) || settings.whatsapp_channel, 'WhatsApp Channel'); }}>
                   <Text style={styles.linkBtnText}>WhatsApp Channel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.instagram, 'Instagram'); }}>

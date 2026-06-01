@@ -433,12 +433,12 @@ export default function LiveClassroomScreen() {
         Alert.alert('Live token unavailable', 'Could not get a secure live class token.');
         return;
       }
-      const runtimeAgoraAppId = String(AGORA_APP_ID || '').trim();
+      const runtimeAgoraAppId = String(AGORA_APP_ID || rtcToken.appId || '').trim();
       if (!runtimeAgoraAppId) {
-        Alert.alert('Agora configuration missing', 'EXPO_PUBLIC_AGORA_APP_ID is not loaded in this app build.');
+        Alert.alert('Agora configuration missing', 'Agora App ID is not available from the app build or live token service.');
         return;
       }
-      if (runtimeAgoraAppId !== rtcToken.appId) {
+      if (AGORA_APP_ID && runtimeAgoraAppId !== rtcToken.appId) {
         Alert.alert('Agora configuration mismatch', 'The app build Agora App ID does not match the live class token App ID.');
         return;
       }

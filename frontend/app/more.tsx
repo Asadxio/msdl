@@ -17,6 +17,7 @@ export default function MoreScreen() {
   const isAdmin = profile?.role === 'admin';
 
   const MORE_ITEMS: MoreItem[] = [
+    { label: 'Qibla Finder', icon: 'compass-outline', route: '/qibla' },
     { label: 'Library', icon: 'library-outline', route: '/library' },
     { label: 'Attendance', icon: 'calendar-outline', route: '/attendance' },
     { label: 'Quiz', icon: 'help-circle-outline', route: '/quiz' },

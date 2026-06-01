@@ -204,7 +204,7 @@ service cloud.firestore {
     function isValidNotificationWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['title', 'message', 'user_id', 'target_roles', 'target_user_ids', 'category', 'sound', 'read', 'created_at']
+          ['title', 'message', 'user_id', 'target_roles', 'target_user_ids', 'category', 'sound', 'read', 'hidden_by', 'created_at']
         )
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
@@ -217,6 +217,7 @@ service cloud.firestore {
         && (!('category' in request.resource.data) || request.resource.data.category is string)
         && (!('sound' in request.resource.data) || request.resource.data.sound == 'default')
         && (!('read' in request.resource.data) || request.resource.data.read is map)
+        && (!('hidden_by' in request.resource.data) || request.resource.data.hidden_by is list)
         && request.resource.data.created_at is timestamp;
     }
 
@@ -258,7 +259,7 @@ service cloud.firestore {
 
     function isValidNotificationReadUpdate() {
       return canReadNotification()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'hidden_by'])
         && request.resource.data.title == resource.data.title
         && request.resource.data.message == resource.data.message
         && request.resource.data.user_id == resource.data.user_id
@@ -267,8 +268,9 @@ service cloud.firestore {
         && (!('target_user_ids' in resource.data) || request.resource.data.target_user_ids == resource.data.target_user_ids)
         && (!('category' in resource.data) || request.resource.data.category == resource.data.category)
         && (!('sound' in resource.data) || request.resource.data.sound == resource.data.sound)
-        && request.resource.data.read is map
-        && request.resource.data.read[request.auth.uid] == true;
+        && (!('hidden_by' in request.resource.data) || request.resource.data.hidden_by is list)
+        && (!('hidden_by' in request.resource.data) || request.auth.uid in request.resource.data.hidden_by)
+        && (!('read' in request.resource.data) || request.resource.data.read == resource.data.read || (request.resource.data.read is map && request.resource.data.read[request.auth.uid] == true));
     }
 
     function isValidPaymentCreate() {
@@ -593,12 +595,30 @@ service cloud.firestore {
         );
     }
 
+    function enrollmentDocId(uid, courseId) {
+      return uid + ':' + courseId;
+    }
+
+    function activeEnrollmentDoc(courseId) {
+      return get(/databases/$(database)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)));
+    }
+
+    function hasActiveEnrollmentForCourse(courseId) {
+      return isSignedIn()
+        && courseId is string
+        && courseId.size() > 0
+        && exists(/databases/$(database)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
+        && activeEnrollmentDoc(courseId).data.user_id == request.auth.uid
+        && activeEnrollmentDoc(courseId).data.course_id == courseId
+        && activeEnrollmentDoc(courseId).data.status == 'active';
+    }
+
     function canJoinLiveClassData(data) {
       return isSignedIn()
         && data.status == 'live'
         && (
           isLiveClassTeacherOrAdmin(data)
-          || (data.student_ids is list && request.auth.uid in data.student_ids)
+          || hasActiveEnrollmentForCourse(data.course_id)
         );
     }
 
@@ -606,7 +626,7 @@ service cloud.firestore {
       return isSignedIn()
         && (
           isLiveClassTeacherOrAdmin(data)
-          || (data.student_ids is list && request.auth.uid in data.student_ids)
+          || hasActiveEnrollmentForCourse(data.course_id)
         );
     }
 
@@ -1124,7 +1144,11 @@ service cloud.firestore {
 
     match /enrollments/{enrollmentId} {
       allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.user_id is string
+        && request.resource.data.course_id is string
+        && enrollmentId == enrollmentDocId(request.resource.data.user_id, request.resource.data.course_id);
+      allow delete: if isAdmin();
     }
 
     match /modules/{moduleId} {

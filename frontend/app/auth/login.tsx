@@ -17,7 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
-import { prepareExternalUrl } from '@/lib/links';
+import { WHATSAPP_HELP_URL, normalizeWhatsAppUrl } from '@/lib/links';
 
 /**
  * Production-safe Login UI:
@@ -35,7 +35,6 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const WHATSAPP_HELP_URL = 'https://wa.link/mrtyi1';
 
   const handleEmailChange = useCallback((text: string) => setEmail(text), []);
   const handlePasswordChange = useCallback((text: string) => setPassword(text), []);
@@ -117,6 +116,7 @@ export default function LoginScreen() {
                   onPress={() => setShowPass((v) => !v)}
                   style={styles.eyeBtn}
                   testID="toggle-password"
+                  accessibilityLabel={showPass ? 'Hide password' : 'Show password'}
                 >
                   <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.textMuted} />
                 </TouchableOpacity>
@@ -150,9 +150,11 @@ export default function LoginScreen() {
           <TouchableOpacity
             style={styles.helpBtn}
             onPress={() => {
-              const url = prepareExternalUrl(WHATSAPP_HELP_URL);
+              const url = normalizeWhatsAppUrl(WHATSAPP_HELP_URL);
               if (!url) return;
-              Linking.openURL(url).catch(() => {});
+              Linking.openURL(url).catch(() => {
+                Linking.openURL(WHATSAPP_HELP_URL).catch(() => {});
+              });
             }}
           >
             <Text style={styles.helpBtnText}>Need Help? WhatsApp Us</Text>

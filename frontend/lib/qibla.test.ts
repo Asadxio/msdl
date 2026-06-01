@@ -1,0 +1,55 @@
+import fs from 'fs';
+import path from 'path';
+import {
+  QIBLA_LOCATION_CACHE_KEY,
+  calculateDistanceToKaaba,
+  calculateQiblaAngle,
+  calculateQiblaState,
+  formatDistanceToKaaba,
+  getDirectionText,
+  getQiblaTurnGuidance,
+} from './qibla';
+
+describe('qibla calculations', () => {
+  it('calculates expected qibla angle and distance from New York', () => {
+    const newYork = { latitude: 40.7128, longitude: -74.006 };
+    expect(Math.round(calculateQiblaAngle(newYork))).toBe(58);
+    expect(Math.round(calculateDistanceToKaaba(newYork))).toBeGreaterThan(10000);
+    expect(formatDistanceToKaaba(calculateDistanceToKaaba(newYork))).toContain('km');
+  });
+
+  it('normalizes direction and turn guidance', () => {
+    expect(getDirectionText(90)).toBe('East');
+    expect(getQiblaTurnGuidance(2)).toBe('You are facing the Qibla');
+    expect(getQiblaTurnGuidance(40)).toBe('Turn right toward Qibla');
+    expect(getQiblaTurnGuidance(-40)).toBe('Turn left toward Qibla');
+  });
+
+  it('returns complete qibla state for UI', () => {
+    const state = calculateQiblaState({ latitude: 51.5072, longitude: -0.1276 }, 120);
+    expect(state).toEqual(expect.objectContaining({
+      qiblaAngle: expect.any(Number),
+      heading: 120,
+      offset: expect.any(Number),
+      directionText: expect.any(String),
+      distanceKm: expect.any(Number),
+      guidance: expect.any(String),
+    }));
+  });
+
+  it('wires Qibla entry points, sensors, camera, and offline cache in screens', () => {
+    const qiblaScreen = fs.readFileSync(path.join(__dirname, '../app/qibla.tsx'), 'utf8');
+    const moreScreen = fs.readFileSync(path.join(__dirname, '../app/more.tsx'), 'utf8');
+    const homeScreen = fs.readFileSync(path.join(__dirname, '../app/(tabs)/index.tsx'), 'utf8');
+
+    expect(QIBLA_LOCATION_CACHE_KEY).toBe('qibla_location_cache_v1');
+    expect(moreScreen).toContain("route: '/qibla'");
+    expect(homeScreen).toContain('testID="dashboard-qibla-shortcut"');
+    expect(qiblaScreen).toContain('getMagnetometerModule');
+    expect(qiblaScreen).toContain('CameraView');
+    expect(qiblaScreen).toContain('AsyncStorage.getItem(QIBLA_LOCATION_CACHE_KEY)');
+    expect(qiblaScreen).toContain("permission === 'granted'");
+    expect(qiblaScreen).toContain('sensorStatus');
+    expect(qiblaScreen).toContain('formatDistanceToKaaba(qibla.distanceKm)');
+  });
+});

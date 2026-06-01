@@ -18,7 +18,7 @@ import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import type { OnboardingRole } from '@/lib/roles';
 import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
-import { prepareExternalUrl } from '@/lib/links';
+import { WHATSAPP_HELP_URL, normalizeWhatsAppUrl } from '@/lib/links';
 
 /**
  * Production-safe Signup UI:
@@ -38,7 +38,6 @@ export default function SignupScreen() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const WHATSAPP_HELP_URL = 'https://wa.link/mrtyi1';
 
   const handleNameChange = useCallback((text: string) => setName(text), []);
   const handleEmailChange = useCallback((text: string) => setEmail(text), []);
@@ -109,7 +108,7 @@ export default function SignupScreen() {
 
               <View>
                 <AppInput label="Password" leftIcon="lock-closed-outline" placeholder="Min 6 characters" value={password} onChangeText={handlePasswordChange} secureTextEntry={!showPass} testID="signup-password-input" />
-                <TouchableOpacity onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn}>
+                <TouchableOpacity onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn} testID="toggle-password" accessibilityLabel={showPass ? 'Hide password' : 'Show password'}>
                   <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -143,9 +142,11 @@ export default function SignupScreen() {
           <TouchableOpacity
             style={styles.helpBtn}
             onPress={() => {
-              const url = prepareExternalUrl(WHATSAPP_HELP_URL);
+              const url = normalizeWhatsAppUrl(WHATSAPP_HELP_URL);
               if (!url) return;
-              Linking.openURL(url).catch(() => {});
+              Linking.openURL(url).catch(() => {
+                Linking.openURL(WHATSAPP_HELP_URL).catch(() => {});
+              });
             }}
           >
             <Text style={styles.helpBtnText}>Need Help? WhatsApp Us</Text>

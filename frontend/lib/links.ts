@@ -44,3 +44,17 @@ export function prepareExternalUrl(raw: string): string | null {
   if (!normalized) return null;
   return isValidHttpsUrl(normalized) ? normalized : null;
 }
+
+export const WHATSAPP_HELP_URL = 'https://wa.link/mrtyi1';
+
+export function normalizeWhatsAppUrl(raw: string): string | null {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  if (/^whatsapp:\/\//i.test(value)) return value;
+  if (/^https?:\/\//i.test(value)) {
+    return prepareExternalUrl(value);
+  }
+  const digits = value.replace(/[^0-9]/g, '');
+  if (digits.length >= 8) return `https://wa.me/${digits}`;
+  return prepareExternalUrl(value);
+}
