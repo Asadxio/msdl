@@ -24,15 +24,16 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
         if state not in {"pending", "processing", "succeeded"} and not can_transition(state, "succeeded"):
             raise ValueError(f"invalid_transition:{state}->succeeded")
 
-        uid = str(p.get("user_id") or "")
-        pay_type = str(p.get("type") or "fees")
-        enroll_id = f"{uid}:{pay_type}"[:180]
-        s_ref = firebase_db.collection("subscriptions").document(uid)
-        e_ref = firebase_db.collection("enrollments").document(enroll_id)
+        uid = str(p.get("user_id") or "").strip()
+        payment_type = str(p.get("type") or "fees").strip().lower()
+        course_id = str(p.get("course_id") or "").strip()
+        grants_course_access = payment_type == "fees"
+        if grants_course_access and not course_id:
+            raise ValueError("missing_course_id")
 
         tx.set(p_ref, {
             "state": "succeeded",
-            "entitlement_granted": True,
+            "entitlement_granted": grants_course_access,
             "finalized_at": admin_firestore.SERVER_TIMESTAMP,
             "finalized_at_ms": now_ms,
             "reconciliation": {"finalized": True, "source_event_id": source_event_id, "updated_at_ms": now_ms},
@@ -40,21 +41,25 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
             "updated_at_ms": now_ms,
         }, merge=True)
 
-        tx.set(e_ref, {
-            "user_id": uid,
-            "course_id": p.get("course_id", "general"),
-            "status": "active",
-            "source": "payment",
-            "payment_id": payment_id,
-            "created_at": admin_firestore.SERVER_TIMESTAMP,
-            "updated_at": admin_firestore.SERVER_TIMESTAMP,
-        }, merge=True)
-        tx.set(s_ref, {
-            "user_id": uid,
-            "status": "active",
-            "last_payment_id": payment_id,
-            "updated_at": admin_firestore.SERVER_TIMESTAMP,
-        }, merge=True)
+        if grants_course_access:
+            enroll_id = f"{uid}:{course_id}"
+            s_ref = firebase_db.collection("subscriptions").document(uid)
+            e_ref = firebase_db.collection("enrollments").document(enroll_id)
+            tx.set(e_ref, {
+                "user_id": uid,
+                "course_id": course_id,
+                "status": "active",
+                "source": "payment",
+                "payment_id": payment_id,
+                "created_at": admin_firestore.SERVER_TIMESTAMP,
+                "updated_at": admin_firestore.SERVER_TIMESTAMP,
+            }, merge=True)
+            tx.set(s_ref, {
+                "user_id": uid,
+                "status": "active",
+                "last_payment_id": payment_id,
+                "updated_at": admin_firestore.SERVER_TIMESTAMP,
+            }, merge=True)
         tx.set(firebase_db.collection("payment_audit_logs").document(), {
             "payment_id": payment_id,
             "actor_id": actor,
@@ -64,6 +69,6 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
             "created_at_ms": now_ms,
             "source_event_id": source_event_id,
         })
-        return {"ok": True, "idempotent": state == "succeeded", "state": "succeeded", "entitlement_granted": True}
+        return {"ok": True, "idempotent": state == "succeeded", "state": "succeeded", "entitlement_granted": grants_course_access}
 
     return _tx(admin_firestore.transaction())

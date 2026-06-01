@@ -85,6 +85,7 @@ export default function ChatsScreen() {
   const isAdmin = profile?.role === 'admin';
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [users, setUsers] = useState<AppUser[]>([]);
   const [chats, setChats] = useState<ChatItem[]>([]);
@@ -133,6 +134,32 @@ export default function ChatsScreen() {
       // no-op
     }
   }, [router]);
+
+
+  const refreshChats = useCallback(async () => {
+    if (!user?.uid || refreshing) return;
+    setRefreshing(true);
+    setError('');
+    try {
+      const participantsQ = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updated_at', 'desc'));
+      const broadcastQ = query(collection(db, 'chats'), where('type', '==', 'broadcast'), orderBy('updated_at', 'desc'));
+      const [participantSnap, broadcastSnap] = await Promise.all([getDocs(participantsQ), getDocs(broadcastQ)]);
+      const directAndGroups: ChatItem[] = [];
+      participantSnap.forEach((d) => directAndGroups.push(normalizeChatItem(d.id, d.data())));
+      const broadcasts: ChatItem[] = [];
+      broadcastSnap.forEach((d) => broadcasts.push(normalizeChatItem(d.id, d.data())));
+      const merged = [...directAndGroups, ...broadcasts.filter((bc) => !directAndGroups.some((x) => x.id === bc.id))];
+      setChats(merged.sort((x, y) => (y.updated_at?.seconds || 0) - (x.updated_at?.seconds || 0)));
+      setLoading(false);
+      setFeedback({ type: 'success', text: 'Chats refreshed.' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to refresh chats.';
+      setError(message);
+      setFeedback({ type: 'error', text: message });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, user?.uid]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -404,8 +431,21 @@ export default function ChatsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>Chats</Text>
-        <Text style={styles.subtitle}>1-to-1, groups, and broadcast</Text>
+        <View style={styles.headerTopRow}>
+          <View>
+            <Text style={styles.title}>Chats</Text>
+            <Text style={styles.subtitle}>1-to-1, groups, and broadcast</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={refreshChats}
+            disabled={refreshing}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh chats"
+          >
+            {refreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
+          </TouchableOpacity>
+        </View>
       </View>
       {feedback ? (
         <View style={styles.feedbackWrap}>
@@ -581,6 +621,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md,
     borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header,
   },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.md },
+  refreshBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
   feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },

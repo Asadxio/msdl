@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
   Platform,
   useColorScheme,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -41,6 +42,7 @@ import {
   getCourseImage,
   getTeacherAvatar,
 } from "@/constants/theme";
+import { calculateQiblaState, formatDistanceToKaaba } from '@/lib/qibla';
 import { type Course, useData } from "@/context/DataContext";
 import { db } from "@/lib/firebase";
 import { EmptyState, ScalePressable, SkeletonCard } from "@/components/ui";
@@ -52,8 +54,8 @@ const DEFAULT_ANNOUNCEMENT_TITLE = "No announcements yet";
 const DEFAULT_ANNOUNCEMENT_DESC =
   "Important updates from teachers and admins will appear here.";
 
-type PrayerName = "Fajr" | "Dhuhr" | "Asr" | "Maghrib" | "Isha";
-type PrayerTime = { name: PrayerName; time: Date; label: string };
+type PrayerName = "Fajr" | "Sunrise" | "Ishraq" | "Chasht" | "Dahwa-e-Kubra" | "Zuhr" | "Asr" | "Maghrib" | "Isha" | "Tahajjud";
+type PrayerTime = { name: PrayerName; time: Date; label: string; kind: "fard" | "sun" | "nafl" | "marker" };
 type PrayerCalculationSettings = {
   method: string;
   fajrAngle: number;
@@ -95,6 +97,49 @@ type IslamicTheme = {
   secondary: string;
   image: string;
   tint: string;
+};
+
+const PRAYER_LOCATION_CACHE_KEY = "home_prayer_location_cache_v2";
+
+const ENGLISH_HIJRI_MONTHS: Record<string, string> = {
+  "Dhuʻl-Qiʻdah": "Zul Qidah",
+  "Dhu’l-Qi’dah": "Zul Qidah",
+  "Dhu al-Qiʻdah": "Zul Qidah",
+  "Dhu al-Qi’dah": "Zul Qidah",
+  "Dhuʻl-Hijjah": "Zul Hijjah",
+  "Dhu’l-Hijjah": "Zul Hijjah",
+  "Dhu al-Hijjah": "Zul Hijjah",
+  "Rabiʻ I": "Rabi al-Awwal",
+  "Rabi’ I": "Rabi al-Awwal",
+  "Rabi I": "Rabi al-Awwal",
+  "Rabiʻ II": "Rabi al-Thani",
+  "Rabi’ II": "Rabi al-Thani",
+  "Rabi II": "Rabi al-Thani",
+};
+
+const URDU_HIJRI_MONTHS: Record<string, string> = {
+  Muharram: "محرم",
+  Safar: "صفر",
+  "Rabiʻ I": "ربیع الاول",
+  "Rabi’ I": "ربیع الاول",
+  "Rabi I": "ربیع الاول",
+  "Rabiʻ II": "ربیع الثانی",
+  "Rabi’ II": "ربیع الثانی",
+  "Rabi II": "ربیع الثانی",
+  "Jumada I": "جمادی الاول",
+  "Jumada II": "جمادی الثانی",
+  Rajab: "رجب",
+  Shaʻban: "شعبان",
+  "Sha’ban": "شعبان",
+  Ramadan: "رمضان",
+  Shawwal: "شوال",
+  "Dhuʻl-Qiʻdah": "ذوالقعدہ",
+  "Dhu’l-Qi’dah": "ذوالقعدہ",
+  "Dhu al-Qiʻdah": "ذوالقعدہ",
+  "Dhu al-Qi’dah": "ذوالقعدہ",
+  "Dhuʻl-Hijjah": "ذوالحجہ",
+  "Dhu’l-Hijjah": "ذوالحجہ",
+  "Dhu al-Hijjah": "ذوالحجہ",
 };
 
 const PRAYER_METHODS: Record<string, PrayerCalculationSettings> = {
@@ -324,51 +369,50 @@ function solarTime(
   const utc = localMean - lngHour;
   return normalizeHour(utc + -date.getTimezoneOffset() / 60);
 }
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60000);
+}
+
 function calculatePrayerTimes(
   date: Date,
   latitude: number,
   longitude: number,
   settings: PrayerCalculationSettings = PRAYER_METHODS.muslimWorldLeague,
 ): PrayerTime[] {
-  const sunrise = solarTime(date, latitude, longitude, 90.833, false);
-  const sunset = solarTime(date, latitude, longitude, 90.833, true);
-  const dhuhr = normalizeHour((sunrise + sunset) / 2 + 0.05);
-  const ishaTime =
-    settings.method === PRAYER_METHODS.ummAlQura.method
-      ? normalizeHour(sunset + settings.ishaAngle)
-      : solarTime(date, latitude, longitude, 90 + settings.ishaAngle, true);
+  const fajr = decimalToDate(date, solarTime(date, latitude, longitude, 90 + settings.fajrAngle, false));
+  const sunrise = decimalToDate(date, solarTime(date, latitude, longitude, 90.833, false));
+  const sunset = decimalToDate(date, solarTime(date, latitude, longitude, 90.833, true));
+  const zuhr = decimalToDate(date, normalizeHour((solarTime(date, latitude, longitude, 90.833, false) + solarTime(date, latitude, longitude, 90.833, true)) / 2 + 0.05));
+  const isha = decimalToDate(date, settings.method === PRAYER_METHODS.ummAlQura.method
+    ? normalizeHour(solarTime(date, latitude, longitude, 90.833, true) + settings.ishaAngle)
+    : solarTime(date, latitude, longitude, 90 + settings.ishaAngle, true));
+  const tomorrowFajr = decimalToDate(
+    new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1),
+    solarTime(new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1), latitude, longitude, 90 + settings.fajrAngle, false),
+  );
+  const nightMs = Math.max(1, tomorrowFajr.getTime() - isha.getTime());
+  const tahajjud = new Date(isha.getTime() + (nightMs * 2) / 3);
+  const dahwa = new Date(fajr.getTime() + (sunset.getTime() - fajr.getTime()) / 2);
   const times: PrayerTime[] = [
-    {
-      name: "Fajr",
-      time: decimalToDate(
-        date,
-        solarTime(date, latitude, longitude, 90 + settings.fajrAngle, false),
-      ),
-      label: "",
-    },
-    { name: "Dhuhr", time: decimalToDate(date, dhuhr), label: "" },
+    { name: "Fajr", time: fajr, label: "", kind: "fard" },
+    { name: "Sunrise", time: sunrise, label: "", kind: "sun" },
+    { name: "Ishraq", time: addMinutes(sunrise, 15), label: "", kind: "nafl" },
+    { name: "Chasht", time: addMinutes(sunrise, 120), label: "", kind: "nafl" },
+    { name: "Dahwa-e-Kubra", time: dahwa, label: "", kind: "marker" },
+    { name: "Zuhr", time: zuhr, label: "", kind: "fard" },
     {
       name: "Asr",
-      time: decimalToDate(
-        date,
-        solarTime(
-          date,
-          latitude,
-          longitude,
-          asrZenith(date, latitude, settings.asrFactor),
-          true,
-        ),
-      ),
+      time: decimalToDate(date, solarTime(date, latitude, longitude, asrZenith(date, latitude, settings.asrFactor), true)),
       label: "",
+      kind: "fard",
     },
-    { name: "Maghrib", time: decimalToDate(date, sunset + 0.03), label: "" },
-    {
-      name: "Isha",
-      time: decimalToDate(date, ishaTime),
-      label: "",
-    },
+    { name: "Maghrib", time: addMinutes(sunset, 3), label: "", kind: "fard" },
+    { name: "Isha", time: isha, label: "", kind: "fard" },
+    { name: "Tahajjud", time: tahajjud, label: "", kind: "nafl" },
   ];
-  return times.map((item) => ({ ...item, label: formatClock(item.time) }));
+  return times
+    .sort((a, b) => a.time.getTime() - b.time.getTime())
+    .map((item) => ({ ...item, label: formatClock(item.time) }));
 }
 function getPrayerWindow(
   prayers: PrayerTime[],
@@ -402,23 +446,29 @@ function getPrayerWindow(
   const elapsed = Math.max(0, now.getTime() - prevTime.getTime());
   return { current: previous, next, progress: Math.min(1, elapsed / duration) };
 }
-function getHijriDate(date: Date) {
+function toUrduDigits(value: string | number) {
+  const urduDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+  return String(value).replace(/[0-9]/g, (digit) => urduDigits[Number(digit)]);
+}
+
+function getIslamicCalendar(date: Date) {
+  const englishDate = date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   try {
-    return new Intl.DateTimeFormat("en-u-ca-islamic-umalqura", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(date);
+    const formatter = new Intl.DateTimeFormat("en-u-ca-islamic-umalqura", { day: "numeric", month: "long", year: "numeric" });
+    const parts = formatter.formatToParts(date);
+    const day = parts.find((part) => part.type === "day")?.value || "";
+    const month = parts.find((part) => part.type === "month")?.value || "";
+    const year = parts.find((part) => part.type === "year")?.value || "";
+    const englishMonth = ENGLISH_HIJRI_MONTHS[month] || month;
+    const hijriDate = `${day} ${englishMonth} ${year} AH`.trim();
+    const urduMonth = URDU_HIJRI_MONTHS[month] || month;
+    const urduHijriDate = `${toUrduDigits(day)} ${urduMonth} ${toUrduDigits(year)}`.trim();
+    return { englishDate, hijriDate, urduHijriDate };
   } catch {
-    return new Intl.DateTimeFormat("en-u-ca-islamic", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(date);
+    return { englishDate, hijriDate: "Hijri date unavailable", urduHijriDate: "تاریخ دستیاب نہیں" };
   }
 }
+
 function getExpoLocationModule() {
   if (Platform.OS === "web" || typeof require !== "function") return null;
   try {
@@ -545,7 +595,7 @@ export default function HomeScreen() {
     ).start();
   }, [pulseAnim]);
 
-  const requestLocation = async () => {
+  const requestLocation = useCallback(async () => {
     if (locationRequestRef.current) return;
     locationRequestRef.current = true;
     setLocationDetails((current) => ({ ...current, permission: "requesting" }));
@@ -595,7 +645,7 @@ export default function HomeScreen() {
         }
       }
 
-      setLocationDetails({
+      const nextLocation = {
         city: resolvedPlace.city,
         state: resolvedPlace.state,
         country: resolvedPlace.country,
@@ -606,21 +656,46 @@ export default function HomeScreen() {
           typeof altitude === "number" ? `${Math.round(altitude)} m` : "—",
         latitude,
         longitude,
-        permission: "granted",
-      });
+        permission: "granted" as const,
+      };
+      setLocationDetails(nextLocation);
+      await AsyncStorage.setItem(PRAYER_LOCATION_CACHE_KEY, JSON.stringify(nextLocation)).catch(() => {});
     } finally {
       locationRequestRef.current = false;
     }
-  };
+  }, []);
 
   useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(PRAYER_LOCATION_CACHE_KEY)
+      .then((raw) => {
+        if (!mounted || !raw) return;
+        const cached = JSON.parse(raw) as LocationDetails;
+        if (typeof cached?.latitude === "number" && typeof cached?.longitude === "number") {
+          setLocationDetails({ ...cached, permission: cached.permission || "granted" });
+        }
+      })
+      .catch(() => {});
     requestLocation().catch(() => {
       setLocationDetails((current) => ({
         ...current,
-        permission: "unavailable",
+        permission: current.permission === "granted" ? "granted" : "unavailable",
       }));
     });
-  }, []);
+    return () => {
+      mounted = false;
+    };
+  }, [requestLocation]);
+
+  useEffect(() => {
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 5, 0);
+    const timer = setTimeout(() => {
+      setNow(new Date());
+      requestLocation().catch(() => {});
+    }, Math.max(1000, nextMidnight.getTime() - now.getTime()));
+    return () => clearTimeout(timer);
+  }, [now, requestLocation]);
 
   useEffect(() => {
     const loadNotice = async () => {
@@ -689,12 +764,12 @@ export default function HomeScreen() {
     () => getPrayerCalculationSettings(locationDetails.country),
     [locationDetails.country],
   );
-  const prayerTimes = calculatePrayerTimes(
+  const prayerTimes = useMemo(() => calculatePrayerTimes(
     now,
     locationDetails.latitude,
     locationDetails.longitude,
     prayerSettings,
-  );
+  ), [locationDetails.latitude, locationDetails.longitude, now, prayerSettings]);
   const prayerWindow = getPrayerWindow(
     prayerTimes,
     now,
@@ -702,13 +777,8 @@ export default function HomeScreen() {
     locationDetails.longitude,
     prayerSettings,
   );
-  const hijriDate = getHijriDate(now);
-  const gregorianDate = now.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  const dashboardQibla = calculateQiblaState(locationDetails, 0);
+  const calendarInfo = getIslamicCalendar(now);
   const countdown = formatDuration(
     prayerWindow.next.time.getTime() - now.getTime(),
   );
@@ -797,7 +867,87 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-                {/* Loading State */}
+        {/* Islamic Calendar & Prayer Widget */}
+        <View style={styles.dashboardOuter} testID="islamic-prayer-dashboard">
+          <Image source={{ uri: selectedIslamicTheme.image }} style={styles.dashboardBgImage} />
+          <View style={[styles.dashboardTint, { backgroundColor: selectedIslamicTheme.tint }]} />
+          <View style={styles.dashboardContent}>
+            <View style={styles.dashboardTopRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dashboardEyebrow}>Islamic Calendar</Text>
+                <Text style={styles.dashboardTitle}>{calendarInfo.englishDate}</Text>
+                <Text style={styles.dashboardSubtitle}>{calendarInfo.hijriDate}</Text>
+                <Text style={styles.urduDate}>{calendarInfo.urduHijriDate}</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.themeButton, { borderColor: selectedIslamicTheme.accent }]}
+                onPress={() => setThemeIndex((value) => value + 1)}
+                accessibilityRole="button"
+                accessibilityLabel="Change Islamic dashboard theme"
+              >
+                <Ionicons name="color-palette-outline" size={14} color={selectedIslamicTheme.accent} />
+                <Text style={[styles.themeButtonText, { color: selectedIslamicTheme.accent }]}>Theme</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.prayerHeroRow}>
+              <View style={[styles.countdownMeter, { borderColor: selectedIslamicTheme.accent }]}>
+                <Animated.View style={[styles.meterProgressHint, { backgroundColor: selectedIslamicTheme.secondary, transform: [{ rotate: `${progressDegrees}deg` }] }]} />
+                <Text style={styles.currentPrayerLabel}>Current</Text>
+                <Text style={styles.currentPrayerName}>{prayerWindow.current.name}</Text>
+                <Text style={styles.nextPrayerText}>Next: {prayerWindow.next.name} • {prayerWindow.next.label}</Text>
+                <Text style={styles.countdownText}>{countdown}</Text>
+              </View>
+              <View style={[styles.glassPanel, isDarkMode && styles.glassPanelDark]}>
+                <Text style={styles.panelLabel}>Prayer Location</Text>
+                <Text style={styles.locationTitle}>{locationDetails.city}</Text>
+                <Text style={styles.locationSubtitle}>{locationDetails.state}, {locationDetails.country}</Text>
+                <View style={styles.locationMetaGrid}>
+                  <Text style={styles.locationMeta}>{locationDetails.timezone} • {locationDetails.gmt}</Text>
+                  <Text style={styles.locationMeta}>{prayerSettings.method}</Text>
+                  <Text style={styles.locationMeta}>Offline cache: {locationDetails.permission === "granted" ? "ready" : "fallback"}</Text>
+                </View>
+                <TouchableOpacity style={styles.locationButton} onPress={() => requestLocation().catch(() => {})} accessibilityRole="button" accessibilityLabel="Refresh prayer location">
+                  <Ionicons name="locate-outline" size={13} color="#fff" />
+                  <Text style={styles.locationButtonText}>Daily Refresh</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.qiblaShortcutCard}
+              onPress={() => safePush("/qibla")}
+              accessibilityRole="button"
+              accessibilityLabel="Open Qibla finder"
+              testID="dashboard-qibla-shortcut"
+            >
+              <View style={styles.qiblaShortcutIcon}>
+                <Ionicons name="compass-outline" size={22} color={COLORS.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.qiblaShortcutTitle}>Qibla Finder</Text>
+                <Text style={styles.qiblaShortcutText}>
+                  {Math.round(dashboardQibla.qiblaAngle)}° {dashboardQibla.directionText} • {formatDistanceToKaaba(dashboardQibla.distanceKm)}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+
+            <View style={styles.prayerTimesRow}>
+              {prayerTimes.map((item) => {
+                const active = item.name === prayerWindow.current.name;
+                return (
+                  <View key={item.name} style={[styles.prayerPill, active && styles.prayerPillActive]}>
+                    <Text style={[styles.prayerPillName, active && styles.prayerPillNameActive]}>{item.name}</Text>
+                    <Text style={styles.prayerPillTime}>{item.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* Loading State */}
         {loading ? (
           <View style={styles.loadingBlock} testID="home-loading">
             <SkeletonCard lines={2} />
@@ -1315,6 +1465,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 2,
   },
+  urduDate: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 6,
+    textAlign: "left",
+  },
   themeButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1422,6 +1579,26 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   locationButtonText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  qiblaShortcutCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    borderRadius: 22,
+    padding: SPACING.md,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+  },
+  qiblaShortcutIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qiblaShortcutTitle: { color: "#fff", fontSize: 15, fontWeight: "900" },
+  qiblaShortcutText: { color: "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: "700", marginTop: 2 },
   prayerTimesRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
   prayerPill: {
     flexGrow: 1,
@@ -1433,12 +1610,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.18)",
   },
+  prayerPillActive: {
+    backgroundColor: "rgba(212,175,55,0.32)",
+    borderColor: "rgba(255,255,255,0.60)",
+  },
   prayerPillName: {
     color: "rgba(255,255,255,0.78)",
     fontSize: 11,
     fontWeight: "900",
     textAlign: "center",
   },
+  prayerPillNameActive: { color: "#fff" },
   prayerPillTime: {
     color: "#fff",
     fontSize: 13,

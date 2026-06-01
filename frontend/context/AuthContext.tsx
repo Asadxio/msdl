@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   onAuthStateChanged,
@@ -17,6 +17,10 @@ import { auth, db } from '@/lib/firebase';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { normalizeRole, type AppRole, type OnboardingRole } from '@/lib/roles';
+
+const AUTH_STARTUP_WATCHDOG_MS = 5000;
+const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
+const PROFILE_CACHE_TIMEOUT_MS = 1200;
 
 export type UserProfile = {
   name: string;
@@ -77,12 +81,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const emailVerified = user?.emailVerified ?? false;
   const getProfileCacheKey = (uid: string) => `profile_cache_${uid}`;
 
+  const parseCachedProfile = (raw: string | null, source: string): UserProfile | null => {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as UserProfile;
+      return { ...parsed, role: normalizeRole((parsed as any)?.role, source) } as UserProfile;
+    } catch (err) {
+      logger.warn('Ignoring invalid cached profile:', err);
+      return null;
+    }
+  };
+
+  const readCachedProfile = async (uid: string, source: string): Promise<UserProfile | null> => {
+    try {
+      const cached = await withTimeout(AsyncStorage.getItem(getProfileCacheKey(uid)), PROFILE_CACHE_TIMEOUT_MS);
+      return parseCachedProfile(cached, source);
+    } catch (err) {
+      logger.warn('Cached profile read timed out or failed:', err);
+      return null;
+    }
+  };
+
+  const applyCachedProfile = async (uid: string, source: string): Promise<boolean> => {
+    const cachedProfile = await readCachedProfile(uid, source);
+    if (!cachedProfile) return false;
+    setProfile(cachedProfile);
+    setProfileOffline(true);
+    return true;
+  };
+
   const fetchProfile = async (uid: string) => {
     try {
-      const snap = await getDoc(doc(db, 'users', uid));
+      const snap = await withTimeout(getDoc(doc(db, 'users', uid)), PROFILE_LOOKUP_TIMEOUT_MS);
       if (snap.exists()) {
         const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
         setProfile(nextProfile);
+        setProfileOffline(false);
         await AsyncStorage.setItem(getProfileCacheKey(uid), JSON.stringify(nextProfile)).catch(() => {});
       } else {
         setProfile(null);
@@ -90,16 +124,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       logger.warn('Failed to fetch profile:', err);
-      const cached = await AsyncStorage.getItem(getProfileCacheKey(uid)).catch(() => null);
-      if (cached) {
-        try {
-          setProfile({ ...(JSON.parse(cached) as UserProfile), role: normalizeRole((JSON.parse(cached) as any)?.role, 'auth.cachedProfile') } as UserProfile);
-          return;
-        } catch {
-          // fall back to null profile
-        }
-      }
-      setProfile(null);
+      const usedCache = await applyCachedProfile(uid, 'auth.cachedProfile');
+      if (!usedCache) setProfile(null);
     }
   };
 
@@ -134,51 +160,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const authStartupCompletedRef = useRef(false);
+
   useEffect(() => {
+    let mounted = true;
     let profileUnsub: (() => void) | null = null;
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (profileUnsub) {
-        profileUnsub();
-        profileUnsub = null;
-      }
-      setUser(firebaseUser);
-      setProfileOffline(false);
-      if (firebaseUser) {
-        const cachedProfile = await AsyncStorage.getItem(getProfileCacheKey(firebaseUser.uid)).catch(() => null);
-        if (cachedProfile) {
-          try {
-            setProfile({ ...(JSON.parse(cachedProfile) as UserProfile), role: normalizeRole((JSON.parse(cachedProfile) as any)?.role, 'auth.cachedRealtime') } as UserProfile);
-            setProfileOffline(true);
-          } catch {
-            // ignore invalid cached profile
-          }
-        }
-        profileUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snap) => {
-          setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
-          if (!snap.exists()) {
-            setProfile(null);
-            await AsyncStorage.removeItem(getProfileCacheKey(firebaseUser.uid)).catch(() => {});
-            await firebaseSignOut(auth).catch(() => {});
-            return;
-          }
-          const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
-          setProfile(nextProfile);
-          await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
-          await syncPublicProfile(firebaseUser.uid, nextProfile);
-          if (nextProfile.status === 'deactivated' || nextProfile.status === 'rejected') {
-            await firebaseSignOut(auth).catch(() => {});
-          }
-        }, async (err) => {
-          logger.warn('Profile realtime listener failed:', err);
-          setProfileOffline(true);
-          await fetchProfile(firebaseUser.uid);
-        });
+
+    const clearAuthLoader = () => {
+      if (!mounted) return;
+      authStartupCompletedRef.current = true;
+      setAuthLoading(false);
+    };
+
+    const watchdog = setTimeout(() => {
+      if (!mounted || authStartupCompletedRef.current) return;
+      logger.warn('Auth startup watchdog elapsed; continuing with cached/offline state');
+      const currentUser = auth.currentUser;
+      setUser(currentUser ?? null);
+      clearAuthLoader();
+      if (currentUser?.uid) {
+        setProfileOffline(true);
+        applyCachedProfile(currentUser.uid, 'auth.watchdogCachedProfile').catch(() => {});
       } else {
         setProfile(null);
       }
-      setAuthLoading(false);
+    }, AUTH_STARTUP_WATCHDOG_MS);
+
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      try {
+        if (profileUnsub) {
+          profileUnsub();
+          profileUnsub = null;
+        }
+        setUser(firebaseUser);
+        setProfileOffline(false);
+        if (firebaseUser) {
+          await applyCachedProfile(firebaseUser.uid, 'auth.cachedRealtime');
+          profileUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snap) => {
+            setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
+            if (!snap.exists()) {
+              setProfile(null);
+              await AsyncStorage.removeItem(getProfileCacheKey(firebaseUser.uid)).catch(() => {});
+              await firebaseSignOut(auth).catch(() => {});
+              return;
+            }
+            const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
+            setProfile(nextProfile);
+            await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
+            await syncPublicProfile(firebaseUser.uid, nextProfile);
+            if (nextProfile.status === 'deactivated' || nextProfile.status === 'rejected') {
+              await firebaseSignOut(auth).catch(() => {});
+            }
+          }, async (err) => {
+            logger.warn('Profile realtime listener failed:', err);
+            setProfileOffline(true);
+            await fetchProfile(firebaseUser.uid);
+          });
+        } else {
+          setProfile(null);
+        }
+      } catch (err) {
+        logger.warn('Auth startup callback failed:', err);
+        setUser(auth.currentUser ?? null);
+        if (!auth.currentUser) setProfile(null);
+      } finally {
+        clearTimeout(watchdog);
+        clearAuthLoader();
+      }
     });
     return () => {
+      mounted = false;
+      clearTimeout(watchdog);
       if (profileUnsub) profileUnsub();
       unsub();
     };

@@ -324,6 +324,7 @@ class PaymentInitiateRequest(BaseModel):
     payment_type: str
     amount: float
     currency: str = "INR"
+    course_id: str | None = None
 
 
 class PaymentConfirmRequest(BaseModel):
@@ -350,6 +351,18 @@ class LiveOpsEventRequest(BaseModel):
     attempt: int | None = None
     latency_ms: int | None = None
     timestamp_ms: int | None = None
+
+
+def _enrollment_doc_id(uid: str, course_id: str) -> str:
+    return f"{str(uid or '').strip()}:{str(course_id or '').strip()}"
+
+
+def _is_active_enrollment(data: dict, uid: str, course_id: str) -> bool:
+    return (
+        str(data.get("user_id") or "") == str(uid or "").strip()
+        and str(data.get("course_id") or "") == str(course_id or "").strip()
+        and str(data.get("status") or "") == "active"
+    )
 
 
 def _agora_uid(firebase_uid: str) -> int:
@@ -393,18 +406,11 @@ def _is_live_class_member(uid: str, role: str, live_class: dict) -> bool:
         return True
     if role == "teacher" and live_class.get("teacher_id") == uid:
         return True
-    student_ids = live_class.get("student_ids") or []
-    if uid in student_ids:
-        return True
-    course_id = str(live_class.get("course_id") or "")
+    course_id = str(live_class.get("course_id") or "").strip()
     if course_id and firebase_db is not None:
-        matches = firebase_db.collection("enrollments")\
-            .where("course_id", "==", course_id)\
-            .where("user_id", "==", uid)\
-            .where("status", "==", "active")\
-            .limit(1)\
-            .stream()
-        return any(True for _ in matches)
+        enrollment_id = _enrollment_doc_id(uid, course_id)
+        snap = firebase_db.collection("enrollments").document(enrollment_id).get()
+        return snap.exists and _is_active_enrollment(snap.to_dict() or {}, uid, course_id)
     return False
 
 
@@ -1464,8 +1470,14 @@ async def payments_initiate(payload: PaymentInitiateRequest, authorization: str 
     amount = validate_payment_amount(payload.amount)
     ptype = validate_payment_type(payload.payment_type)
     op_id = str(payload.operation_id or "").strip()
+    course_id = str(payload.course_id or "").strip()
     if len(op_id) < 6:
         raise HTTPException(status_code=400, detail="operation_id too short")
+    if ptype == "fees":
+        if not course_id or len(course_id) > 128 or "/" in course_id:
+            raise HTTPException(status_code=400, detail="course_id is required for fee payments")
+        if not firebase_db.collection("courses").document(course_id).get().exists:
+            raise HTTPException(status_code=404, detail="Course not found")
 
     pid = payment_doc_id(uid, op_id)
     ref = firebase_db.collection("payments").document(pid)
@@ -1481,6 +1493,7 @@ async def payments_initiate(payload: PaymentInitiateRequest, authorization: str 
         "amount": amount,
         "currency": str(payload.currency or "INR"),
         "type": ptype,
+        **({"course_id": course_id} if ptype == "fees" else {}),
         "provider": "razorpay",
         "state": "pending",
         "review_mode": "manual",

@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, doc, getDoc, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
 import { db } from '@/lib/firebase';
 import { normalizeFirebaseError } from '@/lib/errors';
 import { isValidHttpsUrl, prepareExternalUrl } from '@/lib/links';
@@ -26,12 +27,15 @@ function sanitizeTransactionRef(value: string): string {
 export default function PaymentFlowScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ courseId?: string }>();
   const { user, profile } = useAuth();
+  const { courses } = useData();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [verificationState, setVerificationState] = useState<'idle' | 'verifying' | 'awaiting_confirmation' | 'reconciling' | 'recovery_pending'>('idle');
   const [currentPaymentId, setCurrentPaymentId] = useState('');
   const [paymentType, setPaymentType] = useState<PaymentType>('fees');
+  const [selectedCourseId, setSelectedCourseId] = useState(String(params.courseId || '').trim());
   const [feesAmount, setFeesAmount] = useState(0);
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
@@ -81,10 +85,20 @@ export default function PaymentFlowScreen() {
   }, [feesAmount, paymentType]);
 
   const parsedAmount = useMemo(() => Number(amount || 0), [amount]);
+  const selectedCourse = useMemo(() => courses.find((course) => course.id === selectedCourseId) || null, [courses, selectedCourseId]);
+
+  useEffect(() => {
+    if (selectedCourseId || !params.courseId) return;
+    setSelectedCourseId(String(params.courseId || '').trim());
+  }, [params.courseId, selectedCourseId]);
 
   const onContinueFromAmount = () => {
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       setError('Please enter a valid amount greater than 0.');
+      return;
+    }
+    if (paymentType === 'fees' && !selectedCourseId) {
+      setError('Please select the course this fee payment is for.');
       return;
     }
     setError('');
@@ -157,6 +171,10 @@ export default function PaymentFlowScreen() {
       setError('Reference must be 4-80 chars and only include letters, numbers, spaces, . / # _ -');
       return;
     }
+    if (paymentType === 'fees' && !selectedCourseId) {
+      setError('Please select the course this fee payment is for.');
+      return;
+    }
     setError('');
     try {
       setSubmittingPayment(true);
@@ -165,7 +183,13 @@ export default function PaymentFlowScreen() {
       const initRes = await fetch(apiUrl('/payments/initiate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-        body: JSON.stringify({ operation_id: operationId, payment_type: paymentType, amount: parsedAmount, currency: 'INR' }),
+        body: JSON.stringify({
+          operation_id: operationId,
+          payment_type: paymentType,
+          amount: parsedAmount,
+          currency: 'INR',
+          ...(paymentType === 'fees' ? { course_id: selectedCourseId } : {}),
+        }),
       });
       if (!initRes.ok) throw new Error('Payment initiation failed');
       const initJson = await initRes.json();
@@ -179,7 +203,7 @@ export default function PaymentFlowScreen() {
       if (!confirmRes.ok) throw new Error('Payment confirmation failed');
       setCurrentPaymentId(initJson.payment_id);
       setVerificationState('reconciling');
-      setStatusText('processing • awaiting admin verification');
+      setStatusText(`processing • ${paymentType}${selectedCourse ? ` • ${selectedCourse.name}` : ''} • awaiting admin verification`);
       setStep(4);
     } catch (err) {
       setVerificationState('recovery_pending');
@@ -221,6 +245,25 @@ export default function PaymentFlowScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+            {paymentType === 'fees' ? (
+              <View style={styles.paymentCategory}>
+                <View style={styles.paymentCategoryHeader}>
+                  <Ionicons name="book-outline" size={18} color={COLORS.primary} />
+                  <Text style={styles.paymentCategoryTitle}>Course for enrollment</Text>
+                </View>
+                <View style={styles.choiceRow}>
+                  {courses.map((course) => (
+                    <TouchableOpacity
+                      key={course.id}
+                      style={[styles.choiceChip, selectedCourseId === course.id && styles.choiceChipActive]}
+                      onPress={() => setSelectedCourseId(course.id)}
+                    >
+                      <Text style={[styles.choiceText, selectedCourseId === course.id && styles.choiceTextActive]}>{course.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ) : null}
             <View style={styles.paymentCategory}>
               <View style={styles.paymentCategoryHeader}>
                 <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
@@ -253,6 +296,7 @@ export default function PaymentFlowScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>2) Pay</Text>
             <Text style={styles.bodyText}>Type: {paymentType.toUpperCase()}</Text>
+            {paymentType === 'fees' ? <Text style={styles.bodyText}>Course: {selectedCourse?.name || selectedCourseId}</Text> : null}
             <Text style={styles.bodyText}>Amount: ₹{parsedAmount.toFixed(2)}</Text>
             <TouchableOpacity style={[styles.primaryBtn, openingPayment && styles.primaryBtnDisabled]} onPress={onPayNow} disabled={openingPayment}>
               {openingPayment ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Open Razorpay</Text>}

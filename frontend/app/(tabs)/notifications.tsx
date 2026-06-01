@@ -7,7 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  collection, doc, limit, orderBy, query, updateDoc, where,
+  arrayUnion, collection, doc, limit, orderBy, query, updateDoc, where,
   deleteDoc,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
@@ -30,6 +30,7 @@ type NotificationItem = {
   target_user_ids?: string[];
   target_roles?: AppRole[];
   created_at?: { toDate?: () => Date };
+  hidden_by?: string[];
 };
 
 function formatDate(item: NotificationItem): string {
@@ -86,7 +87,7 @@ export default function NotificationsScreen() {
         const isRoleTargeted = safe.user_id === 'role_targeted';
         const allowById = targetUserIds.includes(user.uid);
         const allowByRole = profile?.role ? targetRoles.includes(profile.role) : false;
-        if (!isRoleTargeted || allowById || allowByRole) {
+        if ((!isRoleTargeted || allowById || allowByRole) && !(Array.isArray(safe.hidden_by) && safe.hidden_by.includes(user.uid))) {
           next.push({ id: d.id, ...safe });
         }
       });
@@ -198,21 +199,26 @@ export default function NotificationsScreen() {
   };
 
   const deleteNotification = (item: NotificationItem) => {
-    Alert.alert('Delete Notification', 'Are you sure you want to delete this notification?', [
+    Alert.alert('Delete Notification', isAdmin ? 'Delete this notification for everyone?' : 'Remove this notification from your list?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDoc(doc(db, 'notifications', item.id));
+            if (isAdmin) {
+              await deleteDoc(doc(db, 'notifications', item.id));
+            } else {
+              await updateDoc(doc(db, 'notifications', item.id), { hidden_by: arrayUnion(user?.uid || '') });
+            }
             if (editingId === item.id) {
               setEditingId('');
               setEditingTitle('');
               setEditingMessage('');
               setShowEditModal(false);
             }
-            setFeedback({ type: 'success', text: 'Notification deleted successfully.' });
+            setItems((prev) => prev.filter((entry) => entry.id !== item.id));
+            setFeedback({ type: 'success', text: isAdmin ? 'Notification deleted successfully.' : 'Notification removed from your list.' });
           } catch (err: unknown) {
             Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete notification.');
           }
@@ -361,16 +367,16 @@ export default function NotificationsScreen() {
               </View>
               <Text style={styles.cardMsg}>{item.message}</Text>
               <Text style={styles.cardTime}>{formatDate(item)}</Text>
-              {isAdmin ? (
-                <View style={styles.adminActions}>
+              <View style={styles.adminActions}>
+                {isAdmin ? (
                   <TouchableOpacity onPress={() => startEditNotification(item)}>
                     <Text style={styles.editActionText}>Edit</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => deleteNotification(item)}>
-                    <Text style={styles.deleteActionText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+                ) : null}
+                <TouchableOpacity onPress={() => deleteNotification(item)}>
+                  <Text style={styles.deleteActionText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </ScalePressable>
           )}
         />

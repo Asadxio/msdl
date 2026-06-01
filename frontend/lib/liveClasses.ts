@@ -21,6 +21,7 @@ import { auth, db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { dispatchNotification } from '@/lib/dispatchNotification';
 import { DELETE_HEARTBEAT_MS, STALE_HEARTBEAT_MS, heartbeatPayload } from '@/lib/liveClassReliability';
+import { ENROLLMENT_DOC_ID_SEPARATOR, getEnrollmentDocId, isActiveEnrollmentForUserCourse } from '@/lib/enrollments';
 
 export type LiveClassStatus = 'scheduled' | 'waiting_room' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'cancelled';
 
@@ -548,13 +549,8 @@ export async function canCurrentUserJoinLiveClass(liveClass: LiveClass, profile:
   if (!uid || !profile) return false;
   if (profile.role === 'admin') return true;
   if (profile.role === 'teacher') return liveClass.teacher_id === uid;
-  if (Array.isArray(liveClass.student_ids) && liveClass.student_ids.includes(uid)) return true;
-  const enrollmentSnap = await getDocs(query(
-    collection(db, 'enrollments'),
-    where('course_id', '==', liveClass.course_id),
-    where('user_id', '==', uid),
-    where('status', '==', 'active'),
-    limit(1),
-  )).catch(() => null);
-  return !!enrollmentSnap && !enrollmentSnap.empty;
+  const enrollmentId = getEnrollmentDocId(uid, liveClass.course_id);
+  if (!enrollmentId || enrollmentId === ENROLLMENT_DOC_ID_SEPARATOR) return false;
+  const enrollmentSnap = await getDoc(doc(db, 'enrollments', enrollmentId)).catch(() => null);
+  return !!enrollmentSnap?.exists() && isActiveEnrollmentForUserCourse(enrollmentSnap.data(), uid, liveClass.course_id);
 }
