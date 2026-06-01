@@ -39,8 +39,6 @@ import {
   markParticipantLeft,
   requestLiveClassToken,
   setLiveClassStatus,
-  startCloudRecording,
-  stopCloudRecording,
   subscribeLiveClass,
   subscribeLiveParticipants,
   updateParticipantMediaState,
@@ -57,7 +55,7 @@ import {
   shallowChanged,
   type ReconnectDiagnostics,
 } from '@/lib/liveClassReliability';
-import { applySingleModerationAction, runModerationBurst, type ModerationAction, type RecordingEngineState } from '@/lib/liveClassOps';
+import { applySingleModerationAction, runModerationBurst, type ModerationAction } from '@/lib/liveClassOps';
 import { clearLiveClassRecovery, loadLiveClassRecovery, saveLiveClassRecovery } from '@/lib/liveClassRecoveryCache';
 import { recordLiveMetric } from '@/lib/liveClassObservability';
 import { buildSyntheticModerationBurst } from '@/lib/liveClassDevLoadTools';
@@ -68,6 +66,13 @@ import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 type RemoteUser = { uid: number; audioMuted?: boolean; videoMuted?: boolean; lastSpokeAtMs?: number };
 
 const MAX_REMOTE_VIDEO_TILES = 8;
+
+const AGORA_CONNECTION_STATE = {
+  disconnected: 1,
+  connected: 3,
+  reconnecting: 4,
+  failed: 5,
+} as const;
 
 type TileItem = {
   key: string;
@@ -145,10 +150,8 @@ export default function LiveClassroomScreen() {
   const prevMediaSyncRef = useRef<{ audio_enabled?: boolean; video_enabled?: boolean } | null>(null);
   const moderationQueueRef = useRef<ModerationAction[]>([]);
   const moderationBusyRef = useRef(false);
-  const recordingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
   const joiningLockRef = useRef(false);
-  const recordingRecoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatLastWriteRef = useRef(0);
 
   const [liveClass, setLiveClass] = useState<LiveClass | null>(null);
@@ -161,7 +164,6 @@ export default function LiveClassroomScreen() {
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [speakerOn, setSpeakerOn] = useState(true);
-  const [recordingBusy, setRecordingBusy] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState('');
   const [networkHint, setNetworkHint] = useState('');
@@ -172,8 +174,6 @@ export default function LiveClassroomScreen() {
     reconnectLatencyMs: 0,
     reconnectAttemptCount: 0,
   });
-  const [recordingState, setRecordingState] = useState<RecordingEngineState>('idle');
-  const [recordingMessage, setRecordingMessage] = useState('');
   const [opsMessage, setOpsMessage] = useState('');
   const [reportParticipant, setReportParticipant] = useState<LiveClassParticipant | null>(null);
   const expoGo = isExpoGo();
@@ -219,14 +219,6 @@ export default function LiveClassroomScreen() {
     if (heartbeatTimerRef.current) {
       clearInterval(heartbeatTimerRef.current);
       heartbeatTimerRef.current = null;
-    }
-    if (recordingPollRef.current) {
-      clearInterval(recordingPollRef.current);
-      recordingPollRef.current = null;
-    }
-    if (recordingRecoverTimerRef.current) {
-      clearTimeout(recordingRecoverTimerRef.current);
-      recordingRecoverTimerRef.current = null;
     }
     const engine = engineRef.current;
     if (!engine) return;
@@ -302,10 +294,6 @@ export default function LiveClassroomScreen() {
       if (cached.handRaised && !localParticipant?.hand_raised) {
         updateParticipantModerationState(classId, user.uid, { hand_raised: true }).catch(() => {});
       }
-      if (cached.recordingState === 'recovering' && isTeacher) {
-        setRecordingState('recovering');
-        setRecordingMessage('Recovering recording…');
-      }
     });
   }, [classId, isTeacher, localParticipant?.hand_raised, user?.uid]);
 
@@ -316,11 +304,10 @@ export default function LiveClassroomScreen() {
       userId: user.uid,
       reconnectPhase: reconnectDiag.phase,
       handRaised: localParticipant?.hand_raised === true,
-      recordingState,
       pendingModerationCount: moderationQueueRef.current.length,
       savedAtMs: Date.now(),
     }).catch(() => {});
-  }, [classId, localParticipant?.hand_raised, reconnectDiag.phase, recordingState, user?.uid]);
+  }, [classId, localParticipant?.hand_raised, reconnectDiag.phase, user?.uid]);
 
   useEffect(() => {
     if (!classId) return;
@@ -465,12 +452,15 @@ export default function LiveClassroomScreen() {
             console.log('[LiveClass] Enable speaker after join threw', err);
           }
           setReconnecting(false);
+          setNetworkHint('Connected');
+          reconnectAttemptsRef.current = 0;
           joinedRef.current = true;
           setJoined(true);
+          if (isTeacher && liveClass?.status === 'reconnecting') setLiveClassStatus(classId, 'live').catch(() => {});
           void markParticipantJoined(classId, profile, user.uid, rtcToken.agoraUid).catch(() => {});
         },
         onConnectionStateChanged: (_connection, state, reason) => {
-          if (state === 3) {
+          if (state === AGORA_CONNECTION_STATE.reconnecting) {
             reconnectAttemptsRef.current += 1;
             reconnectStartedAtRef.current = Date.now();
             setReconnecting(true);
@@ -491,19 +481,16 @@ export default function LiveClassroomScreen() {
                   setNetworkHint('Reconnect failed');
                   recordLiveMetric('reconnect_failed', { attempt });
                   void postOpsEvent('reconnect_failed', { attempt });
-                  return;
                 }
-                setReconnectDiag(buildReconnectDiagnostics('rejoining', 'scheduled_rejoin', reconnectStartedAtRef.current || Date.now(), attempt));
-                try { engineRef.current?.leaveChannel(); } catch {}
               }, delay);
             }
           }
-          if (state === 5) {
+          if (state === AGORA_CONNECTION_STATE.failed) {
             setReconnecting(false);
             setError(`Connection failed (${reason}). Tap Join to re-enter safely.`);
             setRemoteUsers([]);
           }
-          if (state === 1 || state === 4) {
+          if (state === AGORA_CONNECTION_STATE.connected) {
             setReconnecting(false);
             setNetworkHint('Recovered connection');
             reconnectAttemptsRef.current = 0;
@@ -511,6 +498,9 @@ export default function LiveClassroomScreen() {
             recordLiveMetric('reconnect_recovered', { latency_ms: Date.now() - (reconnectStartedAtRef.current || Date.now()) });
             void postOpsEvent('reconnect_recovered', { latency_ms: Date.now() - (reconnectStartedAtRef.current || Date.now()) });
             if (isTeacher && liveClass?.status === 'reconnecting') setLiveClassStatus(classId, 'live').catch(() => {});
+          }
+          if (state === AGORA_CONNECTION_STATE.disconnected && !leavingRef.current) {
+            setReconnecting(false);
           }
         },
         onUserJoined: (_connection, remoteUid) => {
@@ -625,66 +615,6 @@ export default function LiveClassroomScreen() {
     await updateParticipantModerationState(classId, user.uid, { hand_raised: !localParticipant?.hand_raised }).catch(() => {});
   }, [classId, localParticipant?.hand_raised, user?.uid]);
 
-  const toggleRecording = useCallback(async () => {
-    if (!classId || !isTeacher || recordingBusy) return;
-    if (LIVE_OPS.emergencyRecordingDisabled) {
-      setOpsMessage('Recording temporarily disabled by operations.');
-      return;
-    }
-    setRecordingBusy(true);
-    try {
-      const status = liveClass?.recording?.status || 'not_started';
-      if (status === 'recording' || status === 'starting') {
-        setRecordingState('stopping');
-        await stopCloudRecording(classId);
-        setRecordingState('idle');
-        setRecordingMessage('Recording stopped');
-      } else {
-        setRecordingState('starting');
-        await startCloudRecording(classId);
-        setRecordingState('active');
-        setRecordingMessage('Recording restored');
-        void postOpsEvent('recording_restored');
-      }
-    } catch (err: any) {
-      setRecordingState('recovering');
-      setRecordingMessage('Recovering recording…');
-      recordingRecoverTimerRef.current = setTimeout(() => {
-        if (!mountedRef.current || !classId) return;
-        startCloudRecording(classId).then(() => {
-          if (!mountedRef.current) return;
-          setRecordingState('active');
-          setRecordingMessage('Recording restored');
-        }).catch(() => {
-          if (!mountedRef.current) return;
-          setRecordingState('failed');
-          setRecordingMessage('Recording verification failed');
-          void postOpsEvent('recording_recovery_failed');
-        });
-      }, 1500);
-      void postOpsEvent('recording_toggle_failed', { error: String(err?.message || 'unknown') });
-      Alert.alert('Recording failed', err?.message || 'Could not update cloud recording.');
-    } finally {
-      setRecordingBusy(false);
-    }
-  }, [classId, isTeacher, liveClass?.recording?.status, postOpsEvent, recordingBusy]);
-
-  useEffect(() => {
-    if (!isTeacher || !classId || !joined) return;
-    recordingPollRef.current = setInterval(() => {
-      const status = liveClass?.recording?.status || 'not_started';
-      if (status === 'recording' && recordingState !== 'active') setRecordingState('active');
-      if (status === 'failed' && recordingState !== 'failed') {
-        setRecordingState('recovering');
-        setRecordingMessage('Recovering recording…');
-      }
-    }, 20000);
-    return () => {
-      if (recordingPollRef.current) clearInterval(recordingPollRef.current);
-      recordingPollRef.current = null;
-    };
-  }, [classId, isTeacher, joined, liveClass?.recording?.status, recordingState]);
-
   useEffect(() => {
     if (!isTeacher || !classId) return;
     const timer = setInterval(async () => {
@@ -720,9 +650,6 @@ export default function LiveClassroomScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            if (liveClass.recording?.status === 'recording' || liveClass.recording?.status === 'starting') {
-              await stopCloudRecording(classId).catch(() => {});
-            }
             await endLiveClassAndSyncAttendance(classId, liveClass, profile);
             await leaveClass(true, false);
           } catch (err: any) {
@@ -880,14 +807,8 @@ export default function LiveClassroomScreen() {
           {!!reconnectDiag.lastReconnectReason ? (
             <Text style={styles.diagText}>Reconnect: {reconnectDiag.phase} • attempts {reconnectDiag.reconnectAttemptCount}</Text>
           ) : null}
-          {!!recordingMessage ? <Text style={styles.diagText}>{recordingMessage}</Text> : null}
           {!!opsMessage ? <Text style={styles.diagText}>{opsMessage}</Text> : null}
         </View>
-        {isTeacher ? (
-          <TouchableOpacity style={styles.recordBtn} onPress={toggleRecording} disabled={recordingBusy}>
-            {recordingBusy ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name={liveClass.recording?.status === 'recording' ? 'stop-circle' : 'radio'} size={16} color="#fff" />}
-          </TouchableOpacity>
-        ) : null}
         {isTeacher ? (
           <TouchableOpacity style={styles.endBtn} onPress={endClass}>
             <Text style={styles.endBtnText}>End</Text>
@@ -989,7 +910,6 @@ const styles = StyleSheet.create({
   diagText: { color: 'rgba(255,255,255,0.62)', fontSize: 10, marginTop: 2 },
   reconnectBanner: { marginHorizontal: SPACING.md, marginTop: SPACING.sm, borderRadius: RADIUS.full, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(180,83,9,0.95)', alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8 },
   reconnectText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  recordBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#B45309' },
   endBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADIUS.full, backgroundColor: COLORS.error },
   endBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   joinPanel: { margin: SPACING.lg, padding: SPACING.lg, borderRadius: RADIUS.xl, backgroundColor: COLORS.surface, alignItems: 'center', ...SHADOWS.card },

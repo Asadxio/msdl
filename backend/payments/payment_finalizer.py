@@ -18,9 +18,10 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
         state = str(p.get("state") or "pending")
         now_ms = int(time.time() * 1000)
 
-        if state == "succeeded":
-            return {"ok": True, "idempotent": True, "state": state}
-        if not can_transition(state, "succeeded"):
+        already_finalized = state == "succeeded" and p.get("entitlement_granted") is True
+        if already_finalized:
+            return {"ok": True, "idempotent": True, "state": state, "entitlement_granted": True}
+        if state not in {"pending", "processing", "succeeded"} and not can_transition(state, "succeeded"):
             raise ValueError(f"invalid_transition:{state}->succeeded")
 
         uid = str(p.get("user_id") or "")
@@ -63,6 +64,6 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
             "created_at_ms": now_ms,
             "source_event_id": source_event_id,
         })
-        return {"ok": True, "idempotent": False, "state": "succeeded"}
+        return {"ok": True, "idempotent": state == "succeeded", "state": "succeeded", "entitlement_granted": True}
 
     return _tx(admin_firestore.transaction())

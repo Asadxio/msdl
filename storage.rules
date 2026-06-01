@@ -46,6 +46,13 @@ service firebase.storage {
         );
     }
 
+    function isSafeAudioLessonUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 104857600
+        && request.resource.contentType in ['audio/mpeg', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac', 'audio/aacp'];
+    }
+
     function isSafeCourseMaterialUpload() {
       return request.resource != null
         && request.resource.size > 0
@@ -62,10 +69,18 @@ service firebase.storage {
         ];
     }
 
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
     function isTeacherOrAdmin() {
       return isSignedIn()
         && exists(/databases/(default)/documents/users/$(request.auth.uid))
-        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin']
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin', 'super_admin']
         && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
@@ -109,6 +124,16 @@ service firebase.storage {
         && fileName.matches('^[A-Za-z0-9._-]{6,160}$')
         && isSafeCourseMaterialUpload();
     }
+
+    match /audio_lessons/{courseId}/{teacherId}/{fileName} {
+      allow read: if isSignedIn();
+      allow create, update: if isTeacherOrAdmin()
+        && request.auth.uid == teacherId
+        && fileName.matches('^[A-Za-z0-9._-]{6,180}$')
+        && isSafeAudioLessonUpload();
+      allow delete: if isAdmin() || (isTeacherOrAdmin() && request.auth.uid == teacherId);
+    }
+
 
     match /live_classes/{classId}/{allPaths=**} {
       allow read: if canReadLiveClassStorage(classId);
