@@ -20,9 +20,9 @@ describe('qibla calculations', () => {
 
   it('normalizes direction and turn guidance', () => {
     expect(getDirectionText(90)).toBe('East');
-    expect(getQiblaTurnGuidance(2)).toBe('You are facing the Qibla');
-    expect(getQiblaTurnGuidance(40)).toBe('Turn right toward Qibla');
-    expect(getQiblaTurnGuidance(-40)).toBe('Turn left toward Qibla');
+    expect(getQiblaTurnGuidance(2)).toBe('Facing Qibla ✓');
+    expect(getQiblaTurnGuidance(40)).toBe('Turn Right 40°');
+    expect(getQiblaTurnGuidance(-40)).toBe('Turn Left 40°');
   });
 
   it('returns complete qibla state for UI', () => {
@@ -33,7 +33,10 @@ describe('qibla calculations', () => {
       offset: expect.any(Number),
       directionText: expect.any(String),
       distanceKm: expect.any(Number),
+      directionAbbreviation: expect.any(String),
+      directionLongText: expect.any(String),
       guidance: expect.any(String),
+      aligned: expect.any(Boolean),
     }));
   });
 
@@ -50,6 +53,12 @@ describe('qibla calculations', () => {
     expect(qiblaScreen).toContain('AsyncStorage.getItem(QIBLA_LOCATION_CACHE_KEY)');
     expect(qiblaScreen).toContain("permission === 'granted'");
     expect(qiblaScreen).toContain('sensorStatus');
+    expect(qiblaScreen).toContain('react-native-maps');
+    expect(qiblaScreen).toContain('Map Qibla View');
+    expect(qiblaScreen).not.toContain('WebView');
+    expect(qiblaScreen).not.toContain('expo-web-browser');
+    expect(qiblaScreen).not.toContain('google.com');
+    expect(qiblaScreen).toContain('Move your phone in a figure-8 motion to improve accuracy.');
     expect(qiblaScreen).toContain('formatDistanceToKaaba(qibla.distanceKm)');
   });
 });

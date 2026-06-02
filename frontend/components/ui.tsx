@@ -33,12 +33,8 @@ export function FadeInView({ children, style, delay = 0 }: PropsWithChildren<{ s
   );
 }
 
-type ScalePressableProps = PropsWithChildren<{
+type ScalePressableProps = PropsWithChildren<PressableProps & {
   style?: StyleProp<ViewStyle>;
-  onPress?: PressableProps['onPress'];
-  onLongPress?: PressableProps['onLongPress'];
-  testID?: string;
-  disabled?: boolean;
   haptic?: boolean;
 }>;
 
@@ -50,6 +46,7 @@ export function ScalePressable({
   testID,
   disabled,
   haptic = true,
+  ...pressableProps
 }: ScalePressableProps) {
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -66,6 +63,7 @@ export function ScalePressable({
         Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
       }}
       onPressOut={() => Animated.spring(scale, { toValue: 1, friction: 7, useNativeDriver: true }).start()}
+      {...pressableProps}
     >
       <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>

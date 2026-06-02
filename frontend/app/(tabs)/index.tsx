@@ -551,6 +551,7 @@ export default function HomeScreen() {
     DEFAULT_ANNOUNCEMENT_DESC,
   );
   const [noticeModalVisible, setNoticeModalVisible] = useState(false);
+  const [qiblaEntryVisible, setQiblaEntryVisible] = useState(false);
   const [noticeDraftTitle, setNoticeDraftTitle] = useState("");
   const [noticeDraftMessage, setNoticeDraftMessage] = useState("");
   const [savingNotice, setSavingNotice] = useState(false);
@@ -782,7 +783,6 @@ export default function HomeScreen() {
   const countdown = formatDuration(
     prayerWindow.next.time.getTime() - now.getTime(),
   );
-  const progressDegrees = Math.round(prayerWindow.progress * 360);
   const isDarkMode = colorScheme === "dark";
   const resumeLearning = useMemo(
     () => getResumeLearning(),
@@ -867,83 +867,125 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Islamic Calendar & Prayer Widget */}
-        <View style={styles.dashboardOuter} testID="islamic-prayer-dashboard">
+        {/* Compact Islamic Dashboard */}
+        <View style={styles.dashboardOuter} testID="compact-islamic-dashboard">
           <Image source={{ uri: selectedIslamicTheme.image }} style={styles.dashboardBgImage} />
           <View style={[styles.dashboardTint, { backgroundColor: selectedIslamicTheme.tint }]} />
           <View style={styles.dashboardContent}>
             <View style={styles.dashboardTopRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.dashboardEyebrow}>Islamic Calendar</Text>
-                <Text style={styles.dashboardTitle}>{calendarInfo.englishDate}</Text>
-                <Text style={styles.dashboardSubtitle}>{calendarInfo.hijriDate}</Text>
-                <Text style={styles.urduDate}>{calendarInfo.urduHijriDate}</Text>
+                <Text style={styles.dashboardEyebrow}>Islamic Dashboard</Text>
+                <Text style={styles.dashboardTitle}>Today’s Prayer Snapshot</Text>
+                <Text style={styles.dashboardSubtitle}>Hijri: {calendarInfo.hijriDate}</Text>
               </View>
               <TouchableOpacity
                 style={[styles.themeButton, { borderColor: selectedIslamicTheme.accent }]}
                 onPress={() => setThemeIndex((value) => value + 1)}
                 accessibilityRole="button"
-                accessibilityLabel="Change Islamic dashboard theme"
+                accessibilityLabel="Change compact Islamic dashboard theme"
               >
                 <Ionicons name="color-palette-outline" size={14} color={selectedIslamicTheme.accent} />
                 <Text style={[styles.themeButtonText, { color: selectedIslamicTheme.accent }]}>Theme</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.prayerHeroRow}>
-              <View style={[styles.countdownMeter, { borderColor: selectedIslamicTheme.accent }]}>
-                <Animated.View style={[styles.meterProgressHint, { backgroundColor: selectedIslamicTheme.secondary, transform: [{ rotate: `${progressDegrees}deg` }] }]} />
-                <Text style={styles.currentPrayerLabel}>Current</Text>
-                <Text style={styles.currentPrayerName}>{prayerWindow.current.name}</Text>
-                <Text style={styles.nextPrayerText}>Next: {prayerWindow.next.name} • {prayerWindow.next.label}</Text>
-                <Text style={styles.countdownText}>{countdown}</Text>
+            <View style={styles.compactPrayerGrid}>
+              <View style={styles.compactMetricCard}>
+                <Text style={styles.compactMetricLabel}>Current Prayer</Text>
+                <Text style={styles.compactMetricValue}>{prayerWindow.current.name}</Text>
               </View>
-              <View style={[styles.glassPanel, isDarkMode && styles.glassPanelDark]}>
-                <Text style={styles.panelLabel}>Prayer Location</Text>
-                <Text style={styles.locationTitle}>{locationDetails.city}</Text>
-                <Text style={styles.locationSubtitle}>{locationDetails.state}, {locationDetails.country}</Text>
-                <View style={styles.locationMetaGrid}>
-                  <Text style={styles.locationMeta}>{locationDetails.timezone} • {locationDetails.gmt}</Text>
-                  <Text style={styles.locationMeta}>{prayerSettings.method}</Text>
-                  <Text style={styles.locationMeta}>Offline cache: {locationDetails.permission === "granted" ? "ready" : "fallback"}</Text>
-                </View>
-                <TouchableOpacity style={styles.locationButton} onPress={() => requestLocation().catch(() => {})} accessibilityRole="button" accessibilityLabel="Refresh prayer location">
-                  <Ionicons name="locate-outline" size={13} color="#fff" />
-                  <Text style={styles.locationButtonText}>Daily Refresh</Text>
-                </TouchableOpacity>
+              <View style={styles.compactMetricCard}>
+                <Text style={styles.compactMetricLabel}>Next Prayer</Text>
+                <Text style={styles.compactMetricValue}>{prayerWindow.next.name}</Text>
+              </View>
+              <View style={styles.compactMetricCard}>
+                <Text style={styles.compactMetricLabel}>Remaining</Text>
+                <Text style={styles.compactMetricValue}>{countdown}</Text>
+              </View>
+              <View style={styles.compactMetricCard}>
+                <Text style={styles.compactMetricLabel}>Hijri</Text>
+                <Text style={styles.compactMetricValue}>{calendarInfo.hijriDate}</Text>
               </View>
             </View>
 
             <TouchableOpacity
               style={styles.qiblaShortcutCard}
-              onPress={() => safePush("/qibla")}
+              onPress={() => setQiblaEntryVisible(true)}
               accessibilityRole="button"
-              accessibilityLabel="Open Qibla finder"
+              accessibilityLabel={`Open Qibla finder. Direction ${dashboardQibla.directionAbbreviation}. Distance ${formatDistanceToKaaba(dashboardQibla.distanceKm)}.`}
               testID="dashboard-qibla-shortcut"
             >
               <View style={styles.qiblaShortcutIcon}>
                 <Ionicons name="compass-outline" size={22} color={COLORS.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.qiblaShortcutTitle}>Qibla Finder</Text>
+                <Text style={styles.qiblaShortcutTitle}>Qibla</Text>
                 <Text style={styles.qiblaShortcutText}>
-                  {Math.round(dashboardQibla.qiblaAngle)}° {dashboardQibla.directionText} • {formatDistanceToKaaba(dashboardQibla.distanceKm)}
+                  {dashboardQibla.directionAbbreviation} • {formatDistanceToKaaba(dashboardQibla.distanceKm)}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#fff" />
             </TouchableOpacity>
 
-            <View style={styles.prayerTimesRow}>
-              {prayerTimes.map((item) => {
-                const active = item.name === prayerWindow.current.name;
-                return (
-                  <View key={item.name} style={[styles.prayerPill, active && styles.prayerPillActive]}>
-                    <Text style={[styles.prayerPillName, active && styles.prayerPillNameActive]}>{item.name}</Text>
-                    <Text style={styles.prayerPillTime}>{item.label}</Text>
-                  </View>
-                );
-              })}
+            <View style={[styles.compactLocationCard, isDarkMode && styles.glassPanelDark]}>
+              <Ionicons name="location-outline" size={18} color={selectedIslamicTheme.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.compactMetricLabel}>Location</Text>
+                <Text style={styles.compactLocationText}>{locationDetails.state}, {locationDetails.country}</Text>
+              </View>
+              <TouchableOpacity style={styles.locationButton} onPress={() => requestLocation().catch(() => {})} accessibilityRole="button" accessibilityLabel="Refresh prayer location">
+                <Ionicons name="locate-outline" size={13} color="#fff" />
+                <Text style={styles.locationButtonText}>Refresh</Text>
+              </TouchableOpacity>
             </View>
+
+            <Modal visible={qiblaEntryVisible} transparent animationType="fade" onRequestClose={() => setQiblaEntryVisible(false)}>
+              <View style={styles.qiblaModalBackdrop}>
+                <View style={[styles.qiblaEntryModal, isDarkMode && styles.qiblaEntryModalDark]}>
+                  <Text style={styles.qiblaModalEyebrow}>Professional Qibla Finder</Text>
+                  <Text style={styles.qiblaModalTitle}>Choose Qibla mode</Text>
+                  <TouchableOpacity
+                    style={styles.qiblaEntryOption}
+                    onPress={() => { setQiblaEntryVisible(false); safePush('/qibla?mode=camera'); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open camera Qibla finder"
+                  >
+                    <View style={styles.qiblaEntryIcon}><Ionicons name="camera-outline" size={26} color={COLORS.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.qiblaEntryTitle}>📷 Camera Qibla Finder</Text>
+                      <Text style={styles.qiblaEntryText}>Native camera overlay with live Qibla arrow.</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.qiblaEntryOption}
+                    onPress={() => { setQiblaEntryVisible(false); safePush('/qibla?mode=compass'); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open compass Qibla direction"
+                  >
+                    <View style={styles.qiblaEntryIcon}><Ionicons name="compass-outline" size={26} color={COLORS.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.qiblaEntryTitle}>🧭 Compass Qibla Direction</Text>
+                      <Text style={styles.qiblaEntryText}>Bearing, heading, calibration, distance, and offline cache.</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.qiblaEntryOption}
+                    onPress={() => { setQiblaEntryVisible(false); safePush('/qibla?mode=map'); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open map Qibla view"
+                  >
+                    <View style={styles.qiblaEntryIcon}><Ionicons name="map-outline" size={26} color={COLORS.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.qiblaEntryTitle}>🗺️ Map Qibla View</Text>
+                      <Text style={styles.qiblaEntryText}>User location, Kaaba marker, bearing line, and distance.</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.qiblaModalClose} onPress={() => setQiblaEntryVisible(false)} accessibilityRole="button" accessibilityLabel="Close Qibla mode chooser">
+                    <Text style={styles.qiblaModalCloseText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
           </View>
         </View>
 
@@ -1429,7 +1471,7 @@ const styles = StyleSheet.create({
     marginTop: -22,
     borderRadius: 28,
     overflow: "hidden",
-    minHeight: 430,
+    minHeight: 292,
     backgroundColor: COLORS.primary,
     ...SHADOWS.card,
   },
@@ -1579,6 +1621,49 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   locationButtonText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  compactPrayerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.sm,
+  },
+  compactMetricCard: {
+    flexGrow: 1,
+    minWidth: "45%",
+    borderRadius: 18,
+    padding: SPACING.md,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  compactMetricLabel: {
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  compactMetricValue: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  compactLocationCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    borderRadius: 20,
+    padding: SPACING.md,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  compactLocationText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 2,
+  },
   qiblaShortcutCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -1599,6 +1684,38 @@ const styles = StyleSheet.create({
   },
   qiblaShortcutTitle: { color: "#fff", fontSize: 15, fontWeight: "900" },
   qiblaShortcutText: { color: "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: "700", marginTop: 2 },
+
+  qiblaModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(2,6,23,0.68)",
+    justifyContent: "center",
+    padding: SPACING.lg,
+  },
+  qiblaEntryModal: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 30,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+    ...SHADOWS.card,
+  },
+  qiblaEntryModalDark: { backgroundColor: "#0f172a" },
+  qiblaModalEyebrow: { color: COLORS.secondary, fontSize: 12, fontWeight: "900", textTransform: "uppercase" },
+  qiblaModalTitle: { color: COLORS.text, fontSize: 23, fontWeight: "900" },
+  qiblaEntryOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+    borderRadius: 22,
+    padding: SPACING.md,
+    backgroundColor: COLORS.goldBg,
+    borderWidth: 1,
+    borderColor: "rgba(212,175,55,0.32)",
+  },
+  qiblaEntryIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  qiblaEntryTitle: { color: COLORS.text, fontSize: 15, fontWeight: "900" },
+  qiblaEntryText: { color: COLORS.textMuted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  qiblaModalClose: { alignSelf: "center", padding: 8 },
+  qiblaModalCloseText: { color: COLORS.primary, fontWeight: "900" },
   prayerTimesRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
   prayerPill: {
     flexGrow: 1,
