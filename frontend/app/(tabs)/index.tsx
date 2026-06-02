@@ -22,6 +22,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import * as Location from "expo-location";
 import {
   collection,
   doc,
@@ -91,7 +92,6 @@ type ReverseGeocodePlace = {
   isoCountryCode?: string | null;
 };
 
-declare const require: ((moduleName: string) => any) | undefined;
 type IslamicTheme = {
   id: string;
   name: string;
@@ -471,14 +471,6 @@ function getIslamicCalendar(date: Date) {
   }
 }
 
-function getExpoLocationModule() {
-  if (Platform.OS === "web" || typeof require !== "function") return null;
-  try {
-    return require("expo-location");
-  } catch {
-    return null;
-  }
-}
 function requestBrowserLocation(): Promise<DevicePosition | null> {
   const geolocation = (globalThis.navigator as any)?.geolocation;
   if (!geolocation?.getCurrentPosition) return Promise.resolve(null);
@@ -495,17 +487,12 @@ async function requestDeviceLocation(): Promise<{
   place: ReverseGeocodePlace | null;
   permission: LocationDetails["permission"];
 }> {
-  const Location = getExpoLocationModule();
-  if (!Location) {
+  if (Platform.OS === "web") {
     const browserPosition = await requestBrowserLocation();
     return {
       position: browserPosition,
       place: null,
-      permission: browserPosition
-        ? "granted"
-        : Platform.OS === "web"
-          ? "denied"
-          : "unavailable",
+      permission: browserPosition ? "granted" : "denied",
     };
   }
 

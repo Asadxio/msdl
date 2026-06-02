@@ -2,6 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import * as Location from 'expo-location';
+import { CameraView, requestCameraPermissionsAsync } from 'expo-camera';
+import { Magnetometer, type MagnetometerMeasurement } from 'expo-sensors';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import { goBackOrReplace } from '@/lib/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -61,37 +66,7 @@ const SENSOR_UPDATE_MS = 120;
 const COMPASS_SIZE = Math.min(Dimensions.get('window').width - 44, 340);
 const DEGREE_MARKS = Array.from({ length: 72 }, (_, index) => index * 5);
 
-declare const require: ((moduleName: string) => any) | undefined;
-
-function safeRequire(moduleName: string) {
-  try {
-    return typeof require === 'function' ? require(moduleName) : null;
-  } catch {
-    return null;
-  }
-}
-
-function getExpoLocationModule() {
-  return safeRequire('expo-location');
-}
-
-function getMagnetometerModule() {
-  return safeRequire('expo-sensors')?.Magnetometer;
-}
-
-function getCameraModule() {
-  return safeRequire('expo-camera');
-}
-
-function getMapModule() {
-  return safeRequire('react-native-maps');
-}
-
-function getHapticsModule() {
-  return safeRequire('expo-haptics');
-}
-
-function headingFromMagnetometer(sample: { x: number; y: number }) {
+function headingFromMagnetometer(sample: Pick<MagnetometerMeasurement, 'x' | 'y'>) {
   let angle = Math.atan2(sample.y, sample.x) * (180 / Math.PI);
   angle = angle >= 0 ? angle : angle + 360;
   return (450 - angle) % 360;
@@ -102,17 +77,9 @@ function formatCoordinate(value: number, axis: 'lat' | 'lng') {
   return `${Math.abs(value).toFixed(6)}° ${direction}`;
 }
 
-async function requestCameraPermission(Camera: any): Promise<CameraPermission> {
-  if (!Camera) return 'unavailable';
-  if (typeof Camera.requestCameraPermissionsAsync === 'function') {
-    const permission = await Camera.requestCameraPermissionsAsync();
-    return permission?.status === 'granted' ? 'granted' : 'denied';
-  }
-  if (Camera.Camera?.requestCameraPermissionsAsync) {
-    const permission = await Camera.Camera.requestCameraPermissionsAsync();
-    return permission?.status === 'granted' ? 'granted' : 'denied';
-  }
-  return 'unavailable';
+async function requestCameraPermission(): Promise<CameraPermission> {
+  const permission = await requestCameraPermissionsAsync();
+  return permission?.status === 'granted' ? 'granted' : 'denied';
 }
 
 export default function QiblaScreen() {
@@ -161,11 +128,6 @@ export default function QiblaScreen() {
 
   const refreshLocation = useCallback(async () => {
     setLocation((current) => ({ ...current, permission: 'requesting' }));
-    const Location = getExpoLocationModule();
-    if (!Location) {
-      setLocation((current) => ({ ...current, permission: current.source === 'cache' ? 'offline' : 'unavailable' }));
-      return;
-    }
     try {
       const existing = await Location.getForegroundPermissionsAsync();
       const permission = existing?.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
@@ -233,26 +195,24 @@ export default function QiblaScreen() {
 
   useEffect(() => {
     if (!isFocused || !appActive || appStateRef.current !== 'active') return undefined;
-    const Magnetometer = getMagnetometerModule();
-    const Location = getExpoLocationModule();
     let subscription: { remove?: () => void } | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
 
     if (Magnetometer?.addListener) {
       setSensorStatus('active');
       Magnetometer.setUpdateInterval?.(SENSOR_UPDATE_MS);
-      subscription = Magnetometer.addListener((sample: { x: number; y: number }) => {
+      subscription = Magnetometer.addListener((sample) => {
         setSmoothHeading(headingFromMagnetometer(sample), headingAccuracy);
       });
     } else if (Location?.getHeadingAsync) {
       setSensorStatus('checking');
       timer = setInterval(() => {
         Location.getHeadingAsync()
-          .then((value: any) => {
-            const nextHeading = value?.trueHeading >= 0 ? value.trueHeading : value?.magHeading;
+          .then((value: Location.LocationHeadingObject) => {
+            const nextHeading = value.trueHeading >= 0 ? value.trueHeading : value.magHeading;
             if (typeof nextHeading === 'number' && nextHeading >= 0) {
               setSensorStatus('active');
-              setSmoothHeading(nextHeading, value?.accuracy);
+              setSmoothHeading(nextHeading, value.accuracy);
             }
           })
           .catch(() => setSensorStatus('unavailable'));
@@ -276,8 +236,7 @@ export default function QiblaScreen() {
     }).start();
     if (qibla.aligned && !alignmentBuzzedRef.current) {
       alignmentBuzzedRef.current = true;
-      const Haptics = getHapticsModule();
-      Haptics?.notificationAsync?.(Haptics.NotificationFeedbackType?.Success).catch?.(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
     if (!qibla.aligned) alignmentBuzzedRef.current = false;
   }, [qibla.aligned, qibla.offset, qiblaAnim]);
@@ -301,11 +260,10 @@ export default function QiblaScreen() {
   }, [showQiblaFinderOpenError]);
 
   const openNativeCameraMode = useCallback(async () => {
-    const Camera = getCameraModule();
     setEntryVisible(false);
     setMapMode(false);
     setCameraPermission('requesting');
-    const permission = await requestCameraPermission(Camera).catch(() => 'unavailable' as CameraPermission);
+    const permission = await requestCameraPermission().catch(() => 'unavailable' as CameraPermission);
     setCameraPermission(permission);
     if (permission === 'granted') setCameraMode(true);
   }, []);
@@ -335,12 +293,6 @@ export default function QiblaScreen() {
     if (params.mode === 'map') openMapMode();
   }, [cameraPermission, openGoogleQiblaFinder, openNativeCameraMode, openCompassMode, openMapMode, params.mode]);
 
-  const Camera = cameraMode ? getCameraModule() : null;
-  const CameraView = Camera?.CameraView || Camera?.Camera;
-  const Maps = mapMode ? getMapModule() : null;
-  const MapView = Maps?.default || Maps?.MapView || Maps;
-  const Marker = Maps?.Marker;
-  const Polyline = Maps?.Polyline;
   const compassRotation = headingAnim.interpolate({ inputRange: [-720, 720], outputRange: ['-720deg', '720deg'] });
   const qiblaRotation = qiblaAnim.interpolate({ inputRange: [-180, 180], outputRange: ['-180deg', '180deg'] });
 
@@ -383,7 +335,7 @@ export default function QiblaScreen() {
         </View>
       </Modal>
 
-      {cameraMode && CameraView ? (
+      {cameraMode ? (
         <View style={styles.cameraFullScreen} testID="qibla-camera-finder">
           <CameraView style={StyleSheet.absoluteFill} facing="back" />
           <View style={[styles.cameraTopBar, { paddingTop: insets.top + 10 }]}> 
@@ -489,15 +441,11 @@ export default function QiblaScreen() {
 
           {mapMode ? (
             <View style={styles.mapCard} testID="qibla-map-mode">
-              {MapView && Marker && Polyline ? (
-                <MapView style={styles.map} initialRegion={{ latitude: location.latitude, longitude: location.longitude, latitudeDelta: 50, longitudeDelta: 50 }}>
-                  <Marker coordinate={location} title="Your location" />
-                  <Marker coordinate={KAABA_COORDINATES} title="Kaaba" description="Masjid al-Haram" />
-                  <Polyline coordinates={qiblaLine} strokeWidth={4} strokeColor={COLORS.secondary} geodesic />
-                </MapView>
-              ) : (
-                <View style={styles.mapFallback}><Text style={styles.statusTitle}>Map native module unavailable</Text><Text style={styles.statusText}>Install react-native-maps in the native build to display the user location, Kaaba marker, and bearing line.</Text></View>
-              )}
+              <MapView style={styles.map} initialRegion={{ latitude: location.latitude, longitude: location.longitude, latitudeDelta: 50, longitudeDelta: 50 }}>
+                <Marker coordinate={location} title="Your location" />
+                <Marker coordinate={KAABA_COORDINATES} title="Kaaba" description="Masjid al-Haram" />
+                <Polyline coordinates={qiblaLine} strokeWidth={4} strokeColor={COLORS.secondary} geodesic />
+              </MapView>
               <Text style={styles.mapMeta}>Distance: {formatDistanceToKaaba(qibla.distanceKm)} • Direction: {qibla.directionLongText}</Text>
             </View>
           ) : null}
