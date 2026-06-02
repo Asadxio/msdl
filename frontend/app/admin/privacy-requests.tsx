@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Alert, FlatList, StatusBar, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, orderBy, query, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
@@ -76,7 +77,7 @@ export default function AdminPrivacyRequestsScreen() {
 
   useEffect(() => {
     if (profile && !isAdmin) {
-      router.replace('/');
+      router.replace('/unauthorized?required=admin');
       return;
     }
     void loadRequests();
@@ -113,7 +114,7 @@ export default function AdminPrivacyRequestsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')}>
           <Ionicons name="chevron-back" size={22} color={COLORS.primary} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>

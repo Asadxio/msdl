@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -51,7 +52,7 @@ export default function AdminPaymentsScreen() {
 
   useEffect(() => {
     if (profile && !isAdmin) {
-      router.replace('/');
+      router.replace('/unauthorized?required=admin');
       return;
     }
     if (!isAdmin) return;
@@ -109,7 +110,7 @@ export default function AdminPaymentsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} testID="payments-back-btn">
+        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')} testID="payments-back-btn">
           <Ionicons name="close" size={22} color={COLORS.textMain} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Manage Payments</Text>

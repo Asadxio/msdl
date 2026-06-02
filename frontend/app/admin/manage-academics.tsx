@@ -5,6 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import {
   addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc,
 } from 'firebase/firestore';
@@ -490,7 +491,7 @@ export default function ManageAcademicsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')}>
           <Ionicons name="close" size={22} color={COLORS.textMain} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Manage Academics</Text>

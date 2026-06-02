@@ -15,6 +15,7 @@ import {
   TextInput,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { goBackOrReplace } from "@/lib/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
@@ -643,7 +644,7 @@ export default function CourseDetailScreen() {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <TouchableOpacity
           style={styles.errorBackBtn}
-          onPress={() => router.back()}
+          onPress={() => goBackOrReplace(router, "/(tabs)/courses")}
         >
           <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
           <Text style={styles.errorBackText}>Go Back</Text>
@@ -658,7 +659,7 @@ export default function CourseDetailScreen() {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <TouchableOpacity
           style={styles.errorBackBtn}
-          onPress={() => router.back()}
+          onPress={() => goBackOrReplace(router, "/(tabs)/courses")}
         >
           <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
           <Text style={styles.errorBackText}>Go Back</Text>
@@ -950,7 +951,7 @@ export default function CourseDetailScreen() {
           <View style={styles.heroGradient} />
           <TouchableOpacity
             style={[styles.backBtn, { top: insets.top + 10 }]}
-            onPress={() => router.back()}
+            onPress={() => goBackOrReplace(router, "/(tabs)/courses")}
             testID="course-detail-back-btn"
             activeOpacity={0.8}
           >

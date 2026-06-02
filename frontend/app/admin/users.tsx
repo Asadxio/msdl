@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { collection, doc, updateDoc, deleteDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
@@ -65,7 +66,7 @@ export default function AdminUsersScreen() {
 
   useEffect(() => {
     if (profile && !isAdmin) {
-      router.replace('/');
+      router.replace('/unauthorized?required=admin');
       return;
     }
     if (isAdmin) fetchUsers();
@@ -293,7 +294,7 @@ export default function AdminUsersScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} testID="admin-users-back-btn">
+        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')} testID="admin-users-back-btn">
           <Ionicons name="close" size={22} color={COLORS.textMain} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Manage Users</Text>

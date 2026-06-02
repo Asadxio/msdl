@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -260,7 +261,7 @@ export default function LiveClassroomScreen() {
       setJoined(false);
       setReconnecting(false);
       setRemoteUsers([]);
-      if (navigateBack) router.back();
+      if (navigateBack) goBackOrReplace(router, '/(tabs)/courses');
       if (classId && user?.uid) void clearLiveClassRecovery(classId, user.uid);
       setOpsMessage('');
     } finally {
@@ -783,7 +784,7 @@ export default function LiveClassroomScreen() {
     return (
       <View style={[styles.center, { padding: SPACING.lg }]}> 
         <Text style={styles.errorTitle}>Live class not found</Text>
-        <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.back()}><Text style={styles.secondaryBtnText}>Go Back</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryBtn} onPress={() => goBackOrReplace(router, '/(tabs)/courses')}><Text style={styles.secondaryBtnText}>Go Back</Text></TouchableOpacity>
       </View>
     );
   }

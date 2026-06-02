@@ -2,13 +2,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   AppState,
   Dimensions,
   Easing,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -53,6 +56,7 @@ const FALLBACK_LOCATION: QiblaLocation = {
   source: 'fallback',
 };
 
+const GOOGLE_QIBLA_FINDER_URL = 'https://qiblafinder.withgoogle.com/';
 const SENSOR_UPDATE_MS = 120;
 const COMPASS_SIZE = Math.min(Dimensions.get('window').width - 44, 340);
 const DEGREE_MARKS = Array.from({ length: 72 }, (_, index) => index * 5);
@@ -121,6 +125,7 @@ export default function QiblaScreen() {
   const qiblaAnim = useRef(new Animated.Value(0)).current;
   const lastHeadingRef = useRef(0);
   const alignmentBuzzedRef = useRef(false);
+  const googleQiblaPromptedRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   const [entryVisible, setEntryVisible] = useState(() => !['camera', 'compass', 'map'].includes(String(params.mode)));
@@ -277,7 +282,25 @@ export default function QiblaScreen() {
     if (!qibla.aligned) alignmentBuzzedRef.current = false;
   }, [qibla.aligned, qibla.offset, qiblaAnim]);
 
-  const openCameraMode = useCallback(async () => {
+  const showQiblaFinderOpenError = useCallback(() => {
+    Alert.alert('Qibla Finder', 'Unable to open Qibla Finder.');
+  }, []);
+
+  const openGoogleQiblaFinder = useCallback(() => {
+    Alert.alert('Google Qibla Finder', 'Google Qibla Finder will open in your browser.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Open',
+        onPress: () => {
+          Linking.canOpenURL(GOOGLE_QIBLA_FINDER_URL)
+            .then((supported) => (supported ? Linking.openURL(GOOGLE_QIBLA_FINDER_URL) : Promise.reject(new Error('No browser available'))))
+            .catch(showQiblaFinderOpenError);
+        },
+      },
+    ]);
+  }, [showQiblaFinderOpenError]);
+
+  const openNativeCameraMode = useCallback(async () => {
     const Camera = getCameraModule();
     setEntryVisible(false);
     setMapMode(false);
@@ -300,12 +323,17 @@ export default function QiblaScreen() {
   }, []);
 
   useEffect(() => {
-    if (params.mode === 'camera' && cameraPermission === 'idle') {
-      openCameraMode().catch(() => setCameraPermission('unavailable'));
+    if ((params.mode === 'camera' || params.mode === 'google') && !googleQiblaPromptedRef.current) {
+      googleQiblaPromptedRef.current = true;
+      setEntryVisible(false);
+      openGoogleQiblaFinder();
+    }
+    if (params.mode === 'native-camera' && cameraPermission === 'idle') {
+      openNativeCameraMode().catch(() => setCameraPermission('unavailable'));
     }
     if (params.mode === 'compass') openCompassMode();
     if (params.mode === 'map') openMapMode();
-  }, [cameraPermission, openCameraMode, openCompassMode, openMapMode, params.mode]);
+  }, [cameraPermission, openGoogleQiblaFinder, openNativeCameraMode, openCompassMode, openMapMode, params.mode]);
 
   const Camera = cameraMode ? getCameraModule() : null;
   const CameraView = Camera?.CameraView || Camera?.Camera;
@@ -323,15 +351,27 @@ export default function QiblaScreen() {
           <Animated.View style={modalSurfaceStyle}>
             <Text style={styles.modalEyebrow}>Professional Qibla Finder</Text>
             <Text style={styles.modalTitle}>Choose your Qibla experience</Text>
-            <TouchableOpacity style={styles.entryOption} onPress={openCameraMode} accessibilityRole="button">
+            <TouchableOpacity
+              style={styles.entryOption}
+              onPress={openGoogleQiblaFinder}
+              accessibilityRole="button"
+              accessibilityLabel="Open Google Camera Qibla Finder. Internet required. Opens in browser."
+              testID="google-qibla-finder-option"
+            >
               <View style={styles.entryIcon}><Ionicons name="camera-outline" size={30} color={COLORS.primary} /></View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.entryTitle}>📷 Camera Qibla Finder</Text>
-                <Text style={styles.entryText}>Native camera preview with AR-style Kaaba alignment overlay.</Text>
+                <Text style={styles.entryTitle}>📷 Google Camera Qibla Finder</Text>
+                <Text style={styles.entryText}>Google Camera Qibla Finder (Internet Required). Opens the verified browser experience.</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.secondary} />
+              <Ionicons name="open-outline" size={20} color={COLORS.secondary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.entryOption} onPress={openCompassMode} accessibilityRole="button">
+            <TouchableOpacity
+              style={styles.entryOption}
+              onPress={openCompassMode}
+              accessibilityRole="button"
+              accessibilityLabel="Open Compass Qibla Direction in the app"
+              testID="compass-qibla-direction-option"
+            >
               <View style={styles.entryIcon}><Ionicons name="compass-outline" size={30} color={COLORS.primary} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.entryTitle}>🧭 Compass Qibla Direction</Text>
@@ -339,15 +379,6 @@ export default function QiblaScreen() {
               </View>
               <Ionicons name="chevron-forward" size={20} color={COLORS.secondary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.entryOption} onPress={openMapMode} accessibilityRole="button" accessibilityLabel="Open map Qibla view">
-              <View style={styles.entryIcon}><Ionicons name="map-outline" size={30} color={COLORS.primary} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.entryTitle}>🗺️ Map Qibla View</Text>
-                <Text style={styles.entryText}>Native map with user marker, Kaaba marker, distance, and bearing line.</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.secondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalSkip} onPress={() => setEntryVisible(false)}><Text style={styles.modalSkipText}>Continue to compass</Text></TouchableOpacity>
           </Animated.View>
         </View>
       </Modal>
@@ -371,7 +402,7 @@ export default function QiblaScreen() {
       ) : (
         <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.md }]} showsVerticalScrollIndicator={false}>
           <View style={styles.headerRow}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()} accessibilityLabel="Go back">
+            <TouchableOpacity style={styles.backButton} onPress={() => goBackOrReplace(router, '/more')} accessibilityLabel="Go back">
               <Ionicons name="chevron-back" size={20} color={COLORS.primary} />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
@@ -440,10 +471,10 @@ export default function QiblaScreen() {
           </View>
 
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.actionCard} onPress={openCameraMode}>
+            <TouchableOpacity style={styles.actionCard} onPress={openGoogleQiblaFinder} accessibilityRole="button" accessibilityLabel="Open Google Camera Qibla Finder in browser. Internet required.">
               <Ionicons name="camera-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.actionTitle}>Camera mode</Text>
-              <Text style={styles.actionText}>{cameraPermission === 'denied' ? 'Permission denied' : 'Open AR overlay'}</Text>
+              <Text style={styles.actionTitle}>Google Camera Qibla Finder</Text>
+              <Text style={styles.actionText}>Internet Required • Opens in browser</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionCard} onPress={() => setMapMode((value) => !value)}>
               <Ionicons name="map-outline" size={24} color={COLORS.primary} />
@@ -505,8 +536,6 @@ const styles = StyleSheet.create({
   entryIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   entryTitle: { color: COLORS.text, fontSize: 16, fontWeight: '900' },
   entryText: { color: COLORS.textMuted, fontSize: 13, fontWeight: '600', marginTop: 3 },
-  modalSkip: { alignSelf: 'center', padding: 8 },
-  modalSkipText: { color: COLORS.primary, fontWeight: '900' },
   calibrationBanner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderRadius: 18, padding: SPACING.md, backgroundColor: '#fef3c7' },
   calibrationText: { color: '#92400e', flex: 1, fontWeight: '800' },
   cacheBanner: { borderRadius: 16, padding: SPACING.sm, backgroundColor: '#dbeafe' },

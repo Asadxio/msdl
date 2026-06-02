@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, doc, getDoc, getDocs, orderBy, query, where } from 'firebase/firestore';
@@ -216,7 +217,7 @@ export default function PaymentFlowScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}> 
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')}>
           <Ionicons name="arrow-back" size={18} color={COLORS.text} />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>

@@ -4,6 +4,7 @@ import { getStorage } from 'firebase/storage';
 import * as FirebaseAuth from 'firebase/auth';
 import type { Auth, Persistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { startupLog } from '@/lib/startup';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFk_Cc6yEIROJ60vq0VtyFx0qd4YUeqxQ",
@@ -15,13 +16,16 @@ const firebaseConfig = {
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+startupLog('Firebase initialized', { reusedApp: getApps().length > 1 });
 let db: Firestore;
 try {
   db = initializeFirestore(app, {
     experimentalForceLongPolling: true,
   });
+  startupLog('Firestore initialized', { mode: 'longPolling' });
 } catch {
   db = getFirestore(app);
+  startupLog('Firestore initialized', { mode: 'existing' });
 }
 
 let auth: Auth;
@@ -32,8 +36,10 @@ try {
   auth = FirebaseAuth.initializeAuth(app, getReactNativePersistence ? {
     persistence: getReactNativePersistence(AsyncStorage),
   } : undefined);
+  startupLog('Firebase Auth initialized', { persistence: getReactNativePersistence ? 'asyncStorage' : 'default' });
 } catch {
   auth = FirebaseAuth.getAuth(app);
+  startupLog('Firebase Auth initialized', { persistence: 'existing' });
 }
 
 export { db, auth };

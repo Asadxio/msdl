@@ -6,6 +6,7 @@ import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
 import { initPushNotifications, registerDevicePushToken } from '@/lib/pushNotifications';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
@@ -13,6 +14,7 @@ import { getConsentStatus } from '@/lib/legal';
 import { reportError } from '@/lib/errorReporter';
 import { getReleaseDiagnostics } from '@/lib/releaseDiagnostics';
 import { FullScreenLoader } from '@/components/ui';
+import { startupLog } from '@/lib/startup';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
@@ -32,7 +34,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, [user?.uid, profileStatus, segmentKey]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading) {
+      startupLog('Navigation guard waiting for auth');
+      return;
+    }
+
+    startupLog('Root loader cleared');
+    SplashScreen.hideAsync().then(() => startupLog('Splash screen hidden')).catch((error) => startupLog('Splash screen hide failed', { message: String(error?.message || error) }));
 
     const inAuth = segments[0] === 'auth';
     const isAdmin = profile?.role === 'admin';
@@ -43,27 +51,61 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const inLegalGate = segments[0] === 'legal-gate';
 
     if (!user) {
-      if (!inAuth) router.replace('/auth/login');
+      if (!inAuth) {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/login', reason: 'no-user' });
+        router.replace('/auth/login');
+      } else {
+        startupLog('Navigation complete', { route: segmentKey || 'auth', reason: 'no-user-auth-route' });
+      }
     } else if (needsLegalAcceptance && !inLegalConsentRoute) {
+      startupLog('Navigation complete', { action: 'replace', route: '/legal-gate', reason: 'needs-legal-acceptance' });
       router.replace('/legal-gate');
     } else if (!needsLegalAcceptance && inLegalGate) {
+      startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'legal-gate-complete' });
       router.replace('/');
     } else if (inUnauthorized && profile?.status === 'approved') {
+      startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'authorized-user-on-unauthorized' });
       router.replace('/');
     } else if (inAdmin && (profileOffline || !isAdmin)) {
+      startupLog('Navigation complete', { action: 'replace', route: '/unauthorized?required=admin', reason: 'admin-required' });
       router.replace('/unauthorized?required=admin');
     } else if (profile?.status === 'rejected') {
-      if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
+      if (segments.join('/') !== 'auth/pending') {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'account-status' });
+        router.replace('/auth/pending');
+      } else {
+        startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
+      }
     } else if (profile?.status === 'deactivated') {
       // Deactivated users -> pending screen shows deactivated state
-      if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
+      if (segments.join('/') !== 'auth/pending') {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'account-status' });
+        router.replace('/auth/pending');
+      } else {
+        startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
+      }
     } else if (!emailVerified && !isAdmin) {
       // Email not verified (non-admin) -> pending screen for verification
-      if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
+      if (segments.join('/') !== 'auth/pending') {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'email-unverified' });
+        router.replace('/auth/pending');
+      } else {
+        startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
+      }
     } else if (profile && profile.status === 'pending' && !isAdmin) {
-      if (segments.join('/') !== 'auth/pending') router.replace('/auth/pending');
+      if (segments.join('/') !== 'auth/pending') {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'profile-pending' });
+        router.replace('/auth/pending');
+      } else {
+        startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
+      }
     } else if (user && (profile?.status === 'approved' || isAdmin)) {
-      if (inAuth) router.replace('/');
+      if (inAuth) {
+        startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'approved-user-in-auth' });
+        router.replace('/');
+      } else {
+        startupLog('Navigation complete', { route: segmentKey || '/', reason: 'approved-user' });
+      }
     }
   }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance]);
 
@@ -203,12 +245,18 @@ export default function RootLayout() {
             <Stack.Screen name="status-player" options={{ animation: 'fade' }} />
             <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="qibla" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="islamic-calendar" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="prayer-times" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/payments" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/manage-academics" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/analytics" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="admin/privacy-requests" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="admin/moderation" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="admin/security" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />

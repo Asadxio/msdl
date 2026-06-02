@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, deleteDoc, doc, getDocs, orderBy, query } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
@@ -143,7 +144,7 @@ export default function RecordingsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => goBackOrReplace(router, '/more')}>
           <Ionicons name="arrow-back" size={20} color={COLORS.textMain} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
