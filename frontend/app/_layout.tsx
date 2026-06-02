@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import type { Href } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { I18nManager } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
@@ -15,15 +15,42 @@ import { reportError } from '@/lib/errorReporter';
 import { getReleaseDiagnostics } from '@/lib/releaseDiagnostics';
 import { FullScreenLoader } from '@/components/ui';
 import { startupLog } from '@/lib/startup';
+import { shouldShowOnboardingEntry } from '@/lib/onboarding';
+import { OnboardingProvider } from '@/context/OnboardingContext';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
   const profileStatus = profile?.status;
   const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
+  const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
   const segments = useSegments();
   const segmentKey = segments.join('/');
   const router = useRouter();
 
+
+  useEffect(() => {
+    let mounted = true;
+    shouldShowOnboardingEntry()
+      .then((required) => {
+        if (!mounted) return;
+        setOnboardingStatus(required ? 'required' : 'complete');
+        startupLog('Onboarding gate checked', { required });
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        setOnboardingStatus('complete');
+        startupLog('Onboarding gate check failed', { message: String(error?.message || error) });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const markEntryCompleteInSession = useCallback(() => {
+    setOnboardingStatus('complete');
+  }, []);
 
   useEffect(() => {
     if (!user?.uid || profileStatus !== 'approved') {
@@ -34,8 +61,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, [user?.uid, profileStatus, segmentKey]);
 
   useEffect(() => {
-    if (authLoading) {
-      startupLog('Navigation guard waiting for auth');
+    if (authLoading || onboardingStatus === 'checking') {
+      startupLog('Navigation guard waiting', { authLoading, onboardingStatus });
       return;
     }
 
@@ -43,6 +70,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     SplashScreen.hideAsync().then(() => startupLog('Splash screen hidden')).catch((error) => startupLog('Splash screen hide failed', { message: String(error?.message || error) }));
 
     const inAuth = segments[0] === 'auth';
+    const inOnboardingEntry = segments[0] === 'onboarding-entry';
     const isAdmin = profile?.role === 'admin';
     const inAdmin = segments[0] === 'admin';
     const inUnauthorized = segments[0] === 'unauthorized';
@@ -50,7 +78,18 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const inLegalConsentRoute = legalConsentRoutes.includes(String(segments[0] || ''));
     const inLegalGate = segments[0] === 'legal-gate';
 
-    if (!user) {
+    if (onboardingStatus === 'required') {
+      if (!inOnboardingEntry) {
+        startupLog('Navigation complete', { action: 'replace', route: '/onboarding-entry', reason: 'onboarding-required' });
+        router.replace('/onboarding-entry');
+      } else {
+        startupLog('Navigation complete', { route: 'onboarding-entry', reason: 'onboarding-required' });
+      }
+    } else if (inOnboardingEntry) {
+      const route = user ? '/' : '/auth/login';
+      startupLog('Navigation complete', { action: 'replace', route, reason: 'onboarding-complete' });
+      router.replace(route);
+    } else if (!user) {
       if (!inAuth) {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/login', reason: 'no-user' });
         router.replace('/auth/login');
@@ -107,7 +146,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         startupLog('Navigation complete', { route: segmentKey || '/', reason: 'approved-user' });
       }
     }
-  }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance]);
+  }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance, onboardingStatus]);
 
 
   useEffect(() => {
@@ -205,13 +244,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [router, user?.uid]);
 
-  if (authLoading) {
+  if (authLoading || onboardingStatus === 'checking') {
     return (
       <FullScreenLoader label="Loading account…" />
     );
   }
 
-  return <>{children}</>;
+  return (
+    <OnboardingProvider value={{ markEntryCompleteInSession }}>
+      {children}
+    </OnboardingProvider>
+  );
 }
 
 export default function RootLayout() {
@@ -257,6 +300,7 @@ export default function RootLayout() {
             <Stack.Screen name="admin/privacy-requests" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/moderation" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/security" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="onboarding-entry" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />
