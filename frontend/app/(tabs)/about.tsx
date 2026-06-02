@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import {
   addDoc,
   collection,
@@ -543,8 +544,6 @@ export default function AboutScreen() {
     if (!user?.uid) return;
     try {
       console.log('[About] pickProfileImage button pressed', { source });
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const ImagePicker: any = require('expo-image-picker');
       const hasPermission = await ensureImagePickerPermission(ImagePicker, source);
       if (!hasPermission) return;
       let result: any;
