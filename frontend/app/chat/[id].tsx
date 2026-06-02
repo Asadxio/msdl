@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -739,7 +740,7 @@ export default function ChatDetailScreen() {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
         <Text style={styles.blockedText}>You don&apos;t have access to this chat.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backPlainBtn}>
+        <TouchableOpacity onPress={() => goBackOrReplace(router, '/(tabs)/chats')} style={styles.backPlainBtn}>
           <Text style={styles.backPlainText}>Go back</Text>
         </TouchableOpacity>
       </View>
@@ -752,7 +753,7 @@ export default function ChatDetailScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <ScalePressable style={styles.backBtn} onPress={() => router.back()}>
+        <ScalePressable style={styles.backBtn} onPress={() => goBackOrReplace(router, '/(tabs)/chats')}>
           <Ionicons name="arrow-back" size={20} color={COLORS.textMain} />
         </ScalePressable>
         <View style={{ flex: 1 }}>

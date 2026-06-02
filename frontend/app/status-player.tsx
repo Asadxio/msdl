@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableWithoutFeedback, Animated, PanResponder, ActivityIndicator, Image, AppState } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { Video, ResizeMode } from 'expo-av';
 import { COLORS } from '@/constants/theme';
 import { clearAsyncOp, clearMediaRef, clearTimerTrack, getLifecycleMetrics, trackAsyncOp, trackMediaRef, trackTimer } from '@/lib/lifecycleDiagnostics';
@@ -46,7 +47,7 @@ export default function StatusPlayer() {
     };
   }, [index, paused, current, items.length, progress]);
 
-  const pan = useRef(PanResponder.create({ onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 15, onPanResponderRelease: (_, g) => { if (g.dy > 80) router.back(); } })).current;
+  const pan = useRef(PanResponder.create({ onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 15, onPanResponderRelease: (_, g) => { if (g.dy > 80) goBackOrReplace(router, '/status'); } })).current;
 
   useEffect(() => {
     const next = items[index + 1];

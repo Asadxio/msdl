@@ -33,5 +33,7 @@ describe('phase 2 Islamic dashboard features', () => {
     expect(source).toContain('Current Prayer');
     expect(source).toContain('Next Prayer');
     expect(source).toContain('Remaining');
+    expect(source).toContain('Location');
+    expect(source).toContain('dashboard-google-qibla-finder-option');
   });
 });

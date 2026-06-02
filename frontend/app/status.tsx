@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { goBackOrReplace } from "@/lib/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -80,13 +81,7 @@ const STATUS_API_URL = String(
 export default function StatusScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const goBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-    router.replace('/(tabs)');
-  };
+  const goBack = () => goBackOrReplace(router, "/(tabs)");
   const { user, profile } = useAuth();
   const canPostStatus =
     profile?.role === "teacher" || profile?.role === "admin";

@@ -16,6 +16,7 @@ import {
 import { auth, db } from '@/lib/firebase';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+import { startupLog } from '@/lib/startup';
 import { normalizeRole, type AppRole, type OnboardingRole } from '@/lib/roles';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
@@ -161,23 +162,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const authStartupCompletedRef = useRef(false);
+  const authLoaderClearReasonRef = useRef<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
     let profileUnsub: (() => void) | null = null;
+    let authUnsub: (() => void) | null = null;
 
-    const clearAuthLoader = () => {
+    startupLog('Auth provider mounted', { authLoadingInitial: true });
+
+    const clearAuthLoader = (reason: string) => {
       if (!mounted) return;
       authStartupCompletedRef.current = true;
+      if (!authLoaderClearReasonRef.current) {
+        authLoaderClearReasonRef.current = reason;
+        startupLog('Loader cleared', { reason });
+      }
       setAuthLoading(false);
     };
 
+    startupLog('Auth startup watchdog scheduled', { timeoutMs: AUTH_STARTUP_WATCHDOG_MS });
     const watchdog = setTimeout(() => {
       if (!mounted || authStartupCompletedRef.current) return;
       logger.warn('Auth startup watchdog elapsed; continuing with cached/offline state');
+      startupLog('Auth startup watchdog fired', { timeoutMs: AUTH_STARTUP_WATCHDOG_MS, hasCurrentUser: Boolean(auth.currentUser?.uid) });
       const currentUser = auth.currentUser;
       setUser(currentUser ?? null);
-      clearAuthLoader();
+      clearAuthLoader('watchdog');
       if (currentUser?.uid) {
         setProfileOffline(true);
         applyCachedProfile(currentUser.uid, 'auth.watchdogCachedProfile').catch(() => {});
@@ -186,53 +197,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }, AUTH_STARTUP_WATCHDOG_MS);
 
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      try {
-        if (profileUnsub) {
-          profileUnsub();
-          profileUnsub = null;
+    try {
+      authUnsub = onAuthStateChanged(auth, async (firebaseUser) => {
+        startupLog('Auth restored', { hasUser: Boolean(firebaseUser?.uid), emailVerified: Boolean(firebaseUser?.emailVerified) });
+        try {
+          if (profileUnsub) {
+            profileUnsub();
+            profileUnsub = null;
+          }
+          setUser(firebaseUser);
+          setProfileOffline(false);
+          if (firebaseUser) {
+            const usedCachedProfile = await applyCachedProfile(firebaseUser.uid, 'auth.cachedRealtime');
+            startupLog('Cached profile lookup complete', { usedCache: usedCachedProfile });
+            profileUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snap) => {
+              setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
+              if (!snap.exists()) {
+                startupLog('Profile loaded', { exists: false, fromCache: snap.metadata.fromCache });
+                setProfile(null);
+                await AsyncStorage.removeItem(getProfileCacheKey(firebaseUser.uid)).catch(() => {});
+                await firebaseSignOut(auth).catch(() => {});
+                return;
+              }
+              const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
+              startupLog('Profile loaded', { exists: true, status: nextProfile.status, role: nextProfile.role, fromCache: snap.metadata.fromCache });
+              setProfile(nextProfile);
+              await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
+              await syncPublicProfile(firebaseUser.uid, nextProfile);
+              if (nextProfile.status === 'deactivated' || nextProfile.status === 'rejected') {
+                await firebaseSignOut(auth).catch(() => {});
+              }
+            }, async (err) => {
+              logger.warn('Profile realtime listener failed:', err);
+              startupLog('Profile listener failed', { message: String((err as any)?.message || err) });
+              setProfileOffline(true);
+              await fetchProfile(firebaseUser.uid);
+            });
+          } else {
+            startupLog('Profile loaded', { skipped: 'no-user' });
+            setProfile(null);
+          }
+        } catch (err) {
+          logger.warn('Auth startup callback failed:', err);
+          startupLog('Auth startup callback failed', { message: String((err as any)?.message || err) });
+          setUser(auth.currentUser ?? null);
+          if (!auth.currentUser) setProfile(null);
+        } finally {
+          clearTimeout(watchdog);
+          clearAuthLoader('auth-state-callback');
         }
-        setUser(firebaseUser);
-        setProfileOffline(false);
-        if (firebaseUser) {
-          await applyCachedProfile(firebaseUser.uid, 'auth.cachedRealtime');
-          profileUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snap) => {
-            setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
-            if (!snap.exists()) {
-              setProfile(null);
-              await AsyncStorage.removeItem(getProfileCacheKey(firebaseUser.uid)).catch(() => {});
-              await firebaseSignOut(auth).catch(() => {});
-              return;
-            }
-            const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
-            setProfile(nextProfile);
-            await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
-            await syncPublicProfile(firebaseUser.uid, nextProfile);
-            if (nextProfile.status === 'deactivated' || nextProfile.status === 'rejected') {
-              await firebaseSignOut(auth).catch(() => {});
-            }
-          }, async (err) => {
-            logger.warn('Profile realtime listener failed:', err);
-            setProfileOffline(true);
-            await fetchProfile(firebaseUser.uid);
-          });
-        } else {
-          setProfile(null);
-        }
-      } catch (err) {
-        logger.warn('Auth startup callback failed:', err);
-        setUser(auth.currentUser ?? null);
-        if (!auth.currentUser) setProfile(null);
-      } finally {
-        clearTimeout(watchdog);
-        clearAuthLoader();
-      }
-    });
+      });
+    } catch (err) {
+      logger.warn('Auth state subscription failed:', err);
+      startupLog('Auth state subscription failed', { message: String((err as any)?.message || err) });
+      clearTimeout(watchdog);
+      setUser(auth.currentUser ?? null);
+      if (!auth.currentUser) setProfile(null);
+      clearAuthLoader('auth-subscribe-error');
+    }
+
     return () => {
       mounted = false;
       clearTimeout(watchdog);
       if (profileUnsub) profileUnsub();
-      unsub();
+      if (authUnsub) authUnsub();
     };
   }, []);
 

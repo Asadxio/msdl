@@ -1,18 +1,26 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, StatusBar,
+  View, Text, StyleSheet, ScrollView, StatusBar, TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { LEGAL_DOCS } from '@/lib/legal';
+import { goBackOrReplace } from '@/lib/navigation';
 
 export default function PrivacyScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const policy = LEGAL_DOCS.privacy;
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity style={styles.backButton} onPress={() => goBackOrReplace(router, '/more')} accessibilityRole="button" accessibilityLabel="Go back">
+          <Ionicons name="chevron-back" size={18} color={COLORS.primary} />
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
         <Text style={styles.title}>Privacy Policy</Text>
         <Text style={styles.subtitle}>Version {policy.version} • Effective {policy.effectiveAt.slice(0, 10)}</Text>
       </View>
@@ -96,6 +104,8 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
+  backButton: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, marginBottom: SPACING.xs },
+  backText: { color: COLORS.primary, fontWeight: '800', fontSize: 13 },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 12, color: COLORS.textMuted },
   content: { padding: SPACING.md, paddingBottom: 24 },

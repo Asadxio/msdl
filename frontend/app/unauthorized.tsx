@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { ScalePressable } from '@/components/ui';
+import { goBackOrReplace } from '@/lib/navigation';
 
 export default function UnauthorizedScreen() {
   const router = useRouter();
@@ -19,8 +20,8 @@ export default function UnauthorizedScreen() {
         <Text style={styles.subtitle}>
           This page requires {roleLabel} permission.
         </Text>
-        <ScalePressable style={styles.button} onPress={() => router.replace('/')}>
-          <Text style={styles.buttonText}>Go to Home</Text>
+        <ScalePressable style={styles.button} onPress={() => goBackOrReplace(router, '/(tabs)')}>
+          <Text style={styles.buttonText}>Go Back</Text>
         </ScalePressable>
       </View>
     </View>

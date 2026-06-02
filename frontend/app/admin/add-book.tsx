@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData } from '@/context/DataContext';
 import {
@@ -68,7 +69,7 @@ export default function AddBookScreen() {
 
   useEffect(() => {
     if (profile && !isAdmin) {
-      router.replace('/');
+      router.replace('/unauthorized?required=admin');
     }
   }, [profile, isAdmin, router]);
 
@@ -212,7 +213,7 @@ export default function AddBookScreen() {
         <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.back()}
+            onPress={() => goBackOrReplace(router, '/more')}
             testID="add-book-back-btn"
           >
             <Ionicons name="close" size={22} color={COLORS.textMain} />

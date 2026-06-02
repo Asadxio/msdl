@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
@@ -33,7 +34,7 @@ export default function ForgotPasswordScreen() {
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <TouchableOpacity style={styles.backRow} onPress={() => router.back()} testID="forgot-back-btn">
+          <TouchableOpacity style={styles.backRow} onPress={() => goBackOrReplace(router, '/auth/login')} testID="forgot-back-btn">
             <Ionicons name="arrow-back" size={20} color={COLORS.text} />
             <Text style={styles.backText}>Back to Sign In</Text>
           </TouchableOpacity>

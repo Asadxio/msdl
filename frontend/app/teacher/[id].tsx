@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS, SHADOWS, getTeacherAvatar, getCourseImage } from '@/constants/theme';
@@ -38,7 +39,7 @@ export default function TeacherDetailScreen() {
   if (!teacher) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.errorBackBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.errorBackBtn} onPress={() => goBackOrReplace(router, '/(tabs)/teachers')}>
           <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
           <Text style={styles.errorBackText}>Go Back</Text>
         </TouchableOpacity>
@@ -71,7 +72,7 @@ export default function TeacherDetailScreen() {
         <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.back()}
+            onPress={() => goBackOrReplace(router, '/(tabs)/teachers')}
             testID="teacher-detail-back-btn"
             activeOpacity={0.8}
           >

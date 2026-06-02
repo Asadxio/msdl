@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -40,7 +41,7 @@ export default function BookViewerScreen() {
   if (!book) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.errorBackBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.errorBackBtn} onPress={() => goBackOrReplace(router, '/(tabs)/library')}>
           <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
           <Text style={styles.errorBackText}>Go Back</Text>
         </TouchableOpacity>
@@ -74,7 +75,7 @@ export default function BookViewerScreen() {
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => router.back()}
+          onPress={() => goBackOrReplace(router, '/(tabs)/library')}
           testID="book-viewer-back-btn"
           activeOpacity={0.8}
         >

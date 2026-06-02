@@ -6,19 +6,21 @@ const source = fs.readFileSync(authContextPath, 'utf8');
 
 describe('auth startup freeze protections', () => {
   it('clears auth loading from a finally block in onAuthStateChanged', () => {
-    expect(source).toContain('const unsub = onAuthStateChanged(auth, async (firebaseUser) => {');
+    expect(source).toContain('authUnsub = onAuthStateChanged(auth, async (firebaseUser) => {');
     expect(source).toContain('} finally {');
     const finallyIndex = source.indexOf('} finally {');
     const finallyBody = source.slice(finallyIndex, source.indexOf('\n    });', finallyIndex));
-    expect(finallyBody).toContain('clearAuthLoader();');
+    expect(finallyBody).toContain("clearAuthLoader('auth-state-callback')");
     expect(source).toContain('setAuthLoading(false);');
+    expect(source).toContain("startupLog('Loader cleared'");
   });
 
   it('has a 5-second watchdog that clears the loader and uses cached/offline state', () => {
     expect(source).toContain('const AUTH_STARTUP_WATCHDOG_MS = 5000;');
     expect(source).toContain('setTimeout(() => {');
     expect(source).toContain('Auth startup watchdog elapsed; continuing with cached/offline state');
-    expect(source).toContain('clearAuthLoader();');
+    expect(source).toContain("startupLog('Auth startup watchdog fired'");
+    expect(source).toContain("clearAuthLoader('watchdog')");
     expect(source).toContain("applyCachedProfile(currentUser.uid, 'auth.watchdogCachedProfile')");
   });
 
@@ -35,5 +37,17 @@ describe('auth startup freeze protections', () => {
     expect(source).toContain('return null;');
     expect(source).toContain("applyCachedProfile(firebaseUser.uid, 'auth.cachedRealtime')");
     expect(source).toContain('setProfileOffline(true);');
+  });
+
+  it('logs startup milestones for APK logcat investigation', () => {
+    const firebaseSource = fs.readFileSync(path.join(__dirname, 'firebase.ts'), 'utf8');
+    const layoutSource = fs.readFileSync(path.join(__dirname, '../app/_layout.tsx'), 'utf8');
+    expect(firebaseSource).toContain("startupLog('Firebase initialized'");
+    expect(firebaseSource).toContain("startupLog('Firebase Auth initialized'");
+    expect(source).toContain("startupLog('Auth restored'");
+    expect(source).toContain("startupLog('Profile loaded'");
+    expect(layoutSource).toContain("startupLog('Navigation complete'");
+    expect(layoutSource).toContain("startupLog('Root loader cleared'");
+    expect(layoutSource).toContain('SplashScreen.hideAsync()');
   });
 });

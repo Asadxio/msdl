@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, PermissionsAndroid, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { ChannelProfileType, ClientRoleType, RenderModeType, RtcSurfaceView, VideoSourceType, createAgoraRtcEngine, type IRtcEngine, type IRtcEngineEventHandler } from 'react-native-agora';
 import { useAuth } from '@/context/AuthContext';
@@ -57,7 +58,7 @@ export default function CallScreen() {
       trackCallMetric('avg_call_duration', callId, { duration_ms: durationMs, ended_as: finalState });
       await setCallState(callId, finalState, { termination_reason: finalState === 'ended' ? 'local_end' : finalState }).catch(() => {});
     }
-    if (mountedRef.current) router.back();
+    if (mountedRef.current) goBackOrReplace(router, '/(tabs)/chats');
     releaseLockRef.current = false;
   }, [callId, router]);
 

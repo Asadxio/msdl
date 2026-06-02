@@ -12,6 +12,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Linking,
   Animated,
   Easing,
   Platform,
@@ -53,6 +54,7 @@ import { normalizeGoogleDriveFileUrl } from "@/lib/links";
 const DEFAULT_ANNOUNCEMENT_TITLE = "No announcements yet";
 const DEFAULT_ANNOUNCEMENT_DESC =
   "Important updates from teachers and admins will appear here.";
+const GOOGLE_QIBLA_FINDER_URL = "https://qiblafinder.withgoogle.com/";
 
 type PrayerName = "Fajr" | "Sunrise" | "Ishraq" | "Chasht" | "Dahwa-e-Kubra" | "Zuhr" | "Asr" | "Maghrib" | "Isha" | "Tahajjud";
 type PrayerTime = { name: PrayerName; time: Date; label: string; kind: "fard" | "sun" | "nafl" | "marker" };
@@ -830,6 +832,24 @@ export default function HomeScreen() {
     }
   };
 
+  const showQiblaFinderOpenError = useCallback(() => {
+    Alert.alert("Qibla Finder", "Unable to open Qibla Finder.");
+  }, []);
+
+  const openGoogleQiblaFinder = useCallback(() => {
+    Alert.alert("Google Qibla Finder", "Google Qibla Finder will open in your browser.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Open",
+        onPress: () => {
+          Linking.canOpenURL(GOOGLE_QIBLA_FINDER_URL)
+            .then((supported) => (supported ? Linking.openURL(GOOGLE_QIBLA_FINDER_URL) : Promise.reject(new Error("No browser available"))))
+            .catch(showQiblaFinderOpenError);
+        },
+      },
+    ]);
+  }, [showQiblaFinderOpenError]);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -946,21 +966,23 @@ export default function HomeScreen() {
                   <Text style={styles.qiblaModalTitle}>Choose Qibla mode</Text>
                   <TouchableOpacity
                     style={styles.qiblaEntryOption}
-                    onPress={() => { setQiblaEntryVisible(false); safePush('/qibla?mode=camera'); }}
+                    onPress={() => { setQiblaEntryVisible(false); openGoogleQiblaFinder(); }}
                     accessibilityRole="button"
-                    accessibilityLabel="Open camera Qibla finder"
+                    accessibilityLabel="Open Google Camera Qibla Finder. Internet required. Opens in browser."
+                    testID="dashboard-google-qibla-finder-option"
                   >
                     <View style={styles.qiblaEntryIcon}><Ionicons name="camera-outline" size={26} color={COLORS.primary} /></View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.qiblaEntryTitle}>📷 Camera Qibla Finder</Text>
-                      <Text style={styles.qiblaEntryText}>Native camera overlay with live Qibla arrow.</Text>
+                      <Text style={styles.qiblaEntryTitle}>📷 Google Camera Qibla Finder</Text>
+                      <Text style={styles.qiblaEntryText}>Google Camera Qibla Finder (Internet Required). Opens the verified browser experience.</Text>
                     </View>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.qiblaEntryOption}
                     onPress={() => { setQiblaEntryVisible(false); safePush('/qibla?mode=compass'); }}
                     accessibilityRole="button"
-                    accessibilityLabel="Open compass Qibla direction"
+                    accessibilityLabel="Open Compass Qibla Direction in the app"
+                    testID="dashboard-compass-qibla-direction-option"
                   >
                     <View style={styles.qiblaEntryIcon}><Ionicons name="compass-outline" size={26} color={COLORS.primary} /></View>
                     <View style={{ flex: 1 }}>

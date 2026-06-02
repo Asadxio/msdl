@@ -12,7 +12,7 @@ type AppItem = { label: string; subtitle: string; icon: keyof typeof Ionicons.gl
 
 const APPLICATION_ITEMS: AppItem[] = [
   { label: 'Islamic Calendar', subtitle: 'Hijri date and Islamic calendar view', icon: 'calendar-number-outline', route: '/islamic-calendar' },
-  { label: 'Qibla Finder', subtitle: 'Camera, compass, and map Qibla modes', icon: 'compass-outline', route: '/qibla' },
+  { label: 'Qibla Finder', subtitle: 'Google Camera Qibla Finder (Internet Required) and Compass Qibla Direction', icon: 'compass-outline', route: '/qibla' },
   { label: 'Prayer Times', subtitle: 'Daily prayer schedule and countdown', icon: 'time-outline', route: '/prayer-times' },
   { label: 'Future Islamic Tools', subtitle: 'Duas, tasbih, and more tools coming soon', icon: 'sparkles-outline', disabled: true },
 ];
