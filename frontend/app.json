@@ -11,9 +11,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow camera access for profile photos, status media, and built-in live classes.",
+        "NSCameraUsageDescription": "Allow camera access for profile photos, status media, live classes, and the native Camera Qibla Finder overlay.",
         "NSMicrophoneUsageDescription": "Allow microphone access for video status content and built-in live classes.",
-        "NSLocationWhenInUseUsageDescription": "Allow location access to show accurate local prayer times and city details.",
+        "NSLocationWhenInUseUsageDescription": "Allow location access to show accurate local prayer times, city details, and Qibla direction.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow location access to keep prayer times accurate while using the app."
       }
     },

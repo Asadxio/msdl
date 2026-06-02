@@ -5,13 +5,17 @@ const homePath = path.join(__dirname, '../app/(tabs)/index.tsx');
 const source = fs.readFileSync(homePath, 'utf8');
 
 describe('phase 2 Islamic dashboard features', () => {
-  it('renders English, Hijri, and Urdu Hijri calendar labels on the dashboard', () => {
-    expect(source).toContain('const calendarInfo = getIslamicCalendar(now);');
-    expect(source).toContain('{calendarInfo.englishDate}');
-    expect(source).toContain('{calendarInfo.hijriDate}');
-    expect(source).toContain('{calendarInfo.urduHijriDate}');
-    expect(source).toContain('toUrduDigits');
-    expect(source).toContain('Zul Hijjah');
+  it('keeps a compact Hijri prayer snapshot on dashboard and moves full calendar to applications', () => {
+    const moreSource = fs.readFileSync(path.join(__dirname, '../app/more.tsx'), 'utf8');
+    const calendarScreen = fs.readFileSync(path.join(__dirname, '../app/islamic-calendar.tsx'), 'utf8');
+    expect(source).toContain('testID="compact-islamic-dashboard"');
+    expect(source).toContain('Hijri: {calendarInfo.hijriDate}');
+    expect(source).not.toContain('<Text style={styles.dashboardEyebrow}>Islamic Calendar</Text>');
+    expect(moreSource).toContain('More → Applications');
+    expect(moreSource).toContain("route: '/islamic-calendar'");
+    expect(moreSource).toContain("route: '/prayer-times'");
+    expect(calendarScreen).toContain('Islamic Calendar');
+    expect(calendarScreen).toContain('Zul Hijjah');
   });
 
   it('calculates all requested prayer times including nafl and marker times', () => {
@@ -26,8 +30,8 @@ describe('phase 2 Islamic dashboard features', () => {
     expect(source).toContain('AsyncStorage.setItem(PRAYER_LOCATION_CACHE_KEY');
     expect(source).toContain('nextMidnight');
     expect(source).toContain('const countdown = formatDuration');
-    expect(source).toContain('active && styles.prayerPillActive');
-    expect(source).toContain('Current');
-    expect(source).toContain('Next: {prayerWindow.next.name}');
+    expect(source).toContain('Current Prayer');
+    expect(source).toContain('Next Prayer');
+    expect(source).toContain('Remaining');
   });
 });
