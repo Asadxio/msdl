@@ -199,6 +199,10 @@ export default function NotificationsScreen() {
   };
 
   const deleteNotification = (item: NotificationItem) => {
+    if (!user?.uid) {
+      Alert.alert('Sign in required', 'Please sign in again to update notifications.');
+      return;
+    }
     Alert.alert('Delete Notification', isAdmin ? 'Delete this notification for everyone?' : 'Remove this notification from your list?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -209,7 +213,7 @@ export default function NotificationsScreen() {
             if (isAdmin) {
               await deleteDoc(doc(db, 'notifications', item.id));
             } else {
-              await updateDoc(doc(db, 'notifications', item.id), { hidden_by: arrayUnion(user?.uid || '') });
+              await updateDoc(doc(db, 'notifications', item.id), { hidden_by: arrayUnion(user.uid) });
             }
             if (editingId === item.id) {
               setEditingId('');
