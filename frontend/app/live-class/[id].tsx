@@ -750,7 +750,7 @@ export default function LiveClassroomScreen() {
         <View style={styles.videoOff}>
           <Ionicons name="person-circle-outline" size={52} color="rgba(255,255,255,0.8)" />
         </View>
-      )}
+      ) : null}
       <View style={styles.tileMeta}>
         <Text style={styles.tileName} numberOfLines={1}>{item.isLocal ? `${item.name} (You)` : item.name}</Text>
         <View style={styles.tileIcons}>
