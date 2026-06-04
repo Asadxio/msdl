@@ -97,14 +97,29 @@ export type LiveClassCreateInput = {
   profile: UserProfile | null;
 };
 
-export const AGORA_APP_ID = process.env.EXPO_PUBLIC_AGORA_APP_ID || '';
-const LIVE_API_URL = (
+export const AGORA_APP_ID = String(process.env.EXPO_PUBLIC_AGORA_APP_ID || '').trim();
+const LIVE_API_URL = String(
   process.env.EXPO_PUBLIC_LIVE_API_URL
   || process.env.EXPO_PUBLIC_PUSH_API_URL
-  || String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '')
-);
-const LIVE_API_SETUP_MESSAGE = 'Live classes are not configured yet. Please set EXPO_PUBLIC_LIVE_API_URL in your Expo environment.';
+  || process.env.EXPO_PUBLIC_API_BASE_URL
+).replace(/\/api\/?$/, '').trim();
+const LIVE_API_SETUP_MESSAGE = 'Live classes are not configured yet. Please set EXPO_PUBLIC_LIVE_API_URL, EXPO_PUBLIC_PUSH_API_URL, and/or EXPO_PUBLIC_API_BASE_URL in your Expo environment.';
 const ENROLLMENT_LOOKUP_LIMIT = 500;
+
+function getMissingLiveClassEnvVars(): string[] {
+  const missing: string[] = [];
+  if (!AGORA_APP_ID) missing.push('EXPO_PUBLIC_AGORA_APP_ID');
+  if (!String(process.env.EXPO_PUBLIC_LIVE_API_URL || '').trim()) missing.push('EXPO_PUBLIC_LIVE_API_URL');
+  if (!String(process.env.EXPO_PUBLIC_PUSH_API_URL || '').trim()) missing.push('EXPO_PUBLIC_PUSH_API_URL');
+  return missing;
+}
+
+function ensureLiveClassConfig(): void {
+  const missing = getMissingLiveClassEnvVars();
+  if (missing.length > 0) {
+    throw new Error(`Missing required live class environment variable${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.`);
+  }
+}
 const MIN_LIVE_ATTENDANCE_SECONDS = 60;
 const MAX_LIVE_ATTENDANCE_SECONDS = 4 * 60 * 60;
 type JsonMap = Record<string, unknown>;
@@ -230,6 +245,7 @@ async function getEligibleStudentIds(courseId: string): Promise<{ ids: string[];
 }
 
 export async function startLiveClass(input: LiveClassCreateInput): Promise<string> {
+  ensureLiveClassConfig();
   if (!input.teacherId || !input.courseId) throw new Error('Missing teacher or course.');
   if (input.profile?.role !== 'teacher' && input.profile?.role !== 'admin') {
     throw new Error('Only teachers/admins can start live classes.');
@@ -312,12 +328,12 @@ type LiveClassTokenResponse = {
 };
 
 function getLiveApiBaseUrl(): string {
+  ensureLiveClassConfig();
   return LIVE_API_URL.replace(/\/$/, '');
 }
 
 async function requestLiveBackend<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const baseUrl = getLiveApiBaseUrl();
-  if (!baseUrl) throw new Error(LIVE_API_SETUP_MESSAGE);
   if (!auth.currentUser) throw new Error('Please sign in again.');
   const idToken = await auth.currentUser.getIdToken();
   const runFetch = () => fetch(`${baseUrl}${path}`, {

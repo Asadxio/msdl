@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import type { Href } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { I18nManager } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
@@ -8,6 +8,8 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { initPushNotifications, registerDevicePushToken } from '@/lib/pushNotifications';
+import { validateConfig, getMissingConfigVars } from '@/lib/config';
+import { ConfigErrorScreen } from '@/components/ui/ConfigErrorScreen';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
 import { getConsentStatus } from '@/lib/legal';
@@ -27,42 +29,94 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const profileStatus = profile?.status;
   const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
+  const [splashHidden, setSplashHidden] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(() => {
+    try {
+      validateConfig();
+      return null;
+    } catch (error) {
+      return String(error?.message || 'Invalid environment configuration.');
+    }
+  });
+  const [missingConfigVars] = useState<string[]>(() => getMissingConfigVars());
+  const hideRequestedRef = useRef(false);
   const segments = useSegments();
   const segmentKey = segments.join('/');
   const router = useRouter();
 
+  const safeHideSplash = useCallback(async () => {
+    if (hideRequestedRef.current) return;
+    hideRequestedRef.current = true;
+
+    try {
+      await SplashScreen.hideAsync();
+      startupLog('Splash screen hidden');
+    } catch (error) {
+      startupLog('Splash screen hide failed', { message: String(error?.message || error) });
+    } finally {
+      setSplashHidden(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!configError) return;
+    void safeHideSplash();
+  }, [configError, safeHideSplash]);
 
   useEffect(() => {
     let mounted = true;
     let settled = false;
     startupLog('Onboarding gate timeout scheduled', { timeoutMs: ONBOARDING_GATE_TIMEOUT_MS });
-    const timeout = setTimeout(() => {
+
+    const onboardingTimeout = setTimeout(() => {
       if (!mounted || settled) return;
       settled = true;
       setOnboardingStatus('complete');
       startupLog('Onboarding gate timed out; continuing startup', { timeoutMs: ONBOARDING_GATE_TIMEOUT_MS });
     }, ONBOARDING_GATE_TIMEOUT_MS);
 
-    shouldShowOnboardingEntry()
-      .then((required) => {
-        if (!mounted || settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        setOnboardingStatus(required ? 'required' : 'complete');
-        startupLog('Onboarding gate checked', { required });
-      })
-      .catch((error) => {
-        if (!mounted || settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        setOnboardingStatus('complete');
-        startupLog('Onboarding gate check failed', { message: String(error?.message || error) });
-      });
+    const startupFallbackTimeout = setTimeout(() => {
+      if (!mounted) return;
+      startupLog('Startup fallback timeout reached', { timeoutMs: 8000 });
+      void safeHideSplash();
+    }, 8000);
+
+    const runStartup = async () => {
+      try {
+        await shouldShowOnboardingEntry()
+          .then((required) => {
+            if (!mounted || settled) return;
+            settled = true;
+            clearTimeout(onboardingTimeout);
+            setOnboardingStatus(required ? 'required' : 'complete');
+            startupLog('Onboarding gate checked', { required });
+          })
+          .catch((error) => {
+            if (!mounted || settled) return;
+            settled = true;
+            clearTimeout(onboardingTimeout);
+            setOnboardingStatus('complete');
+            startupLog('Onboarding gate check failed', { message: String(error?.message || error) });
+          });
+      } catch (error) {
+        if (mounted && !settled) {
+          setOnboardingStatus('complete');
+          startupLog('Startup sequence failed before onboarding complete', { message: String(error?.message || error) });
+        }
+      } finally {
+        clearTimeout(startupFallbackTimeout);
+        await safeHideSplash();
+      }
+    };
+
+    void runStartup();
+
     return () => {
       mounted = false;
-      clearTimeout(timeout);
+      clearTimeout(onboardingTimeout);
+      clearTimeout(startupFallbackTimeout);
     };
-  }, []);
+  }, [safeHideSplash]);
 
   const markEntryCompleteInSession = useCallback(() => {
     setOnboardingStatus('complete');
@@ -83,7 +137,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
 
     startupLog('Root loader cleared');
-    SplashScreen.hideAsync().then(() => startupLog('Splash screen hidden')).catch((error) => startupLog('Splash screen hide failed', { message: String(error?.message || error) }));
 
     const inAuth = segments[0] === 'auth';
     const inOnboardingEntry = segments[0] === 'onboarding-entry';
@@ -260,9 +313,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [router, user?.uid]);
 
-  if (authLoading || onboardingStatus === 'checking') {
+  if (configError) {
+    return <ConfigErrorScreen error={configError} missingVars={missingConfigVars} />;
+  }
+
+  if (!splashHidden || authLoading || onboardingStatus === 'checking') {
     return (
-      <FullScreenLoader label="Loading account…" />
+      <FullScreenLoader label={splashHidden ? 'Loading account…' : 'Starting app…'} />
     );
   }
 

@@ -1,7 +1,21 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  collection, getDocs, getDoc, addDoc, serverTimestamp, doc, updateDoc, setDoc, query, where, limit,
+  collection,
+  getDocs,
+  getDoc,
+  addDoc,
+  serverTimestamp,
+  doc,
+  updateDoc,
+  setDoc,
+  query,
+  where,
+  limit,
+  orderBy,
+  startAfter,
+  documentId,
+  type DocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -114,6 +128,8 @@ export type CourseProgressSummary = {
   completionPercent: number;
 };
 
+type QueryCursor = { order: number; id: string } | null;
+
 type DataContextType = {
   courses: Course[];
   teachers: Teacher[];
@@ -126,9 +142,21 @@ type DataContextType = {
   submissions: AssignmentSubmission[];
   lessonProgress: Record<string, LessonProgressState>;
   error: string | null;
+  courseContentLoading: Record<string, boolean>;
+  courseContentError: Record<string, string>;
+  hasMoreModulesByCourse: Record<string, boolean>;
+  hasMoreLessonsByModule: Record<string, boolean>;
+  hasMoreAssignmentsByLesson: Record<string, boolean>;
   refetch: () => void;
   refetchBooks: () => Promise<void>;
   refetchLearning: () => Promise<void>;
+  fetchCourseModules: (courseId: string) => Promise<void>;
+  fetchMoreCourseModules: (courseId: string) => Promise<void>;
+  fetchLessonsForModule: (moduleId: string) => Promise<void>;
+  fetchMoreLessonsForModule: (moduleId: string) => Promise<void>;
+  fetchAssignmentsForLesson: (lessonId: string) => Promise<void>;
+  fetchMoreAssignmentsForLesson: (lessonId: string) => Promise<void>;
+  fetchSubmissionsForAssignment: (assignmentId: string) => Promise<void>;
   getModulesForCourse: (courseId: string) => CourseModule[];
   getLessonsForModule: (moduleId: string) => Lesson[];
   getLessonById: (lessonId: string) => Lesson | null;
@@ -160,6 +188,36 @@ type DataContextType = {
   deleteBook: (bookId: string) => Promise<boolean>;
 };
 
+const COURSES_CACHE_KEY = 'courses_cache_v1';
+const TEACHERS_CACHE_KEY = 'teachers_cache_v1';
+const COURSE_MODULES_CACHE_TTL_MS = 60 * 60 * 1000;
+const MODULE_LESSONS_CACHE_TTL_MS = 60 * 60 * 1000;
+const LESSON_ASSIGNMENTS_CACHE_TTL_MS = 60 * 60 * 1000;
+const ASSIGNMENT_SUBMISSIONS_CACHE_TTL_MS = 60 * 60 * 1000;
+const COURSE_CACHE_TTL_MS = 60 * 60 * 1000;
+
+function getCourseModulesCacheKey(courseId: string) {
+  return `course_modules_${courseId}`;
+}
+
+function getModuleLessonsCacheKey(moduleId: string) {
+  return `module_lessons_${moduleId}`;
+}
+
+function getLessonAssignmentsCacheKey(lessonId: string) {
+  return `lesson_assignments_${lessonId}`;
+}
+
+function getAssignmentSubmissionsCacheKey(assignmentId: string) {
+  return `assignment_submissions_${assignmentId}`;
+}
+
+function mergeUniqueById<T extends { id: string }>(existing: T[], incoming: T[]) {
+  const map = new Map(existing.map((item) => [item.id, item]));
+  incoming.forEach((item) => map.set(item.id, item));
+  return Array.from(map.values());
+}
+
 const DataContext = createContext<DataContextType>({
   courses: [],
   teachers: [],
@@ -172,9 +230,21 @@ const DataContext = createContext<DataContextType>({
   submissions: [],
   lessonProgress: {},
   error: null,
+  courseContentLoading: {},
+  courseContentError: {},
+  hasMoreModulesByCourse: {},
+  hasMoreLessonsByModule: {},
+  hasMoreAssignmentsByLesson: {},
   refetch: () => {},
   refetchBooks: async () => {},
   refetchLearning: async () => {},
+  fetchCourseModules: async () => {},
+  fetchMoreCourseModules: async () => {},
+  fetchLessonsForModule: async () => {},
+  fetchMoreLessonsForModule: async () => {},
+  fetchAssignmentsForLesson: async () => {},
+  fetchMoreAssignmentsForLesson: async () => {},
+  fetchSubmissionsForAssignment: async () => {},
   getModulesForCourse: () => [],
   getLessonsForModule: () => [],
   getLessonById: () => null,
@@ -191,15 +261,6 @@ const DataContext = createContext<DataContextType>({
   addBook: async () => false,
   deleteBook: async () => false,
 });
-const COURSES_CACHE_KEY = 'courses_cache_v1';
-const TEACHERS_CACHE_KEY = 'teachers_cache_v1';
-const QUERY_CHUNK = 10;
-
-function chunkIds(ids: string[], size = QUERY_CHUNK): string[][] {
-  const chunks: string[][] = [];
-  for (let i = 0; i < ids.length; i += size) chunks.push(ids.slice(i, i + size));
-  return chunks;
-}
 
 export function useData() {
   return useContext(DataContext);
@@ -219,6 +280,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [booksLoading, setBooksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [courseContentLoading, setCourseContentLoading] = useState<Record<string, boolean>>({});
+  const [courseContentError, setCourseContentError] = useState<Record<string, string>>({});
+  const [hasMoreModulesByCourse, setHasMoreModulesByCourse] = useState<Record<string, boolean>>({});
+  const [hasMoreLessonsByModule, setHasMoreLessonsByModule] = useState<Record<string, boolean>>({});
+  const [hasMoreAssignmentsByLesson, setHasMoreAssignmentsByLesson] = useState<Record<string, boolean>>({});
+  const [moduleCursorByCourse, setModuleCursorByCourse] = useState<Record<string, QueryCursor>>({});
+  const [lessonCursorByModule, setLessonCursorByModule] = useState<Record<string, QueryCursor>>({});
+  const [assignmentCursorByLesson, setAssignmentCursorByLesson] = useState<Record<string, QueryCursor>>({});
 
   const fetchBooks = useCallback(async () => {
     setBooksLoading(true);
@@ -256,9 +325,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const cachedTeachers = await cacheGet<Teacher[]>(TEACHERS_CACHE_KEY);
       if (cachedCourses?.length) setCourses(cachedCourses);
       if (cachedTeachers?.length) setTeachers(cachedTeachers);
+
       const coursesSnap = await withTimeout(getDocs(collection(db, 'courses')));
+      const courseDocs = coursesSnap.docs;
       const coursesData: Course[] = [];
-      coursesSnap.forEach((doc) => {
+      const courseIdsSeen = new Set<string>();
+      courseDocs.forEach((doc) => {
+        if (courseIdsSeen.has(doc.id)) return;
+        courseIdsSeen.add(doc.id);
         const data = doc.data();
         coursesData.push({
           id: doc.id,
@@ -288,35 +362,278 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       setCourses(coursesData);
       setTeachers(teachersData);
-      await AsyncStorage.setItem(COURSES_CACHE_KEY, JSON.stringify(coursesData)).catch(() => {});
-      await AsyncStorage.setItem(TEACHERS_CACHE_KEY, JSON.stringify(teachersData)).catch(() => {});
-      perfEnd('data.fetchData', t0, { courses: courses.length, teachers: teachers.length });
+      await cacheSet(COURSES_CACHE_KEY, coursesData, COURSE_CACHE_TTL_MS).catch(() => {});
+      await cacheSet(TEACHERS_CACHE_KEY, teachersData, COURSE_CACHE_TTL_MS).catch(() => {});
+      perfEnd('data.fetchData', t0, { courses: coursesData.length, teachers: teachersData.length });
     } catch (err: unknown) {
       logger.warn('Firebase fetch failed, using local data:', normalizeFirebaseError(err, 'Failed to fetch data'));
       setError(normalizeFirebaseError(err, 'Failed to fetch data'));
-      const cachedCoursesRaw = await AsyncStorage.getItem(COURSES_CACHE_KEY).catch(() => null);
-      const cachedTeachersRaw = await AsyncStorage.getItem(TEACHERS_CACHE_KEY).catch(() => null);
-      let cachedCourses: Course[] = [];
-      let cachedTeachers: Teacher[] = [];
-      try {
-        const parsed = cachedCoursesRaw ? JSON.parse(cachedCoursesRaw) : [];
-        cachedCourses = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        cachedCourses = [];
-      }
-      try {
-        const parsed = cachedTeachersRaw ? JSON.parse(cachedTeachersRaw) : [];
-        cachedTeachers = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        cachedTeachers = [];
-      }
-      setCourses(cachedCourses);
-      setTeachers(cachedTeachers);
+      const cachedCourses = await cacheGet<Course[]>(COURSES_CACHE_KEY).catch(() => null);
+      const cachedTeachers = await cacheGet<Teacher[]>(TEACHERS_CACHE_KEY).catch(() => null);
+      setCourses(Array.isArray(cachedCourses) ? cachedCourses : []);
+      setTeachers(Array.isArray(cachedTeachers) ? cachedTeachers : []);
     } finally {
       setLoading(false);
     }
   };
 
+  function cursorFromItems(items: { order: number; id: string }[]): QueryCursor {
+    if (!items.length) return null;
+    const last = items[items.length - 1];
+    return { order: Number(last.order || 0), id: String(last.id) };
+  }
+
+  function cursorFromIdItems(items: { id: string }[]): QueryCursor {
+    if (!items.length) return null;
+    const last = items[items.length - 1];
+    return { order: 0, id: String(last.id) };
+  }
+
+  function buildCourseModule(docItem: any): CourseModule {
+    const data = docItem.data() as any;
+    return {
+      id: docItem.id,
+      course_id: String(data.course_id || ''),
+      title: String(data.title || 'Module'),
+      order: Number(data.order || 0),
+    };
+  }
+
+  function buildLesson(docItem: any): Lesson {
+    const data = docItem.data() as any;
+    return {
+      id: docItem.id,
+      course_id: String(data.course_id || ''),
+      module_id: String(data.module_id || ''),
+      title: String(data.title || 'Lesson'),
+      order: Number(data.order || 0),
+      description: data.description ? String(data.description) : '',
+      duration_minutes: data.duration_minutes != null ? Number(data.duration_minutes) : undefined,
+      content_url: data.content_url ? String(data.content_url) : undefined,
+      video_url: data.video_url ? String(data.video_url) : undefined,
+      pdf_url: data.pdf_url ? String(data.pdf_url) : undefined,
+      quiz_id: data.quiz_id ? String(data.quiz_id) : undefined,
+      resources: Array.isArray(data.resources) ? data.resources : undefined,
+    };
+  }
+
+  function buildAssignment(docItem: any): Assignment {
+    const data = docItem.data() as any;
+    return {
+      id: docItem.id,
+      lesson_id: String(data.lesson_id || ''),
+      module_id: String(data.module_id || ''),
+      course_id: String(data.course_id || ''),
+      title: String(data.title || 'Assignment'),
+      description: String(data.description || ''),
+      due_date: data.due_date ? String(data.due_date) : undefined,
+      file_url: data.file_url ? String(data.file_url) : undefined,
+    };
+  }
+
+  function buildSubmission(docItem: any): AssignmentSubmission {
+    const data = docItem.data() as any;
+    return {
+      id: docItem.id,
+      user_id: String(data.user_id || ''),
+      assignment_id: String(data.assignment_id || ''),
+      file_url: data.file_url ? String(data.file_url) : undefined,
+      text_answer: data.text_answer ? String(data.text_answer) : undefined,
+      status: data.status === 'reviewed' ? 'reviewed' : 'submitted',
+      feedback: data.feedback ? String(data.feedback) : undefined,
+      grade: data.grade ? String(data.grade) : undefined,
+      created_at: data.created_at || null,
+      reviewed_at: data.reviewed_at || null,
+      reviewer_id: data.reviewer_id ? String(data.reviewer_id) : undefined,
+    };
+  }
+
+  async function loadCourseModules(courseId: string, append = false): Promise<void> {
+    const contentKey = `courseModules:${courseId}`;
+    setCourseContentLoading((prev) => ({ ...prev, [contentKey]: true }));
+    setCourseContentError((prev) => ({ ...prev, [contentKey]: '' }));
+
+    try {
+      const existingModules = modules.filter((module) => module.course_id === courseId).sort((a, b) => a.order - b.order);
+      if (!append) {
+        const cachedModules = await cacheGet<CourseModule[]>(getCourseModulesCacheKey(courseId));
+        if (cachedModules?.length) {
+          setModules((prev) => mergeUniqueById(prev.filter((m) => m.course_id !== courseId), cachedModules));
+          setHasMoreModulesByCourse((prev) => ({ ...prev, [courseId]: cachedModules.length >= QUERY_CHUNK }));
+          setModuleCursorByCourse((prev) => ({ ...prev, [courseId]: cursorFromItems(cachedModules) }));
+          return;
+        }
+      }
+
+      const cursor = append
+        ? moduleCursorByCourse[courseId] || cursorFromItems(existingModules)
+        : null;
+
+      let modulesQuery = query(
+        collection(db, 'modules'),
+        where('course_id', '==', courseId),
+        orderBy('order', 'asc'),
+        orderBy(documentId(), 'asc'),
+        limit(QUERY_CHUNK),
+      );
+      if (cursor) modulesQuery = query(modulesQuery, startAfter(cursor.order, cursor.id));
+
+      const moduleSnap = await withTimeout(getDocs(modulesQuery));
+      const nextModules = moduleSnap.docs.map(buildCourseModule);
+      setModules((prev) => {
+        const filtered = append ? prev : prev.filter((module) => module.course_id !== courseId);
+        return mergeUniqueById(filtered, nextModules);
+      });
+      setModuleCursorByCourse((prev) => ({ ...prev, [courseId]: cursorFromItems(nextModules) }));
+      setHasMoreModulesByCourse((prev) => ({ ...prev, [courseId]: nextModules.length === QUERY_CHUNK }));
+      if (!append) {
+        await cacheSet(getCourseModulesCacheKey(courseId), nextModules, COURSE_MODULES_CACHE_TTL_MS).catch(() => {});
+      }
+    } catch (err: unknown) {
+      setCourseContentError((prev) => ({ ...prev, [contentKey]: normalizeFirebaseError(err, 'Failed to fetch course modules') }));
+    } finally {
+      setCourseContentLoading((prev) => ({ ...prev, [contentKey]: false }));
+    }
+  }
+
+  async function loadLessonsForModule(moduleId: string, append = false): Promise<void> {
+    const contentKey = `moduleLessons:${moduleId}`;
+    setCourseContentLoading((prev) => ({ ...prev, [contentKey]: true }));
+    setCourseContentError((prev) => ({ ...prev, [contentKey]: '' }));
+
+    try {
+      const existingLessons = lessons.filter((lesson) => lesson.module_id === moduleId).sort((a, b) => a.order - b.order);
+      if (!append) {
+        const cachedLessons = await cacheGet<Lesson[]>(getModuleLessonsCacheKey(moduleId));
+        if (cachedLessons?.length) {
+          setLessons((prev) => mergeUniqueById(prev.filter((lesson) => lesson.module_id !== moduleId), cachedLessons));
+          setHasMoreLessonsByModule((prev) => ({ ...prev, [moduleId]: cachedLessons.length >= QUERY_CHUNK }));
+          setLessonCursorByModule((prev) => ({ ...prev, [moduleId]: cursorFromItems(cachedLessons) }));
+          return;
+        }
+      }
+
+      const cursor = append
+        ? lessonCursorByModule[moduleId] || cursorFromItems(existingLessons)
+        : null;
+
+      let lessonsQuery = query(
+        collection(db, 'lessons'),
+        where('module_id', '==', moduleId),
+        orderBy('order', 'asc'),
+        orderBy(documentId(), 'asc'),
+        limit(QUERY_CHUNK),
+      );
+      if (cursor) lessonsQuery = query(lessonsQuery, startAfter(cursor.order, cursor.id));
+
+      const lessonSnap = await withTimeout(getDocs(lessonsQuery));
+      const nextLessons = lessonSnap.docs.map(buildLesson);
+      setLessons((prev) => {
+        const filtered = append ? prev : prev.filter((lesson) => lesson.module_id !== moduleId);
+        return mergeUniqueById(filtered, nextLessons);
+      });
+      setLessonCursorByModule((prev) => ({ ...prev, [moduleId]: cursorFromItems(nextLessons) }));
+      setHasMoreLessonsByModule((prev) => ({ ...prev, [moduleId]: nextLessons.length === QUERY_CHUNK }));
+      if (!append) {
+        await cacheSet(getModuleLessonsCacheKey(moduleId), nextLessons, MODULE_LESSONS_CACHE_TTL_MS).catch(() => {});
+      }
+    } catch (err: unknown) {
+      setCourseContentError((prev) => ({ ...prev, [contentKey]: normalizeFirebaseError(err, 'Failed to fetch module lessons') }));
+    } finally {
+      setCourseContentLoading((prev) => ({ ...prev, [contentKey]: false }));
+    }
+  }
+
+  async function loadAssignmentsForLesson(lessonId: string, append = false): Promise<void> {
+    const contentKey = `lessonAssignments:${lessonId}`;
+    setCourseContentLoading((prev) => ({ ...prev, [contentKey]: true }));
+    setCourseContentError((prev) => ({ ...prev, [contentKey]: '' }));
+
+    try {
+      const existingAssignments = assignments.filter((assignment) => assignment.lesson_id === lessonId);
+      if (!append) {
+        const cachedAssignments = await cacheGet<Assignment[]>(getLessonAssignmentsCacheKey(lessonId));
+        if (cachedAssignments?.length) {
+          setAssignments((prev) => mergeUniqueById(prev.filter((assignment) => assignment.lesson_id !== lessonId), cachedAssignments));
+          setHasMoreAssignmentsByLesson((prev) => ({ ...prev, [lessonId]: cachedAssignments.length >= QUERY_CHUNK }));
+          setAssignmentCursorByLesson((prev) => ({ ...prev, [lessonId]: cursorFromIdItems(cachedAssignments) }));
+          return;
+        }
+      }
+
+      const cursor = append
+        ? assignmentCursorByLesson[lessonId] || (existingAssignments.length ? { order: 0, id: existingAssignments[existingAssignments.length - 1].id } : null)
+        : null;
+
+      let assignmentQuery = query(
+        collection(db, 'assignments'),
+        where('lesson_id', '==', lessonId),
+        orderBy(documentId(), 'asc'),
+        limit(QUERY_CHUNK),
+      );
+      if (cursor) assignmentQuery = query(assignmentQuery, startAfter(cursor.id));
+
+      const assignmentSnap = await withTimeout(getDocs(assignmentQuery));
+      const nextAssignments = assignmentSnap.docs.map(buildAssignment);
+      setAssignments((prev) => {
+        const filtered = append ? prev : prev.filter((assignment) => assignment.lesson_id !== lessonId);
+        return mergeUniqueById(filtered, nextAssignments);
+      });
+      setAssignmentCursorByLesson((prev) => ({ ...prev, [lessonId]: nextAssignments.length ? { order: 0, id: nextAssignments[nextAssignments.length - 1].id } : null }));
+      setHasMoreAssignmentsByLesson((prev) => ({ ...prev, [lessonId]: nextAssignments.length === QUERY_CHUNK }));
+      if (!append) {
+        await cacheSet(getLessonAssignmentsCacheKey(lessonId), nextAssignments, LESSON_ASSIGNMENTS_CACHE_TTL_MS).catch(() => {});
+      }
+    } catch (err: unknown) {
+      setCourseContentError((prev) => ({ ...prev, [contentKey]: normalizeFirebaseError(err, 'Failed to fetch lesson assignments') }));
+    } finally {
+      setCourseContentLoading((prev) => ({ ...prev, [contentKey]: false }));
+    }
+  }
+
+  async function loadSubmissionsForAssignment(assignmentId: string): Promise<void> {
+    const contentKey = `assignmentSubmissions:${assignmentId}`;
+    setCourseContentLoading((prev) => ({ ...prev, [contentKey]: true }));
+    setCourseContentError((prev) => ({ ...prev, [contentKey]: '' }));
+
+    try {
+      if (!assignmentId) {
+        throw new Error('Invalid assignment id');
+      }
+
+      const cachedSubmissions = await cacheGet<AssignmentSubmission[]>(getAssignmentSubmissionsCacheKey(assignmentId));
+      if (cachedSubmissions?.length) {
+        setSubmissions((prev) => mergeUniqueById(prev.filter((submission) => submission.assignment_id !== assignmentId), cachedSubmissions));
+        setCourseContentError((prev) => ({ ...prev, [assignmentId]: '' }));
+        return;
+      }
+
+      const submissionsQuery = query(
+        collection(db, 'submissions'),
+        where('assignment_id', '==', assignmentId),
+        orderBy(documentId(), 'asc'),
+        limit(200),
+      );
+      const submissionSnap = await withTimeout(getDocs(submissionsQuery));
+      const nextSubmissions = submissionSnap.docs.map(buildSubmission);
+      setSubmissions((prev) => mergeUniqueById(prev.filter((submission) => submission.assignment_id !== assignmentId), nextSubmissions));
+      await cacheSet(getAssignmentSubmissionsCacheKey(assignmentId), nextSubmissions, ASSIGNMENT_SUBMISSIONS_CACHE_TTL_MS).catch(() => {});
+      setCourseContentError((prev) => ({ ...prev, [assignmentId]: '' }));
+    } catch (err: unknown) {
+      setCourseContentError((prev) => ({ ...prev, [contentKey]: normalizeFirebaseError(err, 'Failed to fetch submissions') }));
+    } finally {
+      setCourseContentLoading((prev) => ({ ...prev, [contentKey]: false }));
+    }
+  }
+
+  const fetchCourseModules = useCallback((courseId: string) => loadCourseModules(courseId, false), [modules]);
+  const fetchMoreCourseModules = useCallback((courseId: string) => loadCourseModules(courseId, true), [modules, moduleCursorByCourse]);
+  const fetchLessonsForModule = useCallback((moduleId: string) => loadLessonsForModule(moduleId, false), [lessons]);
+  const fetchMoreLessonsForModule = useCallback((moduleId: string) => loadLessonsForModule(moduleId, true), [lessons, lessonCursorByModule]);
+  const fetchAssignmentsForLesson = useCallback((lessonId: string) => loadAssignmentsForLesson(lessonId, false), [assignments]);
+  const fetchMoreAssignmentsForLesson = useCallback((lessonId: string) => loadAssignmentsForLesson(lessonId, true), [assignments, assignmentCursorByLesson]);
+
+  const fetchSubmissionsForAssignment = useCallback((assignmentId: string) => loadSubmissionsForAssignment(assignmentId), []);
 
   const fetchLearning = useCallback(async () => {
     if (!user?.uid) {
@@ -325,6 +642,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setAssignments([]);
       setSubmissions([]);
       setLessonProgress({});
+      setLastOpenedLessonId(null);
       return;
     }
 
@@ -341,89 +659,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         withTimeout(getDoc(doc(db, 'learning_state', user.uid))),
       ]);
 
-      let courseIds: string[] = [];
-      if (profile?.role === 'student') {
-        const enrolledSnap = await withTimeout(getDocs(query(
-          collection(db, 'enrollments'),
-          where('user_id', '==', user.uid),
-          where('status', '==', 'active'),
-          limit(200),
-        )));
-        courseIds = Array.from(new Set(enrolledSnap.docs.map((d) => {
-          const data = d.data() as { course_id?: string };
-          return String(data.course_id || '');
-        }).filter(Boolean)));
-      } else if (profile?.role === 'teacher') {
-        const taught = courses.filter((c) => String(c.teacher_name || '').trim() === String(profile.name || '').trim()).map((c) => c.id);
-        courseIds = Array.from(new Set(taught));
-      }
-
-      const moduleSnaps = profile?.role === 'admin' || courseIds.length === 0
-        ? [await withTimeout(getDocs(query(collection(db, 'modules'), limit(1200))))]
-        : await Promise.all(chunkIds(courseIds).map((ids) => withTimeout(getDocs(query(
-          collection(db, 'modules'),
-          where('course_id', 'in', ids),
-        )))));
-
-      const nextModules: CourseModule[] = [];
-      moduleSnaps.forEach((moduleSnap) => moduleSnap.forEach((d) => {
-        const data = d.data() as any;
-        nextModules.push({
-          id: d.id,
-          course_id: String(data.course_id || ''),
-          title: String(data.title || 'Module'),
-          order: Number(data.order || 0),
-        });
-      }));
-
-      const moduleIds = Array.from(new Set(nextModules.map((m) => m.id))).filter(Boolean);
-      const lessonSnaps = profile?.role === 'admin' || moduleIds.length === 0
-        ? [await withTimeout(getDocs(query(collection(db, 'lessons'), limit(1500))))]
-        : await Promise.all(chunkIds(moduleIds).map((ids) => withTimeout(getDocs(query(
-          collection(db, 'lessons'),
-          where('module_id', 'in', ids),
-        )))));
-
-      const nextLessons: Lesson[] = [];
-      lessonSnaps.forEach((lessonSnap) => lessonSnap.forEach((d) => {
-        const data = d.data() as any;
-        nextLessons.push({
-          id: d.id,
-          course_id: String(data.course_id || ''),
-          module_id: String(data.module_id || ''),
-          title: String(data.title || 'Lesson'),
-          order: Number(data.order || 0),
-          description: data.description ? String(data.description) : '',
-          duration_minutes: Number(data.duration_minutes || 0) || undefined,
-          content_url: data.content_url ? String(data.content_url) : undefined,
-          video_url: data.video_url ? String(data.video_url) : undefined,
-          pdf_url: data.pdf_url ? String(data.pdf_url) : undefined,
-          quiz_id: data.quiz_id ? String(data.quiz_id) : undefined,
-          resources: Array.isArray(data.resources) ? data.resources : undefined,
-        });
-      }));
-      const lessonIds = Array.from(new Set(nextLessons.map((l) => l.id))).filter(Boolean);
-      const assignmentSnaps = profile?.role === 'admin' || lessonIds.length === 0
-        ? [await withTimeout(getDocs(query(collection(db, 'assignments'), limit(1500))))]
-        : await Promise.all(chunkIds(lessonIds).map((ids) => withTimeout(getDocs(query(
-          collection(db, 'assignments'),
-          where('lesson_id', 'in', ids),
-        )))));
-      const nextAssignments: Assignment[] = [];
-      assignmentSnaps.forEach((assignmentSnap) => assignmentSnap.forEach((d) => {
-        const data = d.data() as any;
-        nextAssignments.push({
-          id: d.id,
-          lesson_id: String(data.lesson_id || ''),
-          module_id: String(data.module_id || ''),
-          course_id: String(data.course_id || ''),
-          title: String(data.title || 'Assignment'),
-          description: String(data.description || ''),
-          due_date: data.due_date ? String(data.due_date) : undefined,
-          file_url: data.file_url ? String(data.file_url) : undefined,
-        });
-      }));
-
       const nextProgress: Record<string, LessonProgressState> = {};
       progressSnap.forEach((d) => {
         const data = d.data() as any;
@@ -435,6 +670,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           };
         }
       });
+
       const nextSubmissions: AssignmentSubmission[] = [];
       submissionSnap.forEach((d) => {
         const data = d.data() as any;
@@ -452,6 +688,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           reviewer_id: data.reviewer_id ? String(data.reviewer_id) : '',
         });
       });
+
       if (learningStateSnap.exists()) {
         const state = learningStateSnap.data() as any;
         setLastOpenedLessonId(state.last_opened_lesson_id ? String(state.last_opened_lesson_id) : null);
@@ -459,21 +696,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setLastOpenedLessonId(null);
       }
 
-      setModules(nextModules.sort((a, b) => a.order - b.order));
-      setLessons(nextLessons.sort((a, b) => a.order - b.order));
-      setAssignments(nextAssignments);
       setLessonProgress(nextProgress);
       setSubmissions(nextSubmissions);
     } catch (err: any) {
       logger.warn('Failed to fetch structured learning:', normalizeFirebaseError(err, 'Failed to fetch learning'));
-      setModules([]);
-      setLessons([]);
-      setAssignments([]);
       setSubmissions([]);
       setLessonProgress({});
       setLastOpenedLessonId(null);
     }
-  }, [courses, profile?.role, user?.uid]);
+  }, [profile?.role, user?.uid]);
 
   const addBook = async (
     title: string,
@@ -754,7 +985,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     <DataContext.Provider value={{
       courses, teachers, books, loading, booksLoading, error,
       modules, lessons, assignments, submissions, lessonProgress,
+      courseContentLoading, courseContentError,
+      hasMoreModulesByCourse, hasMoreLessonsByModule, hasMoreAssignmentsByLesson,
       refetch: fetchData, refetchBooks: fetchBooks, refetchLearning: fetchLearning,
+      fetchCourseModules, fetchMoreCourseModules,
+      fetchLessonsForModule, fetchMoreLessonsForModule,
+      fetchAssignmentsForLesson, fetchMoreAssignmentsForLesson,
+      fetchSubmissionsForAssignment,
       getModulesForCourse, getLessonsForModule, getLessonById, getAssignmentsForLesson,
       getSubmissionForAssignment, getSubmissionsForAssignment,
       markLessonOpened, markLessonComplete, markLessonQuizComplete, submitAssignment, reviewSubmission,

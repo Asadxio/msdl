@@ -15,6 +15,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
+import * as FileSystem from 'expo-file-system';
 import { auth, db, storage } from '@/lib/firebase';
 
 export const AUDIO_LESSON_MAX_BYTES = 100 * 1024 * 1024;
@@ -149,6 +150,51 @@ export async function fetchAudioLessonsPage(
   };
 }
 
+const MAX_UPLOAD_ATTEMPTS = 2;
+const UPLOAD_RETRY_DELAY_MS = 700;
+
+function getUriScheme(uri: string) {
+  const normalized = uri.trim();
+  if (normalized.startsWith('content://')) return 'content';
+  if (normalized.startsWith('file://')) return 'file';
+  if (/^https?:\/\//i.test(normalized)) return 'http';
+  return 'file';
+}
+
+function getTempCacheUri(fileName: string) {
+  return `${FileSystem.cacheDirectory}${Date.now()}_${sanitizeFileName(fileName)}`;
+}
+
+async function createBlobFromLocalUri(uri: string, mimeType: string, fileName: string) {
+  const scheme = getUriScheme(uri);
+  let localUri = uri;
+  let tempCacheUri: string | null = null;
+
+  if (scheme === 'content') {
+    tempCacheUri = getTempCacheUri(fileName);
+    await FileSystem.copyAsync({ from: uri, to: tempCacheUri });
+    localUri = tempCacheUri;
+  }
+
+  const base64Data = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
+  if (!base64Data) throw new Error('Selected audio file is empty.');
+
+  const blob = await fetch(`data:${mimeType};base64,${base64Data}`).then((response) => response.blob());
+  return { blob, size: blob.size, tempCacheUri };
+}
+
+async function createBlobFromUri(uri: string, mimeType: string, fileName: string) {
+  const scheme = getUriScheme(uri);
+  if (scheme === 'http') {
+    const response = await fetch(uri);
+    if (!response.ok) throw new Error(`Could not download selected audio file (${response.status}).`);
+    const blob = await response.blob();
+    return { blob, size: blob.size, tempCacheUri: null };
+  }
+
+  return createBlobFromLocalUri(uri, mimeType, fileName);
+}
+
 export async function uploadAudioLesson(
   input: UploadAudioLessonInput,
   onProgress?: (progress: number) => void,
@@ -161,37 +207,63 @@ export async function uploadAudioLesson(
   const safeName = sanitizeFileName(input.fileName);
   const storagePath = `audio_lessons/${input.courseId}/${input.teacherId}/${Date.now()}_${safeName}`;
 
-  const uploadOnce = async (): Promise<{ downloadUrl: string; size: number }> => {
-    const response = await fetch(input.uri);
-    if (!response.ok) throw new Error(`Could not read selected audio file (${response.status}).`);
-    const blob = await response.blob();
-    if (!blob.size) throw new Error('Selected audio file is empty.');
-    if (blob.size > AUDIO_LESSON_MAX_BYTES) throw new Error('Audio file is too large. Maximum upload size is 100 MB.');
-    const fileRef = ref(storage, storagePath);
-    const task = uploadBytesResumable(fileRef, blob, {
-      contentType: mimeType,
-      customMetadata: {
-        course_id: input.courseId,
-        teacher_id: input.teacherId,
-        uploaded_by: auth.currentUser?.uid || input.teacherId,
-      },
-    });
-    await new Promise<void>((resolve, reject) => {
-      task.on('state_changed',
-        (snap) => onProgress?.(snap.totalBytes ? snap.bytesTransferred / snap.totalBytes : 0),
-        (error) => reject(error),
-        () => resolve(),
-      );
-    });
-    return { downloadUrl: await getDownloadURL(fileRef), size: blob.size };
+  let tempCacheUri: string | null = null;
+  let lastError: unknown;
+  let uploaded: { downloadUrl: string; size: number } | null = null;
+
+  const cleanupTempFile = async () => {
+    if (!tempCacheUri) return;
+    try {
+      await FileSystem.deleteAsync(tempCacheUri, { idempotent: true });
+    } catch {
+      // ignore cleanup failure
+    }
   };
 
-  let uploaded: { downloadUrl: string; size: number };
-  try {
-    uploaded = await uploadOnce();
-  } catch (error) {
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    uploaded = await uploadOnce();
+  for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      const { blob, size, tempCacheUri: createdTemp } = await createBlobFromUri(input.uri, mimeType, input.fileName);
+      if (createdTemp) tempCacheUri = createdTemp;
+      if (!size) throw new Error('Selected audio file is empty.');
+      if (size > AUDIO_LESSON_MAX_BYTES) throw new Error('Audio file is too large. Maximum upload size is 100 MB.');
+
+      const fileRef = ref(storage, storagePath);
+      const task = uploadBytesResumable(fileRef, blob, {
+        contentType: mimeType,
+        customMetadata: {
+          course_id: input.courseId,
+          teacher_id: input.teacherId,
+          uploaded_by: auth.currentUser?.uid || input.teacherId,
+        },
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        task.on(
+          'state_changed',
+          (snap) => {
+            const progress = snap.totalBytes ? snap.bytesTransferred / snap.totalBytes : 0;
+            onProgress?.(Math.round(progress * 100));
+          },
+          (error) => reject(error),
+          () => resolve(),
+        );
+      });
+
+      uploaded = { downloadUrl: await getDownloadURL(fileRef), size };
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_UPLOAD_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, UPLOAD_RETRY_DELAY_MS));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (!uploaded) {
+    await cleanupTempFile();
+    throw lastError ?? new Error('Upload failed.');
   }
 
   const docRef = await addDoc(collection(db, 'audio_lessons'), {
@@ -209,7 +281,9 @@ export async function uploadAudioLesson(
     mime_type: mimeType,
     storage_path: storagePath,
   });
-  onProgress?.(1);
+
+  await cleanupTempFile();
+  onProgress?.(100);
   return docRef.id;
 }
 

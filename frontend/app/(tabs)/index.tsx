@@ -14,16 +14,13 @@ import {
   ActivityIndicator,
   Linking,
   Animated,
-  Easing,
+  Linking,
   Platform,
-  useColorScheme,
-} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
-import {
   collection,
   doc,
   getDoc,
@@ -44,7 +41,6 @@ import {
   getCourseImage,
   getTeacherAvatar,
 } from "@/constants/theme";
-import { calculateQiblaState, formatDistanceToKaaba } from '@/lib/qibla';
 import { type Course, useData } from "@/context/DataContext";
 import { db } from "@/lib/firebase";
 import { EmptyState, ScalePressable, SkeletonCard } from "@/components/ui";
@@ -540,7 +536,6 @@ export default function HomeScreen() {
     DEFAULT_ANNOUNCEMENT_DESC,
   );
   const [noticeModalVisible, setNoticeModalVisible] = useState(false);
-  const [qiblaEntryVisible, setQiblaEntryVisible] = useState(false);
   const [noticeDraftTitle, setNoticeDraftTitle] = useState("");
   const [noticeDraftMessage, setNoticeDraftMessage] = useState("");
   const [savingNotice, setSavingNotice] = useState(false);
@@ -550,7 +545,6 @@ export default function HomeScreen() {
   const [themeIndex, setThemeIndex] = useState(0);
   const [locationDetails, setLocationDetails] =
     useState<LocationDetails>(FALLBACK_LOCATION);
-  const pulseAnim = useRef(new Animated.Value(0)).current;
   const locationRequestRef = useRef(false);
   const [featuredCoursesExpanded, setFeaturedCoursesExpanded] = useState(
     featuredCoursesExpandedCache,
@@ -566,126 +560,9 @@ export default function HomeScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1800,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0,
-          duration: 1800,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, [pulseAnim]);
-
   const requestLocation = useCallback(async () => {
-    if (locationRequestRef.current) return;
-    locationRequestRef.current = true;
-    setLocationDetails((current) => ({ ...current, permission: "requesting" }));
-    try {
-      const { position, place, permission } = await requestDeviceLocation();
-      if (!position) {
-        setLocationDetails((current) => ({
-          ...current,
-          permission,
-        }));
-        return;
-      }
-
-      const { latitude, longitude, altitude } = position.coords;
-      let resolvedPlace = {
-        city:
-          place?.city ||
-          place?.district ||
-          place?.subregion ||
-          "Detected location",
-        state: place?.region || place?.subregion || "State unavailable",
-        country:
-          place?.country || place?.isoCountryCode || "Prayer times localized",
-      };
-
-      if (!place && Platform.OS === "web") {
-        try {
-          const response = await fetch(
-            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
-          );
-          const data = await response.json();
-          resolvedPlace = {
-            city:
-              data.city ||
-              data.locality ||
-              data.principalSubdivision ||
-              "Detected location",
-            state:
-              data.principalSubdivision ||
-              data.localityInfo?.administrative?.[1]?.name ||
-              "State unavailable",
-            country:
-              data.countryName || data.countryCode || "Country unavailable",
-          };
-        } catch {
-          // Keep coordinate-based prayer times even if reverse geocoding is unavailable.
-        }
-      }
-
-      const nextLocation = {
-        city: resolvedPlace.city,
-        state: resolvedPlace.state,
-        country: resolvedPlace.country,
-        timezone:
-          Intl.DateTimeFormat().resolvedOptions().timeZone || "Local timezone",
-        gmt: formatGmtOffset(new Date()),
-        elevation:
-          typeof altitude === "number" ? `${Math.round(altitude)} m` : "—",
-        latitude,
-        longitude,
-        permission: "granted" as const,
-      };
-      setLocationDetails(nextLocation);
-      await AsyncStorage.setItem(PRAYER_LOCATION_CACHE_KEY, JSON.stringify(nextLocation)).catch(() => {});
-    } finally {
-      locationRequestRef.current = false;
-    }
+    // Stubbed: location-based Islamic dashboard was moved to More/Applications/Islamic Dashboard.
   }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    AsyncStorage.getItem(PRAYER_LOCATION_CACHE_KEY)
-      .then((raw) => {
-        if (!mounted || !raw) return;
-        const cached = JSON.parse(raw) as LocationDetails;
-        if (typeof cached?.latitude === "number" && typeof cached?.longitude === "number") {
-          setLocationDetails({ ...cached, permission: cached.permission || "granted" });
-        }
-      })
-      .catch(() => {});
-    requestLocation().catch(() => {
-      setLocationDetails((current) => ({
-        ...current,
-        permission: current.permission === "granted" ? "granted" : "unavailable",
-      }));
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [requestLocation]);
-
-  useEffect(() => {
-    const nextMidnight = new Date(now);
-    nextMidnight.setHours(24, 0, 5, 0);
-    const timer = setTimeout(() => {
-      setNow(new Date());
-      requestLocation().catch(() => {});
-    }, Math.max(1000, nextMidnight.getTime() - now.getTime()));
-    return () => clearTimeout(timer);
-  }, [now, requestLocation]);
 
   useEffect(() => {
     const loadNotice = async () => {
@@ -748,30 +625,8 @@ export default function HomeScreen() {
       announcementMessage === DEFAULT_ANNOUNCEMENT_DESC,
     [announcementMessage, announcementTitle],
   );
-  const selectedIslamicTheme =
-    ISLAMIC_THEMES[themeIndex % ISLAMIC_THEMES.length];
-  const prayerSettings = useMemo(
-    () => getPrayerCalculationSettings(locationDetails.country),
-    [locationDetails.country],
-  );
-  const prayerTimes = useMemo(() => calculatePrayerTimes(
-    now,
-    locationDetails.latitude,
-    locationDetails.longitude,
-    prayerSettings,
-  ), [locationDetails.latitude, locationDetails.longitude, now, prayerSettings]);
-  const prayerWindow = getPrayerWindow(
-    prayerTimes,
-    now,
-    locationDetails.latitude,
-    locationDetails.longitude,
-    prayerSettings,
-  );
-  const dashboardQibla = calculateQiblaState(locationDetails, 0);
-  const calendarInfo = getIslamicCalendar(now);
-  const countdown = formatDuration(
-    prayerWindow.next.time.getTime() - now.getTime(),
-  );
+  const isDarkMode = colorScheme === "dark";
+  // Islamic dashboard moved to More → Applications → Islamic Dashboard
   const isDarkMode = colorScheme === "dark";
   const resumeLearning = useMemo(
     () => getResumeLearning(),
@@ -874,129 +729,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Compact Islamic Dashboard */}
-        <View style={styles.dashboardOuter} testID="compact-islamic-dashboard">
-          <Image source={{ uri: selectedIslamicTheme.image }} style={styles.dashboardBgImage} />
-          <View style={[styles.dashboardTint, { backgroundColor: selectedIslamicTheme.tint }]} />
-          <View style={styles.dashboardContent}>
-            <View style={styles.dashboardTopRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.dashboardEyebrow}>Islamic Dashboard</Text>
-                <Text style={styles.dashboardTitle}>Today’s Prayer Snapshot</Text>
-                <Text style={styles.dashboardSubtitle}>Hijri: {calendarInfo.hijriDate}</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.themeButton, { borderColor: selectedIslamicTheme.accent }]}
-                onPress={() => setThemeIndex((value) => value + 1)}
-                accessibilityRole="button"
-                accessibilityLabel="Change compact Islamic dashboard theme"
-              >
-                <Ionicons name="color-palette-outline" size={14} color={selectedIslamicTheme.accent} />
-                <Text style={[styles.themeButtonText, { color: selectedIslamicTheme.accent }]}>Theme</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.compactPrayerGrid}>
-              <View style={styles.compactMetricCard}>
-                <Text style={styles.compactMetricLabel}>Current Prayer</Text>
-                <Text style={styles.compactMetricValue}>{prayerWindow.current.name}</Text>
-              </View>
-              <View style={styles.compactMetricCard}>
-                <Text style={styles.compactMetricLabel}>Next Prayer</Text>
-                <Text style={styles.compactMetricValue}>{prayerWindow.next.name}</Text>
-              </View>
-              <View style={styles.compactMetricCard}>
-                <Text style={styles.compactMetricLabel}>Remaining</Text>
-                <Text style={styles.compactMetricValue}>{countdown}</Text>
-              </View>
-              <View style={styles.compactMetricCard}>
-                <Text style={styles.compactMetricLabel}>Hijri</Text>
-                <Text style={styles.compactMetricValue}>{calendarInfo.hijriDate}</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.qiblaShortcutCard}
-              onPress={() => setQiblaEntryVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel={`Open Qibla finder. Direction ${dashboardQibla.directionAbbreviation}. Distance ${formatDistanceToKaaba(dashboardQibla.distanceKm)}.`}
-              testID="dashboard-qibla-shortcut"
-            >
-              <View style={styles.qiblaShortcutIcon}>
-                <Ionicons name="compass-outline" size={22} color={COLORS.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.qiblaShortcutTitle}>Qibla</Text>
-                <Text style={styles.qiblaShortcutText}>
-                  {dashboardQibla.directionAbbreviation} • {formatDistanceToKaaba(dashboardQibla.distanceKm)}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#fff" />
-            </TouchableOpacity>
-
-            <View style={[styles.compactLocationCard, isDarkMode && styles.glassPanelDark]}>
-              <Ionicons name="location-outline" size={18} color={selectedIslamicTheme.accent} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.compactMetricLabel}>Location</Text>
-                <Text style={styles.compactLocationText}>{locationDetails.state}, {locationDetails.country}</Text>
-              </View>
-              <TouchableOpacity style={styles.locationButton} onPress={() => requestLocation().catch(() => {})} accessibilityRole="button" accessibilityLabel="Refresh prayer location">
-                <Ionicons name="locate-outline" size={13} color="#fff" />
-                <Text style={styles.locationButtonText}>Refresh</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Modal visible={qiblaEntryVisible} transparent animationType="fade" onRequestClose={() => setQiblaEntryVisible(false)}>
-              <View style={styles.qiblaModalBackdrop}>
-                <View style={[styles.qiblaEntryModal, isDarkMode && styles.qiblaEntryModalDark]}>
-                  <Text style={styles.qiblaModalEyebrow}>Professional Qibla Finder</Text>
-                  <Text style={styles.qiblaModalTitle}>Choose Qibla mode</Text>
-                  <TouchableOpacity
-                    style={styles.qiblaEntryOption}
-                    onPress={() => { setQiblaEntryVisible(false); openGoogleQiblaFinder(); }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open Google Camera Qibla Finder. Internet required. Opens in browser."
-                    testID="dashboard-google-qibla-finder-option"
-                  >
-                    <View style={styles.qiblaEntryIcon}><Ionicons name="camera-outline" size={26} color={COLORS.primary} /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.qiblaEntryTitle}>📷 Google Camera Qibla Finder</Text>
-                      <Text style={styles.qiblaEntryText}>Google Camera Qibla Finder (Internet Required). Opens the verified browser experience.</Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.qiblaEntryOption}
-                    onPress={() => { setQiblaEntryVisible(false); safePush('/qibla?mode=compass'); }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open Compass Qibla Direction in the app"
-                    testID="dashboard-compass-qibla-direction-option"
-                  >
-                    <View style={styles.qiblaEntryIcon}><Ionicons name="compass-outline" size={26} color={COLORS.primary} /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.qiblaEntryTitle}>🧭 Compass Qibla Direction</Text>
-                      <Text style={styles.qiblaEntryText}>Bearing, heading, calibration, distance, and offline cache.</Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.qiblaEntryOption}
-                    onPress={() => { setQiblaEntryVisible(false); safePush('/qibla?mode=map'); }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open map Qibla view"
-                  >
-                    <View style={styles.qiblaEntryIcon}><Ionicons name="map-outline" size={26} color={COLORS.primary} /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.qiblaEntryTitle}>🗺️ Map Qibla View</Text>
-                      <Text style={styles.qiblaEntryText}>User location, Kaaba marker, bearing line, and distance.</Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.qiblaModalClose} onPress={() => setQiblaEntryVisible(false)} accessibilityRole="button" accessibilityLabel="Close Qibla mode chooser">
-                    <Text style={styles.qiblaModalCloseText}>Close</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </Modal>
-          </View>
-        </View>
+        {/* Islamic Dashboard relocated to More → Applications → Islamic Dashboard. */}
 
         {/* Loading State */}
         {loading ? (
