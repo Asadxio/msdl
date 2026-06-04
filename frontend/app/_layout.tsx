@@ -22,6 +22,8 @@ import { startupLog } from '@/lib/startup';
 import { shouldShowOnboardingEntry } from '@/lib/onboarding';
 import { safeReplace } from '@/lib/navigation';
 import { OnboardingProvider } from '@/context/OnboardingContext';
+import { TutorialProvider } from '@/context/TutorialContext';
+import { InAppTutorialOverlay } from '@/components/ui/InAppTutorialOverlay';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -357,7 +359,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <OnboardingProvider value={{ markEntryCompleteInSession }}>
-      {children}
+      <TutorialProvider>
+        {children}
+        <InAppTutorialOverlay />
+      </TutorialProvider>
     </OnboardingProvider>
   );
 }
@@ -407,6 +412,7 @@ export default function RootLayout() {
             <Stack.Screen name="admin/moderation" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/security" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="onboarding-entry" options={{ animation: 'fade' }} />
+            <Stack.Screen name="onboarding-first-time" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />
