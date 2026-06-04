@@ -133,5 +133,13 @@ const styles = StyleSheet.create({
   appTitle: { color: COLORS.text, fontSize: 16, fontWeight: '900', letterSpacing: -0.2 },
   appSubtitle: { color: COLORS.textMuted, fontSize: 12, fontWeight: '700', marginTop: 4, lineHeight: 17 },
   comingSoon: { color: COLORS.secondary, fontSize: 12, fontWeight: '900' },
+  chevronBubble: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.goldBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   grid: { gap: SPACING.sm },
 });

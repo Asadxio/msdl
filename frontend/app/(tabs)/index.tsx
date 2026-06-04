@@ -630,7 +630,6 @@ export default function HomeScreen() {
   );
   const isDarkMode = colorScheme === "dark";
   // Islamic dashboard moved to More → Applications → Islamic Dashboard
-  const isDarkMode = colorScheme === "dark";
   const resumeLearning = useMemo(
     () => getResumeLearning(),
     [getResumeLearning],

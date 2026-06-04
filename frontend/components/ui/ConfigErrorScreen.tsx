@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     color: COLORS.error,
   },
   helpText: {
-    ...TYPOGRAPHY.small,
+    ...TYPOGRAPHY.body,
     color: COLORS.textMuted,
     marginTop: SPACING.md,
   },

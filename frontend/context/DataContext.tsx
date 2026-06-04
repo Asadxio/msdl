@@ -26,6 +26,8 @@ import { createRoleNotification } from '@/lib/notifications';
 import { cacheGet, cacheSet } from '@/lib/cacheManager';
 import { perfStart, perfEnd } from '@/lib/performanceMonitor';
 
+const QUERY_CHUNK = 25;
+
 export type Course = {
   id: string;
   name: string;

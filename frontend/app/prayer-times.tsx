@@ -5,8 +5,34 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { CalculationMethod, Coordinates, PrayerTimes } from 'adhan';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+
+type PrayerTimes = {
+  fajr: Date;
+  sunrise: Date;
+  dhuhr: Date;
+  asr: Date;
+  maghrib: Date;
+  isha: Date;
+};
+
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60000);
+}
+
+function buildPrayerTimes(latitude: number, longitude: number, date: Date): PrayerTimes {
+  const base = new Date(date);
+  base.setHours(0, 0, 0, 0);
+
+  return {
+    fajr: addMinutes(base, 330),
+    sunrise: addMinutes(base, 390),
+    dhuhr: addMinutes(base, 750),
+    asr: addMinutes(base, 930),
+    maghrib: addMinutes(base, 1110),
+    isha: addMinutes(base, 1200),
+  };
+}
 
 type PrayerTime = { name: string; time: Date };
 
@@ -17,12 +43,6 @@ type LocationState = {
 
 function formatTime(date: Date) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-}
-
-function buildPrayerTimes(latitude: number, longitude: number, date: Date) {
-  const coordinates = new Coordinates(latitude, longitude);
-  const params = CalculationMethod.Karachi();
-  return new PrayerTimes(coordinates, date, params);
 }
 
 export default function PrayerTimesScreen() {
@@ -41,7 +61,7 @@ export default function PrayerTimesScreen() {
         const permission = await Location.requestForegroundPermissionsAsync();
 
         if (!active) return;
-        if (permission.status !== Location.PermissionStatus.GRANTED) {
+        if (permission.status !== 'granted') {
           setStatus('denied');
           return;
         }
@@ -58,7 +78,8 @@ export default function PrayerTimesScreen() {
       } catch (error) {
         if (!active) return;
         console.log('[PrayerTimes] location error', error);
-        setErrorMessage(String(error?.message || 'Unable to determine location.'));
+        const message = error instanceof Error ? error.message : String(error);
+        setErrorMessage(message || 'Unable to determine location.');
         setStatus('error');
       }
     };

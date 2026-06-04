@@ -24,6 +24,16 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const ONBOARDING_GATE_TIMEOUT_MS = 2500;
 
+function formatErrorMessage(error: unknown, fallback = 'An unexpected error occurred.') {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return fallback;
+}
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
   const profileStatus = profile?.status;
@@ -35,7 +45,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       validateConfig();
       return null;
     } catch (error) {
-      return String(error?.message || 'Invalid environment configuration.');
+      return formatErrorMessage(error, 'Invalid environment configuration.');
     }
   });
   const [missingConfigVars] = useState<string[]>(() => getMissingConfigVars());
@@ -52,7 +62,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       await SplashScreen.hideAsync();
       startupLog('Splash screen hidden');
     } catch (error) {
-      startupLog('Splash screen hide failed', { message: String(error?.message || error) });
+      startupLog('Splash screen hide failed', { message: formatErrorMessage(error) });
     } finally {
       setSplashHidden(true);
     }
@@ -96,12 +106,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             settled = true;
             clearTimeout(onboardingTimeout);
             setOnboardingStatus('complete');
-            startupLog('Onboarding gate check failed', { message: String(error?.message || error) });
+            startupLog('Onboarding gate check failed', { message: formatErrorMessage(error) });
           });
       } catch (error) {
         if (mounted && !settled) {
           setOnboardingStatus('complete');
-          startupLog('Startup sequence failed before onboarding complete', { message: String(error?.message || error) });
+          startupLog('Startup sequence failed before onboarding complete', { message: formatErrorMessage(error) });
         }
       } finally {
         clearTimeout(startupFallbackTimeout);
