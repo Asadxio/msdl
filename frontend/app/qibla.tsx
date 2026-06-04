@@ -4,7 +4,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import { CameraView, requestCameraPermissionsAsync } from 'expo-camera';
+import { Camera, CameraView } from 'expo-camera';
 import { Magnetometer, type MagnetometerMeasurement } from 'expo-sensors';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -78,7 +78,7 @@ function formatCoordinate(value: number, axis: 'lat' | 'lng') {
 }
 
 async function requestCameraPermission(): Promise<CameraPermission> {
-  const permission = await requestCameraPermissionsAsync();
+  const permission = await Camera.requestCameraPermissionsAsync();
   return permission?.status === 'granted' ? 'granted' : 'denied';
 }
 
@@ -196,34 +196,18 @@ export default function QiblaScreen() {
   useEffect(() => {
     if (!isFocused || !appActive || appStateRef.current !== 'active') return undefined;
     let subscription: { remove?: () => void } | null = null;
-    let timer: ReturnType<typeof setInterval> | null = null;
-
     if (Magnetometer?.addListener) {
       setSensorStatus('active');
       Magnetometer.setUpdateInterval?.(SENSOR_UPDATE_MS);
       subscription = Magnetometer.addListener((sample) => {
         setSmoothHeading(headingFromMagnetometer(sample), headingAccuracy);
       });
-    } else if (Location?.getHeadingAsync) {
-      setSensorStatus('checking');
-      timer = setInterval(() => {
-        Location.getHeadingAsync()
-          .then((value: Location.LocationHeadingObject) => {
-            const nextHeading = value.trueHeading >= 0 ? value.trueHeading : value.magHeading;
-            if (typeof nextHeading === 'number' && nextHeading >= 0) {
-              setSensorStatus('active');
-              setSmoothHeading(nextHeading, value.accuracy);
-            }
-          })
-          .catch(() => setSensorStatus('unavailable'));
-      }, 500);
     } else {
       setSensorStatus('unavailable');
     }
 
     return () => {
       subscription?.remove?.();
-      if (timer) clearInterval(timer);
     };
   }, [appActive, headingAccuracy, isFocused, setSmoothHeading]);
 
