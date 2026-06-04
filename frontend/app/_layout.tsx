@@ -20,6 +20,8 @@ import { OnboardingProvider } from '@/context/OnboardingContext';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+const ONBOARDING_GATE_TIMEOUT_MS = 2500;
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
   const profileStatus = profile?.status;
@@ -32,19 +34,33 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let settled = false;
+    startupLog('Onboarding gate timeout scheduled', { timeoutMs: ONBOARDING_GATE_TIMEOUT_MS });
+    const timeout = setTimeout(() => {
+      if (!mounted || settled) return;
+      settled = true;
+      setOnboardingStatus('complete');
+      startupLog('Onboarding gate timed out; continuing startup', { timeoutMs: ONBOARDING_GATE_TIMEOUT_MS });
+    }, ONBOARDING_GATE_TIMEOUT_MS);
+
     shouldShowOnboardingEntry()
       .then((required) => {
-        if (!mounted) return;
+        if (!mounted || settled) return;
+        settled = true;
+        clearTimeout(timeout);
         setOnboardingStatus(required ? 'required' : 'complete');
         startupLog('Onboarding gate checked', { required });
       })
       .catch((error) => {
-        if (!mounted) return;
+        if (!mounted || settled) return;
+        settled = true;
+        clearTimeout(timeout);
         setOnboardingStatus('complete');
         startupLog('Onboarding gate check failed', { message: String(error?.message || error) });
       });
     return () => {
       mounted = false;
+      clearTimeout(timeout);
     };
   }, []);
 
@@ -289,6 +305,7 @@ export default function RootLayout() {
             <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="qibla" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="islamic-dashboard" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="islamic-calendar" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="prayer-times" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />

@@ -30,6 +30,7 @@ describe('navigation history preservation audit', () => {
       'privacy.tsx',
       'data-privacy.tsx',
       'unauthorized.tsx',
+      'islamic-dashboard.tsx',
     ];
 
     auditedScreens.forEach((screen) => {
