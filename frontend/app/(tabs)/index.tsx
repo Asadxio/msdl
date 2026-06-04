@@ -50,6 +50,8 @@ import { EmptyState, ScalePressable, SkeletonCard } from "@/components/ui";
 import { ExpandableSection } from "@/components/ExpandableSection";
 import { useAuth } from "@/context/AuthContext";
 import { normalizeGoogleDriveFileUrl } from "@/lib/links";
+import { useTutorial } from "@/context/TutorialContext";
+import { isTutorialCompleted, markTutorialCompleted } from "@/lib/tutorialStorage";
 
 const DEFAULT_ANNOUNCEMENT_TITLE = "No announcements yet";
 const DEFAULT_ANNOUNCEMENT_DESC =
@@ -528,6 +530,8 @@ export default function HomeScreen() {
   const { courses, teachers, loading, getResumeLearning, getCourseProgress } =
     useData();
   const { profile } = useAuth();
+  const { showTutorial, setShowTutorial, setCurrentStep } = useTutorial();
+  const tutorialStartedRef = useRef(false);
   const isAdmin = profile?.role === "admin";
   const safeCourses = Array.isArray(courses) ? courses : [];
   const safeTeachers = Array.isArray(teachers) ? teachers : [];
@@ -562,6 +566,27 @@ export default function HomeScreen() {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Tutorial trigger on first dashboard load
+  useEffect(() => {
+    if (!profile?.uid || tutorialStartedRef.current || showTutorial) return;
+
+    const checkAndStartTutorial = async () => {
+      try {
+        const completed = await isTutorialCompleted();
+        if (!completed) {
+          tutorialStartedRef.current = true;
+          setShowTutorial(true);
+          setCurrentStep('dashboard');
+        }
+      } catch {
+        // ignore tutorial errors
+      }
+    };
+
+    const timeout = setTimeout(checkAndStartTutorial, 800);
+    return () => clearTimeout(timeout);
+  }, [profile?.uid, setShowTutorial, setCurrentStep]);
 
   const requestLocation = useCallback(async () => {
     // Stubbed: location-based Islamic dashboard was moved to More/Applications/Islamic Dashboard.
