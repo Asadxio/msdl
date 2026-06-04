@@ -26,6 +26,7 @@ const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
 const PROFILE_CACHE_TIMEOUT_MS = 1200;
 
 export type UserProfile = {
+  uid?: string;
   name: string;
   email: string;
   role: AppRole;

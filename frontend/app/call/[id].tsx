@@ -5,7 +5,8 @@ import { ActivityIndicator, Alert, AppState, PermissionsAndroid, Platform, Statu
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
-import type { ChannelProfileType, ClientRoleType, RenderModeType, VideoSourceType, IRtcEngine, IRtcEngineEventHandler } from 'react-native-agora';
+import { ChannelProfileType, ClientRoleType } from 'react-native-agora';
+import type { RenderModeType, VideoSourceType, IRtcEngine, IRtcEngineEventHandler } from 'react-native-agora';
 import { useAuth } from '@/context/AuthContext';
 import { classifyCallFailure, evaluateCallTimeout, requestCallToken, setCallState, subscribeCallSession, transitionCallState, updateHeartbeat, type CallSession } from '@/lib/calls';
 import { trackCallMetric } from '@/lib/callTelemetry';

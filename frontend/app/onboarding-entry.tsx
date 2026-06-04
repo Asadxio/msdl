@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useEffect } from 'react';
 import {
+  AccessibilityInfo,
   Image,
   Platform,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
-  useReducedMotionSettings,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -60,11 +60,18 @@ export default function OnboardingEntryScreen() {
   const { height, width } = useWindowDimensions();
   const { user } = useAuth();
   const { markEntryCompleteInSession } = useOnboardingSession();
-  const reduceMotion = useReducedMotionSettings();
+  const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
+  const reduceMotion = { reduceMotionEnabled };
 
   const progress = useSharedValue(0);
   const crossedThreshold = useSharedValue(false);
   const completing = useSharedValue(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(setReduceMotionEnabled)
+      .catch(() => {});
+  }, []);
 
   // Premium animation values
   const logoScale = useSharedValue(0.85);
