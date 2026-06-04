@@ -39,6 +39,15 @@ describe('auth startup freeze protections', () => {
     expect(source).toContain('setProfileOffline(true);');
   });
 
+
+  it('has a timeout for onboarding gate checks so first launch cannot remain behind the splash screen', () => {
+    const layoutSource = fs.readFileSync(path.join(__dirname, '../app/_layout.tsx'), 'utf8');
+    expect(layoutSource).toContain('const ONBOARDING_GATE_TIMEOUT_MS = 2500;');
+    expect(layoutSource).toContain("startupLog('Onboarding gate timeout scheduled'");
+    expect(layoutSource).toContain("startupLog('Onboarding gate timed out; continuing startup'");
+    expect(layoutSource).toContain("setOnboardingStatus('complete')");
+  });
+
   it('logs startup milestones for APK logcat investigation', () => {
     const firebaseSource = fs.readFileSync(path.join(__dirname, 'firebase.ts'), 'utf8');
     const layoutSource = fs.readFileSync(path.join(__dirname, '../app/_layout.tsx'), 'utf8');
