@@ -19,9 +19,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { ChannelProfileType, ClientRoleType } from 'react-native-agora';
 import type {
-  ChannelProfileType,
-  ClientRoleType,
   RenderModeType,
   VideoSourceType,
   IRtcEngine,

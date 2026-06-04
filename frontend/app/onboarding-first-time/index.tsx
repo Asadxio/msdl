@@ -48,7 +48,7 @@ function useLocaleKey() {
   const rtl = I18nManager.isRTL;
   if (rtl) return 'ar';
   // basic heuristic: prefer Urdu if device locale contains 'ur'
-  const raw = (Constants?.expoConfig?.locale || '').toLowerCase();
+  const raw = String((Constants.expoConfig as any)?.extra?.locale || (Constants as any).locale || '').toLowerCase();
   if (raw.includes('ur')) return 'ur';
   return 'en';
 }
