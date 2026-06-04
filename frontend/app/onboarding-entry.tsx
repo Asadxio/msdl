@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect } from 'react';
 import {
   Image,
   Platform,
@@ -6,6 +6,7 @@ import {
   Text,
   useWindowDimensions,
   View,
+  useReducedMotionSettings,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -22,6 +23,11 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  withSequence,
+  withDelay,
+  Easing,
+  useAnimatedReaction as useReaction,
+  createAnimatedComponent,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '@/constants/theme';
@@ -35,6 +41,13 @@ const GOLD = '#D4AF37';
 const EMERALD = '#064E3B';
 const DEEP_EMERALD = '#032D23';
 const SOFT_GOLD = '#FFF7D8';
+const DARK_TEAL = '#005E4A';
+
+// Premium animation values
+const LOGO_INTRO_DURATION = 1200;
+const EXPANSION_DURATION = 900;
+const BREATHING_DURATION = 3000;
+const PARTICLE_DURATION = 4000;
 
 function clamp(value: number, min: number, max: number) {
   'worklet';
@@ -47,9 +60,22 @@ export default function OnboardingEntryScreen() {
   const { height, width } = useWindowDimensions();
   const { user } = useAuth();
   const { markEntryCompleteInSession } = useOnboardingSession();
+  const reduceMotion = useReducedMotionSettings();
+
   const progress = useSharedValue(0);
   const crossedThreshold = useSharedValue(false);
   const completing = useSharedValue(false);
+
+  // Premium animation values
+  const logoScale = useSharedValue(0.85);
+  const logoOpacity = useSharedValue(0);
+  const arabicOpacity = useSharedValue(0);
+  const englishOpacity = useSharedValue(0);
+  const handleBreathing = useSharedValue(0.5);
+  const handleGlowOpacity = useSharedValue(0.3);
+  const expansionRadius = useSharedValue(0);
+  const centerExpansionOpacity = useSharedValue(0);
+  const particleOpacity = useSharedValue(0);
 
   const motifItems = useMemo(() => Array.from({ length: 9 }, (_, index) => index), []);
 
@@ -60,6 +86,48 @@ export default function OnboardingEntryScreen() {
   const hapticComplete = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   }, []);
+
+  // Premium logo intro animation on mount
+  useEffect(() => {
+    if (reduceMotion?.reduceMotionEnabled) {
+      logoOpacity.value = 1;
+      logoScale.value = 1;
+      arabicOpacity.value = 1;
+      englishOpacity.value = 1;
+      handleGlowOpacity.value = 1;
+      return;
+    }
+
+    // Sequential premium animations
+    logoOpacity.value = withTiming(1, {
+      duration: 600,
+      easing: Easing.inOut(Easing.cubic),
+    });
+
+    logoScale.value = withTiming(1, {
+      duration: LOGO_INTRO_DURATION,
+      easing: Easing.inOut(Easing.cubic),
+    });
+
+    arabicOpacity.value = withDelay(200, withTiming(1, { duration: 500, easing: Easing.inOut(Easing.cubic) }));
+    englishOpacity.value = withDelay(300, withTiming(1, { duration: 500, easing: Easing.inOut(Easing.cubic) }));
+
+    // Breathing animation for handle
+    handleBreathing.value = withSequence(
+      withDelay(800, withTiming(0.8, { duration: 1500 })),
+      withTiming(1.2, { duration: 1500 }),
+      withTiming(0.8, { duration: 1500 }),
+    );
+
+    // Glow intensity animation
+    handleGlowOpacity.value = withSequence(
+      withDelay(800, withTiming(0.6, { duration: 2000 })),
+      withTiming(0.3, { duration: 2000 }),
+    );
+
+    // Particle fade-in
+    particleOpacity.value = withDelay(400, withTiming(1, { duration: 800 }));
+  }, [reduceMotion?.reduceMotionEnabled, logoOpacity, logoScale, arabicOpacity, englishOpacity, handleBreathing, handleGlowOpacity, particleOpacity]);
 
   const completeOnboarding = useCallback(async () => {
     await markOnboardingEntryComplete();
@@ -82,29 +150,57 @@ export default function OnboardingEntryScreen() {
 
   const finish = useCallback(() => {
     hapticComplete();
-    completeOnboarding().catch(() => {
-      markEntryCompleteInSession();
-      safeReplace(router, user ? '/' : '/auth/login');
-    });
-  }, [completeOnboarding, hapticComplete, markEntryCompleteInSession, router, user]);
+    
+    // PREMIUM: Center expansion animation before navigation
+    if (!reduceMotion?.reduceMotionEnabled) {
+      centerExpansionOpacity.value = withTiming(0.8, { duration: 200 });
+      
+      const timer = setTimeout(() => {
+        completeOnboarding().catch(() => {
+          markEntryCompleteInSession();
+          safeReplace(router, user ? '/' : '/auth/login');
+        });
+      }, EXPANSION_DURATION);
+      
+      return () => clearTimeout(timer);
+    } else {
+      completeOnboarding().catch(() => {
+        markEntryCompleteInSession();
+        safeReplace(router, user ? '/' : '/auth/login');
+      });
+    }
+  }, [completeOnboarding, hapticComplete, markEntryCompleteInSession, router, user, centerExpansionOpacity, reduceMotion?.reduceMotionEnabled]);
 
   const panGesture = Gesture.Pan()
     .onUpdate((event) => {
       'worklet';
       if (completing.value) return;
-      progress.value = clamp(-event.translationY / SWIPE_DISTANCE, 0, 1);
+      
+      // PREMIUM: Add resistance at start for "unlocking" feel
+      const rawProgress = -event.translationY / SWIPE_DISTANCE;
+      const resistance = rawProgress < 0.1 ? rawProgress * 0.6 : 0.06 + (rawProgress - 0.1) * 1.04;
+      progress.value = clamp(resistance, 0, 1);
     })
     .onEnd((event) => {
       'worklet';
       if (completing.value) return;
+      
       const shouldComplete = progress.value >= COMPLETE_THRESHOLD || event.velocityY < -820;
       if (shouldComplete) {
         completing.value = true;
-        progress.value = withTiming(1, { duration: 520 }, (finished) => {
-          if (finished) runOnJS(finish)();
-        });
+        
+        // PREMIUM: Smoother expansion animation
+        progress.value = withTiming(1, 
+          { 
+            duration: EXPANSION_DURATION,
+            easing: Easing.inOut(Easing.cubic),
+          }, 
+          (finished) => {
+            if (finished) runOnJS(finish)();
+          }
+        );
       } else {
-        progress.value = withSpring(0, { damping: 18, stiffness: 170 });
+        progress.value = withSpring(0, { damping: 16, stiffness: 180, overshootClamping: true });
       }
     });
 
@@ -116,13 +212,18 @@ export default function OnboardingEntryScreen() {
   const logoStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: interpolate(progress.value, [0, 1], [0, -18], Extrapolation.CLAMP) },
-      { scale: interpolate(progress.value, [0, 1], [1, 1.08], Extrapolation.CLAMP) },
+      { scale: interpolate(progress.value, [0, 0.5, 1], [logoScale.value, 1.02, 1.08], Extrapolation.CLAMP) },
     ],
+    opacity: logoOpacity.value,
   }));
 
   const copyStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 0.72, 1], [1, 0.35, 0], Extrapolation.CLAMP),
+    opacity: interpolate(progress.value, [0, 0.72, 1], [arabicOpacity.value, 0.35, 0], Extrapolation.CLAMP),
     transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -28], Extrapolation.CLAMP) }],
+  }));
+
+  const englishNameStyle = useAnimatedStyle(() => ({
+    opacity: englishOpacity.value,
   }));
 
   const handleStyle = useAnimatedStyle(() => ({
@@ -130,6 +231,26 @@ export default function OnboardingEntryScreen() {
       { translateY: interpolate(progress.value, [0, 1], [0, -SWIPE_DISTANCE * 0.72], Extrapolation.CLAMP) },
       { scale: interpolate(progress.value, [0, 1], [1, 0.9], Extrapolation.CLAMP) },
     ],
+  }));
+
+  // PREMIUM: Breathing handle animation
+  const handleBreathingStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: handleBreathing.value }],
+  }));
+
+  // PREMIUM: Glow intensity animation
+  const glowIntensityStyle = useAnimatedStyle(() => ({
+    opacity: handleGlowOpacity.value,
+  }));
+
+  // PREMIUM: Center expansion overlay
+  const expansionStyle = useAnimatedStyle(() => ({
+    opacity: centerExpansionOpacity.value,
+  }));
+
+  // PREMIUM: Particle fade-in
+  const particleStyle = useAnimatedStyle(() => ({
+    opacity: particleOpacity.value,
   }));
 
   const fadeStyle = useAnimatedStyle(() => ({
@@ -146,27 +267,29 @@ export default function OnboardingEntryScreen() {
       />
 
       <View pointerEvents="none" style={styles.geometricLayer}>
-        {motifItems.map((item) => {
-          const size = width * (item % 2 === 0 ? 0.34 : 0.24);
-          return (
-            <View
-              key={item}
-              style={[
-                styles.motif,
-                {
-                  width: size,
-                  height: size,
-                  left: (item % 3) * (width / 2.5) - size / 2,
-                  top: 54 + item * 76,
-                  transform: [{ rotate: `${45 + item * 9}deg` }],
-                  borderColor: item % 2 === 0 ? 'rgba(212,175,55,0.18)' : 'rgba(6,78,59,0.12)',
-                },
-              ]}
-            />
-          );
-        })}
-        <View style={[styles.star, { top: height * 0.15, left: width * 0.12 }]} />
-        <View style={[styles.star, styles.starEmerald, { top: height * 0.7, right: width * 0.12 }]} />
+        <Animated.View style={[particleStyle, styles.particleContainer]}>
+          {motifItems.map((item) => {
+            const size = width * (item % 2 === 0 ? 0.34 : 0.24);
+            return (
+              <View
+                key={item}
+                style={[
+                  styles.motif,
+                  {
+                    width: size,
+                    height: size,
+                    left: (item % 3) * (width / 2.5) - size / 2,
+                    top: 54 + item * 76,
+                    transform: [{ rotate: `${45 + item * 9}deg` }],
+                    borderColor: item % 2 === 0 ? 'rgba(212,175,55,0.18)' : 'rgba(6,78,59,0.12)',
+                  },
+                ]}
+              />
+            );
+          })}
+          <View style={[styles.star, { top: height * 0.15, left: width * 0.12 }]} />
+          <View style={[styles.star, styles.starEmerald, { top: height * 0.7, right: width * 0.12 }]} />
+        </Animated.View>
       </View>
 
       <Animated.View pointerEvents="none" style={[styles.emeraldRise, emeraldRiseStyle]}>
@@ -192,27 +315,50 @@ export default function OnboardingEntryScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.copy, copyStyle]}>
-          <Text style={styles.arabicName}>مدرسۃ السالکات للبنات</Text>
-          <Text style={styles.englishName}>Madars tus salikat Lilbanat</Text>
+          <Animated.Text style={[styles.arabicName, { opacity: arabicOpacity }]}>مدرسۃ السالکات للبنات</Animated.Text>
+          <Animated.Text style={[styles.englishName, englishNameStyle]}>Madars tus salikat Lilbanat</Animated.Text>
           <View style={styles.divider} />
-          <Text style={styles.subtitle}>A refined learning space for sacred knowledge.</Text>
+          <Text style={styles.subtitle}>Begin your journey of sacred knowledge</Text>
         </Animated.View>
 
         <GestureDetector gesture={panGesture}>
           <Animated.View style={[styles.swipeZone, { bottom: insets.bottom + 28 }, handleStyle]}>
-            <View style={styles.handleGlow} />
-            <LinearGradient
-              colors={[SOFT_GOLD, GOLD, '#B88916']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.handle}
-            >
-              <View style={styles.handlePill} />
-            </LinearGradient>
-            <Text style={styles.swipeText}>Swipe Up To Begin</Text>
+            <Animated.View style={[styles.handleGlow, glowIntensityStyle]} />
+            <Animated.View style={[handleBreathingStyle]}>
+              <LinearGradient
+                colors={[SOFT_GOLD, GOLD, '#B88916']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.handle}
+              >
+                <View style={styles.handlePill} />
+              </LinearGradient>
+            </Animated.View>
+            <Animated.Text style={[styles.swipeText, { opacity: interpolate(progress.value, [0, 0.3], [1, 0.2], Extrapolation.CLAMP) }]}>
+              Swipe Up To Enter
+            </Animated.Text>
           </Animated.View>
         </GestureDetector>
       </View>
+
+      {/* PREMIUM: Center expansion overlay for completion */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.expansionOverlay,
+          expansionStyle,
+          {
+            borderRadius: Math.max(height, width),
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[DARK_TEAL, EMERALD, '#0E7A5D']}
+          start={{ x: 0.5, y: 1 }}
+          end={{ x: 0.5, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
 
       <Animated.View pointerEvents="none" style={[styles.fadeOverlay, fadeStyle]} />
     </View>
@@ -226,6 +372,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   geometricLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  particleContainer: {
     ...StyleSheet.absoluteFillObject,
   },
   motif: {
@@ -355,24 +504,29 @@ const styles = StyleSheet.create({
   handleGlow: {
     position: 'absolute',
     top: -20,
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    backgroundColor: 'rgba(212,175,55,0.24)',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(212,175,55,0.28)',
     shadowColor: GOLD,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: Platform.OS === 'android' ? 0.8 : 0.44,
-    shadowRadius: 24,
-    elevation: 16,
+    shadowOpacity: Platform.OS === 'android' ? 0.9 : 0.52,
+    shadowRadius: 28,
+    elevation: 18,
   },
   handle: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.68)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.72)',
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   handlePill: {
     width: 30,
@@ -392,5 +546,13 @@ const styles = StyleSheet.create({
   fadeOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: COLORS.background,
+  },
+  expansionOverlay: {
+    position: 'absolute',
+    width: '200%',
+    height: '200%',
+    left: '-50%',
+    top: '-50%',
+    zIndex: 999,
   },
 });
