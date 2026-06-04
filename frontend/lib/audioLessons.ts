@@ -161,8 +161,17 @@ function getUriScheme(uri: string) {
   return 'file';
 }
 
+function getFileSystemCacheDirectory() {
+  return (
+    ((FileSystem as unknown) as { cacheDirectory?: string; documentDirectory?: string }).cacheDirectory ||
+    ((FileSystem as unknown) as { documentDirectory?: string }).documentDirectory ||
+    ''
+  );
+}
+
 function getTempCacheUri(fileName: string) {
-  return `${FileSystem.cacheDirectory}${Date.now()}_${sanitizeFileName(fileName)}`;
+  const cacheDirectory = getFileSystemCacheDirectory();
+  return `${cacheDirectory}${Date.now()}_${sanitizeFileName(fileName)}`;
 }
 
 async function createBlobFromLocalUri(uri: string, mimeType: string, fileName: string) {
@@ -176,7 +185,7 @@ async function createBlobFromLocalUri(uri: string, mimeType: string, fileName: s
     localUri = tempCacheUri;
   }
 
-  const base64Data = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
+  const base64Data = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' as any });
   if (!base64Data) throw new Error('Selected audio file is empty.');
 
   const blob = await fetch(`data:${mimeType};base64,${base64Data}`).then((response) => response.blob());
