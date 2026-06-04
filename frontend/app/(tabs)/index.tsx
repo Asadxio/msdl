@@ -14,13 +14,16 @@ import {
   ActivityIndicator,
   Linking,
   Animated,
-  Linking,
+  Easing,
   Platform,
-import AsyncStorage from "@react-native-async-storage/async-storage";
+  useColorScheme,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
+import {
   collection,
   doc,
   getDoc,

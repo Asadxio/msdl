@@ -203,3 +203,4 @@ const styles = StyleSheet.create({
   time: { color: COLORS.textMuted, fontSize: 15, fontWeight: '800' },
   timeActive: { color: COLORS.primary },
   message: { color: COLORS.text, fontSize: 16, lineHeight: 24, marginTop: SPACING.lg, textAlign: 'center' },
+});
