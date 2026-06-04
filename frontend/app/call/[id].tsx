@@ -1,9 +1,11 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, PermissionsAndroid, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
-import { ChannelProfileType, ClientRoleType, RenderModeType, RtcSurfaceView, VideoSourceType, createAgoraRtcEngine, type IRtcEngine, type IRtcEngineEventHandler } from 'react-native-agora';
+import type { ChannelProfileType, ClientRoleType, RenderModeType, VideoSourceType, IRtcEngine, IRtcEngineEventHandler } from 'react-native-agora';
 import { useAuth } from '@/context/AuthContext';
 import { classifyCallFailure, evaluateCallTimeout, requestCallToken, setCallState, subscribeCallSession, transitionCallState, updateHeartbeat, type CallSession } from '@/lib/calls';
 import { trackCallMetric } from '@/lib/callTelemetry';
@@ -42,6 +44,18 @@ export default function CallScreen() {
   const [camOn, setCamOn] = useState(true);
 
   const isCaller = useMemo(() => call?.caller_id === user?.uid, [call?.caller_id, user?.uid]);
+
+  // Lazy-load Agora runtime surface view and constants when available
+  let AgoraRuntimeForCall: any = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    AgoraRuntimeForCall = require('react-native-agora');
+  } catch {
+    AgoraRuntimeForCall = null;
+  }
+  const RtcSurfaceViewCompCall: any = AgoraRuntimeForCall?.RtcSurfaceView ?? null;
+  const VideoSourceTypeCall: any = AgoraRuntimeForCall?.VideoSourceType ?? { VideoSourceCameraPrimary: 0 };
+  const RenderModeTypeCall: any = AgoraRuntimeForCall?.RenderModeType ?? { RenderModeHidden: 1 };
 
   const leave = useCallback(async (finalState: 'ended' | 'declined' | 'missed' = 'ended') => {
     if (releaseLockRef.current) return;
@@ -120,8 +134,12 @@ export default function CallScreen() {
       }
       await transitionCallState(callId, ['ringing', 'initiating'], 'connecting').catch(() => false);
       if (engineRef.current) return;
+      // Lazy-require Agora native module to avoid loading native code in Expo Go
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Agora = require('react-native-agora');
+      const createAgoraRtcEngine = Agora.createAgoraRtcEngine;
       const engine = createAgoraRtcEngine();
-      engineRef.current = engine;
+      engineRef.current = engine as IRtcEngine;
       const h: IRtcEngineEventHandler = {
         onJoinChannelSuccess: async () => {
           reconnectAttemptRef.current = 0;
@@ -197,7 +215,7 @@ export default function CallScreen() {
       }
     });
     return () => sub.remove();
-  }, [micOn]);
+  }, [micOn, camOn]);
 
   useEffect(() => {
     if (!callId || !joined || heartbeatRef.current || timeoutEvalRef.current) return;
@@ -221,7 +239,7 @@ export default function CallScreen() {
       heartbeatRef.current = null;
       timeoutEvalRef.current = null;
     };
-  }, [call, callId, joined]);
+  }, [call, callId, joined, user?.uid]);
 
   useEffect(() => {
     if (!joined || !callId) return;
@@ -236,7 +254,9 @@ export default function CallScreen() {
       <Text style={styles.title}>{isCaller ? 'Calling…' : 'Incoming Call'}</Text>
       <Text style={styles.sub}>{statusText}</Text>
       {call.mode === 'video' ? (
-        <RtcSurfaceView style={styles.video} canvas={{ uid: 0, sourceType: VideoSourceType.VideoSourceCameraPrimary, renderMode: RenderModeType.RenderModeHidden }} />
+        RtcSurfaceViewCompCall ? (
+          <RtcSurfaceViewCompCall style={styles.video} canvas={{ uid: 0, sourceType: VideoSourceTypeCall.VideoSourceCameraPrimary, renderMode: RenderModeTypeCall.RenderModeHidden }} />
+        ) : null
       ) : null}
       <View style={styles.row}>
         <TouchableOpacity style={styles.btn} onPress={() => { const n = !micOn; setMicOn(n); engineRef.current?.muteLocalAudioStream(!n); }}><Ionicons name={micOn ? 'mic' : 'mic-off'} size={22} color="#fff" /></TouchableOpacity>

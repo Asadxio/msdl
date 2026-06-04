@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import { safeReplace } from '@/lib/navigation';
 import { StatusBar } from 'expo-status-bar';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -63,7 +64,7 @@ export default function OnboardingEntryScreen() {
   const completeOnboarding = useCallback(async () => {
     await markOnboardingEntryComplete();
     markEntryCompleteInSession();
-    router.replace(user ? '/' : '/auth/login');
+    safeReplace(router, user ? '/' : '/auth/login');
   }, [markEntryCompleteInSession, router, user]);
 
   useAnimatedReaction(
@@ -83,7 +84,7 @@ export default function OnboardingEntryScreen() {
     hapticComplete();
     completeOnboarding().catch(() => {
       markEntryCompleteInSession();
-      router.replace(user ? '/' : '/auth/login');
+      safeReplace(router, user ? '/' : '/auth/login');
     });
   }, [completeOnboarding, hapticComplete, markEntryCompleteInSession, router, user]);
 

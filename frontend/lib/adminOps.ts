@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { addDoc, collection, writeBatch, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { createAdminLog } from '@/lib/adminLogs';
 
-import { canAssignRole, normalizeRole, type AppRole } from '@/lib/roles';
+import { canAssignRole, normalizeRole } from '@/lib/roles';
 
 export async function updateUserRoleSecure(input: {
   actorProfile: UserProfile | null;

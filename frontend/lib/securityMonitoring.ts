@@ -1,4 +1,4 @@
-import { collection, getDocs, limit, orderBy, query, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export type SecuritySeverity = 'low' | 'medium' | 'high' | 'critical';

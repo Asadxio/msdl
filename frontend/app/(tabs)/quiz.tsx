@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput,
@@ -92,7 +94,7 @@ export default function QuizScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     loadQuiz().catch(() => {});

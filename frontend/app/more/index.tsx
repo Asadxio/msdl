@@ -17,12 +17,12 @@ type MoreItem = {
 
 const MORE_ITEMS: MoreItem[] = [
   { label: 'Applications', subtitle: 'Islamic tools and features', icon: 'apps-outline', route: '/more/applications' },
-  { label: 'Library', subtitle: 'Course materials and books', icon: 'library-outline', route: '/library' },
-  { label: 'Attendance', subtitle: 'Track your attendance', icon: 'calendar-outline', route: '/attendance' },
-  { label: 'Quiz', subtitle: 'Tests and assessments', icon: 'help-circle-outline', route: '/quiz' },
+  { label: 'Library', subtitle: 'Course materials and books', icon: 'library-outline', route: '/more/library' },
+  { label: 'Attendance', subtitle: 'Track your attendance', icon: 'calendar-outline', route: '/more/attendance' },
+  { label: 'Quiz', subtitle: 'Tests and assessments', icon: 'help-circle-outline', route: '/more/quiz' },
   { label: 'Recordings', subtitle: 'Watch lesson recordings', icon: 'play-circle-outline', route: '/recordings' },
   { label: 'Status', subtitle: 'Live status and announcements', icon: 'radio-outline', route: '/status' },
-  { label: 'Teachers', subtitle: 'Meet your teachers', icon: 'people-outline', route: '/teachers' },
+  { label: 'Teachers', subtitle: 'Meet your teachers', icon: 'people-outline', route: '/more/teachers' },
   { label: 'Settings', subtitle: 'App preferences and account', icon: 'settings-outline', route: '/settings' },
   { label: 'Privacy Policy', subtitle: 'Review your privacy rights', icon: 'shield-checkmark-outline', route: '/privacy' },
   { label: 'Terms & Conditions', subtitle: 'View app terms', icon: 'document-text-outline', route: '/terms' },

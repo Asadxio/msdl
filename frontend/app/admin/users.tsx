@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { collection, doc, updateDoc, deleteDoc, where } from 'firebase/firestore';

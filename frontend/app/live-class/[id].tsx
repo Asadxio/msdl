@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,15 +19,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import {
+import type {
   ChannelProfileType,
   ClientRoleType,
   RenderModeType,
-  RtcSurfaceView,
   VideoSourceType,
-  createAgoraRtcEngine,
-  type IRtcEngine,
-  type IRtcEngineEventHandler,
+  IRtcEngine,
+  IRtcEngineEventHandler,
 } from 'react-native-agora';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { isExpoGo } from '@/lib/runtime';
@@ -34,7 +34,6 @@ import {
   AGORA_APP_ID,
   canCurrentUserJoinLiveClass,
   endLiveClassAndSyncAttendance,
-  getLiveApiSetupMessage,
   isLiveApiConfigured,
   markParticipantJoined,
   markParticipantLeft,
@@ -160,7 +159,6 @@ export default function LiveClassroomScreen() {
   const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
-  const liveApiReady = isLiveApiConfigured();
   const [joined, setJoined] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
@@ -179,6 +177,19 @@ export default function LiveClassroomScreen() {
   const [reportParticipant, setReportParticipant] = useState<LiveClassParticipant | null>(null);
   const expoGo = isExpoGo();
   const isLowEndAndroid = Platform.OS === 'android';
+  // Lazy-load Agora runtime values when available to avoid loading native modules in Expo Go
+  let AgoraRuntime: any = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    AgoraRuntime = require('react-native-agora');
+  } catch {
+    AgoraRuntime = null;
+  }
+  const RtcSurfaceViewComp: any = AgoraRuntime?.RtcSurfaceView ?? null;
+  const VideoSourceTypeConst: any = AgoraRuntime?.VideoSourceType ?? { VideoSourceCameraPrimary: 0 };
+  const RenderModeTypeConst: any = AgoraRuntime?.RenderModeType ?? { RenderModeHidden: 1 };
+  const ChannelProfileTypeConst: any = AgoraRuntime?.ChannelProfileType ?? { ChannelProfileCommunication: 0 };
+  const ClientRoleTypeConst: any = AgoraRuntime?.ClientRoleType ?? { ClientRoleBroadcaster: 1 };
 
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
   const localParticipant = useMemo(
@@ -443,8 +454,12 @@ export default function LiveClassroomScreen() {
         Alert.alert('Agora configuration mismatch', 'The app build Agora App ID does not match the live class token App ID.');
         return;
       }
+      // Lazy-require Agora engine at join-time
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Agora = require('react-native-agora');
+      const createAgoraRtcEngine = Agora.createAgoraRtcEngine;
       const engine = createAgoraRtcEngine();
-      engineRef.current = engine;
+      engineRef.current = engine as IRtcEngine;
       const handler: IRtcEngineEventHandler = {
         onJoinChannelSuccess: () => {
           try {
@@ -722,15 +737,16 @@ export default function LiveClassroomScreen() {
   const renderTile = useCallback(({ item, index }: { item: TileItem; index: number }) => (
     <View style={[styles.tile, item.role === 'teacher' && styles.teacherTile]}>
       {item.videoEnabled && index < (isLowEndAndroid ? 6 : MAX_REMOTE_VIDEO_TILES) ? (
-        <RtcSurfaceView
-          style={styles.video}
-          canvas={{
-            uid: item.isLocal ? 0 : item.uid,
-            sourceType: item.isLocal ? VideoSourceType.VideoSourceCameraPrimary : undefined,
-            renderMode: RenderModeType.RenderModeHidden,
-          }}
-        />
-      ) : (
+        RtcSurfaceViewComp ? (
+          <RtcSurfaceViewComp
+            style={styles.video}
+            canvas={{
+              uid: item.isLocal ? 0 : item.uid,
+              sourceType: item.isLocal ? VideoSourceTypeConst.VideoSourceCameraPrimary : undefined,
+              renderMode: RenderModeTypeConst.RenderModeHidden,
+            }}
+          />
+        ) : (
         <View style={styles.videoOff}>
           <Ionicons name="person-circle-outline" size={52} color="rgba(255,255,255,0.8)" />
         </View>

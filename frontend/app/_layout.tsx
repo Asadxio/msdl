@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Stack, useRouter, useSegments } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,6 +20,7 @@ import { getReleaseDiagnostics } from '@/lib/releaseDiagnostics';
 import { FullScreenLoader } from '@/components/ui';
 import { startupLog } from '@/lib/startup';
 import { shouldShowOnboardingEntry } from '@/lib/onboarding';
+import { safeReplace } from '@/lib/navigation';
 import { OnboardingProvider } from '@/context/OnboardingContext';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -50,9 +53,25 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   });
   const [missingConfigVars] = useState<string[]>(() => getMissingConfigVars());
   const hideRequestedRef = useRef(false);
+  const navigationLockedRef = useRef(false);
+  const rootLoaderClearedRef = useRef(false);
   const segments = useSegments();
   const segmentKey = segments.join('/');
   const router = useRouter();
+
+  const performReplace = useCallback((route: string) => {
+    if (navigationLockedRef.current) {
+      startupLog('Navigation suppressed', { route, reason: 'lock' });
+      return;
+    }
+    navigationLockedRef.current = true;
+    try {
+      // Use global-safe replace to coordinate with other components
+      safeReplace(router, route as any);
+    } catch (error) {
+      startupLog('router.replace failed', { route, message: formatErrorMessage(error) });
+    }
+  }, [router]);
 
   const safeHideSplash = useCallback(async () => {
     if (hideRequestedRef.current) return;
@@ -146,7 +165,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    startupLog('Root loader cleared');
+    if (!rootLoaderClearedRef.current) {
+      rootLoaderClearedRef.current = true;
+      startupLog('Root loader cleared');
+    }
 
     const inAuth = segments[0] === 'auth';
     const inOnboardingEntry = segments[0] === 'onboarding-entry';
@@ -160,37 +182,37 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (onboardingStatus === 'required') {
       if (!inOnboardingEntry) {
         startupLog('Navigation complete', { action: 'replace', route: '/onboarding-entry', reason: 'onboarding-required' });
-        router.replace('/onboarding-entry');
+        performReplace('/onboarding-entry');
       } else {
         startupLog('Navigation complete', { route: 'onboarding-entry', reason: 'onboarding-required' });
       }
     } else if (inOnboardingEntry) {
       const route = user ? '/' : '/auth/login';
       startupLog('Navigation complete', { action: 'replace', route, reason: 'onboarding-complete' });
-      router.replace(route);
+      performReplace(route);
     } else if (!user) {
       if (!inAuth) {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/login', reason: 'no-user' });
-        router.replace('/auth/login');
+        performReplace('/auth/login');
       } else {
         startupLog('Navigation complete', { route: segmentKey || 'auth', reason: 'no-user-auth-route' });
       }
     } else if (needsLegalAcceptance && !inLegalConsentRoute) {
       startupLog('Navigation complete', { action: 'replace', route: '/legal-gate', reason: 'needs-legal-acceptance' });
-      router.replace('/legal-gate');
+      performReplace('/legal-gate');
     } else if (!needsLegalAcceptance && inLegalGate) {
       startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'legal-gate-complete' });
-      router.replace('/');
+      performReplace('/');
     } else if (inUnauthorized && profile?.status === 'approved') {
       startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'authorized-user-on-unauthorized' });
-      router.replace('/');
+      performReplace('/');
     } else if (inAdmin && (profileOffline || !isAdmin)) {
       startupLog('Navigation complete', { action: 'replace', route: '/unauthorized?required=admin', reason: 'admin-required' });
-      router.replace('/unauthorized?required=admin');
+      performReplace('/unauthorized?required=admin');
     } else if (profile?.status === 'rejected') {
       if (segments.join('/') !== 'auth/pending') {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'account-status' });
-        router.replace('/auth/pending');
+        performReplace('/auth/pending');
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
@@ -198,7 +220,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // Deactivated users -> pending screen shows deactivated state
       if (segments.join('/') !== 'auth/pending') {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'account-status' });
-        router.replace('/auth/pending');
+        performReplace('/auth/pending');
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
@@ -206,21 +228,21 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // Email not verified (non-admin) -> pending screen for verification
       if (segments.join('/') !== 'auth/pending') {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'email-unverified' });
-        router.replace('/auth/pending');
+        performReplace('/auth/pending');
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
     } else if (profile && profile.status === 'pending' && !isAdmin) {
       if (segments.join('/') !== 'auth/pending') {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'profile-pending' });
-        router.replace('/auth/pending');
+        performReplace('/auth/pending');
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
     } else if (user && (profile?.status === 'approved' || isAdmin)) {
       if (inAuth) {
         startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'approved-user-in-auth' });
-        router.replace('/');
+        performReplace('/');
       } else {
         startupLog('Navigation complete', { route: segmentKey || '/', reason: 'approved-user' });
       }

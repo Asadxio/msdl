@@ -19,7 +19,6 @@ export type SecurityRiskState = {
 };
 
 const STATE_KEY = 'security_engine_state_v1';
-const NONCE_KEY = 'security_engine_nonce_v1';
 const ACTION_WINDOW_MS = 60_000;
 
 let state: SecurityRiskState = {

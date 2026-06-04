@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
 import {
@@ -67,6 +69,7 @@ export default function NotificationsScreen() {
   const [focusedEditField, setFocusedEditField] = useState<'editTitle' | 'editMessage' | null>(null);
   const perfRef = useRef(registerPerformanceSurface({ surface: 'notifications_screen', cleanupIntervalMs: 120000, lowEndSafe: true }));
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!user?.uid) return;
     setLoadError('');

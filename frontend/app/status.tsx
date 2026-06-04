@@ -101,7 +101,6 @@ export default function StatusScreen() {
   } | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [cleaningExpired, setCleaningExpired] = useState(false);
   const [audience, setAudience] = useState<"everyone" | "teachers" | "students">("students");
   const [seenTracker, setSeenTracker] = useState<Record<string, boolean>>({});
   const [commentsByStatus, setCommentsByStatus] = useState<Record<string, StatusComment[]>>({});

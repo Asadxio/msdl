@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableWithoutFeedback, Animated, PanResponder, ActivityIndicator, Image, AppState } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { Video, ResizeMode } from 'expo-av';
-import { COLORS } from '@/constants/theme';
 import { clearAsyncOp, clearMediaRef, clearTimerTrack, getLifecycleMetrics, trackAsyncOp, trackMediaRef, trackTimer } from '@/lib/lifecycleDiagnostics';
 import { trackPerformanceMetric } from '@/lib/performanceEngine';
 

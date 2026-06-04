@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, FlatList, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { collection, where } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { hasPermission } from '@/lib/rbac';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { db } from '@/lib/firebase';

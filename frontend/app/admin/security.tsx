@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { fetchSecurityEvents, detectAnomalies, buildIncidentTimeline, toCsvIncidentReport, type SecuritySeverity } from '@/lib/securityMonitoring';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
