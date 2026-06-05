@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useTutorial } from '@/context/TutorialContext';
 import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
@@ -18,6 +19,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { setShowTutorial, setCurrentStep } = useTutorial();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [largeText, setLargeText] = useState(false);
   const [channelPrefs, setChannelPrefs] = useState<Record<NotificationChannel, boolean>>({
@@ -120,6 +122,13 @@ export default function SettingsScreen() {
           <Text style={styles.rowLabel}>Large text mode</Text>
           <Switch value={largeText} onValueChange={toggleLargeText} />
         </View>
+        <TouchableOpacity style={styles.linkRow} onPress={() => {
+          setCurrentStep('dashboard');
+          setShowTutorial(true);
+        }}>
+          <Text style={styles.linkText}>Replay tutorial</Text>
+          <Ionicons name="play-circle-outline" size={16} color={COLORS.primary} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.linkRow} onPress={() => Alert.alert('Saved', 'Preferences are saved on this device.')}>
           <Text style={styles.linkText}>Save preferences</Text>
           <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.primary} />
