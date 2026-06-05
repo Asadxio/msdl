@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
 export type TutorialScreen = 'dashboard' | 'courses' | 'live_classes' | 'notifications' | 'applications';
 
@@ -11,12 +11,27 @@ type TutorialContextType = {
   markStepComplete: (s: TutorialScreen) => void;
 };
 
+type TutorialProviderProps = {
+  children: React.ReactNode;
+  autoShowOnMount?: boolean;
+  initialStep?: TutorialScreen;
+};
+
 const TutorialContext = createContext<TutorialContextType | null>(null);
 
-export function TutorialProvider({ children }: { children: React.ReactNode }) {
+export function TutorialProvider({ children, autoShowOnMount = false, initialStep = 'dashboard' }: TutorialProviderProps) {
   const [showTutorial, setShowTutorial] = useState(false);
   const [currentStep, setCurrentStep] = useState<TutorialScreen | null>(null);
   const [completedSteps, setCompletedSteps] = useState(new Set<TutorialScreen>());
+  const [tutorialAutoShown, setTutorialAutoShown] = useState(false);
+
+  useEffect(() => {
+    if (!tutorialAutoShown && autoShowOnMount) {
+      setCurrentStep(initialStep);
+      setShowTutorial(true);
+      setTutorialAutoShown(true);
+    }
+  }, [autoShowOnMount, initialStep, tutorialAutoShown]);
 
   const markStepComplete = (s: TutorialScreen) => {
     setCompletedSteps((prev) => new Set([...prev, s]));

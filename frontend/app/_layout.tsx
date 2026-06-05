@@ -24,6 +24,7 @@ import { safeReplace } from '@/lib/navigation';
 import { OnboardingProvider } from '@/context/OnboardingContext';
 import { TutorialProvider } from '@/context/TutorialContext';
 import { InAppTutorialOverlay } from '@/components/ui/InAppTutorialOverlay';
+import { isTutorialCompleted } from '@/lib/tutorialStorage';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -45,6 +46,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
   const [splashHidden, setSplashHidden] = useState(false);
+  const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
   const [configError, setConfigError] = useState<string | null>(() => {
     try {
       validateConfig();
@@ -251,6 +253,26 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance, onboardingStatus]);
 
+  useEffect(() => {
+    if (shouldShowTutorial || authLoading || onboardingStatus !== 'complete' || !user?.uid) return;
+    const isAdmin = profile?.role === 'admin';
+    if (!profile || !(profile.status === 'approved' || isAdmin) || needsLegalAcceptance) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const completed = await isTutorialCompleted();
+        if (cancelled || completed) return;
+        setShouldShowTutorial(true);
+      } catch {
+        // If tutorial completion check fails, do not block the app.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, onboardingStatus, user?.uid, profile, needsLegalAcceptance, shouldShowTutorial]);
 
   useEffect(() => {
     try {
@@ -359,7 +381,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <OnboardingProvider value={{ markEntryCompleteInSession }}>
-      <TutorialProvider>
+      <TutorialProvider autoShowOnMount={shouldShowTutorial} initialStep="dashboard">
         {children}
         <InAppTutorialOverlay />
       </TutorialProvider>
