@@ -31,6 +31,12 @@
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "madrasa-app-50d6c",
         "EXPO_PUBLIC_AGORA_APP_ID": "ca2064bd4e204ec99bcb4449f2df7231"
       }
+    },
+    "production-apk": {
+      "extends": "production",
+      "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {
