@@ -11,7 +11,6 @@ import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { initPushNotifications, registerDevicePushToken } from '@/lib/pushNotifications';
 import { validateConfig, getMissingConfigVars } from '@/lib/config';
-import { ConfigErrorScreen } from '@/components/ui/ConfigErrorScreen';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
 import { getConsentStatus } from '@/lib/legal';
@@ -47,15 +46,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
   const [splashHidden, setSplashHidden] = useState(false);
   const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
-  const [configError, setConfigError] = useState<string | null>(() => {
+  useEffect(() => {
     try {
       validateConfig();
-      return null;
     } catch (error) {
-      return formatErrorMessage(error, 'Invalid environment configuration.');
+      console.warn('[Config] Invalid environment configuration; continuing startup.', {
+        error: formatErrorMessage(error, 'Invalid environment configuration.'),
+        missingVars: getMissingConfigVars(),
+      });
     }
-  });
-  const [missingConfigVars] = useState<string[]>(() => getMissingConfigVars());
+  }, []);
   const hideRequestedRef = useRef(false);
   const navigationLockedRef = useRef(false);
   const rootLoaderClearedRef = useRef(false);
@@ -90,11 +90,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       setSplashHidden(true);
     }
   }, []);
-
-  useEffect(() => {
-    if (!configError) return;
-    void safeHideSplash();
-  }, [configError, safeHideSplash]);
 
   useEffect(() => {
     let mounted = true;
@@ -368,10 +363,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return () => {};
     }
   }, [router, user?.uid]);
-
-  if (configError) {
-    return <ConfigErrorScreen error={configError} missingVars={missingConfigVars} />;
-  }
 
   if (!splashHidden || authLoading || onboardingStatus === 'checking') {
     return (
