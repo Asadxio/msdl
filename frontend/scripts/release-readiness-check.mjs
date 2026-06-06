@@ -4,15 +4,26 @@ const required = [
   'EXPO_PUBLIC_APP_ENV',
   'EXPO_PUBLIC_API_BASE_URL',
   'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
+];
+
+const fallbackApiVars = [
+  'EXPO_PUBLIC_API_BASE_URL',
   'EXPO_PUBLIC_LIVE_API_URL',
   'EXPO_PUBLIC_PUSH_API_URL',
-  'EXPO_PUBLIC_AGORA_APP_ID',
 ];
 
 const missing = required.filter((k) => !process.env[k]);
+if (!fallbackApiVars.some((k) => process.env[k])) {
+  missing.push(...fallbackApiVars);
+}
+
 if (missing.length) {
-  console.error('[release-check] missing env:', missing.join(', '));
+  console.error('[release-check] missing env:', [...new Set(missing)].join(', '));
   process.exitCode = 1;
+}
+
+if (!process.env.EXPO_PUBLIC_AGORA_APP_ID) {
+  console.warn('[release-check] optional EXPO_PUBLIC_AGORA_APP_ID is not set; the live-class token API must return app_id at runtime.');
 }
 
 const placeholderValues = required.filter((k) => /YOUR-|your_|localhost|127\.0\.0\.1/i.test(String(process.env[k] || '')));

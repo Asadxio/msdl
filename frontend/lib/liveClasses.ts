@@ -103,21 +103,25 @@ const LIVE_API_URL = String(
   || process.env.EXPO_PUBLIC_PUSH_API_URL
   || process.env.EXPO_PUBLIC_API_BASE_URL
 ).replace(/\/api\/?$/, '').trim();
-const LIVE_API_SETUP_MESSAGE = 'Live classes are not configured yet. Please set EXPO_PUBLIC_LIVE_API_URL, EXPO_PUBLIC_PUSH_API_URL, and/or EXPO_PUBLIC_API_BASE_URL in your Expo environment.';
+const LIVE_API_SETUP_MESSAGE = 'Live classes are not configured yet. Please set EXPO_PUBLIC_LIVE_API_URL, EXPO_PUBLIC_PUSH_API_URL, or EXPO_PUBLIC_API_BASE_URL in your Expo environment.';
 const ENROLLMENT_LOOKUP_LIMIT = 500;
 
 function getMissingLiveClassEnvVars(): string[] {
   const missing: string[] = [];
-  if (!AGORA_APP_ID) missing.push('EXPO_PUBLIC_AGORA_APP_ID');
-  if (!String(process.env.EXPO_PUBLIC_LIVE_API_URL || '').trim()) missing.push('EXPO_PUBLIC_LIVE_API_URL');
-  if (!String(process.env.EXPO_PUBLIC_PUSH_API_URL || '').trim()) missing.push('EXPO_PUBLIC_PUSH_API_URL');
+  if (!String(
+    process.env.EXPO_PUBLIC_LIVE_API_URL
+    || process.env.EXPO_PUBLIC_PUSH_API_URL
+    || process.env.EXPO_PUBLIC_API_BASE_URL,
+  ).trim()) {
+    missing.push('EXPO_PUBLIC_LIVE_API_URL or EXPO_PUBLIC_PUSH_API_URL or EXPO_PUBLIC_API_BASE_URL');
+  }
   return missing;
 }
 
 function ensureLiveClassConfig(): void {
   const missing = getMissingLiveClassEnvVars();
   if (missing.length > 0) {
-    throw new Error(`Missing required live class environment variable${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.`);
+    throw new Error(`Missing required live class environment variable: ${missing.join(', ')}.`);
   }
 }
 const MIN_LIVE_ATTENDANCE_SECONDS = 60;

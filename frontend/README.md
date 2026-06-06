@@ -33,9 +33,10 @@ npx expo config --type public
 
 Required public env vars (must be present in EAS/CI build profile):
 
-- `EXPO_PUBLIC_LIVE_API_URL`
-- `EXPO_PUBLIC_PUSH_API_URL`
-- `EXPO_PUBLIC_AGORA_APP_ID`
+- `EXPO_PUBLIC_API_BASE_URL`
+- `EXPO_PUBLIC_FIREBASE_PROJECT_ID`
+- `EXPO_PUBLIC_LIVE_API_URL` or `EXPO_PUBLIC_PUSH_API_URL` (required if `EXPO_PUBLIC_API_BASE_URL` is absent)
+- `EXPO_PUBLIC_AGORA_APP_ID` (optional when the live class token endpoint returns `app_id` securely)
 
 Firebase rules validation (required in CI/release checklist):
 
