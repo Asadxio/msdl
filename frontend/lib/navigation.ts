@@ -16,17 +16,38 @@ export function goBackOrReplace(router: BackCapableRouter, fallback: Href = HOME
   router.replace(fallback);
 }
 
-// Safe replace with a global startup navigation lock to prevent duplicate
-// navigations during app startup. Uses a global flag on `globalThis`.
+type ReplaceLockState = {
+  href: string;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+const STARTUP_NAVIGATION_LOCK_KEY = '__startupNavigationLock_v2';
+const STARTUP_NAVIGATION_LOCK_MS = 250;
+
+// Safe replace with a short, target-aware global lock to prevent duplicate
+// startup navigations without blocking later auth-state redirects (for example,
+// replacing /auth/login with / after sign-in).
 export function safeReplace(router: BackCapableRouter, href: Href) {
-  const KEY = '__startupNavigationLock_v1';
   const g = globalThis as any;
-  if (g[KEY]) return;
-  g[KEY] = true;
+  const hrefKey = String(href);
+  const currentLock = g[STARTUP_NAVIGATION_LOCK_KEY] as ReplaceLockState | undefined;
+
+  if (currentLock?.href === hrefKey) return;
+  if (currentLock?.timer) clearTimeout(currentLock.timer);
+
+  const nextLock: ReplaceLockState = { href: hrefKey, timer: null };
+  g[STARTUP_NAVIGATION_LOCK_KEY] = nextLock;
+
   try {
     router.replace(href);
   } catch (error) {
-    g[KEY] = false;
+    delete g[STARTUP_NAVIGATION_LOCK_KEY];
     throw error;
   }
+
+  nextLock.timer = setTimeout(() => {
+    if (g[STARTUP_NAVIGATION_LOCK_KEY] === nextLock) {
+      delete g[STARTUP_NAVIGATION_LOCK_KEY];
+    }
+  }, STARTUP_NAVIGATION_LOCK_MS);
 }
