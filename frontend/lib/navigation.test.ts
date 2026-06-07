@@ -68,7 +68,7 @@ describe('navigation history preservation audit', () => {
 
   it('keeps menu and dashboard feature entries on push navigation', () => {
     const home = read('(tabs)/index.tsx');
-    const more = read('more.tsx');
+    const more = read('more/index.tsx');
     const courses = read('(tabs)/courses.tsx');
     const navigation = fs.readFileSync(path.join(__dirname, 'navigation.ts'), 'utf8');
     expect(home).toContain('router.push(path as any)');
@@ -80,4 +80,14 @@ describe('navigation history preservation audit', () => {
     expect(navigation).toContain('router.canGoBack()');
     expect(navigation).toContain('router.replace(fallback)');
   });
+
+  it('does not keep a permanent startup navigation lock after auth redirects', () => {
+    const layout = read('_layout.tsx');
+    const navigation = fs.readFileSync(path.join(__dirname, 'navigation.ts'), 'utf8');
+    expect(layout).not.toContain('navigationLockedRef.current = true');
+    expect(navigation).toContain('STARTUP_NAVIGATION_LOCK_MS');
+    expect(navigation).toContain('currentLock?.href === hrefKey');
+    expect(navigation).toContain('delete g[STARTUP_NAVIGATION_LOCK_KEY]');
+  });
+
 });

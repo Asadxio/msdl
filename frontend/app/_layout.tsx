@@ -57,20 +57,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, []);
   const hideRequestedRef = useRef(false);
-  const navigationLockedRef = useRef(false);
   const rootLoaderClearedRef = useRef(false);
   const segments = useSegments();
   const segmentKey = segments.join('/');
   const router = useRouter();
 
   const performReplace = useCallback((route: string) => {
-    if (navigationLockedRef.current) {
-      startupLog('Navigation suppressed', { route, reason: 'lock' });
-      return;
-    }
-    navigationLockedRef.current = true;
     try {
-      // Use global-safe replace to coordinate with other components
+      // Use global-safe replace to coordinate with other components without
+      // permanently suppressing auth-state redirects after sign-in.
       safeReplace(router, route as any);
     } catch (error) {
       startupLog('router.replace failed', { route, message: formatErrorMessage(error) });
