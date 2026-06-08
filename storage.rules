@@ -5,6 +5,24 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function userDoc() {
+      return get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isApprovedVerifiedUser() {
+      return isVerified()
+        && exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && userDoc().status == 'approved';
+    }
+
+    function enrollmentDocId(uid, courseId) {
+      return uid + ':' + courseId;
+    }
+
     function isSafeImageUpload(maxBytes) {
       return request.resource != null
         && request.resource.size > 0
@@ -35,14 +53,13 @@ service firebase.storage {
     }
 
     function canReadLiveClassStorage(classId) {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && exists(/databases/(default)/documents/live_classes/$(classId))
         && (
           get(/databases/(default)/documents/live_classes/$(classId)).data.teacher_id == request.auth.uid
-          || (get(/databases/(default)/documents/live_classes/$(classId)).data.student_ids is list
-            && request.auth.uid in get(/databases/(default)/documents/live_classes/$(classId)).data.student_ids)
-          || (exists(/databases/(default)/documents/users/$(request.auth.uid))
-            && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+          || (exists(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, get(/databases/(default)/documents/live_classes/$(classId)).data.course_id)))
+            && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, get(/databases/(default)/documents/live_classes/$(classId)).data.course_id))).data.status == 'active')
+          || userDoc().role in ['admin', 'super_admin']
         );
     }
 
@@ -71,14 +88,14 @@ service firebase.storage {
 
 
     function isAdmin() {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && exists(/databases/(default)/documents/users/$(request.auth.uid))
         && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
         && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
     function isTeacherOrAdmin() {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && exists(/databases/(default)/documents/users/$(request.auth.uid))
         && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin', 'super_admin']
         && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
@@ -98,20 +115,31 @@ service firebase.storage {
         ];
     }
 
+    function canReadCourseStorage(courseId) {
+      return isApprovedVerifiedUser()
+        && (
+          userDoc().role in ['teacher', 'admin', 'super_admin']
+          || (exists(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
+            && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.user_id == request.auth.uid
+            && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.course_id == courseId
+            && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.status == 'active')
+        );
+    }
+
     match /users/{userId}/profile/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId && isSafeImageUpload(5242880);
+      allow read: if isApprovedVerifiedUser() && request.auth.uid == userId;
+      allow write: if isVerified() && request.auth.uid == userId && isSafeImageUpload(5242880);
     }
 
     match /status_updates/{userId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId && isSafeStatusUpload();
+      allow read: if isApprovedVerifiedUser() && request.auth.uid == userId;
+      allow write: if isVerified() && request.auth.uid == userId && isSafeStatusUpload();
     }
 
 
     match /chat_media/{chatId}/{userId}/{fileName} {
       allow read: if canReadChatMedia(chatId);
-      allow write: if isSignedIn()
+      allow write: if isApprovedVerifiedUser()
         && request.auth.uid == userId
         && fileName.matches('^[A-Za-z0-9._-]{6,160}$')
         && canReadChatMedia(chatId)
@@ -119,14 +147,14 @@ service firebase.storage {
     }
 
     match /course_materials/{courseId}/{fileName} {
-      allow read: if isSignedIn();
+      allow read: if canReadCourseStorage(courseId);
       allow write: if isTeacherOrAdmin()
         && fileName.matches('^[A-Za-z0-9._-]{6,160}$')
         && isSafeCourseMaterialUpload();
     }
 
     match /audio_lessons/{courseId}/{teacherId}/{fileName} {
-      allow read: if isSignedIn();
+      allow read: if canReadCourseStorage(courseId);
       allow create, update: if isTeacherOrAdmin()
         && request.auth.uid == teacherId
         && fileName.matches('^[A-Za-z0-9._-]{6,180}$')
@@ -141,8 +169,8 @@ service firebase.storage {
     }
 
     match /assignment_submissions/{userId}/{fileName} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isTeacherOrAdmin());
-      allow write: if isSignedIn()
+      allow read: if isApprovedVerifiedUser() && (request.auth.uid == userId || isTeacherOrAdmin());
+      allow write: if isApprovedVerifiedUser()
         && request.auth.uid == userId
         && fileName.matches('^[A-Za-z0-9._-]{6,140}$')
         && isSafeAssignmentUpload();

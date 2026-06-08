@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, Share, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { apiUrl } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 
@@ -80,13 +81,13 @@ export default function CertificateScreen() {
     const course = courses.find((c) => c.id === selectedCourseId);
     if (!course) return;
     try {
-      await addDoc(collection(db, 'certificates'), {
-        user_id: user.uid,
-        user_name: profile.name,
-        course_name: course.name,
-        completion_date: new Date().toISOString().slice(0, 10),
-        created_at: serverTimestamp(),
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(apiUrl('/certificates/generate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
+        body: JSON.stringify({ course_id: selectedCourseId }),
       });
+      if (!res.ok) throw new Error(`certificate_generate_failed_${res.status}`);
       const certText = `Certificate of Completion\n\nAwarded to: ${profile.name}\nCourse: ${course.name}\nDate: ${new Date().toDateString()}`;
       await Share.share({ message: certText });
     } catch {
