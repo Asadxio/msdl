@@ -205,11 +205,16 @@ export default function PendingScreen() {
     }
   };
 
+  const handlePendingSignOut = async () => {
+    if (user?.uid) void markPendingSignout(user.uid, resendCount);
+    await signOut();
+  };
+
   // Deactivated state
   if (isDeactivated || isRejected) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={styles.content}>
           <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
             <Ionicons name="close-circle-outline" size={48} color={COLORS.error} />
@@ -230,9 +235,9 @@ export default function PendingScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.content}>
+    <View style={[styles.container, isDarkMode && styles.containerDark, { paddingTop: insets.top }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Email Verification Section */}
         {needsVerification ? (
           <>
@@ -243,9 +248,23 @@ export default function PendingScreen() {
             <Text style={styles.subtitle}>
               We sent a verification email to your inbox.{"\n"}Please verify your email to continue.
             </Text>
-            <Text style={styles.verificationNote}>
-              Didn{'\''}t receive the verification email? Please check your Spam/Junk folder.
+            <View style={[styles.deliveryInfoBox, isDarkMode && styles.deliveryInfoBoxDark]} testID="verification-delivery-guidance">
+              <Ionicons name="information-circle-outline" size={20} color={isDarkMode ? COLORS.secondary : COLORS.primary} />
+              <Text style={[styles.deliveryInfoText, isDarkMode && styles.deliveryInfoTextDark]}>
+                Verification email may take a few minutes to arrive. Please check your Inbox, Spam/Junk, Promotions, and Updates folders.
+              </Text>
+            </View>
+            <Text style={[styles.resendHelperText, isDarkMode && styles.resendHelperTextDark]}>
+              Didn{'\''}t receive the email? Check Spam/Junk first, then try resending.
             </Text>
+            <View style={[styles.resendMetaBox, isDarkMode && styles.resendMetaBoxDark]}>
+              <Text style={[styles.resendMetaText, isDarkMode && styles.resendMetaTextDark]}>Last verification email sent: {lastEmailSentLabel}</Text>
+              {cooldownRemainingSeconds > 0 ? (
+                <Text style={[styles.cooldownText, isDarkMode && styles.cooldownTextDark]}>
+                  You can resend again in {cooldownRemainingSeconds} seconds
+                </Text>
+              ) : null}
+            </View>
             <TouchableOpacity
               style={[styles.resendBtn, busy && styles.disabledBtn]}
               onPress={handleResendVerification}
@@ -282,14 +301,14 @@ export default function PendingScreen() {
 
         {/* Profile Info */}
         {profile && (
-          <View style={styles.infoCard} testID="pending-info">
+          <View style={[styles.infoCard, isDarkMode && styles.infoCardDark]} testID="pending-info">
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Name</Text>
-              <Text style={styles.infoValue}>{profile.name}</Text>
+              <Text style={[styles.infoLabel, isDarkMode && styles.infoLabelDark]}>Name</Text>
+              <Text style={[styles.infoValue, isDarkMode && styles.infoValueDark]}>{profile.name}</Text>
             </View>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Role</Text>
-              <Text style={styles.infoValue}>{profile.role}</Text>
+              <Text style={[styles.infoLabel, isDarkMode && styles.infoLabelDark]}>Role</Text>
+              <Text style={[styles.infoValue, isDarkMode && styles.infoValueDark]}>{profile.role}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Email Verified</Text>
@@ -317,19 +336,34 @@ export default function PendingScreen() {
           {signingOut ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="log-out-outline" size={18} color={COLORS.error} />}
           <Text style={styles.logoutBtnText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  content: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, gap: SPACING.md },
+  containerDark: { backgroundColor: '#071A14' },
+  content: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, gap: SPACING.md },
   iconCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: COLORS.goldBg, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  title: { fontSize: 24, fontWeight: '800', color: COLORS.textMain },
+  title: { fontSize: 24, fontWeight: '800', color: COLORS.textMain, textAlign: 'center' },
+  titleDark: { color: '#F8FAF9' },
   subtitle: { fontSize: 15, color: COLORS.textMuted, textAlign: 'center', lineHeight: 24 },
-  verificationNote: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
+  subtitleDark: { color: '#C8D7D1' },
+  deliveryInfoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.xs, width: '100%', backgroundColor: COLORS.surfaceAlt, borderColor: COLORS.border, borderWidth: 1, borderRadius: RADIUS.lg, padding: SPACING.md },
+  deliveryInfoBoxDark: { backgroundColor: '#102820', borderColor: '#214438' },
+  deliveryInfoText: { flex: 1, fontSize: 14, color: COLORS.textMain, lineHeight: 21, fontWeight: '600' },
+  deliveryInfoTextDark: { color: '#E3ECE8' },
+  resendHelperText: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 19, maxWidth: 340 },
+  resendHelperTextDark: { color: '#A9BBB4' },
+  resendMetaBox: { width: '100%', alignItems: 'center', gap: 4, marginTop: -4 },
+  resendMetaBoxDark: {},
+  resendMetaText: { fontSize: 12, color: COLORS.textMuted, textAlign: 'center', lineHeight: 17 },
+  resendMetaTextDark: { color: '#A9BBB4' },
+  cooldownText: { fontSize: 13, color: COLORS.primary, textAlign: 'center', fontWeight: '700', lineHeight: 18 },
+  cooldownTextDark: { color: COLORS.secondary },
   resendBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 24, paddingVertical: 14, marginTop: 4 },
+  resendBtnDisabled: { opacity: 0.55 },
   resendBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.secondary },
   disabledBtn: { opacity: 0.55 },
   messageBox: { width: '100%', borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10 },
@@ -343,7 +377,9 @@ const styles = StyleSheet.create({
   infoCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, width: '100%', gap: SPACING.sm, marginTop: 8 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   infoLabel: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500' },
+  infoLabelDark: { color: '#A9BBB4' },
   infoValue: { fontSize: 14, fontWeight: '600', color: COLORS.textMain, textTransform: 'capitalize' },
+  infoValueDark: { color: '#F8FAF9' },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: RADIUS.full },
   verifiedBadge: { backgroundColor: '#D1FAE5' },
   unverifiedBadge: { backgroundColor: '#FEF3C7' },
