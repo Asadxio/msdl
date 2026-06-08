@@ -21,7 +21,7 @@ import { auth, db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { dispatchNotification } from '@/lib/dispatchNotification';
 import { DELETE_HEARTBEAT_MS, STALE_HEARTBEAT_MS, heartbeatPayload } from '@/lib/liveClassReliability';
-import { ENROLLMENT_DOC_ID_SEPARATOR, getEnrollmentDocId, isActiveEnrollmentForUserCourse } from '@/lib/enrollments';
+import { ENROLLMENT_DOC_ID_SEPARATOR, allowsLegacyCourseAccessWhenEnrollmentMissing, getEnrollmentDocId, isActiveEnrollmentForUserCourse } from '@/lib/enrollments';
 
 export type LiveClassStatus = 'scheduled' | 'waiting_room' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'cancelled';
 
@@ -572,5 +572,6 @@ export async function canCurrentUserJoinLiveClass(liveClass: LiveClass, profile:
   const enrollmentId = getEnrollmentDocId(uid, liveClass.course_id);
   if (!enrollmentId || enrollmentId === ENROLLMENT_DOC_ID_SEPARATOR) return false;
   const enrollmentSnap = await getDoc(doc(db, 'enrollments', enrollmentId)).catch(() => null);
-  return !!enrollmentSnap?.exists() && isActiveEnrollmentForUserCourse(enrollmentSnap.data(), uid, liveClass.course_id);
+  if (enrollmentSnap?.exists()) return isActiveEnrollmentForUserCourse(enrollmentSnap.data(), uid, liveClass.course_id);
+  return profile.role === 'student' && allowsLegacyCourseAccessWhenEnrollmentMissing(liveClass.enrollment_source);
 }

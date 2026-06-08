@@ -10,7 +10,6 @@ import {
   signOut as firebaseSignOut,
   sendEmailVerification,
   sendPasswordResetEmail,
-  reload,
   User,
   updateEmail,
   EmailAuthProvider,
@@ -24,7 +23,11 @@ import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { startupLog } from '@/lib/startup';
 import { normalizeRole, type AppRole, type OnboardingRole } from '@/lib/roles';
-import { trackEvent } from '@/lib/analytics';
+import {
+  markSignupCompleted,
+  markVerificationEmailSent,
+  trackEmailVerificationError,
+} from '@/lib/emailVerificationAnalytics';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
@@ -64,9 +67,11 @@ type AuthContextType = {
   resendVerification: () => Promise<string | null>;
   changeEmailAddress: (newEmail: string, currentPassword?: string) => Promise<ChangeEmailResult>;
   resetPassword: (email: string) => Promise<string | null>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<boolean>;
   profileOffline: boolean;
-  profileIssue: ProfileIssue;
+  showSignupVerificationPrompt: boolean;
+  signupVerificationFlowActive: boolean;
+  acknowledgeSignupVerificationPrompt: () => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -81,9 +86,11 @@ const AuthContext = createContext<AuthContextType>({
   resendVerification: async () => null,
   changeEmailAddress: async () => ({ error: 'Not signed in' }),
   resetPassword: async () => null,
-  refreshUser: async () => {},
+  refreshUser: async () => false,
   profileOffline: false,
-  profileIssue: null,
+  showSignupVerificationPrompt: false,
+  signupVerificationFlowActive: false,
+  acknowledgeSignupVerificationPrompt: () => {},
 });
 
 export function useAuth() {
@@ -100,7 +107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileOffline, setProfileOffline] = useState(false);
-  const [profileIssue, setProfileIssue] = useState<ProfileIssue>(null);
+  const [showSignupVerificationPrompt, setShowSignupVerificationPrompt] = useState(false);
+  const [signupVerificationFlowActive, setSignupVerificationFlowActive] = useState(false);
 
   const emailVerified = user?.emailVerified ?? false;
   const getProfileCacheKey = (uid: string) => `profile_cache_${uid}`;
@@ -205,10 +213,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = async () => {
     if (auth.currentUser) {
       try {
-        await reload(auth.currentUser);
-        setUser({ ...auth.currentUser } as User);
+        await auth.currentUser.reload();
+        logger.info('Auth user refreshed', { uid: auth.currentUser.uid, emailVerified: auth.currentUser.emailVerified });
+        setUser({ ...auth.currentUser, emailVerified: auth.currentUser.emailVerified } as User);
       } catch (err) {
-        logger.warn('Failed to refresh auth user:', err);
+        logger.error('Failed to refresh auth user:', err);
       }
     }
   };
@@ -348,6 +357,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!safeName || !safeEmail || !password) return 'Please fill in all required fields';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return 'Invalid email format';
     if (normalizedPassword.length < 6) return 'Password must be at least 6 characters';
+    setSignupVerificationFlowActive(true);
     try {
       const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
       // Send verification email
@@ -359,25 +369,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           emailDomain: safeEmail.split('@')[1] || 'unknown',
         }, `verification-email-signup-requested-${cred.user.uid}`);
         await withTimeout(sendEmailVerification(cred.user));
-        await AsyncStorage.setItem(getVerificationResendKey(cred.user.uid), JSON.stringify({
-          lastSentAt: Date.now(),
-          date: new Date().toISOString().slice(0, 10),
-          count: 1,
-        })).catch(() => {});
-        trackEvent('verification_email_delivery_attempt', {
-          source: 'signup',
-          status: 'sent',
-          uid: cred.user.uid,
-          emailDomain: safeEmail.split('@')[1] || 'unknown',
-        }, `verification-email-signup-sent-${cred.user.uid}`);
-      } catch (verificationErr: any) {
-        trackEvent('verification_email_delivery_attempt', {
-          source: 'signup',
-          status: 'error',
-          uid: cred.user.uid,
-          emailDomain: safeEmail.split('@')[1] || 'unknown',
-          code: verificationErr?.code || 'unknown',
-        }, `verification-email-signup-error-${cred.user.uid}-${Date.now()}`);
+        void markVerificationEmailSent(cred.user.uid);
+      } catch (error) {
+        trackEmailVerificationError('verification_email_send_failed', error, { uid: cred.user.uid });
       }
 
       let referrerId: string | null = null;
@@ -415,9 +409,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           updated_at: serverTimestamp(),
         }).catch(() => {});
       }
+      void markSignupCompleted(cred.user.uid);
+      setShowSignupVerificationPrompt(true);
       await fetchProfile(cred.user.uid);
       return null;
     } catch (err: any) {
+      setSignupVerificationFlowActive(false);
       const code = err?.code || '';
       if (code === 'auth/email-already-in-use') return 'Email already registered';
       if (code === 'auth/weak-password') return 'Password must be at least 6 characters';
@@ -435,65 +432,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const today = new Date(now).toISOString().slice(0, 10);
     const emailDomain = currentUser.email?.split('@')[1] || 'unknown';
     try {
-      const raw = await AsyncStorage.getItem(key).catch(() => null);
-      let state: { lastSentAt?: number; date?: string; count?: number } = {};
-      if (raw) {
-        try {
-          state = JSON.parse(raw) as { lastSentAt?: number; date?: string; count?: number };
-        } catch {
-          state = {};
-        }
-      }
-      const count = state.date === today ? state.count || 0 : 0;
-      const elapsed = now - (state.lastSentAt || 0);
-
-      if (state.lastSentAt && elapsed < VERIFICATION_RESEND_COOLDOWN_MS) {
-        const secondsLeft = Math.ceil((VERIFICATION_RESEND_COOLDOWN_MS - elapsed) / 1000);
-        trackEvent('verification_email_delivery_attempt', {
-          source: 'resend',
-          status: 'cooldown_blocked',
-          uid: currentUser.uid,
-          emailDomain,
-          secondsLeft,
-        }, `verification-email-resend-cooldown-${currentUser.uid}-${Math.floor(now / VERIFICATION_RESEND_COOLDOWN_MS)}`);
-        return `Please wait ${secondsLeft} seconds before requesting another email`;
-      }
-
-      if (count >= VERIFICATION_RESEND_DAILY_LIMIT) {
-        trackEvent('verification_email_delivery_attempt', {
-          source: 'resend',
-          status: 'daily_limit_blocked',
-          uid: currentUser.uid,
-          emailDomain,
-          dailyLimit: VERIFICATION_RESEND_DAILY_LIMIT,
-        }, `verification-email-resend-daily-limit-${currentUser.uid}-${today}`);
-        return 'Daily resend limit reached. Please try again tomorrow or contact support.';
-      }
-
-      trackEvent('verification_email_delivery_attempt', {
-        source: 'resend',
-        status: 'requested',
-        uid: currentUser.uid,
-        emailDomain,
-      }, `verification-email-resend-requested-${currentUser.uid}-${now}`);
-      await sendEmailVerification(currentUser);
-      await AsyncStorage.setItem(key, JSON.stringify({ lastSentAt: now, date: today, count: count + 1 })).catch(() => {});
-      trackEvent('verification_email_delivery_attempt', {
-        source: 'resend',
-        status: 'sent',
-        uid: currentUser.uid,
-        emailDomain,
-        dailyCount: count + 1,
-      }, `verification-email-resend-sent-${currentUser.uid}-${now}`);
+      await sendEmailVerification(auth.currentUser);
+      logger.info('Verification email sent', { uid: auth.currentUser.uid, email: auth.currentUser.email });
       return null;
     } catch (err: any) {
-      trackEvent('verification_email_delivery_attempt', {
-        source: 'resend',
-        status: 'error',
-        uid: currentUser.uid,
-        emailDomain,
-        code: err?.code || 'unknown',
-      }, `verification-email-resend-error-${currentUser.uid}-${Date.now()}`);
+      logger.error('Verification email resend failed', err);
       if (err?.code === 'auth/too-many-requests') return 'Please wait before requesting another email';
       return err?.message || 'Failed to send verification email';
     }
@@ -577,22 +520,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOutUser = async () => {
+    const uid = auth.currentUser?.uid || user?.uid || null;
     try {
       await firebaseSignOut(auth);
+      if (uid) await AsyncStorage.removeItem(getProfileCacheKey(uid)).catch(() => {});
+      logger.info('Signed out and cleared auth session cache', { uid });
     } catch (err) {
-      logger.warn('Failed to sign out cleanly:', err);
+      logger.error('Failed to sign out cleanly:', err);
     } finally {
       setUser(null);
       setProfile(null);
-      setProfileIssue(null);
+      setProfileOffline(false);
     }
+  };
+
+  const acknowledgeSignupVerificationPrompt = () => {
+    setShowSignupVerificationPrompt(false);
+    setSignupVerificationFlowActive(false);
   };
 
   return (
     <AuthContext.Provider value={{
       user, profile, authLoading, emailVerified,
       signIn, signUp, signOut: signOutUser, refreshProfile,
-      resendVerification, changeEmailAddress, resetPassword, refreshUser, profileOffline, profileIssue,
+      resendVerification, resetPassword, refreshUser, profileOffline,
+      showSignupVerificationPrompt, signupVerificationFlowActive, acknowledgeSignupVerificationPrompt,
     }}>
       {children}
     </AuthContext.Provider>

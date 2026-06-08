@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   StatusBar,
   Linking,
+  Modal,
+  useColorScheme,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -19,6 +21,12 @@ import { useAuth } from '@/context/AuthContext';
 import type { OnboardingRole } from '@/lib/roles';
 import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
 import { WHATSAPP_HELP_URL, normalizeWhatsAppUrl } from '@/lib/links';
+import {
+  markSignupStarted,
+  markVerificationModalContinue,
+  markVerificationModalShown,
+  trackEmailVerificationError,
+} from '@/lib/emailVerificationAnalytics';
 
 /**
  * Production-safe Signup UI:
@@ -28,7 +36,10 @@ import { WHATSAPP_HELP_URL, normalizeWhatsAppUrl } from '@/lib/links';
 export default function SignupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signUp } = useAuth();
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const { user, signUp, showSignupVerificationPrompt, acknowledgeSignupVerificationPrompt } = useAuth();
+  const modalShownTrackedRef = useRef(false);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -46,6 +57,22 @@ export default function SignupScreen() {
 
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
 
+  useEffect(() => {
+    if (!showSignupVerificationPrompt || modalShownTrackedRef.current) return;
+    modalShownTrackedRef.current = true;
+    void markVerificationModalShown(user?.uid || '');
+  }, [showSignupVerificationPrompt, user?.uid]);
+
+  const handleContinueToVerification = useCallback(() => {
+    void markVerificationModalContinue(user?.uid);
+    acknowledgeSignupVerificationPrompt();
+    try {
+      router.replace('/auth/pending');
+    } catch (error) {
+      trackEmailVerificationError('verification_navigation_failed', error, { uid: user?.uid || '', target: '/auth/pending' });
+    }
+  }, [acknowledgeSignupVerificationPrompt, router, user?.uid]);
+
   const handleSignup = async () => {
     if (loading) return;
     if (!name.trim() || !email.trim() || !password) {
@@ -61,6 +88,7 @@ export default function SignupScreen() {
       return;
     }
 
+    markSignupStarted();
     setLoading(true);
     setError('');
     try {
@@ -74,8 +102,8 @@ export default function SignupScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.container, isDarkMode && styles.containerDark]} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
@@ -87,12 +115,12 @@ export default function SignupScreen() {
           showsVerticalScrollIndicator={false}
         >
           <FadeInView style={styles.headerSection}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join our learning community</Text>
+            <Text style={[styles.title, isDarkMode && styles.titleDark]}>Create Account</Text>
+            <Text style={[styles.subtitle, isDarkMode && styles.subtitleDark]}>Join our learning community</Text>
           </FadeInView>
 
           <FadeInView delay={60}>
-            <AppCard style={styles.formCard}>
+            <AppCard style={[styles.formCard, isDarkMode && styles.formCardDark]}>
               {error ? (
                 <View style={styles.errorBox} testID="signup-error">
                   <Ionicons name="alert-circle" size={18} color={COLORS.error} />
@@ -102,9 +130,6 @@ export default function SignupScreen() {
 
               <AppInput label="Full Name" leftIcon="person-outline" placeholder="Enter your name" value={name} onChangeText={handleNameChange} testID="signup-name-input" />
               <AppInput label="Email" leftIcon="mail-outline" placeholder="Enter your email" value={email} onChangeText={handleEmailChange} autoCapitalize="none" keyboardType="email-address" testID="signup-email-input" />
-              <Text style={styles.verificationNote}>
-                Didn{'\''}t receive the verification email? Please check your Spam/Junk folder.
-              </Text>
 
               <View>
                 <AppInput label="Password" leftIcon="lock-closed-outline" placeholder="Min 6 characters" value={password} onChangeText={handlePasswordChange} secureTextEntry={!showPass} testID="signup-password-input" />
@@ -134,9 +159,9 @@ export default function SignupScreen() {
           </FadeInView>
 
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Already have an account? </Text>
+            <Text style={[styles.footerText, isDarkMode && styles.footerTextDark]}>Already have an account? </Text>
             <TouchableOpacity onPress={() => router.replace('/auth/login')} testID="goto-login-btn">
-              <Text style={styles.footerLink}>Sign In</Text>
+              <Text style={[styles.footerLink, isDarkMode && styles.footerLinkDark]}>Sign In</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -153,6 +178,22 @@ export default function SignupScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+      <Modal transparent visible={showSignupVerificationPrompt} animationType="fade" onRequestClose={handleContinueToVerification}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, isDarkMode && styles.modalCardDark]} testID="signup-verification-modal">
+            <View style={[styles.modalIconCircle, isDarkMode && styles.modalIconCircleDark]}>
+              <Ionicons name="mail-unread-outline" size={28} color={isDarkMode ? COLORS.secondary : COLORS.primary} />
+            </View>
+            <Text style={[styles.modalTitle, isDarkMode && styles.modalTitleDark]}>Verify Your Email</Text>
+            <Text style={[styles.modalMessage, isDarkMode && styles.modalMessageDark]}>
+              We have sent a verification email to your email address. If you don{'\''}t see it within a few minutes, please check your Spam/Junk, Promotions, or Updates folders.
+            </Text>
+            <ScalePressable style={styles.modalButton} onPress={handleContinueToVerification} testID="signup-verification-continue-btn">
+              <Text style={styles.modalButtonText}>Continue</Text>
+            </ScalePressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -160,6 +201,7 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, backgroundColor: '#F5F5F5' },
+  containerDark: { backgroundColor: '#071A14' },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -170,7 +212,9 @@ const styles = StyleSheet.create({
   },
   headerSection: { marginBottom: SPACING.md },
   title: { ...TYPOGRAPHY.title, color: COLORS.text, fontWeight: '800', textAlign: 'left' },
+  titleDark: { color: '#F8FAF9' },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, marginTop: SPACING.xs, textAlign: 'left' },
+  subtitleDark: { color: '#A9BBB4' },
   formCard: {
     gap: SPACING.md,
     backgroundColor: '#FFFFFF',
@@ -182,6 +226,11 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 4,
   },
+  formCardDark: {
+    backgroundColor: '#102820',
+    borderColor: '#214438',
+    shadowColor: '#000000',
+  },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -191,7 +240,6 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1, textAlign: 'left' },
-  verificationNote: { ...TYPOGRAPHY.label, color: COLORS.textMuted, marginTop: -SPACING.xs, lineHeight: 18 },
   eyeBtn: { position: 'absolute', right: SPACING.sm, top: 34, height: 40, justifyContent: 'center' },
   field: { gap: SPACING.xs },
   label: { ...TYPOGRAPHY.label, color: '#6A6A6A', fontSize: 12, fontWeight: '500', textAlign: 'left' },
@@ -222,7 +270,20 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.md },
   footerText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  footerTextDark: { color: '#A9BBB4' },
   footerLink: { ...TYPOGRAPHY.label, color: COLORS.primary },
+  footerLinkDark: { color: COLORS.secondary },
   helpBtn: { alignSelf: 'center', marginTop: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: '#DCFCE7' },
   helpBtnText: { ...TYPOGRAPHY.label, color: '#166534', fontWeight: '700' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.42)', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
+  modalCard: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: RADIUS.xl, padding: SPACING.lg, alignItems: 'center', gap: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
+  modalCardDark: { backgroundColor: '#102820', borderColor: '#214438' },
+  modalIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.goldBg, alignItems: 'center', justifyContent: 'center' },
+  modalIconCircleDark: { backgroundColor: '#213B31' },
+  modalTitle: { ...TYPOGRAPHY.heading, color: COLORS.textMain, textAlign: 'center', fontWeight: '800' },
+  modalTitleDark: { color: '#F8FAF9' },
+  modalMessage: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', lineHeight: 22 },
+  modalMessageDark: { color: '#C8D7D1' },
+  modalButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, minHeight: 50, width: '100%', alignItems: 'center', justifyContent: 'center', marginTop: SPACING.xs },
+  modalButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });
