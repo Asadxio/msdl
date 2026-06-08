@@ -7,9 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { auth } from '@/lib/firebase';
+import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 
 const VERIFICATION_POLL_MS = 15000;
+const FIREBASE_AUTH_ACTION_TIMEOUT_MS = 15000;
 
 type MessageState = { type: 'success' | 'error' | 'info'; text: string } | null;
 
@@ -27,6 +29,8 @@ export default function PendingScreen() {
   const navigationTriggeredRef = useRef(false);
   const refreshProfileRef = useRef(refreshProfile);
   const refreshUserRef = useRef(refreshUser);
+  const verificationCheckInFlightRef = useRef(false);
+  const authActionVersionRef = useRef(0);
 
   useEffect(() => {
     refreshProfileRef.current = refreshProfile;
@@ -61,6 +65,11 @@ export default function PendingScreen() {
   }, [router, stopPolling]);
 
   const refreshVerificationStatus = useCallback(async (source: 'mount' | 'manual' | 'poll', showUnverifiedMessage = false) => {
+    if (verificationCheckInFlightRef.current) {
+      logger.info('Verification status check skipped because another check is in flight', { source });
+      return false;
+    }
+    const actionVersion = authActionVersionRef.current;
     const currentUser = auth.currentUser;
     console.log('[EmailVerification] Verification status check started', { source });
     if (!currentUser) {
@@ -74,8 +83,10 @@ export default function PendingScreen() {
     console.log('[EmailVerification] Current user uid', currentUser.uid);
     console.log('[EmailVerification] Current email', currentUser.email);
 
+    verificationCheckInFlightRef.current = true;
     try {
-      await currentUser.reload();
+      await withTimeout(currentUser.reload(), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
+      if (authActionVersionRef.current !== actionVersion || !mountedRef.current) return false;
       const verified = Boolean(auth.currentUser?.emailVerified);
       console.log('[EmailVerification] emailVerified value', verified);
       logger.info('Verification status updated', { source, uid: currentUser.uid, emailVerified: verified });
@@ -95,8 +106,11 @@ export default function PendingScreen() {
     } catch (err) {
       logger.error('Email verification status check failed', err);
       console.log('[EmailVerification] Any caught errors', err);
-      if (mountedRef.current) setMessage({ type: 'error', text: 'Unable to check verification status. Please try again.' });
+      const text = normalizeFirebaseError(err, 'Unable to check verification status. Please try again.');
+      if (mountedRef.current) setMessage({ type: 'error', text });
       return false;
+    } finally {
+      verificationCheckInFlightRef.current = false;
     }
   }, [navigateAfterVerified]);
 
@@ -149,7 +163,7 @@ export default function PendingScreen() {
     setResending(true);
     setMessage(null);
     try {
-      await sendEmailVerification(currentUser);
+      await withTimeout(sendEmailVerification(currentUser), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
       console.log('[EmailVerification] Verification email sent');
       logger.info('Verification email sent', { uid: currentUser.uid, email: currentUser.email });
       const text = 'Verification email sent. Please check your inbox.';
@@ -160,7 +174,7 @@ export default function PendingScreen() {
       console.log('[EmailVerification] Any caught errors', err);
       const text = err?.code === 'auth/too-many-requests'
         ? 'Please wait before requesting another email.'
-        : (err?.message || 'Failed to send verification email.');
+        : normalizeFirebaseError(err, 'Failed to send verification email.');
       if (mountedRef.current) setMessage({ type: 'error', text });
       Alert.alert('Error', text);
     } finally {
@@ -172,18 +186,20 @@ export default function PendingScreen() {
     if (busy) return;
     console.log('[EmailVerification] Sign out clicked');
     logger.info('Sign out clicked');
+    authActionVersionRef.current += 1;
     setSigningOut(true);
     setMessage(null);
     stopPolling();
     try {
-      await signOut();
+      await withTimeout(signOut(), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
       console.log('[EmailVerification] Navigation triggered', { route: '/auth/login' });
       logger.info('Navigation triggered', { reason: 'sign-out', route: '/auth/login' });
       router.replace('/auth/login');
     } catch (err) {
       logger.error('Sign out failed from pending screen', err);
       console.log('[EmailVerification] Any caught errors', err);
-      if (mountedRef.current) setMessage({ type: 'error', text: 'Unable to sign out. Please try again.' });
+      const text = normalizeFirebaseError(err, 'Unable to sign out. Please try again.');
+      if (mountedRef.current) setMessage({ type: 'error', text });
     } finally {
       if (mountedRef.current) setSigningOut(false);
     }

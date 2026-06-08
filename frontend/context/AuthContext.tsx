@@ -157,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         await auth.currentUser.reload();
         logger.info('Auth user refreshed', { uid: auth.currentUser.uid, emailVerified: auth.currentUser.emailVerified });
-        setUser({ ...auth.currentUser } as User);
+        setUser({ ...auth.currentUser, emailVerified: auth.currentUser.emailVerified } as User);
       } catch (err) {
         logger.error('Failed to refresh auth user:', err);
       }

@@ -226,13 +226,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
-    } else if (profile && profile.status === 'pending' && !isAdmin) {
-      if (segments.join('/') !== 'auth/pending') {
-        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'profile-pending' });
-        performReplace('/auth/pending');
-      } else {
-        startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
-      }
     } else if (user && (profile?.status === 'approved' || isAdmin)) {
       if (inAuth) {
         startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'approved-user-in-auth' });
