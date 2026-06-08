@@ -34,6 +34,20 @@ service firebase.storage {
         && request.auth.uid in get(/databases/(default)/documents/chats/$(chatId)).data.participants;
     }
 
+    function isApprovedStudent() {
+      return isSignedIn()
+        && exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'student'
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    function allowsLegacyLiveClassStorageAccess(data) {
+      return isApprovedStudent()
+        && (!('enrollment_source' in data) || data.enrollment_source != 'enrollments')
+        && data.course_id is string
+        && exists(/databases/(default)/documents/courses/$(data.course_id));
+    }
+
     function canReadLiveClassStorage(classId) {
       return isSignedIn()
         && exists(/databases/(default)/documents/live_classes/$(classId))
@@ -41,6 +55,7 @@ service firebase.storage {
           get(/databases/(default)/documents/live_classes/$(classId)).data.teacher_id == request.auth.uid
           || (get(/databases/(default)/documents/live_classes/$(classId)).data.student_ids is list
             && request.auth.uid in get(/databases/(default)/documents/live_classes/$(classId)).data.student_ids)
+          || allowsLegacyLiveClassStorageAccess(get(/databases/(default)/documents/live_classes/$(classId)).data)
           || (exists(/databases/(default)/documents/users/$(request.auth.uid))
             && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
         );

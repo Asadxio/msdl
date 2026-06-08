@@ -11,3 +11,6 @@ export function isActiveEnrollmentForUserCourse(enrollment: EnrollmentLike, user
     && String(enrollment?.course_id || '') === String(courseId || '').trim()
     && String(enrollment?.status || '') === 'active';
 }
+export function allowsLegacyCourseAccessWhenEnrollmentMissing(enrollmentSource: unknown): boolean {
+  return String(enrollmentSource || '').trim() !== 'enrollments';
+}
