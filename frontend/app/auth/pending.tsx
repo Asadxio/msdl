@@ -1,107 +1,207 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert, ScrollView, useColorScheme } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { sendEmailVerification } from 'firebase/auth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import {
-  getVerificationFunnelRecord,
-  markPendingScreenOpened,
-  markPendingSignout,
-  markVerificationEmailResent,
-  markVerificationStatus,
-  trackEmailVerificationError,
-} from '@/lib/emailVerificationAnalytics';
+import { auth } from '@/lib/firebase';
+import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
+import { logger } from '@/lib/logger';
+
+const VERIFICATION_POLL_MS = 15000;
+const FIREBASE_AUTH_ACTION_TIMEOUT_MS = 15000;
+
+type MessageState = { type: 'success' | 'error' | 'info'; text: string } | null;
 
 export default function PendingScreen() {
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === 'dark';
-  const { user, signOut, refreshProfile, resendVerification, refreshUser, profile, emailVerified } = useAuth();
+  const router = useRouter();
+  const { signOut, refreshProfile, refreshUser, profile } = useAuth();
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
-  const [resendCount, setResendCount] = useState(0);
-  const [lastEmailSentAt, setLastEmailSentAt] = useState<number | null>(null);
-  const [nowMs, setNowMs] = useState(Date.now());
-  const pendingOpenTrackedRef = useRef(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [freshEmailVerified, setFreshEmailVerified] = useState(Boolean(auth.currentUser?.emailVerified));
+  const [message, setMessage] = useState<MessageState>(null);
+  const mountedRef = useRef(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const navigationTriggeredRef = useRef(false);
+  const refreshProfileRef = useRef(refreshProfile);
+  const refreshUserRef = useRef(refreshUser);
+  const verificationCheckInFlightRef = useRef(false);
+  const authActionVersionRef = useRef(0);
+
+  useEffect(() => {
+    refreshProfileRef.current = refreshProfile;
+    refreshUserRef.current = refreshUser;
+  }, [refreshProfile, refreshUser]);
 
   const isDeactivated = profile?.status === 'deactivated';
   const isRejected = profile?.status === 'rejected';
-  const needsVerification = !emailVerified && profile?.role !== 'admin';
-  const cooldownRemainingSeconds = useMemo(() => {
-    if (!lastEmailSentAt) return 0;
-    return Math.max(0, Math.ceil((60000 - (nowMs - lastEmailSentAt)) / 1000));
-  }, [lastEmailSentAt, nowMs]);
-  const resendDisabled = resending || cooldownRemainingSeconds > 0;
-  const lastEmailSentLabel = lastEmailSentAt ? new Date(lastEmailSentAt).toLocaleString() : 'Not available yet';
+  const displayEmailVerified = freshEmailVerified;
+  const needsVerification = !displayEmailVerified && profile?.role !== 'admin';
+  const displayStatus = displayEmailVerified ? 'active' : profile?.status;
+  const busy = checking || resending || signingOut;
 
-  useEffect(() => {
-    const interval = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(interval);
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   }, []);
 
-  useEffect(() => {
-    if (!user?.uid) return;
-    let mounted = true;
-    getVerificationFunnelRecord(user.uid).then((record) => {
-      if (!mounted || !record) return;
-      setResendCount(record.resendCount || 0);
-      setLastEmailSentAt(record.lastEmailSentAt || null);
-    }).catch(() => {});
-    return () => { mounted = false; };
-  }, [user?.uid]);
+  const navigateAfterVerified = useCallback(async () => {
+    if (navigationTriggeredRef.current) return;
+    navigationTriggeredRef.current = true;
+    stopPolling();
+    logger.info('Navigation triggered', { reason: 'email-verified', route: '/' });
+    console.log('[EmailVerification] Navigation triggered', { route: '/' });
+    await refreshProfileRef.current().catch((err) => {
+      logger.error('Email verification profile refresh failed before navigation', err);
+      console.log('[EmailVerification] Any caught errors', err);
+    });
+    router.replace('/');
+  }, [router, stopPolling]);
+
+  const refreshVerificationStatus = useCallback(async (source: 'mount' | 'manual' | 'poll', showUnverifiedMessage = false) => {
+    if (verificationCheckInFlightRef.current) {
+      logger.info('Verification status check skipped because another check is in flight', { source });
+      return false;
+    }
+    const actionVersion = authActionVersionRef.current;
+    const currentUser = auth.currentUser;
+    console.log('[EmailVerification] Verification status check started', { source });
+    if (!currentUser) {
+      const text = 'Not signed in. Please log in again.';
+      logger.warn('Email verification status check failed: no current user', { source });
+      console.log('[EmailVerification] Any caught errors', { source, error: text });
+      if (mountedRef.current) setMessage({ type: 'error', text });
+      return false;
+    }
+
+    console.log('[EmailVerification] Current user uid', currentUser.uid);
+    console.log('[EmailVerification] Current email', currentUser.email);
+
+    verificationCheckInFlightRef.current = true;
+    try {
+      await withTimeout(currentUser.reload(), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
+      if (authActionVersionRef.current !== actionVersion || !mountedRef.current) return false;
+      const verified = Boolean(auth.currentUser?.emailVerified);
+      console.log('[EmailVerification] emailVerified value', verified);
+      logger.info('Verification status updated', { source, uid: currentUser.uid, emailVerified: verified });
+      console.log('[EmailVerification] Verification status updated', { source, emailVerified: verified });
+
+      if (!mountedRef.current) return verified;
+      setFreshEmailVerified(verified);
+      await refreshUserRef.current();
+
+      if (verified) {
+        setMessage({ type: 'success', text: 'Email verified. Redirecting...' });
+        await navigateAfterVerified();
+      } else if (showUnverifiedMessage) {
+        setMessage({ type: 'info', text: 'Email not verified yet. Please verify and try again.' });
+      }
+      return verified;
+    } catch (err) {
+      logger.error('Email verification status check failed', err);
+      console.log('[EmailVerification] Any caught errors', err);
+      const text = normalizeFirebaseError(err, 'Unable to check verification status. Please try again.');
+      if (mountedRef.current) setMessage({ type: 'error', text });
+      return false;
+    } finally {
+      verificationCheckInFlightRef.current = false;
+    }
+  }, [navigateAfterVerified]);
 
   useEffect(() => {
-    if (!needsVerification || !user?.uid || pendingOpenTrackedRef.current) return;
-    pendingOpenTrackedRef.current = true;
-    void markPendingScreenOpened(user.uid, resendCount);
-  }, [needsVerification, resendCount, user?.uid]);
+    mountedRef.current = true;
+    const currentUser = auth.currentUser;
+    console.log('[EmailVerification] Screen mounted');
+    console.log('[EmailVerification] Current user uid', currentUser?.uid || null);
+    console.log('[EmailVerification] Current email', currentUser?.email || null);
+    console.log('[EmailVerification] emailVerified value', Boolean(currentUser?.emailVerified));
+    setFreshEmailVerified(Boolean(currentUser?.emailVerified));
+    refreshVerificationStatus('mount');
+    pollRef.current = setInterval(() => {
+      refreshVerificationStatus('poll');
+    }, VERIFICATION_POLL_MS);
 
-  useEffect(() => {
-    if (!user?.uid || !emailVerified) return;
-    void markVerificationStatus(user.uid, true, resendCount);
-  }, [emailVerified, resendCount, user?.uid]);
+    return () => {
+      mountedRef.current = false;
+      stopPolling();
+    };
+  }, [refreshVerificationStatus, stopPolling]);
 
   const handleCheck = async () => {
+    if (busy) return;
+    console.log('[EmailVerification] Check status clicked');
+    logger.info('Check status clicked');
     setChecking(true);
-    const uid = user?.uid || '';
-    const startedAt = Date.now();
+    setMessage(null);
     try {
-      const latestVerified = await Promise.race([
-        (async () => {
-          const verified = await refreshUser();
-          await refreshProfile();
-          return verified;
-        })(),
-        new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error('Verification status check timed out')), 10000)),
-      ]);
-      if (Date.now() - startedAt >= 10000) {
-        trackEmailVerificationError('verification_timeout', new Error('Verification status check exceeded timeout'), { uid });
-      }
-      void markVerificationStatus(uid, Boolean(latestVerified), resendCount);
-    } catch (error) {
-      trackEmailVerificationError('verification_timeout', error, { uid });
-      Alert.alert('Still Checking', 'We could not refresh your verification status. Please try again.');
+      await refreshVerificationStatus('manual', true);
     } finally {
-      setChecking(false);
+      if (mountedRef.current) setChecking(false);
     }
   };
 
   const handleResendVerification = async () => {
-    if (resendDisabled) return;
+    if (busy) return;
+    console.log('[EmailVerification] Resend button clicked');
+    logger.info('Resend button clicked');
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      const text = 'Not signed in. Please log in again.';
+      logger.warn('Verification email resend failed: no current user');
+      console.log('[EmailVerification] Any caught errors', { error: text });
+      setMessage({ type: 'error', text });
+      Alert.alert('Error', text);
+      return;
+    }
+
     setResending(true);
-    const err = await resendVerification();
-    setResending(false);
-    if (err) {
-      trackEmailVerificationError('verification_email_send_failed', new Error(err), { uid: user?.uid || '', resend_count: resendCount });
-      Alert.alert('Error', err);
-    } else {
-      const nextCount = resendCount + 1;
-      const sentAt = Date.now();
-      setResendCount(nextCount);
-      setLastEmailSentAt(sentAt);
-      void markVerificationEmailResent(user?.uid || '', nextCount);
-      Alert.alert('Email Sent', 'Verification email sent. Please check your inbox, Spam/Junk, Promotions, and Updates folders.');
+    setMessage(null);
+    try {
+      await withTimeout(sendEmailVerification(currentUser), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
+      console.log('[EmailVerification] Verification email sent');
+      logger.info('Verification email sent', { uid: currentUser.uid, email: currentUser.email });
+      const text = 'Verification email sent. Please check your inbox.';
+      if (mountedRef.current) setMessage({ type: 'success', text });
+      Alert.alert('Email Sent', text);
+    } catch (err: any) {
+      logger.error('Verification email resend failed', err);
+      console.log('[EmailVerification] Any caught errors', err);
+      const text = err?.code === 'auth/too-many-requests'
+        ? 'Please wait before requesting another email.'
+        : normalizeFirebaseError(err, 'Failed to send verification email.');
+      if (mountedRef.current) setMessage({ type: 'error', text });
+      Alert.alert('Error', text);
+    } finally {
+      if (mountedRef.current) setResending(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (busy) return;
+    console.log('[EmailVerification] Sign out clicked');
+    logger.info('Sign out clicked');
+    authActionVersionRef.current += 1;
+    setSigningOut(true);
+    setMessage(null);
+    stopPolling();
+    try {
+      await withTimeout(signOut(), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
+      console.log('[EmailVerification] Navigation triggered', { route: '/auth/login' });
+      logger.info('Navigation triggered', { reason: 'sign-out', route: '/auth/login' });
+      router.replace('/auth/login');
+    } catch (err) {
+      logger.error('Sign out failed from pending screen', err);
+      console.log('[EmailVerification] Any caught errors', err);
+      const text = normalizeFirebaseError(err, 'Unable to sign out. Please try again.');
+      if (mountedRef.current) setMessage({ type: 'error', text });
+    } finally {
+      if (mountedRef.current) setSigningOut(false);
     }
   };
 
@@ -125,9 +225,9 @@ export default function PendingScreen() {
               ? `Your signup request was rejected by an administrator.${'\n'}Please contact support for details.`
               : `Your account has been deactivated by an administrator.${'\n'}Please contact support for assistance.`}
           </Text>
-          <TouchableOpacity style={styles.logoutBtn} onPress={signOut} testID="deactivated-logout-btn">
-            <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
-            <Text style={styles.logoutBtnText}>Sign Out</Text>
+          <TouchableOpacity style={[styles.logoutBtn, signingOut && styles.disabledBtn]} onPress={handleSignOut} disabled={busy} testID="deactivated-logout-btn">
+            {signingOut ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="log-out-outline" size={18} color={COLORS.error} />}
+            <Text style={styles.logoutBtnText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -144,9 +244,9 @@ export default function PendingScreen() {
             <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
               <Ionicons name="mail-unread-outline" size={48} color="#92400E" />
             </View>
-            <Text style={[styles.title, isDarkMode && styles.titleDark]}>Verify Your Email</Text>
-            <Text style={[styles.subtitle, isDarkMode && styles.subtitleDark]}>
-              We sent a verification email to your inbox.{'\n'}Please verify your email to continue.
+            <Text style={styles.title}>Verify Your Email</Text>
+            <Text style={styles.subtitle}>
+              We sent a verification email to your inbox.{"\n"}Please verify your email to continue.
             </Text>
             <View style={[styles.deliveryInfoBox, isDarkMode && styles.deliveryInfoBoxDark]} testID="verification-delivery-guidance">
               <Ionicons name="information-circle-outline" size={20} color={isDarkMode ? COLORS.secondary : COLORS.primary} />
@@ -166,9 +266,9 @@ export default function PendingScreen() {
               ) : null}
             </View>
             <TouchableOpacity
-              style={[styles.resendBtn, resendDisabled && styles.resendBtnDisabled]}
+              style={[styles.resendBtn, busy && styles.disabledBtn]}
               onPress={handleResendVerification}
-              disabled={resendDisabled}
+              disabled={busy}
               testID="resend-verification-btn"
             >
               {resending ? <ActivityIndicator size="small" color={COLORS.secondary} /> : (
@@ -182,13 +282,21 @@ export default function PendingScreen() {
         ) : (
           <>
             <View style={styles.iconCircle}>
-              <Ionicons name="hourglass-outline" size={48} color={COLORS.secondary} />
+              <Ionicons name={displayEmailVerified ? 'checkmark-circle-outline' : 'hourglass-outline'} size={48} color={COLORS.secondary} />
             </View>
-            <Text style={[styles.title, isDarkMode && styles.titleDark]}>Account Pending</Text>
-            <Text style={[styles.subtitle, isDarkMode && styles.subtitleDark]}>
-              Your account is pending approval.{'\n'}An admin will review your request soon.
+            <Text style={styles.title}>{displayEmailVerified ? 'Email Verified' : 'Account Pending'}</Text>
+            <Text style={styles.subtitle}>
+              {displayEmailVerified
+                ? `Your email is verified.${'\n'}Redirecting you to the app...`
+                : `Your account is pending approval.${'\n'}An admin will review your request soon.`}
             </Text>
           </>
+        )}
+
+        {message && (
+          <View style={[styles.messageBox, message.type === 'error' ? styles.errorMessage : message.type === 'success' ? styles.successMessage : styles.infoMessage]} testID="verification-message">
+            <Text style={[styles.messageText, message.type === 'error' ? styles.errorMessageText : message.type === 'success' ? styles.successMessageText : styles.infoMessageText]}>{message.text}</Text>
+          </View>
         )}
 
         {/* Profile Info */}
@@ -203,34 +311,30 @@ export default function PendingScreen() {
               <Text style={[styles.infoValue, isDarkMode && styles.infoValueDark]}>{profile.role}</Text>
             </View>
             <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, isDarkMode && styles.infoLabelDark]}>Email Verified</Text>
-              <View style={[styles.statusBadge, emailVerified ? styles.verifiedBadge : styles.unverifiedBadge]}>
-                <Text style={[styles.statusBadgeText, emailVerified ? styles.verifiedText : styles.unverifiedText]}>
-                  {emailVerified ? 'Verified' : 'Unverified'}
+              <Text style={styles.infoLabel}>Email Verified</Text>
+              <View style={[styles.statusBadge, displayEmailVerified ? styles.verifiedBadge : styles.unverifiedBadge]}>
+                <Text style={[styles.statusBadgeText, displayEmailVerified ? styles.verifiedText : styles.unverifiedText]}>
+                  {displayEmailVerified ? 'Verified' : 'Unverified'}
                 </Text>
               </View>
             </View>
             <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, isDarkMode && styles.infoLabelDark]}>Status</Text>
-              <View style={[styles.statusBadge, styles.pendingStatusBadge]}>
-                <Text style={styles.pendingStatusText}>{profile.status}</Text>
+              <Text style={styles.infoLabel}>Status</Text>
+              <View style={[styles.statusBadge, displayEmailVerified ? styles.activeStatusBadge : styles.pendingStatusBadge]}>
+                <Text style={displayEmailVerified ? styles.activeStatusText : styles.pendingStatusText}>{displayStatus}</Text>
               </View>
             </View>
           </View>
         )}
 
-        <TouchableOpacity style={styles.checkBtn} onPress={handleCheck} disabled={checking} testID="check-status-btn">
-          {checking ? <ActivityIndicator size="small" color={COLORS.primary} /> : (
-            <>
-              <Ionicons name="refresh" size={18} color={COLORS.primary} />
-              <Text style={styles.checkBtnText}>Check Status</Text>
-            </>
-          )}
+        <TouchableOpacity style={[styles.checkBtn, busy && styles.disabledBtn]} onPress={handleCheck} disabled={busy} testID="check-status-btn">
+          {checking ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
+          <Text style={styles.checkBtnText}>{checking ? 'Checking...' : 'Check Status'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={handlePendingSignOut} testID="pending-logout-btn">
-          <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
-          <Text style={styles.logoutBtnText}>Sign Out</Text>
+        <TouchableOpacity style={[styles.logoutBtn, busy && styles.disabledBtn]} onPress={handleSignOut} disabled={busy} testID="pending-logout-btn">
+          {signingOut ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="log-out-outline" size={18} color={COLORS.error} />}
+          <Text style={styles.logoutBtnText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -261,8 +365,16 @@ const styles = StyleSheet.create({
   resendBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 24, paddingVertical: 14, marginTop: 4 },
   resendBtnDisabled: { opacity: 0.55 },
   resendBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.secondary },
-  infoCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, width: '100%', gap: SPACING.sm, marginTop: 8, borderWidth: 1, borderColor: COLORS.border },
-  infoCardDark: { backgroundColor: '#102820', borderColor: '#214438' },
+  disabledBtn: { opacity: 0.55 },
+  messageBox: { width: '100%', borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10 },
+  messageText: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  successMessage: { backgroundColor: '#D1FAE5' },
+  successMessageText: { color: '#065F46' },
+  errorMessage: { backgroundColor: '#FEE2E2' },
+  errorMessageText: { color: '#991B1B' },
+  infoMessage: { backgroundColor: '#E0F2FE' },
+  infoMessageText: { color: '#075985' },
+  infoCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, width: '100%', gap: SPACING.sm, marginTop: 8 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   infoLabel: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500' },
   infoLabelDark: { color: '#A9BBB4' },
@@ -276,6 +388,8 @@ const styles = StyleSheet.create({
   unverifiedText: { color: '#92400E' },
   pendingStatusBadge: { backgroundColor: '#FEF3C7' },
   pendingStatusText: { fontSize: 12, fontWeight: '700', color: '#92400E', textTransform: 'capitalize' },
+  activeStatusBadge: { backgroundColor: '#D1FAE5' },
+  activeStatusText: { fontSize: 12, fontWeight: '700', color: '#065F46', textTransform: 'capitalize' },
   checkBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 2, borderColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 24, paddingVertical: 14, marginTop: 8 },
   checkBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },

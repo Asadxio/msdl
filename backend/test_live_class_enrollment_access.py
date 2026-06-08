@@ -3,7 +3,7 @@ import os
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "test")
 
-from server import _enrollment_doc_id, _is_active_enrollment, _is_live_class_member
+from server import _allows_legacy_course_access, _enrollment_doc_id, _is_active_enrollment, _is_live_class_member
 
 
 class FakeSnapshot:
@@ -95,8 +95,30 @@ def test_payment_enrollment_can_join(monkeypatch):
     assert _is_live_class_member("student_uid", "student", {"course_id": "course_123"}) is True
 
 
-def test_stale_student_ids_alone_no_longer_grants_student_access(monkeypatch):
+def test_legacy_live_class_without_enrollment_source_uses_course_access(monkeypatch):
     import server
     monkeypatch.setattr(server, "firebase_db", FakeDb({}))
 
-    assert _is_live_class_member("student_uid", "student", {"course_id": "course_123", "student_ids": ["student_uid"]}) is False
+    assert _is_live_class_member("student_uid", "student", {"course_id": "course_123", "student_ids": []}) is True
+
+
+def test_enrollment_source_enrollments_keeps_missing_enrollment_denied(monkeypatch):
+    import server
+    monkeypatch.setattr(server, "firebase_db", FakeDb({}))
+
+    assert _is_live_class_member("student_uid", "student", {"course_id": "course_123", "enrollment_source": "enrollments"}) is False
+
+
+def test_inactive_enrollment_does_not_fall_back_to_legacy_course_access(monkeypatch):
+    enrollments = {
+        "student_uid:course_123": {"user_id": "student_uid", "course_id": "course_123", "status": "pending"}
+    }
+    import server
+    monkeypatch.setattr(server, "firebase_db", FakeDb(enrollments))
+
+    assert _is_live_class_member("student_uid", "student", {"course_id": "course_123"}) is False
+
+
+def test_legacy_course_access_is_students_only():
+    assert _allows_legacy_course_access({"course_id": "course_123"}) is True
+    assert _allows_legacy_course_access({"course_id": "course_123", "enrollment_source": "enrollments"}) is False
