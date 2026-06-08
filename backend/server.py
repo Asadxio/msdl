@@ -426,6 +426,10 @@ def _get_live_class(live_class_id: str) -> tuple[admin_firestore.DocumentReferen
     return ref, snap.to_dict() or {}
 
 
+def _allows_legacy_course_access(live_class: dict) -> bool:
+    return str(live_class.get("enrollment_source") or "").strip() != "enrollments"
+
+
 def _is_live_class_member(uid: str, role: str, live_class: dict) -> bool:
     if role == "admin":
         return True
@@ -435,7 +439,9 @@ def _is_live_class_member(uid: str, role: str, live_class: dict) -> bool:
     if course_id and firebase_db is not None:
         enrollment_id = _enrollment_doc_id(uid, course_id)
         snap = firebase_db.collection("enrollments").document(enrollment_id).get()
-        return snap.exists and _is_active_enrollment(snap.to_dict() or {}, uid, course_id)
+        if snap.exists:
+            return _is_active_enrollment(snap.to_dict() or {}, uid, course_id)
+        return role == "student" and _allows_legacy_course_access(live_class)
     return False
 
 

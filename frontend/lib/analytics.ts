@@ -9,6 +9,20 @@ export type AnalyticsEventName =
   | 'moderation_action'
   | 'upload_result'
   | 'notification_open'
+  | 'verification_email_delivery_attempt'
+  | 'verification_email_open_estimated'
+  | 'verification_email_link_clicked_estimated'
+  | 'verification_change_email_opened'
+  | 'verification_change_email_submitted'
+  | 'verification_change_email_success'
+  | 'verification_change_email_failed'
+  | 'user_entered_app'
+  | 'user_stuck_after_verification'
+  | 'profile_incomplete'
+  | 'approval_pending'
+  | 'approval_rejected'
+  | 'role_missing'
+  | 'missing_profile_document'
   | 'custom';
 
 export type AnalyticsEvent = {

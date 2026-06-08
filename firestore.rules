@@ -624,27 +624,13 @@ service cloud.firestore {
         && activeEnrollmentDoc(courseId).data.status == 'active';
     }
 
-    function canReadLearningContent(data) {
-      return isAdmin()
-        || isTeacherOrAdmin()
-        || (isApprovedVerifiedUser()
-          && (
-            !('course_id' in data)
-            || data.course_id == null
-            || data.course_id == ''
-            || hasActiveEnrollmentForCourse(data.course_id)
-          ));
-    }
-
-    function canReadCourseData(courseId, data) {
-      return isAdmin()
-        || isTeacherOrAdmin()
-        || (isApprovedVerifiedUser()
-          && (
-            hasActiveEnrollmentForCourse(courseId)
-            || !('restricted' in data)
-            || data.restricted == false
-          ));
+    function allowsLegacyCourseAccessWhenEnrollmentMissing(data) {
+      return isStudent()
+        && (!('enrollment_source' in data) || data.enrollment_source != 'enrollments')
+        && data.course_id is string
+        && data.course_id.size() > 0
+        && exists(/databases/$(database)/documents/courses/$(data.course_id))
+        && !exists(/databases/$(database)/documents/enrollments/$(enrollmentDocId(request.auth.uid, data.course_id)));
     }
 
     function canJoinLiveClassData(data) {
@@ -653,6 +639,7 @@ service cloud.firestore {
         && (
           isLiveClassTeacherOrAdmin(data)
           || hasActiveEnrollmentForCourse(data.course_id)
+          || allowsLegacyCourseAccessWhenEnrollmentMissing(data)
         );
     }
 
@@ -661,6 +648,7 @@ service cloud.firestore {
         && (
           isLiveClassTeacherOrAdmin(data)
           || hasActiveEnrollmentForCourse(data.course_id)
+          || allowsLegacyCourseAccessWhenEnrollmentMissing(data)
         );
     }
 

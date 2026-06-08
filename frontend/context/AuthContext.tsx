@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   onAuthStateChanged,
@@ -9,8 +10,10 @@ import {
   signOut as firebaseSignOut,
   sendEmailVerification,
   sendPasswordResetEmail,
-  reload,
   User,
+  updateEmail,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
 } from 'firebase/auth';
 import {
   collection, doc, getDoc, getDocs, increment, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where,
@@ -20,21 +23,36 @@ import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { startupLog } from '@/lib/startup';
 import { normalizeRole, type AppRole, type OnboardingRole } from '@/lib/roles';
+import {
+  markSignupCompleted,
+  markVerificationEmailSent,
+  trackEmailVerificationError,
+} from '@/lib/emailVerificationAnalytics';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
 const PROFILE_CACHE_TIMEOUT_MS = 1200;
+const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
+const VERIFICATION_RESEND_DAILY_LIMIT = 5;
 
 export type UserProfile = {
   uid?: string;
   name: string;
   email: string;
   role: AppRole;
-  status: 'pending' | 'approved' | 'deactivated' | 'rejected';
+  status: 'pending' | 'approved' | 'deactivated' | 'rejected' | 'suspended';
   photo_url?: string;
   avatar?: string;
   referral_code?: string;
   referral_count?: number;
+};
+
+export type ProfileIssue = 'missing_profile_document' | 'profile_incomplete' | 'role_missing' | null;
+
+export type ChangeEmailResult = {
+  error: string | null;
+  code?: string;
+  email?: string;
 };
 
 type AuthContextType = {
@@ -47,9 +65,13 @@ type AuthContextType = {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   resendVerification: () => Promise<string | null>;
+  changeEmailAddress: (newEmail: string, currentPassword?: string) => Promise<ChangeEmailResult>;
   resetPassword: (email: string) => Promise<string | null>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<boolean>;
   profileOffline: boolean;
+  showSignupVerificationPrompt: boolean;
+  signupVerificationFlowActive: boolean;
+  acknowledgeSignupVerificationPrompt: () => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -62,9 +84,13 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
   refreshProfile: async () => {},
   resendVerification: async () => null,
+  changeEmailAddress: async () => ({ error: 'Not signed in' }),
   resetPassword: async () => null,
-  refreshUser: async () => {},
+  refreshUser: async () => false,
   profileOffline: false,
+  showSignupVerificationPrompt: false,
+  signupVerificationFlowActive: false,
+  acknowledgeSignupVerificationPrompt: () => {},
 });
 
 export function useAuth() {
@@ -81,9 +107,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileOffline, setProfileOffline] = useState(false);
+  const [showSignupVerificationPrompt, setShowSignupVerificationPrompt] = useState(false);
+  const [signupVerificationFlowActive, setSignupVerificationFlowActive] = useState(false);
 
   const emailVerified = user?.emailVerified ?? false;
   const getProfileCacheKey = (uid: string) => `profile_cache_${uid}`;
+  const getVerificationResendKey = (uid: string) => `verification_resend_${uid}`;
+
+
+  const validateProfileData = (raw: any, uid: string, source: string): { profile: UserProfile; issue: ProfileIssue } => {
+    const rawRole = raw?.role;
+    const rawStatus = String(raw?.status || '').trim().toLowerCase();
+    const role = normalizeRole(rawRole, source);
+    const status = ['pending', 'approved', 'deactivated', 'rejected', 'suspended'].includes(rawStatus) ? rawStatus as UserProfile['status'] : 'pending';
+    const profileData = {
+      ...(raw as UserProfile),
+      uid: raw?.uid || uid,
+      name: String(raw?.name || '').trim(),
+      email: String(raw?.email || '').trim().toLowerCase(),
+      role,
+      status,
+    } as UserProfile;
+
+    let issue: ProfileIssue = null;
+    if (!rawRole || role !== String(rawRole).trim().toLowerCase()) issue = 'role_missing';
+    if (!profileData.name || !profileData.email || !rawStatus || status !== rawStatus) issue = issue || 'profile_incomplete';
+    return { profile: profileData, issue };
+  };
 
   const parseCachedProfile = (raw: string | null, source: string): UserProfile | null => {
     if (!raw) return null;
@@ -118,18 +168,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const snap = await withTimeout(getDoc(doc(db, 'users', uid)), PROFILE_LOOKUP_TIMEOUT_MS);
       if (snap.exists()) {
-        const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
+        const { profile: nextProfile, issue } = validateProfileData(snap.data(), uid, 'auth.fetchProfile');
         setProfile(nextProfile);
+        setProfileIssue(issue);
         setProfileOffline(false);
         await AsyncStorage.setItem(getProfileCacheKey(uid), JSON.stringify(nextProfile)).catch(() => {});
       } else {
         setProfile(null);
+        setProfileIssue('missing_profile_document');
+        setProfileOffline(false);
+        trackEvent('missing_profile_document', { uid, timestamp: Date.now(), source: 'fetchProfile', platform: Platform.OS }, `missing-profile-${uid}-${Date.now()}`);
         await AsyncStorage.removeItem(getProfileCacheKey(uid)).catch(() => {});
       }
     } catch (err) {
       logger.warn('Failed to fetch profile:', err);
       const usedCache = await applyCachedProfile(uid, 'auth.cachedProfile');
-      if (!usedCache) setProfile(null);
+      if (!usedCache) {
+        setProfile(null);
+        setProfileIssue('missing_profile_document');
+      }
     }
   };
 
@@ -156,10 +213,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = async () => {
     if (auth.currentUser) {
       try {
-        await reload(auth.currentUser);
-        setUser({ ...auth.currentUser } as User);
+        await auth.currentUser.reload();
+        logger.info('Auth user refreshed', { uid: auth.currentUser.uid, emailVerified: auth.currentUser.emailVerified });
+        setUser({ ...auth.currentUser, emailVerified: auth.currentUser.emailVerified } as User);
       } catch (err) {
-        logger.warn('Failed to refresh auth user:', err);
+        logger.error('Failed to refresh auth user:', err);
       }
     }
   };
@@ -197,6 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         applyCachedProfile(currentUser.uid, 'auth.watchdogCachedProfile').catch(() => {});
       } else {
         setProfile(null);
+        setProfileIssue(null);
       }
     }, AUTH_STARTUP_WATCHDOG_MS);
 
@@ -218,18 +277,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (!snap.exists()) {
                 startupLog('Profile loaded', { exists: false, fromCache: snap.metadata.fromCache });
                 setProfile(null);
+                setProfileIssue('missing_profile_document');
+                trackEvent('missing_profile_document', { uid: firebaseUser.uid, timestamp: Date.now(), source: 'snapshot', platform: Platform.OS }, `missing-profile-${firebaseUser.uid}-${Date.now()}`);
                 await AsyncStorage.removeItem(getProfileCacheKey(firebaseUser.uid)).catch(() => {});
-                await firebaseSignOut(auth).catch(() => {});
                 return;
               }
-              const nextProfile = { ...(snap.data() as UserProfile), role: normalizeRole((snap.data() as any)?.role, 'auth.fetchProfile') } as UserProfile;
-              startupLog('Profile loaded', { exists: true, status: nextProfile.status, role: nextProfile.role, fromCache: snap.metadata.fromCache });
+              const { profile: nextProfile, issue } = validateProfileData(snap.data(), firebaseUser.uid, 'auth.snapshotProfile');
+              startupLog('Profile loaded', { exists: true, status: nextProfile.status, role: nextProfile.role, issue, fromCache: snap.metadata.fromCache });
               setProfile(nextProfile);
+              setProfileIssue(issue);
               await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
               await syncPublicProfile(firebaseUser.uid, nextProfile);
-              if (nextProfile.status === 'deactivated' || nextProfile.status === 'rejected') {
-                await firebaseSignOut(auth).catch(() => {});
-              }
             }, async (err) => {
               logger.warn('Profile realtime listener failed:', err);
               startupLog('Profile listener failed', { message: String((err as any)?.message || err) });
@@ -239,6 +297,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             startupLog('Profile loaded', { skipped: 'no-user' });
             setProfile(null);
+            setProfileIssue(null);
           }
         } catch (err) {
           logger.warn('Auth startup callback failed:', err);
@@ -298,12 +357,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!safeName || !safeEmail || !password) return 'Please fill in all required fields';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return 'Invalid email format';
     if (normalizedPassword.length < 6) return 'Password must be at least 6 characters';
+    setSignupVerificationFlowActive(true);
     try {
       const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
       // Send verification email
       try {
+        trackEvent('verification_email_delivery_attempt', {
+          source: 'signup',
+          status: 'requested',
+          uid: cred.user.uid,
+          emailDomain: safeEmail.split('@')[1] || 'unknown',
+        }, `verification-email-signup-requested-${cred.user.uid}`);
         await withTimeout(sendEmailVerification(cred.user));
-      } catch { /* non-blocking */ }
+        void markVerificationEmailSent(cred.user.uid);
+      } catch (error) {
+        trackEmailVerificationError('verification_email_send_failed', error, { uid: cred.user.uid });
+      }
 
       let referrerId: string | null = null;
       const normalizedCode = (referralCode || '').trim().toUpperCase();
@@ -340,9 +409,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           updated_at: serverTimestamp(),
         }).catch(() => {});
       }
+      void markSignupCompleted(cred.user.uid);
+      setShowSignupVerificationPrompt(true);
       await fetchProfile(cred.user.uid);
       return null;
     } catch (err: any) {
+      setSignupVerificationFlowActive(false);
       const code = err?.code || '';
       if (code === 'auth/email-already-in-use') return 'Email already registered';
       if (code === 'auth/weak-password') return 'Password must be at least 6 characters';
@@ -354,12 +426,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resendVerification = async (): Promise<string | null> => {
     if (!auth.currentUser) return 'Not signed in';
+    const currentUser = auth.currentUser;
+    const now = Date.now();
+    const key = getVerificationResendKey(currentUser.uid);
+    const today = new Date(now).toISOString().slice(0, 10);
+    const emailDomain = currentUser.email?.split('@')[1] || 'unknown';
     try {
       await sendEmailVerification(auth.currentUser);
+      logger.info('Verification email sent', { uid: auth.currentUser.uid, email: auth.currentUser.email });
       return null;
     } catch (err: any) {
+      logger.error('Verification email resend failed', err);
       if (err?.code === 'auth/too-many-requests') return 'Please wait before requesting another email';
       return err?.message || 'Failed to send verification email';
+    }
+  };
+
+
+  const changeEmailAddress = async (newEmail: string, currentPassword?: string): Promise<ChangeEmailResult> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return { error: 'Not signed in', code: 'auth/no-current-user' };
+
+    const safeEmail = newEmail.trim().toLowerCase();
+    const previousEmail = currentUser.email || profile?.email || '';
+    const emailDomain = safeEmail.split('@')[1] || 'unknown';
+    const eventBase = {
+      uid: currentUser.uid,
+      emailDomain,
+      platform: Platform.OS,
+      timestamp: Date.now(),
+    };
+
+    const fail = (code: string, message: string): ChangeEmailResult => {
+      trackEvent('verification_change_email_failed', {
+        ...eventBase,
+        code,
+      }, `verification-change-email-failed-${currentUser.uid}-${Date.now()}`);
+      return { error: message, code };
+    };
+
+    if (!safeEmail) return fail('auth/missing-email', 'Please enter your new email address');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return fail('auth/invalid-email', 'Please enter a valid email address');
+    if (safeEmail === previousEmail.trim().toLowerCase()) return fail('auth/same-email', 'Please enter a different email address');
+
+    try {
+      if (currentPassword && previousEmail) {
+        const credential = EmailAuthProvider.credential(previousEmail, currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+      }
+
+      await updateEmail(currentUser, safeEmail);
+      await sendEmailVerification(currentUser);
+      await AsyncStorage.removeItem(getVerificationResendKey(currentUser.uid)).catch(() => {});
+      await setDoc(doc(db, 'users', currentUser.uid), {
+        email: safeEmail,
+        updated_at: serverTimestamp(),
+      }, { merge: true });
+      setProfile((prev) => prev ? { ...prev, email: safeEmail } : prev);
+      await reload(currentUser);
+      setUser({ ...currentUser } as User);
+      await fetchProfile(currentUser.uid);
+      trackEvent('verification_change_email_success', {
+        ...eventBase,
+        previousEmailDomain: previousEmail.split('@')[1] || 'unknown',
+      }, `verification-change-email-success-${currentUser.uid}-${Date.now()}`);
+      return { error: null, email: safeEmail };
+    } catch (err: any) {
+      const code = err?.code || 'unknown';
+      if (code === 'auth/requires-recent-login') return fail(code, 'For your security, please enter your current password and try again.');
+      if (code === 'auth/invalid-email') return fail(code, 'Please enter a valid email address');
+      if (code === 'auth/email-already-in-use') return fail(code, 'This email address is already in use. Please use a different email or sign in with that account.');
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') return fail(code, 'The current password you entered is incorrect. Please try again.');
+      if (code === 'auth/too-many-requests') return fail(code, 'Too many attempts. Please wait and try again later.');
+      if (code === 'auth/network-request-failed') return fail(code, 'Network error. Check your internet connection and try again.');
+      return fail(code, normalizeFirebaseError(err, 'Failed to update email address. Please try again.'));
     }
   };
 
@@ -380,14 +520,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOutUser = async () => {
+    const uid = auth.currentUser?.uid || user?.uid || null;
     try {
       await firebaseSignOut(auth);
+      if (uid) await AsyncStorage.removeItem(getProfileCacheKey(uid)).catch(() => {});
+      logger.info('Signed out and cleared auth session cache', { uid });
     } catch (err) {
-      logger.warn('Failed to sign out cleanly:', err);
+      logger.error('Failed to sign out cleanly:', err);
     } finally {
       setUser(null);
       setProfile(null);
+      setProfileOffline(false);
     }
+  };
+
+  const acknowledgeSignupVerificationPrompt = () => {
+    setShowSignupVerificationPrompt(false);
+    setSignupVerificationFlowActive(false);
   };
 
   return (
@@ -395,6 +544,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user, profile, authLoading, emailVerified,
       signIn, signUp, signOut: signOutUser, refreshProfile,
       resendVerification, resetPassword, refreshUser, profileOffline,
+      showSignupVerificationPrompt, signupVerificationFlowActive, acknowledgeSignupVerificationPrompt,
     }}>
       {children}
     </AuthContext.Provider>
