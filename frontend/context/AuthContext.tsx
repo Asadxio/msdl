@@ -9,7 +9,6 @@ import {
   signOut as firebaseSignOut,
   sendEmailVerification,
   sendPasswordResetEmail,
-  reload,
   User,
 } from 'firebase/auth';
 import {
@@ -156,10 +155,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = async () => {
     if (auth.currentUser) {
       try {
-        await reload(auth.currentUser);
+        await auth.currentUser.reload();
+        logger.info('Auth user refreshed', { uid: auth.currentUser.uid, emailVerified: auth.currentUser.emailVerified });
         setUser({ ...auth.currentUser } as User);
       } catch (err) {
-        logger.warn('Failed to refresh auth user:', err);
+        logger.error('Failed to refresh auth user:', err);
       }
     }
   };
@@ -356,8 +356,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!auth.currentUser) return 'Not signed in';
     try {
       await sendEmailVerification(auth.currentUser);
+      logger.info('Verification email sent', { uid: auth.currentUser.uid, email: auth.currentUser.email });
       return null;
     } catch (err: any) {
+      logger.error('Verification email resend failed', err);
       if (err?.code === 'auth/too-many-requests') return 'Please wait before requesting another email';
       return err?.message || 'Failed to send verification email';
     }
@@ -380,13 +382,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOutUser = async () => {
+    const uid = auth.currentUser?.uid || user?.uid || null;
     try {
       await firebaseSignOut(auth);
+      if (uid) await AsyncStorage.removeItem(getProfileCacheKey(uid)).catch(() => {});
+      logger.info('Signed out and cleared auth session cache', { uid });
     } catch (err) {
-      logger.warn('Failed to sign out cleanly:', err);
+      logger.error('Failed to sign out cleanly:', err);
     } finally {
       setUser(null);
       setProfile(null);
+      setProfileOffline(false);
     }
   };
 
