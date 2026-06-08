@@ -37,7 +37,7 @@ export default function PendingScreen() {
     refreshUserRef.current = refreshUser;
   }, [refreshProfile, refreshUser]);
 
-  const isDeactivated = profile?.status === 'deactivated';
+  const isSuspended = profile?.status === 'deactivated' || profile?.status === 'suspended';
   const isRejected = profile?.status === 'rejected';
   const displayEmailVerified = freshEmailVerified;
   const needsVerification = !displayEmailVerified && profile?.role !== 'admin';
@@ -219,15 +219,50 @@ export default function PendingScreen() {
           <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
             <Ionicons name="close-circle-outline" size={48} color={COLORS.error} />
           </View>
-          <Text style={styles.title}>{isRejected ? 'Account Rejected' : 'Account Deactivated'}</Text>
+          <Text style={styles.title}>{isRejected ? 'Account Rejected' : 'Account Suspended'}</Text>
           <Text style={styles.subtitle}>
             {isRejected
               ? `Your signup request was rejected by an administrator.${'\n'}Please contact support for details.`
-              : `Your account has been deactivated by an administrator.${'\n'}Please contact support for assistance.`}
+              : `Your account is currently suspended.${'\n'}Please contact support for assistance.`}
           </Text>
           <TouchableOpacity style={[styles.logoutBtn, signingOut && styles.disabledBtn]} onPress={handleSignOut} disabled={busy} testID="deactivated-logout-btn">
             {signingOut ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="log-out-outline" size={18} color={COLORS.error} />}
             <Text style={styles.logoutBtnText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+
+
+  if (hasProfileBlocker) {
+    const blockerTitle = profileIssue === 'role_missing' ? 'Role Missing' : 'Profile Incomplete';
+    const blockerMessage = profileIssue === 'missing_profile_document' || !profile
+      ? `We could not find your account profile after email verification.${'\n'}Tap Check Status, or contact support if this continues.`
+      : profileIssue === 'role_missing'
+        ? `Your account role is missing or invalid.${'\n'}Please contact support so we can fix your access.`
+        : `Your account profile is missing required details.${'\n'}Tap Check Status, or contact support if this continues.`;
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.content}>
+          <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
+            <Ionicons name="alert-circle-outline" size={48} color="#92400E" />
+          </View>
+          <Text style={styles.title}>{blockerTitle}</Text>
+          <Text style={styles.subtitle}>{blockerMessage}</Text>
+          <TouchableOpacity style={styles.checkBtn} onPress={handleCheck} disabled={checking} testID="profile-blocker-check-btn">
+            {checking ? <ActivityIndicator size="small" color={COLORS.primary} /> : (
+              <>
+                <Ionicons name="refresh" size={18} color={COLORS.primary} />
+                <Text style={styles.checkBtnText}>Check Status</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutBtn} onPress={signOut} testID="profile-blocker-logout-btn">
+            <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
+            <Text style={styles.logoutBtnText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -278,6 +313,17 @@ export default function PendingScreen() {
                 {resending ? 'Sending...' : 'Resend Verification Email'}
               </Text>
             </TouchableOpacity>
+            <View style={styles.changeEmailSection}>
+              <Text style={styles.changeEmailPrompt}>Wrong email address?</Text>
+              <TouchableOpacity
+                style={styles.changeEmailBtn}
+                onPress={() => router.push('/auth/change-email')}
+                testID="change-email-btn"
+              >
+                <Ionicons name="create-outline" size={17} color={COLORS.primary} />
+                <Text style={styles.changeEmailBtnText}>Change Email Address</Text>
+              </TouchableOpacity>
+            </View>
           </>
         ) : (
           <>

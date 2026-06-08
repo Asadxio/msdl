@@ -3,7 +3,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { I18nManager } from 'react-native';
+import { I18nManager, Platform } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -60,6 +60,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, []);
   const hideRequestedRef = useRef(false);
   const rootLoaderClearedRef = useRef(false);
+  const gateAnalyticsKeysRef = useRef(new Set<string>());
   const segments = useSegments();
   const segmentKey = segments.join('/');
   const router = useRouter();
@@ -73,6 +74,25 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       startupLog('router.replace failed', { route, message: formatErrorMessage(error) });
     }
   }, [router]);
+
+
+  const trackGateEvent = useCallback((name: AnalyticsEventName, reason: string, extra: Record<string, unknown> = {}) => {
+    const uid = user?.uid || 'anonymous';
+    const key = `${name}:${uid}:${reason}:${profile?.status || 'no-status'}:${profile?.role || 'no-role'}:${emailVerified}`;
+    if (gateAnalyticsKeysRef.current.has(key)) return;
+    gateAnalyticsKeysRef.current.add(key);
+    trackEvent(name, {
+      uid,
+      reason,
+      emailVerified,
+      profileStatus: profile?.status || 'missing',
+      role: profile?.role || 'missing',
+      profileIssue: profileIssue || 'none',
+      platform: Platform.OS,
+      timestamp: Date.now(),
+      ...extra,
+    }, key);
+  }, [emailVerified, profile?.role, profile?.status, profileIssue, user?.uid]);
 
   const safeHideSplash = useCallback(async () => {
     if (hideRequestedRef.current) return;
@@ -168,7 +188,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
     const inAuth = segments[0] === 'auth';
     const inOnboardingEntry = segments[0] === 'onboarding-entry';
-    const isAdmin = profile?.role === 'admin';
+    const isAdmin = (profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved';
     const inAdmin = segments[0] === 'admin';
     const inUnauthorized = segments[0] === 'unauthorized';
     const legalConsentRoutes = ['legal-gate', 'terms', 'privacy', 'community-guidelines'];
@@ -209,23 +229,45 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       startupLog('Navigation complete', { action: 'replace', route: '/unauthorized?required=admin', reason: 'admin-required' });
       performReplace('/unauthorized?required=admin');
     } else if (profile?.status === 'rejected') {
+      trackGateEvent('approval_rejected', 'account-rejected');
+      if (emailVerified) trackGateEvent('user_stuck_after_verification', 'account-rejected');
       if (segments.join('/') !== 'auth/pending') {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'account-status' });
         performReplace('/auth/pending');
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
-    } else if (profile?.status === 'deactivated') {
-      // Deactivated users -> pending screen shows deactivated state
+    } else if (profile?.status === 'deactivated' || profile?.status === 'suspended') {
+      if (emailVerified) trackGateEvent('user_stuck_after_verification', 'account-suspended');
+      // Deactivated/suspended users -> pending screen shows a blocked-account state
       if (segments.join('/') !== 'auth/pending') {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'account-status' });
         performReplace('/auth/pending');
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
+      }
+    } else if (profileIssue) {
+      const eventName = profileIssue === 'missing_profile_document' ? 'missing_profile_document' : profileIssue;
+      trackGateEvent(eventName, profileIssue);
+      if (emailVerified) trackGateEvent('user_stuck_after_verification', profileIssue);
+      if (segments.join('/') !== 'auth/pending') {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: profileIssue });
+        performReplace('/auth/pending');
+      } else {
+        startupLog('Navigation complete', { route: 'auth/pending', reason: profileIssue });
+      }
+    } else if (user && !profile && !profileOffline) {
+      trackGateEvent('missing_profile_document', 'missing-profile-document');
+      if (emailVerified) trackGateEvent('user_stuck_after_verification', 'missing-profile-document');
+      if (segments.join('/') !== 'auth/pending') {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'missing-profile-document' });
+        performReplace('/auth/pending');
+      } else {
+        startupLog('Navigation complete', { route: 'auth/pending', reason: 'missing-profile-document' });
       }
     } else if (!emailVerified && !isAdmin) {
       // Email not verified (non-admin) -> pending screen for verification
-      if (segments.join('/') !== 'auth/pending') {
+      if (!inPendingAuthRoute) {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'email-unverified' });
         performReplace('/auth/pending');
       } else {
@@ -247,7 +289,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (shouldShowTutorial || authLoading || onboardingStatus !== 'complete' || !user?.uid) return;
-    const isAdmin = profile?.role === 'admin';
+    const isAdmin = (profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved';
     if (!profile || !(profile.status === 'approved' || isAdmin) || needsLegalAcceptance) return;
 
     let cancelled = false;
@@ -427,6 +469,7 @@ export default function RootLayout() {
             <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />
+            <Stack.Screen name="auth/change-email" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="auth/forgot-password" options={{ animation: 'slide_from_right' }} />
           </Stack>
         </AuthGate>
