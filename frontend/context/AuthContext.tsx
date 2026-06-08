@@ -20,6 +20,11 @@ import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { startupLog } from '@/lib/startup';
 import { normalizeRole, type AppRole, type OnboardingRole } from '@/lib/roles';
+import {
+  markSignupCompleted,
+  markVerificationEmailSent,
+  trackEmailVerificationError,
+} from '@/lib/emailVerificationAnalytics';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
@@ -48,8 +53,11 @@ type AuthContextType = {
   refreshProfile: () => Promise<void>;
   resendVerification: () => Promise<string | null>;
   resetPassword: (email: string) => Promise<string | null>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<boolean>;
   profileOffline: boolean;
+  showSignupVerificationPrompt: boolean;
+  signupVerificationFlowActive: boolean;
+  acknowledgeSignupVerificationPrompt: () => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -63,8 +71,11 @@ const AuthContext = createContext<AuthContextType>({
   refreshProfile: async () => {},
   resendVerification: async () => null,
   resetPassword: async () => null,
-  refreshUser: async () => {},
+  refreshUser: async () => false,
   profileOffline: false,
+  showSignupVerificationPrompt: false,
+  signupVerificationFlowActive: false,
+  acknowledgeSignupVerificationPrompt: () => {},
 });
 
 export function useAuth() {
@@ -81,6 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileOffline, setProfileOffline] = useState(false);
+  const [showSignupVerificationPrompt, setShowSignupVerificationPrompt] = useState(false);
+  const [signupVerificationFlowActive, setSignupVerificationFlowActive] = useState(false);
 
   const emailVerified = user?.emailVerified ?? false;
   const getProfileCacheKey = (uid: string) => `profile_cache_${uid}`;
@@ -153,14 +166,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const refreshUser = async () => {
-    if (auth.currentUser) {
-      try {
-        await reload(auth.currentUser);
-        setUser({ ...auth.currentUser } as User);
-      } catch (err) {
-        logger.warn('Failed to refresh auth user:', err);
-      }
+  const refreshUser = async (): Promise<boolean> => {
+    if (!auth.currentUser) return false;
+    try {
+      await reload(auth.currentUser);
+      setUser({ ...auth.currentUser } as User);
+      return Boolean(auth.currentUser.emailVerified);
+    } catch (err) {
+      logger.warn('Failed to refresh auth user:', err);
+      trackEmailVerificationError('verification_reload_failed', err, { uid: auth.currentUser?.uid || '' });
+      return Boolean(auth.currentUser?.emailVerified);
     }
   };
 
@@ -298,12 +313,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!safeName || !safeEmail || !password) return 'Please fill in all required fields';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return 'Invalid email format';
     if (normalizedPassword.length < 6) return 'Password must be at least 6 characters';
+    setSignupVerificationFlowActive(true);
     try {
       const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
       // Send verification email
       try {
         await withTimeout(sendEmailVerification(cred.user));
-      } catch { /* non-blocking */ }
+        void markVerificationEmailSent(cred.user.uid);
+      } catch (error) {
+        trackEmailVerificationError('verification_email_send_failed', error, { uid: cred.user.uid });
+      }
 
       let referrerId: string | null = null;
       const normalizedCode = (referralCode || '').trim().toUpperCase();
@@ -340,9 +359,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           updated_at: serverTimestamp(),
         }).catch(() => {});
       }
+      void markSignupCompleted(cred.user.uid);
+      setShowSignupVerificationPrompt(true);
       await fetchProfile(cred.user.uid);
       return null;
     } catch (err: any) {
+      setSignupVerificationFlowActive(false);
       const code = err?.code || '';
       if (code === 'auth/email-already-in-use') return 'Email already registered';
       if (code === 'auth/weak-password') return 'Password must be at least 6 characters';
@@ -358,6 +380,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await sendEmailVerification(auth.currentUser);
       return null;
     } catch (err: any) {
+      trackEmailVerificationError('verification_email_send_failed', err, { uid: auth.currentUser?.uid || '' });
       if (err?.code === 'auth/too-many-requests') return 'Please wait before requesting another email';
       return err?.message || 'Failed to send verification email';
     }
@@ -387,7 +410,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setUser(null);
       setProfile(null);
+      setShowSignupVerificationPrompt(false);
+      setSignupVerificationFlowActive(false);
     }
+  };
+
+  const acknowledgeSignupVerificationPrompt = () => {
+    setShowSignupVerificationPrompt(false);
+    setSignupVerificationFlowActive(false);
   };
 
   return (
@@ -395,6 +425,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user, profile, authLoading, emailVerified,
       signIn, signUp, signOut: signOutUser, refreshProfile,
       resendVerification, resetPassword, refreshUser, profileOffline,
+      showSignupVerificationPrompt, signupVerificationFlowActive, acknowledgeSignupVerificationPrompt,
     }}>
       {children}
     </AuthContext.Provider>

@@ -24,6 +24,7 @@ import { OnboardingProvider } from '@/context/OnboardingContext';
 import { TutorialProvider } from '@/context/TutorialContext';
 import { InAppTutorialOverlay } from '@/components/ui/InAppTutorialOverlay';
 import { isTutorialCompleted } from '@/lib/tutorialStorage';
+import { markUserEnteredApp } from '@/lib/emailVerificationAnalytics';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -40,12 +41,13 @@ function formatErrorMessage(error: unknown, fallback = 'An unexpected error occu
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, profile, authLoading, emailVerified, profileOffline } = useAuth();
+  const { user, profile, authLoading, emailVerified, profileOffline, signupVerificationFlowActive } = useAuth();
   const profileStatus = profile?.status;
   const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
   const [splashHidden, setSplashHidden] = useState(false);
   const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
+  const enteredAppTrackedRef = useRef<string | null>(null);
   useEffect(() => {
     try {
       validateConfig();
@@ -172,6 +174,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const legalConsentRoutes = ['legal-gate', 'terms', 'privacy', 'community-guidelines'];
     const inLegalConsentRoute = legalConsentRoutes.includes(String(segments[0] || ''));
     const inLegalGate = segments[0] === 'legal-gate';
+    const holdingSignupVerificationPrompt = signupVerificationFlowActive && segmentKey === 'auth/signup';
 
     if (onboardingStatus === 'required') {
       if (!inOnboardingEntry) {
@@ -191,6 +194,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       } else {
         startupLog('Navigation complete', { route: segmentKey || 'auth', reason: 'no-user-auth-route' });
       }
+    } else if (holdingSignupVerificationPrompt) {
+      startupLog('Navigation complete', { route: segmentKey, reason: 'signup-verification-prompt' });
     } else if (needsLegalAcceptance && !inLegalConsentRoute) {
       startupLog('Navigation complete', { action: 'replace', route: '/legal-gate', reason: 'needs-legal-acceptance' });
       performReplace('/legal-gate');
@@ -234,6 +239,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
     } else if (user && (profile?.status === 'approved' || isAdmin)) {
+      if (user.uid && emailVerified && enteredAppTrackedRef.current !== user.uid) {
+        enteredAppTrackedRef.current = user.uid;
+        void markUserEnteredApp(user.uid);
+      }
       if (inAuth) {
         startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'approved-user-in-auth' });
         performReplace('/');
@@ -241,7 +250,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         startupLog('Navigation complete', { route: segmentKey || '/', reason: 'approved-user' });
       }
     }
-  }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance, onboardingStatus]);
+  }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance, onboardingStatus, signupVerificationFlowActive]);
 
   useEffect(() => {
     if (shouldShowTutorial || authLoading || onboardingStatus !== 'complete' || !user?.uid) return;
