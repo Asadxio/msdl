@@ -5,6 +5,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isApprovedVerifiedUser() {
+      return isVerified()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc(request.auth.uid).status == 'approved';
+    }
+
 
     function userDoc(uid) {
       return get(/databases/$(database)/documents/users/$(uid)).data;
@@ -15,7 +25,7 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isSignedIn() && roleOf(request.auth.uid) == 'super_admin' && userDoc(request.auth.uid).status == 'approved';
+      return isVerified() && roleOf(request.auth.uid) == 'super_admin' && userDoc(request.auth.uid).status == 'approved';
     }
 
     function hasRole(uid, roles) {
@@ -23,18 +33,18 @@ service cloud.firestore {
     }
 
     function isModerator() {
-      return isSignedIn() && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin']) && userDoc(request.auth.uid).status == 'approved';
+      return isVerified() && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin']) && userDoc(request.auth.uid).status == 'approved';
     }
 
     function isAdmin() {
-      return isSignedIn()
+      return isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) in ['admin', 'super_admin']
         && userDoc(request.auth.uid).status == 'approved';
     }
 
     function isTeacherOrAdmin() {
-      return isSignedIn()
+      return isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) in ['teacher', 'assistant_teacher', 'admin', 'super_admin', 'moderator']
         && userDoc(request.auth.uid).status == 'approved';
@@ -48,14 +58,14 @@ service cloud.firestore {
 
 
     function isApprovedTeacher() {
-      return isSignedIn()
+      return isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) == 'teacher'
         && userDoc(request.auth.uid).status == 'approved';
     }
 
     function isStudent() {
-      return isSignedIn()
+      return isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) == 'student'
         && userDoc(request.auth.uid).status == 'approved';
@@ -245,7 +255,7 @@ service cloud.firestore {
     }
 
     function canReadNotification() {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && (
           resource.data.user_id == 'all'
           || resource.data.user_id == request.auth.uid
@@ -274,7 +284,8 @@ service cloud.firestore {
     }
 
     function isValidPaymentCreate() {
-      return hasOnlyAllowedKeys(
+      return isApprovedVerifiedUser()
+        && hasOnlyAllowedKeys(
           request.resource.data,
           ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'type', 'transaction_ref', 'review_mode', 'currency', 'submitted_at']
         )
@@ -403,18 +414,18 @@ service cloud.firestore {
           )
           || (
             request.resource.data.type == 'broadcast'
-            && isSignedIn()
+            && isApprovedVerifiedUser()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinned_by', 'hidden_by', 'muted_by'])
           )
         );
     }
 
     function canReadChat() {
-      return isSignedIn() && (isBroadcastChat() || isChatParticipant());
+      return isApprovedVerifiedUser() && (isBroadcastChat() || isChatParticipant());
     }
 
     function canWriteMessageToChat(chatId) {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && exists(/databases/$(database)/documents/chats/$(chatId))
         && !(
           ('blocked_pairs' in get(/databases/$(database)/documents/chats/$(chatId)).data)
@@ -604,7 +615,7 @@ service cloud.firestore {
     }
 
     function hasActiveEnrollmentForCourse(courseId) {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && courseId is string
         && courseId.size() > 0
         && exists(/databases/$(database)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
@@ -623,7 +634,7 @@ service cloud.firestore {
     }
 
     function canJoinLiveClassData(data) {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && data.status == 'live'
         && (
           isLiveClassTeacherOrAdmin(data)
@@ -633,7 +644,7 @@ service cloud.firestore {
     }
 
     function canReadLiveClassData(data) {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && (
           isLiveClassTeacherOrAdmin(data)
           || hasActiveEnrollmentForCourse(data.course_id)
@@ -698,7 +709,7 @@ service cloud.firestore {
     }
 
     function canReadRecordingData(data) {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && (
           !('live_class_id' in data)
           || data.live_class_id == ''
@@ -860,11 +871,11 @@ service cloud.firestore {
     }
 
     function isCallParticipantData(data) {
-      return isSignedIn() && (data.caller_id == request.auth.uid || data.callee_id == request.auth.uid || isAdmin());
+      return isApprovedVerifiedUser() && (data.caller_id == request.auth.uid || data.callee_id == request.auth.uid || isAdmin());
     }
 
     function isValidCallCreate() {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && hasValidCallKeys(request.resource.data)
         && request.resource.data.caller_id == request.auth.uid
         && request.resource.data.callee_id is string
@@ -939,47 +950,51 @@ service cloud.firestore {
     }
 
     match /public_profiles/{uid} {
-      allow get, list: if isSignedIn();
+      allow get, list: if isApprovedVerifiedUser();
       allow create, update: if (isSelf(uid)
+          && isVerified()
+          && exists(/databases/$(database)/documents/users/$(uid))
           && request.resource.data.uid == uid
-          && request.resource.data.role in ['student', 'teacher', 'assistant_teacher', 'moderator', 'admin', 'super_admin']
-          && request.resource.data.status in ['approved', 'pending', 'deactivated', 'rejected']
+          && request.resource.data.role == userDoc(uid).role
+          && request.resource.data.status == userDoc(uid).status
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.searchable is bool
           && request.resource.data.is_active is bool
+          && request.resource.data.searchable == (userDoc(uid).status == 'approved')
+          && request.resource.data.is_active == (userDoc(uid).status == 'approved')
           && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
           && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
           && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp)
           && request.resource.data.keys().hasOnly(['uid', 'name', 'role', 'status', 'searchable', 'is_active', 'photo_url', 'avatar', 'updated_at']))
         || isAdmin();
-      allow delete: if isSelf(uid) || isAdmin();
+      allow delete: if (isSelf(uid) && isVerified()) || isAdmin();
     }
 
     // courses collection
     match /courses/{courseId} {
-      allow read: if isSignedIn();
+      allow read: if canReadCourseData(courseId, resource.data);
       allow create, update: if isAdmin() && isValidCourseWrite();
       allow delete: if isAdmin();
     }
 
     // teachers collection
     match /teachers/{teacherId} {
-      allow read: if isSignedIn();
+      allow read: if isApprovedVerifiedUser();
       allow create, update: if isAdmin() && isValidTeacherWrite();
       allow delete: if isAdmin();
     }
 
     // library collection
     match /library/{bookId} {
-      allow read: if isSignedIn();
+      allow read: if isApprovedVerifiedUser();
       allow create, update: if isAdmin() && isValidLibraryWrite();
       allow delete: if isAdmin();
     }
 
     // attendance collection
     match /attendance/{attendanceId} {
-      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow read: if isTeacherOrAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
       allow create: if isValidAttendanceRecord();
       allow update: if isValidAttendanceRecord() && isAttendanceRecordUnchangedOwner();
       allow delete: if isAdmin();
@@ -999,7 +1014,7 @@ service cloud.firestore {
     // chats collection
     match /chats/{chatId} {
       allow read: if canReadChat();
-      allow create: if isSignedIn() && isValidChatCreate();
+      allow create: if isApprovedVerifiedUser() && isValidChatCreate();
       allow update: if canReadChat() && isValidChatUpdate();
       allow delete: if isAdmin();
     }
@@ -1015,21 +1030,21 @@ service cloud.firestore {
 
     // status updates collection
     match /status_updates/{statusId} {
-      allow read: if isSignedIn();
+      allow read: if isApprovedVerifiedUser();
       allow create: if isValidStatusCreate();
       allow update: if isValidStatusInteractionUpdate();
       allow delete: if isAdmin() || (isTeacherOrAdmin() && resource.data.user_id == request.auth.uid);
     }
 
     match /status_updates/{statusId}/comments/{commentId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn()
+      allow read: if isApprovedVerifiedUser();
+      allow create: if isApprovedVerifiedUser()
         && request.resource.data.keys().hasOnly(['id', 'user_id', 'user_name', 'user_avatar', 'text', 'created_at', 'created_at_ms', 'edited_at', 'deleted'])
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.id == commentId
         && request.resource.data.text is string
         && request.resource.data.created_at_ms is number;
-      allow update: if isSignedIn()
+      allow update: if isApprovedVerifiedUser()
         && resource.data.user_id == request.auth.uid
         && request.resource.data.user_id == resource.data.user_id
         && request.resource.data.id == resource.data.id
@@ -1039,13 +1054,13 @@ service cloud.firestore {
     }
 
     match /status_updates/{statusId}/reactions/{uid} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn()
+      allow read: if isApprovedVerifiedUser();
+      allow create, update: if isApprovedVerifiedUser()
         && uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['reaction', 'user_id', 'updated_at'])
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.reaction in ['❤️', '🔥', '👏'];
-      allow delete: if isSignedIn() && uid == request.auth.uid;
+      allow delete: if isApprovedVerifiedUser() && uid == request.auth.uid;
     }
 
     match /status_updates/{statusId}/views/{viewerId} {
@@ -1091,11 +1106,11 @@ service cloud.firestore {
 
     // payments collection
     match /payments/{paymentId} {
-      allow get: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create: if isSignedIn() && isValidPaymentCreate();
+      allow get: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow list: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow create: if isApprovedVerifiedUser() && isValidPaymentCreate();
       allow update: if (isAdmin() && isValidPaymentUpdateByAdmin())
-        || (isSignedIn() && resource.data.user_id == request.auth.uid && isValidPaymentUpdateByOwner());
+        || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid && isValidPaymentUpdateByOwner());
       allow delete: if isAdmin();
     }
 
@@ -1118,19 +1133,19 @@ service cloud.firestore {
 
     // modules/lessons/assignments and related learning data
     match /categories/{categoryId} {
-      allow read: if isSignedIn();
+      allow read: if canReadLearningContent(resource.data);
       allow create, update, delete: if isAdmin();
     }
 
     match /quizzes/{quizId} {
-      allow read: if isSignedIn();
+      allow read: if canReadLearningContent(resource.data);
       allow create, update, delete: if isAdmin();
     }
 
     match /quiz_results/{resultId} {
-      allow get: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create: if isSignedIn()
+      allow get: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow list: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow create: if isApprovedVerifiedUser()
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.score is number
         && request.resource.data.total_questions is number
@@ -1140,21 +1155,15 @@ service cloud.firestore {
     }
 
     match /certificates/{certificateId} {
-      allow get: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create: if isSignedIn()
-        && request.resource.data.user_id == request.auth.uid
-        && request.resource.data.user_name is string
-        && request.resource.data.course_name is string
-        && request.resource.data.completion_date is string
-        && request.resource.data.created_at is timestamp
-        && request.resource.data.keys().hasOnly(['user_id', 'user_name', 'course_name', 'completion_date', 'created_at']);
+      allow get: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow list: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow create: if false;
       allow update, delete: if isAdmin();
     }
 
 
     match /enrollments/{enrollmentId} {
-      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow read: if isTeacherOrAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
       allow create, update: if isAdmin()
         && request.resource.data.user_id is string
         && request.resource.data.course_id is string
@@ -1163,24 +1172,24 @@ service cloud.firestore {
     }
 
     match /modules/{moduleId} {
-      allow read: if isSignedIn();
+      allow read: if canReadLearningContent(resource.data);
       allow create, update, delete: if isAdmin();
     }
 
     match /lessons/{lessonId} {
-      allow read: if isSignedIn();
+      allow read: if canReadLearningContent(resource.data);
       allow create, update, delete: if isAdmin();
     }
 
     match /assignments/{assignmentId} {
-      allow read: if isSignedIn();
+      allow read: if canReadLearningContent(resource.data);
       allow create, update, delete: if isAdmin();
     }
 
     match /lesson_progress/{progressId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow read: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
       allow create, update: if isAdmin()
-        || (isSignedIn()
+        || (isApprovedVerifiedUser()
           && request.resource.data.user_id == request.auth.uid
           && request.resource.data.lesson_id is string
           && request.resource.data.keys().hasOnly(['user_id', 'lesson_id', 'course_id', 'module_id', 'completed', 'quiz_completed', 'completed_at', 'last_opened_at', 'updated_at'])
@@ -1195,17 +1204,31 @@ service cloud.firestore {
     }
 
     match /submissions/{submissionId} {
-      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create, update: if isTeacherOrAdmin()
-        || (isSignedIn()
+      allow read: if isTeacherOrAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow create: if isTeacherOrAdmin()
+        || (isApprovedVerifiedUser()
           && request.resource.data.user_id == request.auth.uid
-          && request.resource.data.keys().hasOnly(['assignment_id', 'user_id', 'file_url', 'file_name', 'mime_type', 'text_answer', 'status', 'submitted_at', 'created_at', 'updated_at', 'reviewed_at', 'reviewed_by', 'reviewer_id', 'notes', 'feedback', 'grade'])
+          && request.resource.data.keys().hasOnly(['assignment_id', 'user_id', 'file_url', 'file_name', 'mime_type', 'text_answer', 'status', 'submitted_at', 'created_at', 'updated_at'])
           && request.resource.data.assignment_id is string
           && (!('file_url' in request.resource.data) || request.resource.data.file_url is string)
           && (!('file_name' in request.resource.data) || request.resource.data.file_name is string)
           && (!('mime_type' in request.resource.data) || request.resource.data.mime_type is string)
           && (!('text_answer' in request.resource.data) || request.resource.data.text_answer is string)
-          && request.resource.data.status in ['submitted', 'reviewed']
+          && request.resource.data.status == 'submitted'
+          && (!('submitted_at' in request.resource.data) || request.resource.data.submitted_at is timestamp)
+          && (!('created_at' in request.resource.data) || request.resource.data.created_at is timestamp)
+          && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp));
+      allow update: if isTeacherOrAdmin()
+        || (isApprovedVerifiedUser()
+          && resource.data.user_id == request.auth.uid
+          && request.resource.data.user_id == resource.data.user_id
+          && request.resource.data.assignment_id == resource.data.assignment_id
+          && request.resource.data.keys().hasOnly(['assignment_id', 'user_id', 'file_url', 'file_name', 'mime_type', 'text_answer', 'status', 'submitted_at', 'created_at', 'updated_at'])
+          && request.resource.data.status == 'submitted'
+          && (!('file_url' in request.resource.data) || request.resource.data.file_url is string)
+          && (!('file_name' in request.resource.data) || request.resource.data.file_name is string)
+          && (!('mime_type' in request.resource.data) || request.resource.data.mime_type is string)
+          && (!('text_answer' in request.resource.data) || request.resource.data.text_answer is string)
           && (!('submitted_at' in request.resource.data) || request.resource.data.submitted_at is timestamp)
           && (!('created_at' in request.resource.data) || request.resource.data.created_at is timestamp)
           && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp));
@@ -1219,7 +1242,7 @@ service cloud.firestore {
     }
 
     match /audio_lessons/{lessonId} {
-      allow read, list: if isSignedIn();
+      allow read, list: if canReadLearningContent(resource.data);
       allow create: if (isAdmin() || isApprovedTeacher())
         && isValidAudioLessonWrite()
         && (isAdmin() || request.resource.data.teacher_id == request.auth.uid);
@@ -1256,14 +1279,14 @@ service cloud.firestore {
 
       match /participants/{userId} {
         allow read: if canReadLiveClassData(liveClassDoc(classId).data);
-        allow create: if isSignedIn() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId);
-        allow update: if isValidLiveParticipantModeration(classId, userId) || (isSignedIn() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId));
+        allow create: if isApprovedVerifiedUser() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId);
+        allow update: if isValidLiveParticipantModeration(classId, userId) || (isApprovedVerifiedUser() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId));
         allow delete: if isAdmin();
       }
 
       match /attendance_events/{eventId} {
         allow read: if isTeacherOrAdmin();
-        allow create: if isSignedIn()
+        allow create: if isApprovedVerifiedUser()
           && hasOnlyAllowedKeys(request.resource.data, ['user_id', 'event', 'duration_seconds', 'at'])
           && canJoinLiveClassData(liveClassDoc(classId).data)
           && request.resource.data.user_id == request.auth.uid
@@ -1287,13 +1310,13 @@ service cloud.firestore {
 
 
     match /legal_audit_events/{eventId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow read: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
       allow create: if isValidLegalAuditCreate();
       allow update, delete: if false;
     }
 
     match /privacy_requests/{requestId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow read: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
       allow create: if isValidPrivacyRequestCreate();
       allow update: if isAdmin()
         && request.resource.data.user_id == resource.data.user_id
@@ -1326,14 +1349,14 @@ service cloud.firestore {
 
     // feedback collection
     match /feedback/{feedbackId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidFeedbackCreate();
+      allow read: if isApprovedVerifiedUser();
+      allow create: if isApprovedVerifiedUser() && isValidFeedbackCreate();
       allow update, delete: if isAdmin();
     }
 
     // editable app settings (fees/social links)
     match /app_settings/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isApprovedVerifiedUser();
       allow write: if isAdmin();
     }
 

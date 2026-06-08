@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiUrl } from '@/lib/api';
+import { auth } from '@/lib/firebase';
 import { trackEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 
@@ -119,12 +120,14 @@ function priorityForType(type: OfflineActionType): number {
 async function dispatchAction(action: OfflineAction): Promise<void> {
   // centralized route handler; preserve feature compatibility by delegating to existing APIs
   switch (action.type) {
-    case 'analytics':
+    case 'analytics': {
+      const token = await auth.currentUser?.getIdToken();
       await fetch(apiUrl('/analytics/ingest'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
         body: JSON.stringify({ events: [action.payload] }),
       });
       return;
+    }
     default:
       if (typeof action.payload.endpoint === 'string') {
         const method = String(action.payload.method || 'POST');

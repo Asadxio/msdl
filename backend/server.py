@@ -15,7 +15,7 @@ import json
 import time
 import requests
 from fastapi import HTTPException, Header, Request
-from firebase_admin import auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
+from firebase_admin import app_check as firebase_app_check, auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
 import firebase_admin
 from agora_token_builder import RtcTokenBuilder
 from services.provider_receipt_normalizer import normalize_expo_receipt_status
@@ -82,14 +82,18 @@ async def root():
     return {"message": "Hello World"}
 
 @api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
+async def create_status_check(input: StatusCheckCreate, request: Request, authorization: str | None = Header(default=None)):
+    uid, _ = _verify_firebase_request(authorization)
+    _verify_app_check(request, required=True)
+    _enforce_rate_limit(f"{uid}:status_create", 10, 60)
     status_dict = input.dict()
     status_obj = StatusCheck(**status_dict)
     _ = await db.status_checks.insert_one(status_obj.dict())
     return status_obj
 
 @api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
+async def get_status_checks(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "status_list")
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
 
@@ -120,6 +124,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_ADMIN_ORIGINS = set(_env_list("ADMIN_ALLOWED_ORIGINS", ""))
 SECURITY_EVENT_RATE: dict[str, list[float]] = {}
 NONCE_CACHE: dict[str, float] = {}
+REQUIRE_APP_CHECK = os.environ.get("REQUIRE_APP_CHECK", "false").strip().lower() in {"1", "true", "yes"}
 
 
 def _client_ip(request: Request) -> str:
@@ -158,6 +163,20 @@ def _enforce_nonce(request: Request, uid: str) -> None:
     NONCE_CACHE[key] = now
 
 
+def _verify_app_check(request: Request, required: bool = True) -> None:
+    if not required or not REQUIRE_APP_CHECK:
+        return
+    token = request.headers.get("x-firebase-appcheck", "").strip()
+    if not token:
+        _log_security_event("app_check_missing", {"ip": _client_ip(request), "path": str(request.url.path)})
+        raise HTTPException(status_code=401, detail="App Check token required")
+    try:
+        firebase_app_check.verify_token(token)
+    except Exception:
+        _log_security_event("app_check_invalid", {"ip": _client_ip(request), "path": str(request.url.path)})
+        raise HTTPException(status_code=401, detail="Invalid App Check token")
+
+
 def _classify_security_severity(event: str, payload: dict) -> str:
     e = str(event)
     if "mass_delete" in e or "role_escalation" in e:
@@ -184,6 +203,7 @@ def _log_security_event(event: str, payload: dict) -> None:
 
 def _require_capability(request: Request, authorization: str | None, allowed_roles: set[str], action: str, confirm: str | None = None) -> tuple[str, str]:
     uid, role = _verify_firebase_request(authorization)
+    _verify_app_check(request, required=True)
     _validate_admin_origin(request)
     _enforce_rate_limit(f"{uid}:{action}", 30, 60)
     _enforce_nonce(request, uid)
@@ -317,6 +337,9 @@ class AIInferRequest(BaseModel):
     payload: dict
 
 
+class CertificateGenerateRequest(BaseModel):
+    course_id: str
+
 
 
 class PaymentInitiateRequest(BaseModel):
@@ -382,6 +405,8 @@ def _verify_firebase_request(authorization: str | None) -> tuple[str, str]:
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid auth token")
     uid = decoded.get("uid", "")
+    if decoded.get("email_verified") is not True:
+        raise HTTPException(status_code=403, detail="Verified email required")
     role = _fetch_user_role(uid)
     if not uid or not role:
         raise HTTPException(status_code=403, detail="Approved user required")
@@ -469,8 +494,13 @@ def _normalize_cleanup_reason(reason: str) -> str:
 
 
 @api_router.post("/live-ops/event")
-async def ingest_live_ops_event(payload: LiveOpsEventRequest):
+async def ingest_live_ops_event(payload: LiveOpsEventRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, role = _verify_firebase_request(authorization)
+    _verify_app_check(request, required=True)
+    _enforce_rate_limit(f"{uid}:live_ops_event", 120, 60)
     data = payload.dict()
+    data["uid"] = uid
+    data["verified_role"] = role
     data["received_at"] = int(time.time() * 1000)
     logger.info("LIVE_OPS_EVENT %s", json.dumps(data, ensure_ascii=False))
     return {"ok": True}
@@ -1356,15 +1386,12 @@ async def run_status_maintenance(authorization: str | None = Header(default=None
 
 
 @api_router.post("/analytics/ingest")
-async def analytics_ingest(payload: AnalyticsIngestRequest, authorization: str | None = Header(default=None)):
+async def analytics_ingest(payload: AnalyticsIngestRequest, request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    uid = "anonymous"
-    if authorization:
-        try:
-            uid, _ = _verify_firebase_request(authorization)
-        except Exception:
-            uid = "anonymous"
+    uid, _ = _verify_firebase_request(authorization)
+    _verify_app_check(request, required=True)
+    _enforce_rate_limit(f"{uid}:analytics_ingest", 60, 60)
 
     now_ms = int(time.time() * 1000)
     accepted = 0
@@ -1381,7 +1408,7 @@ async def analytics_ingest(payload: AnalyticsIngestRequest, authorization: str |
     summary_ref.set({
         "updated_at_ms": now_ms,
         "event_count": admin_firestore.Increment(accepted),
-        "actors": admin_firestore.Increment(1 if uid != "anonymous" else 0),
+        "actors": admin_firestore.Increment(1),
     }, merge=True)
     for k, v in names.items():
         summary_ref.set({f"by_name.{k}": admin_firestore.Increment(v)}, merge=True)
@@ -1429,7 +1456,8 @@ async def run_storage_cleanup_job(request: Request, authorization: str | None = 
 
 
 @api_router.get("/ops/health")
-async def ops_health():
+async def ops_health(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin", "moderator"}, "ops_health")
     snap = build_health_snapshot(firebase_db)
     snap["env"] = app_env()
     snap["release_channel"] = release_channel()
@@ -1437,13 +1465,10 @@ async def ops_health():
 
 
 @api_router.post("/ai/infer")
-async def ai_infer(payload: AIInferRequest, authorization: str | None = Header(default=None)):
-    uid = "anonymous"
-    if authorization:
-        try:
-            uid, _ = _verify_firebase_request(authorization)
-        except Exception:
-            uid = "anonymous"
+async def ai_infer(payload: AIInferRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, role = _verify_firebase_request(authorization)
+    _verify_app_check(request, required=True)
+    _enforce_rate_limit(f"{uid}:ai_infer", 30, 60)
 
     feature = str(payload.feature or "").strip().lower()
     body = payload.payload or {}
@@ -1459,12 +1484,81 @@ async def ai_infer(payload: AIInferRequest, authorization: str | None = Header(d
         a = str(body.get("answer") or "")
         result = {"explanation": f"Review the core concept in: {q[:120]}. Your selected answer: {a[:120]}.", "assistive_only": True}
     elif feature == "ops_insight":
+        if role not in {"admin", "super_admin", "moderator"}:
+            raise HTTPException(status_code=403, detail="Insufficient privileges")
         result = summarize_operational_insights(body)
     else:
         raise HTTPException(status_code=400, detail="Unsupported AI feature")
 
     log_ai_metric(firebase_db, "inference", {"feature": feature, "uid": uid, "cache_hit": bool(result.get("cache_hit")), "result_size": len(str(result))})
     return {"ok": True, "result": result, "cache_hit": bool(result.get("cache_hit", False))}
+
+
+def _course_requires_payment(course: dict) -> bool:
+    return bool(course.get("requires_payment") or course.get("paid") or float(course.get("price") or course.get("fee_amount") or 0) > 0)
+
+
+def _has_completed_course(uid: str, course_id: str) -> bool:
+    if firebase_db is None:
+        return False
+    progress = list(firebase_db.collection("lesson_progress").where("user_id", "==", uid).where("course_id", "==", course_id).limit(200).stream())
+    if not progress:
+        return False
+    return all((doc.to_dict() or {}).get("completed") is True for doc in progress)
+
+
+def _has_successful_course_payment(uid: str, course_id: str) -> bool:
+    if firebase_db is None:
+        return False
+    docs = firebase_db.collection("payments").where("user_id", "==", uid).where("course_id", "==", course_id).where("state", "==", "succeeded").limit(1).stream()
+    return any(True for _ in docs)
+
+
+@api_router.post("/certificates/generate")
+async def generate_certificate(payload: CertificateGenerateRequest, request: Request, authorization: str | None = Header(default=None)):
+    if firebase_db is None:
+        raise HTTPException(status_code=500, detail="Firebase service not configured")
+    uid, _ = _verify_firebase_request(authorization)
+    _verify_app_check(request, required=True)
+    _enforce_rate_limit(f"{uid}:certificate_generate", 5, 300)
+
+    course_id = str(payload.course_id or "").strip()
+    if not course_id or len(course_id) > 128 or "/" in course_id:
+        raise HTTPException(status_code=400, detail="Invalid course_id")
+
+    course_snap = firebase_db.collection("courses").document(course_id).get()
+    if not course_snap.exists:
+        raise HTTPException(status_code=404, detail="Course not found")
+    course = course_snap.to_dict() or {}
+
+    enrollment_id = _enrollment_doc_id(uid, course_id)
+    enrollment_snap = firebase_db.collection("enrollments").document(enrollment_id).get()
+    if not enrollment_snap.exists or not _is_active_enrollment(enrollment_snap.to_dict() or {}, uid, course_id):
+        raise HTTPException(status_code=403, detail="Active enrollment required")
+
+    if not _has_completed_course(uid, course_id):
+        raise HTTPException(status_code=409, detail="Course completion required")
+
+    if _course_requires_payment(course) and not _has_successful_course_payment(uid, course_id):
+        raise HTTPException(status_code=402, detail="Successful payment required")
+
+    user_snap = firebase_db.collection("users").document(uid).get()
+    user_doc = user_snap.to_dict() or {}
+    cert_id = f"{uid}:{course_id}"
+    completion_date = datetime.utcnow().date().isoformat()
+    cert_ref = firebase_db.collection("certificates").document(cert_id)
+    cert_ref.set({
+        "user_id": uid,
+        "course_id": course_id,
+        "user_name": str(user_doc.get("name") or "User")[:160],
+        "course_name": str(course.get("name") or course_id)[:200],
+        "completion_date": completion_date,
+        "source": "server",
+        "enrollment_id": enrollment_id,
+        "created_at": admin_firestore.SERVER_TIMESTAMP,
+        "updated_at": admin_firestore.SERVER_TIMESTAMP,
+    }, merge=True)
+    return {"ok": True, "certificate_id": cert_id, "completion_date": completion_date}
 
 
 @api_router.post("/payments/initiate")
