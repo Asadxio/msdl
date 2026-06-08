@@ -1,19 +1,52 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { trackEvent } from '@/lib/analytics';
+
+const FIREBASE_AUTH_SENDER_ADDRESS = 'noreply@madrasa-app-50d6c.firebaseapp.com';
 
 export default function PendingScreen() {
   const insets = useSafeAreaInsets();
-  const { signOut, refreshProfile, resendVerification, refreshUser, profile, emailVerified } = useAuth();
+  const router = useRouter();
+  const { signOut, refreshProfile, resendVerification, refreshUser, profile, emailVerified, user, profileIssue } = useAuth();
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
+  const previousEmailVerified = useRef(emailVerified);
 
-  const isDeactivated = profile?.status === 'deactivated';
+  const isSuspended = profile?.status === 'deactivated' || profile?.status === 'suspended';
   const isRejected = profile?.status === 'rejected';
-  const needsVerification = !emailVerified && profile?.role !== 'admin';
+  const hasProfileBlocker = emailVerified && (profileIssue || !profile);
+  const isPrivilegedAdmin = (profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved';
+  const needsVerification = !emailVerified && !isPrivilegedAdmin;
+  const verificationEmail = profile?.email || user?.email || '';
+  const verificationMailto = verificationEmail ? `mailto:${verificationEmail}` : '';
+
+  useEffect(() => {
+    if (needsVerification && verificationEmail) {
+      trackEvent('verification_email_open_estimated', {
+        source: 'pending_screen_visible',
+        uid: user?.uid || 'unknown',
+        emailDomain: verificationEmail.split('@')[1] || 'unknown',
+        limitation: 'Firebase Auth does not expose true open events; this estimates user exposure to verification instructions.',
+      }, `verification-open-estimated-${user?.uid || verificationEmail}`);
+    }
+  }, [needsVerification, user?.uid, verificationEmail]);
+
+  useEffect(() => {
+    if (!previousEmailVerified.current && emailVerified) {
+      trackEvent('verification_email_link_clicked_estimated', {
+        source: 'auth_user_email_verified_transition',
+        uid: user?.uid || 'unknown',
+        emailDomain: verificationEmail.split('@')[1] || 'unknown',
+        limitation: 'Firebase Auth confirms the account is verified, but does not expose the exact click timestamp to the client.',
+      }, `verification-link-clicked-estimated-${user?.uid || verificationEmail}`);
+    }
+    previousEmailVerified.current = emailVerified;
+  }, [emailVerified, user?.uid, verificationEmail]);
 
   const handleCheck = async () => {
     setChecking(true);
@@ -29,12 +62,12 @@ export default function PendingScreen() {
     if (err) {
       Alert.alert('Error', err);
     } else {
-      Alert.alert('Email Sent', 'Verification email sent. Please check your inbox.');
+      Alert.alert('Email Sent', `Verification email sent to ${verificationEmail || 'your email address'}. Check Inbox, Spam/Junk, Promotions, and Updates.`);
     }
   };
 
-  // Deactivated state
-  if (isDeactivated || isRejected) {
+  // Blocked account state
+  if (isSuspended || isRejected) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle="dark-content" />
@@ -42,13 +75,48 @@ export default function PendingScreen() {
           <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
             <Ionicons name="close-circle-outline" size={48} color={COLORS.error} />
           </View>
-          <Text style={styles.title}>{isRejected ? 'Account Rejected' : 'Account Deactivated'}</Text>
+          <Text style={styles.title}>{isRejected ? 'Account Rejected' : 'Account Suspended'}</Text>
           <Text style={styles.subtitle}>
             {isRejected
               ? `Your signup request was rejected by an administrator.${'\n'}Please contact support for details.`
-              : `Your account has been deactivated by an administrator.${'\n'}Please contact support for assistance.`}
+              : `Your account is currently suspended.${'\n'}Please contact support for assistance.`}
           </Text>
           <TouchableOpacity style={styles.logoutBtn} onPress={signOut} testID="deactivated-logout-btn">
+            <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
+            <Text style={styles.logoutBtnText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+
+
+  if (hasProfileBlocker) {
+    const blockerTitle = profileIssue === 'role_missing' ? 'Role Missing' : 'Profile Incomplete';
+    const blockerMessage = profileIssue === 'missing_profile_document' || !profile
+      ? `We could not find your account profile after email verification.${'\n'}Tap Check Status, or contact support if this continues.`
+      : profileIssue === 'role_missing'
+        ? `Your account role is missing or invalid.${'\n'}Please contact support so we can fix your access.`
+        : `Your account profile is missing required details.${'\n'}Tap Check Status, or contact support if this continues.`;
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.content}>
+          <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
+            <Ionicons name="alert-circle-outline" size={48} color="#92400E" />
+          </View>
+          <Text style={styles.title}>{blockerTitle}</Text>
+          <Text style={styles.subtitle}>{blockerMessage}</Text>
+          <TouchableOpacity style={styles.checkBtn} onPress={handleCheck} disabled={checking} testID="profile-blocker-check-btn">
+            {checking ? <ActivityIndicator size="small" color={COLORS.primary} /> : (
+              <>
+                <Ionicons name="refresh" size={18} color={COLORS.primary} />
+                <Text style={styles.checkBtnText}>Check Status</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutBtn} onPress={signOut} testID="profile-blocker-logout-btn">
             <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
             <Text style={styles.logoutBtnText}>Sign Out</Text>
           </TouchableOpacity>
@@ -71,9 +139,22 @@ export default function PendingScreen() {
             <Text style={styles.subtitle}>
               We sent a verification email to your inbox.{'\n'}Please verify your email to continue.
             </Text>
-            <Text style={styles.verificationNote}>
-              Didn{'\''}t receive the verification email? Please check your Spam/Junk folder.
-            </Text>
+            {!!verificationEmail && (
+              <TouchableOpacity
+                style={styles.emailPill}
+                onPress={() => Linking.openURL(verificationMailto)}
+                accessibilityRole="link"
+                testID="verification-email-address"
+              >
+                <Text style={styles.emailPillLabel}>Verification email sent to:</Text>
+                <Text style={styles.emailPillValue}>{verificationEmail}</Text>
+              </TouchableOpacity>
+            )}
+            <View style={styles.deliveryHelpCard}>
+              <Text style={styles.deliveryHelpText}>• Search your inbox for the sender address: {FIREBASE_AUTH_SENDER_ADDRESS}</Text>
+              <Text style={styles.deliveryHelpText}>• Open your Spam/Junk folder if you don’t see it.</Text>
+              <Text style={styles.deliveryHelpText}>• Gmail users may also need to check Promotions or Updates.</Text>
+            </View>
             <TouchableOpacity
               style={styles.resendBtn}
               onPress={handleResendVerification}
@@ -87,15 +168,26 @@ export default function PendingScreen() {
                 {resending ? 'Sending...' : 'Resend Verification Email'}
               </Text>
             </TouchableOpacity>
+            <View style={styles.changeEmailSection}>
+              <Text style={styles.changeEmailPrompt}>Wrong email address?</Text>
+              <TouchableOpacity
+                style={styles.changeEmailBtn}
+                onPress={() => router.push('/auth/change-email')}
+                testID="change-email-btn"
+              >
+                <Ionicons name="create-outline" size={17} color={COLORS.primary} />
+                <Text style={styles.changeEmailBtnText}>Change Email Address</Text>
+              </TouchableOpacity>
+            </View>
           </>
         ) : (
           <>
             <View style={styles.iconCircle}>
               <Ionicons name="hourglass-outline" size={48} color={COLORS.secondary} />
             </View>
-            <Text style={styles.title}>Account Pending</Text>
+            <Text style={styles.title}>Approval Pending</Text>
             <Text style={styles.subtitle}>
-              Your account is pending approval.{'\n'}An admin will review your request soon.
+              Your email is verified and your account is waiting for approval.{'\n'}An admin will review your request soon.
             </Text>
           </>
         )}
@@ -153,8 +245,17 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '800', color: COLORS.textMain },
   subtitle: { fontSize: 15, color: COLORS.textMuted, textAlign: 'center', lineHeight: 24 },
   verificationNote: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
+  emailPill: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', width: '100%' },
+  emailPillLabel: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600', marginBottom: 4 },
+  emailPillValue: { fontSize: 15, color: COLORS.primary, fontWeight: '800' },
+  deliveryHelpCard: { backgroundColor: '#FFFBEB', borderRadius: RADIUS.lg, padding: SPACING.md, width: '100%', gap: 6 },
+  deliveryHelpText: { fontSize: 13, color: '#92400E', lineHeight: 19 },
   resendBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 24, paddingVertical: 14, marginTop: 4 },
   resendBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.secondary },
+  changeEmailSection: { alignItems: 'center', gap: 8, marginTop: 4 },
+  changeEmailPrompt: { fontSize: 13, color: COLORS.textMuted, fontWeight: '600' },
+  changeEmailBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 18, paddingVertical: 11 },
+  changeEmailBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
   infoCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, width: '100%', gap: SPACING.sm, marginTop: 8 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   infoLabel: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500' },
