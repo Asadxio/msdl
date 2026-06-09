@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useIsFocused } from '@react-navigation/native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { Camera, CameraView } from 'expo-camera';
@@ -87,7 +86,8 @@ export default function QiblaScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const isFocused = useIsFocused();
+  const pathname = usePathname();
+  const isFocused = pathname === '/qibla';
   const headingAnim = useRef(new Animated.Value(0)).current;
   const qiblaAnim = useRef(new Animated.Value(0)).current;
   const lastHeadingRef = useRef(0);
