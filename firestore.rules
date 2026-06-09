@@ -83,6 +83,45 @@ service cloud.firestore {
       return value == null || value == '' || (value is string && value.matches('^https://.*$'));
     }
 
+
+    function isValidProfileAboutSettings(data) {
+      return !data.keys().hasAny(['profile'])
+        || (
+          data.profile is map
+          && data.profile.keys().hasOnly(['about_madrasa'])
+          && (!data.profile.keys().hasAny(['about_madrasa']) || data.profile.about_madrasa is string)
+        );
+    }
+
+    function appSettingsChangedKeys(docId) {
+      return exists(/databases/$(database)/documents/app_settings/$(docId))
+        ? request.resource.data.diff(resource.data).affectedKeys()
+        : request.resource.data.keys();
+    }
+
+    function isValidPlatformSettingsWrite(docId) {
+      return hasOnlyAllowedKeys(
+          appSettingsChangedKeys(docId),
+          [
+            'fees_amount',
+            'razorpay_link',
+            'whatsapp_channel',
+            'whatsapp_contact',
+            'instagram',
+            'youtube_link',
+            'telegram_link',
+            'youtube_telegram',
+            'donation_content',
+            'notice_title',
+            'notice_message',
+            'profile',
+            'updated_at'
+          ]
+        )
+        && !request.resource.data.keys().hasAny(['about', 'about_content', 'introduction_content'])
+        && isValidProfileAboutSettings(request.resource.data);
+    }
+
     function isValidUserCreate(uid) {
       return isSelf(uid)
         && hasOnlyAllowedKeys(
@@ -1354,10 +1393,10 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // editable app settings (fees/social links)
+    // editable app settings (fees/social links/profile about content)
     match /app_settings/{docId} {
       allow read: if isApprovedVerifiedUser();
-      allow write: if isAdmin();
+      allow write: if isAdmin() && (docId != 'platform' || isValidPlatformSettingsWrite(docId));
     }
 
 

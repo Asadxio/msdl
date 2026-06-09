@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   View,
@@ -28,6 +28,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -48,7 +49,7 @@ type AppSettings = {
   youtube_link: string;
   telegram_link: string;
   donation_content: string;
-  introduction_content: string;
+  about_madrasa: string;
 };
 
 type FeedbackItem = {
@@ -78,7 +79,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   youtube_link: '',
   telegram_link: '',
   donation_content: 'Your sadaqah, zakat, fitrah and langar support help students access Islamic education with dignity and consistency.',
-  introduction_content: 'Madarsa Tus Salikat Lil Banat is a modern Islamic learning platform dedicated to quality Islamic education for girls.',
+  about_madrasa: '',
 };
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
@@ -106,11 +107,113 @@ function SectionCard({ title, icon, children }: { title: string; icon: string; c
   );
 }
 
+
+type AboutMadrasaSectionProps = {
+  aboutMadrasa: string;
+  isAdmin: boolean;
+  onSaved: (aboutMadrasa: string) => void;
+};
+
+const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadrasa, isAdmin, onSaved }: AboutMadrasaSectionProps) {
+  const [aboutDraft, setAboutDraft] = useState(aboutMadrasa);
+  const [aboutError, setAboutError] = useState('');
+  const [savingAbout, setSavingAbout] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [serverChangedWhileEditing, setServerChangedWhileEditing] = useState(false);
+  const editingRef = useRef(false);
+  const latestServerAboutRef = useRef(aboutMadrasa);
+
+  useEffect(() => {
+    const serverValueChanged = aboutMadrasa !== latestServerAboutRef.current;
+    if (serverValueChanged) {
+      latestServerAboutRef.current = aboutMadrasa;
+    }
+
+    if (editingRef.current) {
+      if (serverValueChanged) {
+        setServerChangedWhileEditing(true);
+      }
+      return;
+    }
+
+    setAboutDraft(aboutMadrasa);
+    setServerChangedWhileEditing(false);
+  }, [aboutMadrasa]);
+
+  const saveAboutMadrasa = async () => {
+    if (!isAdmin || savingAbout) return;
+    const cleanedAbout = aboutDraft.trim();
+    if (serverChangedWhileEditing && cleanedAbout !== latestServerAboutRef.current.trim()) {
+      const message = 'About content changed on the server while you were editing. Review the latest displayed value before saving again.';
+      setAboutError(message);
+      Alert.alert('Refresh Required', message);
+      return;
+    }
+    setAboutError('');
+    setSavingAbout(true);
+    try {
+      const settingsRef = doc(db, 'app_settings', 'platform');
+      await runTransaction(db, async (transaction) => {
+        transaction.set(settingsRef, {
+          profile: { about_madrasa: cleanedAbout },
+          updated_at: serverTimestamp(),
+        }, { merge: true });
+      });
+      latestServerAboutRef.current = cleanedAbout;
+      setServerChangedWhileEditing(false);
+      onSaved(cleanedAbout);
+      setAboutDraft(cleanedAbout);
+      Alert.alert('Saved', 'About Our Madrasa updated successfully.');
+    } catch (error: any) {
+      console.error('[About] saveAboutMadrasa transaction ERROR', error);
+      const message = error?.message || 'Could not save About Our Madrasa content. Please check your connection and try again.';
+      setAboutError(message);
+      Alert.alert('Save failed', message);
+    } finally {
+      setSavingAbout(false);
+    }
+  };
+
+  return (
+    <SectionCard title="🌿 About Our Madrasa" icon="leaf-outline">
+      <Text style={styles.bodyText}>
+        {aboutMadrasa || 'About Our Madrasa content has not been added yet.'}
+      </Text>
+      {isAdmin ? (
+        <>
+          <Text style={[styles.inputLabel, { marginTop: SPACING.md }]}>Editable About Content</Text>
+          <TextInput
+            style={[styles.input, styles.aboutTextArea, focused && styles.inputFocused]}
+            value={aboutDraft}
+            onChangeText={setAboutDraft}
+            multiline
+            placeholder="Write the complete About Our Madrasa content..."
+            placeholderTextColor={COLORS.textMuted}
+            onFocus={() => {
+              editingRef.current = true;
+              setFocused(true);
+            }}
+            onBlur={() => {
+              editingRef.current = false;
+              setFocused(false);
+            }}
+          />
+          {serverChangedWhileEditing ? <Text style={styles.inputWarning}>Latest server content changed while you are editing. Review before saving.</Text> : null}
+          {aboutError ? <Text style={styles.inputError}>{aboutError}</Text> : null}
+          <TouchableOpacity style={styles.secondaryBtn} onPress={saveAboutMadrasa} disabled={savingAbout}>
+            <Text style={styles.secondaryBtnText}>{savingAbout ? 'Saving About...' : 'Save About'}</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+    </SectionCard>
+  );
+});
+
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const router = useRouter();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
@@ -129,6 +232,9 @@ export default function AboutScreen() {
   const [socialError, setSocialError] = useState('');
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const testimonials = useMemo(() => feedback.slice(0, 6), [feedback]);
+  const handleAboutSaved = useCallback((aboutMadrasa: string) => {
+    setSettings((prev) => ({ ...prev, about_madrasa: aboutMadrasa }));
+  }, []);
 
   const serialize = (value: any): any => {
     if (value?.toDate && typeof value.toDate === 'function') {
@@ -171,12 +277,18 @@ export default function AboutScreen() {
   };
 
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const snap = await getDoc(doc(db, 'app_settings', 'platform'));
+    const settingsRef = doc(db, 'app_settings', 'platform');
+    const unsubscribe = onSnapshot(
+      settingsRef,
+      (snap) => {
         if (!snap.exists()) return;
         const data = snap.data() as any;
         const ytTgLegacy = String(data.youtube_telegram || '').trim();
+        const profileSettings = data.profile && typeof data.profile === 'object' ? data.profile : {};
+        const canonicalAbout = typeof profileSettings.about_madrasa === 'string'
+          ? profileSettings.about_madrasa
+          : '';
+
         setSettings((prev) => ({
           ...prev,
           fees_amount: Number(data.fees_amount || 0),
@@ -187,13 +299,14 @@ export default function AboutScreen() {
           youtube_link: data.youtube_link || ytTgLegacy || '',
           telegram_link: data.telegram_link || '',
           donation_content: data.donation_content || prev.donation_content,
-          introduction_content: data.introduction_content || prev.introduction_content,
+          about_madrasa: canonicalAbout,
         }));
-      } catch (error) {
-        console.log('[About] loadSettings ERROR', error);
-      }
-    };
-    loadSettings().catch(() => {});
+      },
+      (error) => {
+        console.error('[About] loadSettings onSnapshot ERROR', error);
+      },
+    );
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -223,17 +336,29 @@ export default function AboutScreen() {
 
   const saveSettings = async () => {
     if (!isAdmin) return;
+    const settingsPayload = {
+      fees_amount: settings.fees_amount,
+      razorpay_link: settings.razorpay_link,
+      whatsapp_channel: settings.whatsapp_channel,
+      whatsapp_contact: settings.whatsapp_contact,
+      instagram: settings.instagram,
+      youtube_link: settings.youtube_link,
+      telegram_link: settings.telegram_link,
+      donation_content: settings.donation_content,
+    };
     try {
       await setDoc(doc(db, 'app_settings', 'platform'), {
-        ...settings,
+        ...settingsPayload,
         updated_at: serverTimestamp(),
       }, { merge: true });
       Alert.alert('Saved', 'Settings updated successfully.');
     } catch (error: any) {
-      console.log('[About] saveSettings ERROR', error);
+      console.error('[About] saveSettings ERROR', error);
       Alert.alert('Save failed', error?.message || 'Could not save settings.');
     }
   };
+
+
 
   const saveSocialSettings = async () => {
     if (!isAdmin) return;
@@ -893,30 +1018,11 @@ export default function AboutScreen() {
           ))}
         </SectionCard>
 
-        <SectionCard title="🌿 About Our Madrasa" icon="leaf-outline">
-          <Text style={styles.bodyText}>{settings.introduction_content}</Text>
-          {isAdmin ? (
-            <>
-              <Text style={styles.inputLabel}>Editable Introduction</Text>
-              <TextInput
-                style={[styles.input, styles.textArea, focusedInput === 'intro_content' && styles.inputFocused]}
-                value={settings.introduction_content}
-                onChangeText={(v) => setSettings((p) => ({ ...p, introduction_content: v }))}
-                multiline
-                placeholder="Write introduction content..."
-                placeholderTextColor={COLORS.textMuted}
-                onFocus={() => setFocusedInput('intro_content')}
-                onBlur={() => setFocusedInput(null)}
-              />
-              <TouchableOpacity style={styles.secondaryBtn} onPress={saveSettings}>
-                <Text style={styles.secondaryBtnText}>Save Introduction</Text>
-              </TouchableOpacity>
-            </>
-          ) : null}
-          <Text style={styles.bodyText}>
-            Our curriculum covers Quran, Hadith, Fiqh, Arabic, and practical Islamic lifestyle learning.
-          </Text>
-        </SectionCard>
+        <AboutMadrasaSection
+          aboutMadrasa={settings.about_madrasa}
+          isAdmin={isAdmin}
+          onSaved={handleAboutSaved}
+        />
 
         <SectionCard title="🌐 Social & Help" icon="globe-outline">
           {isAdmin ? (
@@ -1012,7 +1118,9 @@ const styles = StyleSheet.create({
   },
   inputFocused: { borderColor: COLORS.primary, shadowColor: COLORS.primary, shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   inputError: { color: COLORS.error, fontSize: 12, fontWeight: '600', marginTop: -4, marginBottom: 8 },
+  inputWarning: { color: COLORS.goldText, fontSize: 12, fontWeight: '600', marginTop: -4, marginBottom: 8 },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
+  aboutTextArea: { minHeight: 180, textAlignVertical: 'top' },
   primaryBtn: { backgroundColor: COLORS.goldBg, borderRadius: RADIUS.full, paddingVertical: 12, alignItems: 'center' },
   primaryBtnSmall: { flexGrow: 1, minWidth: 150, backgroundColor: COLORS.goldBg, borderRadius: RADIUS.full, paddingVertical: 12, alignItems: 'center' },
   primaryBtnText: { color: COLORS.goldText, fontWeight: '700', fontSize: 13 },
