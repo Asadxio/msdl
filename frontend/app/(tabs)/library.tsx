@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Alert,
   TextInput,
   ScrollView,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,7 +18,7 @@ import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData, Book } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
 
@@ -85,11 +87,59 @@ export default function LibraryScreen() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshSpin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    if (!refreshing) {
+      refreshSpin.stopAnimation();
+      refreshSpin.setValue(0);
+      return;
+    }
+    const animation = Animated.loop(
+      Animated.timing(refreshSpin, {
+        toValue: 1,
+        duration: 850,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [refreshSpin, refreshing]);
+
+  const fetchCategoriesOnce = async () => {
+    const q = query(collection(db, 'categories'), orderBy('name'));
+    const snap = await getDocs(q);
+    const arr: { id: string; name: string }[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as { name?: string };
+      arr.push({ id: d.id, name: String(data.name || '') });
+    });
+    setCategories(arr.filter((c) => c.name.trim()));
+  };
+
+  const handleRefreshLibrary = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setFeedback(null);
+    try {
+      const ok = await refetchBooks();
+      await fetchCategoriesOnce();
+      if (!ok) throw new Error('library refresh failed');
+    } catch {
+      setFeedback({ type: 'error', text: 'Unable to refresh library. Please try again.' });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const refreshRotation = refreshSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   useEffect(() => {
     const q = query(collection(db, 'categories'), orderBy('name'));
@@ -139,19 +189,34 @@ export default function LibraryScreen() {
           <View>
             <Text style={styles.headerTitle} testID="library-title">Library</Text>
             <Text style={styles.headerSubtitle}>
-              {booksLoading ? 'Loading...' : `${books.length} books available`}
+              {refreshing ? 'Refreshing library...' : booksLoading ? 'Loading...' : `${books.length} books available`}
             </Text>
           </View>
-          {isAdmin && (
+          <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.addBtn}
-              testID="admin-add-book-btn"
-              onPress={() => router.push('/admin/add-book')}
+              style={[styles.refreshBtn, refreshing && styles.refreshBtnDisabled]}
+              testID="library-refresh-btn"
+              onPress={handleRefreshLibrary}
               activeOpacity={0.8}
+              disabled={refreshing || booksLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh library"
             >
-              <Ionicons name="add-circle" size={28} color={COLORS.primary} />
+              <Animated.View style={{ transform: [{ rotate: refreshRotation }] }}>
+                <Ionicons name="refresh" size={18} color={COLORS.primary} />
+              </Animated.View>
             </TouchableOpacity>
-          )}
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.addBtn}
+                testID="admin-add-book-btn"
+                onPress={() => router.push('/admin/add-book')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add-circle" size={28} color={COLORS.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
       {feedback ? (
@@ -256,6 +321,12 @@ const styles = StyleSheet.create({
   },
   errorText: { color: '#B3261E', fontSize: 12, flex: 1 },
   retryText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  refreshBtn: {
+    width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: 'rgba(15,169,88,0.24)',
+  },
+  refreshBtnDisabled: { opacity: 0.58 },
   addBtn: { padding: 4 },
   loadingList: { padding: SPACING.md, gap: SPACING.sm },
   centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, padding: SPACING.lg },

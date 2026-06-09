@@ -152,7 +152,7 @@ type DataContextType = {
   hasMoreLessonsByModule: Record<string, boolean>;
   hasMoreAssignmentsByLesson: Record<string, boolean>;
   refetch: () => void;
-  refetchBooks: () => Promise<void>;
+  refetchBooks: () => Promise<boolean>;
   refetchLearning: () => Promise<void>;
   fetchCourseModules: (courseId: string) => Promise<void>;
   fetchMoreCourseModules: (courseId: string) => Promise<void>;
@@ -240,7 +240,7 @@ const DataContext = createContext<DataContextType>({
   hasMoreLessonsByModule: {},
   hasMoreAssignmentsByLesson: {},
   refetch: () => {},
-  refetchBooks: async () => {},
+  refetchBooks: async () => false,
   refetchLearning: async () => {},
   fetchCourseModules: async () => {},
   fetchMoreCourseModules: async () => {},
@@ -293,7 +293,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [lessonCursorByModule, setLessonCursorByModule] = useState<Record<string, QueryCursor>>({});
   const [assignmentCursorByLesson, setAssignmentCursorByLesson] = useState<Record<string, QueryCursor>>({});
 
-  const fetchBooks = useCallback(async () => {
+  const fetchBooks = useCallback(async (): Promise<boolean> => {
     setBooksLoading(true);
     try {
       const booksSnap = await withTimeout(getDocs(collection(db, 'library')));
@@ -312,9 +312,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       });
       setBooks(booksData);
+      return true;
     } catch (err: unknown) {
       logger.warn('Failed to fetch books:', normalizeFirebaseError(err, 'Failed to fetch books'));
       setBooks([]);
+      return false;
     } finally {
       setBooksLoading(false);
     }
