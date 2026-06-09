@@ -1,6 +1,7 @@
 import time
 from firebase_admin import firestore as admin_firestore
 from security.paymentSecurity import can_transition
+from payments.payment_state import payment_state_update
 
 
 def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source_event_id: str = "") -> dict:
@@ -30,16 +31,15 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
         grants_subscription = payment_type == "fees"
         grants_course_access = grants_subscription and bool(course_id)
 
-        tx.set(p_ref, {
-            "state": "succeeded",
-            "status": "succeeded",
-            "entitlement_granted": grants_subscription,
-            "finalized_at": admin_firestore.SERVER_TIMESTAMP,
-            "finalized_at_ms": now_ms,
-            "reconciliation": {"finalized": True, "source_event_id": source_event_id, "updated_at_ms": now_ms},
-            "updated_at": admin_firestore.SERVER_TIMESTAMP,
-            "updated_at_ms": now_ms,
-        }, merge=True)
+        tx.set(p_ref, payment_state_update(
+            "succeeded",
+            entitlement_granted=grants_subscription,
+            finalized_at=admin_firestore.SERVER_TIMESTAMP,
+            finalized_at_ms=now_ms,
+            reconciliation={"finalized": True, "source_event_id": source_event_id, "updated_at_ms": now_ms},
+            updated_at=admin_firestore.SERVER_TIMESTAMP,
+            updated_at_ms=now_ms,
+        ), merge=True)
 
         if grants_subscription:
             s_ref = firebase_db.collection("subscriptions").document(uid)

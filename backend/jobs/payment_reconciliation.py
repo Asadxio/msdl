@@ -1,6 +1,7 @@
 import time
 from firebase_admin import firestore as admin_firestore
 from payments.payment_finalizer import finalize_successful_payment
+from payments.payment_state import payment_state_update
 from security.paymentSecurity import can_transition
 
 
@@ -18,7 +19,11 @@ def recover_stale_processing_payments(firebase_db, logger) -> dict:
     stale_minutes = _env_int("PAYMENT_PROCESSING_STALE_MINUTES", 30)
     limit_count = _env_int("PAYMENT_RECONCILIATION_BATCH_LIMIT", 100)
     cutoff = int(time.time() * 1000) - stale_minutes * 60 * 1000
-    docs = list(firebase_db.collection("payments").where("state", "==", "processing").limit(limit_count).stream())
+    state_docs = list(firebase_db.collection("payments").where("state", "==", "processing").limit(limit_count).stream())
+    status_docs = list(firebase_db.collection("payments").where("status", "==", "processing").limit(limit_count).stream())
+    docs_by_id = {d.id: d for d in state_docs}
+    docs_by_id.update({d.id: d for d in status_docs})
+    docs = list(docs_by_id.values())[:limit_count]
     scanned = 0
     recovered = 0
     failed = 0
@@ -38,7 +43,7 @@ def recover_stale_processing_payments(firebase_db, logger) -> dict:
                 logger.warning("reconcile_finalize_failed payment=%s err=%s", d.id, exc)
         else:
             if can_transition("processing", "failed"):
-                d.reference.set({"state": "failed", "reconciliation": {"failed_by_worker": True, "updated_at_ms": int(time.time()*1000)}, "updated_at": admin_firestore.SERVER_TIMESTAMP}, merge=True)
+                d.reference.set(payment_state_update("failed", reconciliation={"failed_by_worker": True, "updated_at_ms": int(time.time()*1000)}, updated_at=admin_firestore.SERVER_TIMESTAMP), merge=True)
                 firebase_db.collection("payment_audit_logs").add({"payment_id": d.id, "actor_id": "reconciliation_worker", "action": "mark_failed_stale_processing", "created_at_ms": int(time.time()*1000)})
     return {"ok": True, "scanned": scanned, "recovered": recovered, "failed": failed}
 
@@ -49,7 +54,11 @@ def expire_abandoned_pending_payments(firebase_db, logger) -> dict:
     exp_minutes = _env_int("PAYMENT_PENDING_EXPIRATION_MINUTES", 60)
     limit_count = _env_int("PAYMENT_RECONCILIATION_BATCH_LIMIT", 100)
     cutoff = int(time.time() * 1000) - exp_minutes * 60 * 1000
-    docs = list(firebase_db.collection("payments").where("state", "==", "pending").limit(limit_count).stream())
+    state_docs = list(firebase_db.collection("payments").where("state", "==", "pending").limit(limit_count).stream())
+    status_docs = list(firebase_db.collection("payments").where("status", "==", "pending").limit(limit_count).stream())
+    docs_by_id = {d.id: d for d in state_docs}
+    docs_by_id.update({d.id: d for d in status_docs})
+    docs = list(docs_by_id.values())[:limit_count]
     scanned = 0
     expired = 0
     for d in docs:
@@ -57,7 +66,7 @@ def expire_abandoned_pending_payments(firebase_db, logger) -> dict:
         p = d.to_dict() or {}
         created_ms = int(p.get("created_at_ms") or 0)
         if created_ms and created_ms < cutoff and can_transition("pending", "expired"):
-            d.reference.set({"state": "expired", "reconciliation": {"expired_by_worker": True, "updated_at_ms": int(time.time()*1000)}, "updated_at": admin_firestore.SERVER_TIMESTAMP}, merge=True)
+            d.reference.set(payment_state_update("expired", reconciliation={"expired_by_worker": True, "updated_at_ms": int(time.time()*1000)}, updated_at=admin_firestore.SERVER_TIMESTAMP), merge=True)
             firebase_db.collection("payment_audit_logs").add({"payment_id": d.id, "actor_id": "expiration_worker", "action": "expire_pending", "created_at_ms": int(time.time()*1000)})
             expired += 1
     return {"ok": True, "scanned": scanned, "expired": expired}

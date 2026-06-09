@@ -1,4 +1,18 @@
 from payments.payment_finalizer import finalize_successful_payment
+from payments.payment_state import payment_state_update
+
+
+def test_payment_state_update_keeps_state_and_legacy_status_in_sync():
+    assert payment_state_update("succeeded") == {"state": "succeeded", "status": "succeeded"}
+    assert payment_state_update("rejected", review_note="manual reject") == {
+        "review_note": "manual reject",
+        "state": "rejected",
+        "status": "rejected",
+    }
+    assert payment_state_update("succeeded", state="pending", status="pending") == {
+        "state": "succeeded",
+        "status": "succeeded",
+    }
 
 
 class FakeSnapshot:
@@ -76,6 +90,8 @@ def test_succeeded_without_entitlement_is_finalized(monkeypatch):
 
     assert result["ok"] is True
     assert result["entitlement_granted"] is True
+    assert db.root["payments"]["p1"]["state"] == "succeeded"
+    assert db.root["payments"]["p1"]["status"] == "succeeded"
     assert db.root["payments"]["p1"]["entitlement_granted"] is True
     assert db.root["subscriptions"]["student_1"]["status"] == "active"
     assert db.root["enrollments"]["student_1:course_1"]["course_id"] == "course_1"
@@ -127,6 +143,7 @@ def test_processing_payment_success_grants_course_access(monkeypatch):
 
     assert result["ok"] is True
     assert db.root["payments"]["p3"]["state"] == "succeeded"
+    assert db.root["payments"]["p3"]["status"] == "succeeded"
     assert db.root["payments"]["p3"]["entitlement_granted"] is True
     assert db.root["enrollments"]["student_3:course_3"]["status"] == "active"
     assert db.root["enrollments"]["student_3:course_3"]["user_id"] == "student_3"
@@ -155,6 +172,7 @@ def test_pending_manual_approval_grants_course_access(monkeypatch):
 
     assert result["ok"] is True
     assert db.root["payments"]["p4"]["state"] == "succeeded"
+    assert db.root["payments"]["p4"]["status"] == "succeeded"
     assert db.root["payments"]["p4"]["entitlement_granted"] is True
     assert db.root["enrollments"]["student_4:course_4"]["status"] == "active"
     assert db.root["enrollments"]["student_4:course_4"]["course_id"] == "course_4"
@@ -209,6 +227,7 @@ def test_donation_payment_does_not_create_course_enrollment(monkeypatch):
     assert result["ok"] is True
     assert result["entitlement_granted"] is False
     assert db.root["payments"]["p_donation"]["state"] == "succeeded"
+    assert db.root["payments"]["p_donation"]["status"] == "succeeded"
     assert db.root["payments"]["p_donation"]["entitlement_granted"] is False
     assert db.root.get("enrollments", {}) == {}
     assert db.root.get("subscriptions", {}) == {}

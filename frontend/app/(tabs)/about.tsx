@@ -65,10 +65,15 @@ type PaymentItem = {
   user_id: string;
   user_name: string;
   amount: number;
-  status: 'pending' | 'approved' | 'rejected' | 'verified' | 'submitted';
+  state?: 'pending' | 'approved' | 'rejected' | 'verified' | 'submitted' | 'processing' | 'succeeded' | 'failed' | 'cancelled' | 'refunded' | 'disputed' | 'expired';
+  status?: 'pending' | 'approved' | 'rejected' | 'verified' | 'submitted' | 'processing' | 'succeeded' | 'failed' | 'cancelled' | 'refunded' | 'disputed' | 'expired';
   provider?: 'razorpay';
   type?: 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
 };
+
+function paymentState(payment: Pick<PaymentItem, 'state' | 'status'>): string {
+  return payment.state ?? payment.status ?? 'pending';
+}
 
 const DEFAULT_SETTINGS: AppSettings = {
   fees_amount: 0,
@@ -510,8 +515,11 @@ export default function AboutScreen() {
         user_id: user.uid,
         user_name: profile.name,
         amount,
+        state: 'pending',
         status: 'pending',
         provider: 'razorpay',
+        review_mode: 'manual',
+        currency: 'INR',
         type: 'fees',
         created_at: serverTimestamp(),
       });
@@ -555,8 +563,11 @@ export default function AboutScreen() {
         user_id: user.uid,
         user_name: profile.name,
         amount,
+        state: 'pending',
         status: 'pending',
         provider: 'razorpay',
+        review_mode: 'manual',
+        currency: 'INR',
         type: donationType,
         created_at: serverTimestamp(),
       });
@@ -848,7 +859,7 @@ export default function AboutScreen() {
             {myPayments[0] ? (
               <View style={styles.statusCard}>
                 <Text style={styles.statusLabel}>Latest Payment Status</Text>
-                <Text style={styles.statusValue}>{myPayments[0].status}</Text>
+                <Text style={styles.statusValue}>{paymentState(myPayments[0])}</Text>
               </View>
             ) : null}
             <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/payment')} testID="open-unified-payment-btn">
@@ -862,7 +873,7 @@ export default function AboutScreen() {
           {myPayments[0] && (
             <View style={styles.statusCard}>
               <Text style={styles.statusLabel}>Latest Payment Status</Text>
-              <Text style={styles.statusValue}>{myPayments[0].status}</Text>
+              <Text style={styles.statusValue}>{paymentState(myPayments[0])}</Text>
             </View>
           )}
           <TouchableOpacity style={styles.primaryBtn} onPress={payFees} testID="pay-fees-btn">

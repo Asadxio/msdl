@@ -69,8 +69,9 @@ export default function PaymentFlowScreen() {
         if (!user?.uid) return;
         const paymentsSnap = await getDocs(query(collection(db, 'payments'), where('user_id', '==', user.uid), orderBy('created_at', 'desc')));
         if (!paymentsSnap.empty) {
-          const latest = paymentsSnap.docs[0].data() as { status?: string; type?: string; amount?: number };
-          setStatusText(`${latest.status || (latest as any).state || 'pending'} • ${latest.type || 'fees'} • ₹${Number(latest.amount || 0).toFixed(2)}`);
+          const latest = paymentsSnap.docs[0].data() as { state?: string; status?: string; type?: string; amount?: number };
+          const paymentState = latest.state ?? latest.status ?? 'pending';
+          setStatusText(`${paymentState} • ${latest.type || 'fees'} • ₹${Number(latest.amount || 0).toFixed(2)}`);
         }
       } catch (err) {
         setError(normalizeFirebaseError(err, 'Could not load payment settings.'));
@@ -148,7 +149,7 @@ export default function PaymentFlowScreen() {
         const snap = await getDoc(doc(db, 'payments', currentPaymentId));
         if (!snap.exists()) return;
         const data = snap.data() as any;
-        const st = String(data.state || data.status || 'processing');
+        const st = String(data.state ?? data.status ?? 'processing');
         setStatusText(`${st} • ${String(data.type || paymentType)} • ₹${Number(data.amount || parsedAmount).toFixed(2)}`);
         if (['succeeded', 'failed', 'rejected', 'refunded', 'disputed', 'expired', 'cancelled'].includes(st)) {
           setVerificationState('idle');

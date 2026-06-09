@@ -17,16 +17,23 @@ import { createAdminLog } from '@/lib/adminLogs';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { actionNonce, apiUrl } from '@/lib/api';
 
+type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
+
 type PaymentItem = {
   id: string;
   user_id: string;
   user_name: string;
   amount: number;
-  status: 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
+  state?: PaymentStatus;
+  status?: PaymentStatus;
   provider?: 'razorpay';
   type?: 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
   created_at?: { toDate?: () => Date };
 };
+
+function paymentState(payment: Pick<PaymentItem, 'state' | 'status'>): PaymentStatus {
+  return payment.state ?? payment.status ?? 'pending';
+}
 
 function formatDate(item: PaymentItem) {
   try {
@@ -49,7 +56,7 @@ export default function AdminPaymentsScreen() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [adminNote, setAdminNote] = useState('');
   const [cursor, setCursor] = useState<any>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | PaymentItem['status']>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | PaymentStatus>('all');
   const [fetching, setFetching] = useState(false);
 
   const loadPayments = useCallback(async (direction: 'reset' | 'next' | 'prev' = 'reset') => {
@@ -57,11 +64,20 @@ export default function AdminPaymentsScreen() {
     setFetching(true);
     if (direction === 'reset') setLoading(true);
     try {
-      const extra: any[] = [];
-      if (statusFilter !== 'all') extra.push(where('state', '==', statusFilter));
-      const page = await fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, cursor: direction === 'reset' ? null : cursor, direction: direction === 'reset' ? 'next' : direction, extra });
-      setPayments(page.items.map((item: any) => ({ ...item, status: item.state || item.status || 'pending' })) as PaymentItem[]);
-      setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
+      if (statusFilter !== 'all') {
+        const [statePage, statusPage] = await Promise.all([
+          fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, extra: [where('state', '==', statusFilter)] }),
+          fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, extra: [where('status', '==', statusFilter)] }),
+        ]);
+        const merged = new Map<string, PaymentItem>();
+        [...statePage.items, ...statusPage.items].forEach((item: any) => merged.set(item.id, { ...item, status: paymentState(item) }));
+        setPayments([...merged.values()].sort((a, b) => Number(b.created_at?.toDate?.() || 0) - Number(a.created_at?.toDate?.() || 0)).slice(0, ADMIN_DEFAULT_PAGE_SIZE));
+        setCursor(null);
+      } else {
+        const page = await fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, cursor: direction === 'reset' ? null : cursor, direction: direction === 'reset' ? 'next' : direction });
+        setPayments(page.items.map((item: any) => ({ ...item, status: paymentState(item) })) as PaymentItem[]);
+        setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
+      }
       setError('');
     } catch (err) {
       console.log('[AdminPayments] load payments failed', err);
@@ -89,14 +105,14 @@ export default function AdminPaymentsScreen() {
       Alert.alert('Update Failed', 'Payment document was not found in the current list. Refresh and try again.');
       return;
     }
-    if (!['pending', 'submitted', 'verified', 'processing'].includes(currentPayment.status)) {
-      Alert.alert('Already Finalized', `Payment ${id} is already ${currentPayment.status}.`);
+    if (!['pending', 'submitted', 'verified', 'processing'].includes(paymentState(currentPayment))) {
+      Alert.alert('Already Finalized', `Payment ${id} is already ${paymentState(currentPayment)}.`);
       return;
     }
     setUpdatingId(id);
     try {
       const token = await currentUser?.getIdToken();
-      const requestBody = { payment_id: id, next_state: status, note: adminNote || `admin_${status}`, evidence: { panel: 'admin_payments', previous_status: currentPayment.status } };
+      const requestBody = { payment_id: id, next_state: status, note: adminNote || `admin_${status}`, evidence: { panel: 'admin_payments', previous_status: paymentState(currentPayment) } };
       console.log('[AdminPayments] updating payment status', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', next_state: status });
       const res = await fetch(apiUrl('/payments/admin/action'), {
         method: 'POST',
@@ -174,12 +190,12 @@ export default function AdminPaymentsScreen() {
               <Text style={styles.meta}>Amount: ₹{Number(item.amount || 0).toFixed(2)}</Text>
               <Text style={styles.meta}>Type: {item.type || 'fees'}</Text>
               <Text style={styles.meta}>Provider: {item.provider || 'razorpay'}</Text>
-              <Text style={styles.meta}>Status: {item.status}</Text>
+              <Text style={styles.meta}>Status: {paymentState(item)}</Text>
               <Text style={styles.time}>{formatDate(item)}</Text>
               <Text style={styles.meta}>Reconciliation: {(item as any).reconciliation?.finalized ? 'finalized' : ((item as any).reconciliation ? 'pending' : 'n/a')}</Text>
               <Text style={styles.meta}>Replay detected: {(item as any).replay_detected ? 'yes' : 'no'}</Text>
 
-              {(item.status === 'submitted' || item.status === 'pending' || item.status === 'verified' || item.status === 'processing') && (
+              {(['submitted', 'pending', 'verified', 'processing'] as PaymentStatus[]).includes(paymentState(item)) && (
                 <View style={styles.actions}>
                   <TouchableOpacity style={[styles.verifyBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'succeeded')} disabled={updatingId === item.id}>
                     {updatingId === item.id ? <ActivityIndicator size="small" color="#166534" /> : <Text style={styles.verifyText}>Succeed</Text>}
