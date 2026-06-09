@@ -1,5 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Stack, useRouter, useSegments } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,6 +23,7 @@ import { TutorialProvider } from '@/context/TutorialContext';
 import { InAppTutorialOverlay } from '@/components/ui/InAppTutorialOverlay';
 import { isTutorialCompleted } from '@/lib/tutorialStorage';
 import { markUserEnteredApp } from '@/lib/emailVerificationAnalytics';
+import { trackEvent, type AnalyticsEventName } from '@/lib/analytics';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -41,7 +40,7 @@ function formatErrorMessage(error: unknown, fallback = 'An unexpected error occu
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, profile, authLoading, emailVerified, profileOffline, signupVerificationFlowActive } = useAuth();
+  const { user, profile, profileIssue, authLoading, emailVerified, profileOffline, signupVerificationFlowActive } = useAuth();
   const profileStatus = profile?.status;
   const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
@@ -187,6 +186,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
 
     const inAuth = segments[0] === 'auth';
+    const inPendingAuthRoute = segmentKey === 'auth/pending' || segmentKey === 'auth/change-email';
     const inOnboardingEntry = segments[0] === 'onboarding-entry';
     const isAdmin = (profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved';
     const inAdmin = segments[0] === 'admin';
