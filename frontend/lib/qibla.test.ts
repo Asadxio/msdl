@@ -42,15 +42,14 @@ describe('qibla calculations', () => {
 
   it('wires Qibla entry points, sensors, camera, and offline cache in screens', () => {
     const qiblaScreen = fs.readFileSync(path.join(__dirname, '../app/qibla.tsx'), 'utf8');
-    const moreScreen = fs.readFileSync(path.join(__dirname, '../app/more.tsx'), 'utf8');
+    const moreScreen = fs.readFileSync(path.join(__dirname, '../app/more/applications/index.tsx'), 'utf8');
     const homeScreen = fs.readFileSync(path.join(__dirname, '../app/(tabs)/index.tsx'), 'utf8');
 
     expect(QIBLA_LOCATION_CACHE_KEY).toBe('qibla_location_cache_v1');
     expect(moreScreen).toContain("route: '/qibla'");
-    expect(homeScreen).toContain('testID="dashboard-qibla-shortcut"');
-    expect(homeScreen).toContain('dashboard-google-qibla-finder-option');
-    expect(homeScreen).toContain('Google Camera Qibla Finder (Internet Required)');
-    expect(qiblaScreen).toContain('getMagnetometerModule');
+    expect(homeScreen).toContain('Islamic Dashboard relocated to More');
+    expect(moreScreen).toContain('Google Camera Qibla Finder (Internet Required)');
+    expect(qiblaScreen).toContain('Magnetometer.addListener');
     expect(qiblaScreen).toContain('CameraView');
     expect(qiblaScreen).toContain('GOOGLE_QIBLA_FINDER_URL');
     expect(qiblaScreen).toContain("params.mode === 'camera' || params.mode === 'google'");
@@ -59,7 +58,7 @@ describe('qibla calculations', () => {
     expect(qiblaScreen).toContain('Google Qibla Finder will open in your browser.');
     expect(qiblaScreen).toContain('Unable to open Qibla Finder.');
     expect(qiblaScreen).toContain('AsyncStorage.getItem(QIBLA_LOCATION_CACHE_KEY)');
-    expect(qiblaScreen).toContain("permission === 'granted'");
+    expect(qiblaScreen).toContain("permission?.status === 'granted'");
     expect(qiblaScreen).toContain('sensorStatus');
     expect(qiblaScreen).toContain('react-native-maps');
     expect(qiblaScreen).toContain('Google Camera Qibla Finder (Internet Required)');

@@ -272,7 +272,7 @@ export default function PendingScreen() {
   return (
     <View style={[styles.container, isDarkMode && styles.containerDark, { paddingTop: insets.top }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
         {/* Email Verification Section */}
         {needsVerification ? (
           <>
@@ -382,7 +382,7 @@ export default function PendingScreen() {
           {signingOut ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="log-out-outline" size={18} color={COLORS.error} />}
           <Text style={styles.logoutBtnText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
     </View>
   );
 }

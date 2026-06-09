@@ -125,6 +125,8 @@ ALLOWED_ADMIN_ORIGINS = set(_env_list("ADMIN_ALLOWED_ORIGINS", ""))
 SECURITY_EVENT_RATE: dict[str, list[float]] = {}
 NONCE_CACHE: dict[str, float] = {}
 REQUIRE_APP_CHECK = os.environ.get("REQUIRE_APP_CHECK", "false").strip().lower() in {"1", "true", "yes"}
+if app_env() == "production" and not REQUIRE_APP_CHECK:
+    raise RuntimeError("REQUIRE_APP_CHECK=true is required when APP_ENV=production")
 
 
 def _client_ip(request: Request) -> str:
@@ -213,6 +215,13 @@ def _require_capability(request: Request, authorization: str | None, allowed_rol
         _log_security_event("capability_denied", {"uid": uid, "role": role, "action": action, "ip": _client_ip(request)})
         raise HTTPException(status_code=403, detail="Insufficient privileges")
     _log_security_event("capability_granted", {"uid": uid, "role": role, "action": action, "ip": _client_ip(request), "ua": request.headers.get("user-agent", "")[:120]})
+    return uid, role
+
+
+def _require_authenticated_request(request: Request, authorization: str | None, action: str, limit_count: int = 60, window_sec: int = 60) -> tuple[str, str]:
+    uid, role = _verify_firebase_request(authorization)
+    _verify_app_check(request, required=True)
+    _enforce_rate_limit(f"{uid}:{action}", limit_count, window_sec)
     return uid, role
 
 
@@ -755,8 +764,8 @@ def _send_expo_push(tokens: list[str], payload: PushSendRequest, token_owners: d
 
 
 @api_router.post("/live-class/token")
-async def issue_live_class_token(payload: LiveClassTokenRequest, authorization: str | None = Header(default=None)):
-    uid, role = _verify_firebase_request(authorization)
+async def issue_live_class_token(payload: LiveClassTokenRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, role = _require_authenticated_request(request, authorization, "live_class_token", 30, 60)
     live_ref, live_class = _get_live_class(payload.live_class_id)
     _require_live_class_access(uid, role, live_class)
     channel_name = str(live_class.get("channel_name") or "").strip()
@@ -782,8 +791,8 @@ async def issue_live_class_token(payload: LiveClassTokenRequest, authorization: 
 
 
 @api_router.post("/call/token")
-async def issue_call_token(payload: CallTokenRequest, authorization: str | None = Header(default=None)):
-    uid, role = _verify_firebase_request(authorization)
+async def issue_call_token(payload: CallTokenRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, role = _require_authenticated_request(request, authorization, "call_token", 30, 60)
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
     call_id = str(payload.call_id or "").strip()
@@ -817,8 +826,8 @@ async def issue_call_token(payload: CallTokenRequest, authorization: str | None 
 
 
 @api_router.post("/call/cleanup")
-async def cleanup_call(payload: CallCleanupRequest, authorization: str | None = Header(default=None)):
-    uid, role = _verify_firebase_request(authorization)
+async def cleanup_call(payload: CallCleanupRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, role = _require_authenticated_request(request, authorization, "call_cleanup", 30, 60)
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
     if role not in {"admin", "teacher"}:
@@ -856,8 +865,8 @@ async def cleanup_call(payload: CallCleanupRequest, authorization: str | None = 
 
 
 @api_router.post("/live-class/recording/start")
-async def start_live_class_recording(payload: LiveClassRecordingRequest, authorization: str | None = Header(default=None)):
-    uid, role = _verify_firebase_request(authorization)
+async def start_live_class_recording(payload: LiveClassRecordingRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, role = _require_authenticated_request(request, authorization, "live_class_recording_start", 20, 60)
     live_ref, live_class = _get_live_class(payload.live_class_id)
     _require_live_class_access(uid, role, live_class)
     _require_teacher_for_live_class(uid, role, live_class)
@@ -952,8 +961,8 @@ async def start_live_class_recording(payload: LiveClassRecordingRequest, authori
 
 
 @api_router.post("/live-class/recording/stop")
-async def stop_live_class_recording(payload: LiveClassRecordingRequest, authorization: str | None = Header(default=None)):
-    uid, role = _verify_firebase_request(authorization)
+async def stop_live_class_recording(payload: LiveClassRecordingRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, role = _require_authenticated_request(request, authorization, "live_class_recording_stop", 20, 60)
     live_ref, live_class = _get_live_class(payload.live_class_id)
     _require_live_class_access(uid, role, live_class, require_live=False)
     _require_teacher_for_live_class(uid, role, live_class)
@@ -1130,8 +1139,8 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
 
 
 @api_router.post("/push/enqueue")
-async def enqueue_push(payload: QueueEnqueueRequest, authorization: str | None = Header(default=None)):
-    uid, _ = _verify_firebase_request(authorization)
+async def enqueue_push(payload: QueueEnqueueRequest, request: Request, authorization: str | None = Header(default=None)):
+    uid, _ = _require_authenticated_request(request, authorization, "push_enqueue", 60, 60)
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Push service not configured")
     now_ms = int(time.time() * 1000)
@@ -1240,11 +1249,11 @@ async def update_routing_weights_job(request: Request, authorization: str | None
 
 
 @api_router.post("/jobs/cleanup-expired-status")
-async def cleanup_expired_statuses(authorization: str | None = Header(default=None)):
+async def cleanup_expired_statuses(request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    uid, role = _verify_firebase_request(authorization)
-    if role != "admin":
+    uid, role = _require_authenticated_request(request, authorization, "cleanup_expired_status", 20, 60)
+    if role not in {"admin", "super_admin"}:
         raise HTTPException(status_code=403, detail="Admin required")
     now_ms = int(time.time() * 1000)
     expired = firebase_db.collection("status_updates").where("expires_at_ms", "<=", now_ms).limit(200).stream()
@@ -1262,10 +1271,10 @@ async def cleanup_expired_statuses(authorization: str | None = Header(default=No
 
 
 @api_router.post("/status/react")
-async def react_status(payload: StatusReactRequest, authorization: str | None = Header(default=None)):
+async def react_status(payload: StatusReactRequest, request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    uid, _ = _verify_firebase_request(authorization)
+    uid, _ = _require_authenticated_request(request, authorization, "status_react", 120, 60)
     if payload.reaction not in {"❤️", "🔥", "👏"}:
         raise HTTPException(status_code=400, detail="Unsupported reaction")
     now_ms = int(time.time() * 1000)
@@ -1314,7 +1323,7 @@ async def react_status(payload: StatusReactRequest, authorization: str | None = 
 async def submit_quiz_authoritative(payload: QuizSubmitRequest, request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    uid, _ = _verify_firebase_request(authorization)
+    uid, _ = _require_authenticated_request(request, authorization, "quiz_submit", 30, 60)
     now_ms = int(time.time() * 1000)
     client_op = request.headers.get("x-op-id", "").strip() or payload.nonce
 
@@ -1353,11 +1362,11 @@ async def submit_quiz_authoritative(payload: QuizSubmitRequest, request: Request
 
 
 @api_router.post("/jobs/repair-status-reaction-counts")
-async def repair_status_reaction_counts(authorization: str | None = Header(default=None)):
+async def repair_status_reaction_counts(request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    _, role = _verify_firebase_request(authorization)
-    if role != "admin":
+    _, role = _require_authenticated_request(request, authorization, "repair_status_reaction_counts", 20, 60)
+    if role not in {"admin", "super_admin"}:
         raise HTTPException(status_code=403, detail="Admin required")
     repaired = 0
     scanned = 0
@@ -1562,10 +1571,10 @@ async def generate_certificate(payload: CertificateGenerateRequest, request: Req
 
 
 @api_router.post("/payments/initiate")
-async def payments_initiate(payload: PaymentInitiateRequest, authorization: str | None = Header(default=None)):
+async def payments_initiate(payload: PaymentInitiateRequest, request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    uid, _ = _verify_firebase_request(authorization)
+    uid, _ = _require_authenticated_request(request, authorization, "payments_initiate", 20, 60)
 
     amount = validate_payment_amount(payload.amount)
     ptype = validate_payment_type(payload.payment_type)
@@ -1608,10 +1617,10 @@ async def payments_initiate(payload: PaymentInitiateRequest, authorization: str 
 
 
 @api_router.post("/payments/confirm")
-async def payments_confirm(payload: PaymentConfirmRequest, authorization: str | None = Header(default=None)):
+async def payments_confirm(payload: PaymentConfirmRequest, request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    uid, _ = _verify_firebase_request(authorization)
+    uid, _ = _require_authenticated_request(request, authorization, "payments_confirm", 20, 60)
     pid = str(payload.payment_id or "").strip()
     ref = firebase_db.collection("payments").document(pid)
     snap = ref.get()

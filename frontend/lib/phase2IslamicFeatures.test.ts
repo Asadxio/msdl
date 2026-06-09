@@ -3,13 +3,14 @@ import path from 'path';
 
 const homePath = path.join(__dirname, '../app/(tabs)/index.tsx');
 const source = fs.readFileSync(homePath, 'utf8');
+const prayerTimesSource = fs.readFileSync(path.join(__dirname, '../app/prayer-times.tsx'), 'utf8');
+const moreSource = fs.readFileSync(path.join(__dirname, '../app/more/applications/index.tsx'), 'utf8');
 
 describe('phase 2 Islamic dashboard features', () => {
   it('keeps a compact Hijri prayer snapshot on dashboard and moves full calendar to applications', () => {
-    const moreSource = fs.readFileSync(path.join(__dirname, '../app/more.tsx'), 'utf8');
     const calendarScreen = fs.readFileSync(path.join(__dirname, '../app/islamic-calendar.tsx'), 'utf8');
-    expect(source).toContain('testID="compact-islamic-dashboard"');
-    expect(source).toContain('Hijri: {calendarInfo.hijriDate}');
+    expect(source).toContain('Islamic Dashboard relocated to More');
+    expect(moreSource).toContain('Islamic Dashboard');
     expect(source).not.toContain('<Text style={styles.dashboardEyebrow}>Islamic Calendar</Text>');
     expect(moreSource).toContain('More → Applications');
     expect(moreSource).toContain("route: '/islamic-calendar'");
@@ -25,15 +26,15 @@ describe('phase 2 Islamic dashboard features', () => {
   });
 
   it('supports daily refresh, offline cache, current highlight, and next-prayer countdown', () => {
-    expect(source).toContain('PRAYER_LOCATION_CACHE_KEY');
-    expect(source).toContain('AsyncStorage.getItem(PRAYER_LOCATION_CACHE_KEY)');
-    expect(source).toContain('AsyncStorage.setItem(PRAYER_LOCATION_CACHE_KEY');
-    expect(source).toContain('nextMidnight');
-    expect(source).toContain('const countdown = formatDuration');
-    expect(source).toContain('Current Prayer');
-    expect(source).toContain('Next Prayer');
-    expect(source).toContain('Remaining');
-    expect(source).toContain('Location');
-    expect(source).toContain('dashboard-google-qibla-finder-option');
+    expect(prayerTimesSource).toContain('PRAYER_LOCATION_CACHE_KEY');
+    expect(prayerTimesSource).toContain('AsyncStorage.getItem(PRAYER_LOCATION_CACHE_KEY)');
+    expect(prayerTimesSource).toContain('AsyncStorage.setItem(PRAYER_LOCATION_CACHE_KEY');
+    expect(prayerTimesSource).toContain('nextMidnight');
+    expect(prayerTimesSource).toContain('const countdown = formatDuration');
+    expect(prayerTimesSource).toContain('Current Prayer');
+    expect(prayerTimesSource).toContain('Next Prayer');
+    expect(prayerTimesSource).toContain('Remaining');
+    expect(prayerTimesSource).toContain('Location');
+    expect(moreSource).toContain('Google Camera Qibla Finder (Internet Required)');
   });
 });

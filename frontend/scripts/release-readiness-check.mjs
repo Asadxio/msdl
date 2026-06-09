@@ -39,7 +39,8 @@ if (!expo?.plugins?.some((p) => Array.isArray(p) ? p[0] === 'expo-notifications'
   process.exitCode = 1;
 }
 
-if (!expo?.android?.permissions?.includes('POST_NOTIFICATIONS')) {
+const androidPermissions = expo?.android?.permissions || [];
+if (!androidPermissions.includes('POST_NOTIFICATIONS') && !androidPermissions.includes('android.permission.POST_NOTIFICATIONS')) {
   console.error('[release-check] android POST_NOTIFICATIONS missing');
   process.exitCode = 1;
 }

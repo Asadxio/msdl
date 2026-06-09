@@ -69,8 +69,11 @@ def test_storage_requires_verified_approved_enrollment_for_course_and_live_class
     assert "enrollments/$(enrollmentDocId(request.auth.uid, courseId))" in STORAGE_RULES
     assert "allow read: if canReadCourseStorage(courseId);" in STORAGE_RULES
     live_storage = _block(STORAGE_RULES, "function canReadLiveClassStorage", "\n\n    function isSafeAudioLessonUpload")
+    enrollment_storage = _block(STORAGE_RULES, "function hasActiveEnrollmentForCourse", "\n\n    function isLiveClassTeacherOrAdmin")
     assert "student_ids" not in live_storage
-    assert "enrollments/$(enrollmentDocId(request.auth.uid" in live_storage
+    assert "hasActiveEnrollmentForCourse" in live_storage
+    assert "enrollments/$(enrollmentDocId(request.auth.uid" in enrollment_storage
+    assert "status == 'active'" in enrollment_storage
 
 
 def test_backend_auth_requires_email_verification_and_secures_formerly_public_endpoints(monkeypatch):
@@ -104,3 +107,25 @@ def test_backend_certificate_generation_validates_enrollment_completion_and_paym
     assert 'Course completion required' in SERVER
     assert 'Successful payment required' in SERVER
     assert 'firebase_db.collection("certificates").document(cert_id)' in SERVER
+
+
+def test_backend_enforces_app_check_and_rate_limits_on_protected_user_endpoints():
+    assert 'def _require_authenticated_request(request: Request, authorization: str | None, action: str' in SERVER
+    assert '_verify_app_check(request, required=True)' in SERVER
+    assert '_enforce_rate_limit(f"{uid}:{action}"' in SERVER
+    for route in [
+        'async def issue_live_class_token(payload: LiveClassTokenRequest, request: Request, authorization: str | None = Header(default=None))',
+        'async def issue_call_token(payload: CallTokenRequest, request: Request, authorization: str | None = Header(default=None))',
+        'async def enqueue_push(payload: QueueEnqueueRequest, request: Request, authorization: str | None = Header(default=None))',
+        'async def submit_quiz_authoritative(payload: QuizSubmitRequest, request: Request, authorization: str | None = Header(default=None))',
+        'async def payments_initiate(payload: PaymentInitiateRequest, request: Request, authorization: str | None = Header(default=None))',
+        'async def payments_confirm(payload: PaymentConfirmRequest, request: Request, authorization: str | None = Header(default=None))',
+    ]:
+        assert route in SERVER
+    for action in ['live_class_token', 'call_token', 'push_enqueue', 'quiz_submit', 'payments_initiate', 'payments_confirm']:
+        assert f'_require_authenticated_request(request, authorization, "{action}"' in SERVER
+
+
+def test_backend_production_startup_requires_app_check_enabled():
+    assert 'if app_env() == "production" and not REQUIRE_APP_CHECK:' in SERVER
+    assert 'REQUIRE_APP_CHECK=true is required when APP_ENV=production' in SERVER

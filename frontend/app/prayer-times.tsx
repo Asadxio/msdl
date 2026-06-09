@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 
 type PrayerTimes = {
@@ -41,8 +42,17 @@ type LocationState = {
   longitude: number;
 };
 
+const PRAYER_LOCATION_CACHE_KEY = 'prayer_location_cache_v1';
+
 function formatTime(date: Date) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+function formatDuration(ms: number) {
+  const totalMinutes = Math.max(0, Math.ceil(ms / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
 export default function PrayerTimesScreen() {
@@ -58,6 +68,14 @@ export default function PrayerTimesScreen() {
 
     const requestLocation = async () => {
       try {
+        const cached = await AsyncStorage.getItem(PRAYER_LOCATION_CACHE_KEY);
+        if (cached && active) {
+          const parsed = JSON.parse(cached) as LocationState;
+          if (typeof parsed.latitude === 'number' && typeof parsed.longitude === 'number') {
+            setLocationState(parsed);
+          }
+        }
+
         const permission = await Location.requestForegroundPermissionsAsync();
 
         if (!active) return;
@@ -74,7 +92,9 @@ export default function PrayerTimesScreen() {
           throw new Error('Unable to resolve location coordinates');
         }
 
-        setLocationState({ latitude, longitude });
+        const nextLocation = { latitude, longitude };
+        setLocationState(nextLocation);
+        await AsyncStorage.setItem(PRAYER_LOCATION_CACHE_KEY, JSON.stringify(nextLocation));
       } catch (error) {
         if (!active) return;
         console.log('[PrayerTimes] location error', error);
@@ -137,6 +157,12 @@ export default function PrayerTimesScreen() {
     ];
   }, [prayerTimes]);
 
+  const currentPrayer = useMemo<PrayerTime | null>(() => {
+    if (!prayerItems.length) return null;
+    const now = new Date().getTime();
+    return [...prayerItems].reverse().find((prayer) => prayer.time.getTime() <= now) ?? prayerItems[prayerItems.length - 1];
+  }, [prayerItems]);
+
   const nextPrayer = useMemo<PrayerTime | null>(() => {
     if (!prayerTimes) return null;
 
@@ -168,12 +194,17 @@ export default function PrayerTimesScreen() {
       return <Text style={styles.message}>Unable to compute prayer times at this moment.</Text>;
     }
 
+    const countdown = formatDuration(nextPrayer.time.getTime() - Date.now());
+
     return (
       <>
         <View style={styles.heroCard} testID="prayer-times-screen">
           <Text style={styles.heroLabel}>Next Prayer</Text>
           <Text style={styles.heroTitle}>{nextPrayer.name}</Text>
           <Text style={styles.heroSubtitle}>{formatTime(nextPrayer.time)}</Text>
+          <Text style={styles.heroMeta}>Remaining: {countdown}</Text>
+          {currentPrayer ? <Text style={styles.heroMeta}>Current Prayer: {currentPrayer.name}</Text> : null}
+          {locationState ? <Text style={styles.heroMeta}>Location: {locationState.latitude.toFixed(2)}, {locationState.longitude.toFixed(2)}</Text> : null}
         </View>
 
         <View style={styles.list}>
@@ -216,6 +247,7 @@ const styles = StyleSheet.create({
   heroLabel: { color: 'rgba(255,255,255,0.74)', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
   heroTitle: { color: '#fff', fontSize: 34, fontWeight: '900', marginTop: 4 },
   heroSubtitle: { color: COLORS.secondary, fontSize: 18, fontWeight: '900', marginTop: 4 },
+  heroMeta: { color: 'rgba(255,255,255,0.82)', fontSize: 13, fontWeight: '800', marginTop: 6 },
   list: { gap: SPACING.sm },
   row: { borderRadius: RADIUS.lg, backgroundColor: COLORS.surface, padding: SPACING.md, flexDirection: 'row', justifyContent: 'space-between', ...SHADOWS.card },
   rowActive: { backgroundColor: COLORS.goldBg, borderWidth: 1, borderColor: 'rgba(212,175,55,0.35)' },

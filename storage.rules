@@ -52,30 +52,30 @@ service firebase.storage {
         && request.auth.uid in get(/databases/(default)/documents/chats/$(chatId)).data.participants;
     }
 
-    function isApprovedStudent() {
-      return isSignedIn()
-        && exists(/databases/(default)/documents/users/$(request.auth.uid))
-        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'student'
-        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    function hasActiveEnrollmentForCourse(courseId) {
+      return isApprovedVerifiedUser()
+        && courseId is string
+        && courseId.size() > 0
+        && exists(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
+        && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.user_id == request.auth.uid
+        && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.course_id == courseId
+        && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.status == 'active';
     }
 
-    function allowsLegacyLiveClassStorageAccess(data) {
-      return isApprovedStudent()
-        && (!('enrollment_source' in data) || data.enrollment_source != 'enrollments')
-        && data.course_id is string
-        && exists(/databases/(default)/documents/courses/$(data.course_id));
+    function isLiveClassTeacherOrAdmin(data) {
+      return isApprovedVerifiedUser()
+        && (
+          userDoc().role in ['admin', 'super_admin']
+          || (userDoc().role in ['teacher', 'assistant_teacher'] && data.teacher_id == request.auth.uid)
+        );
     }
 
     function canReadLiveClassStorage(classId) {
       return isApprovedVerifiedUser()
         && exists(/databases/(default)/documents/live_classes/$(classId))
         && (
-          get(/databases/(default)/documents/live_classes/$(classId)).data.teacher_id == request.auth.uid
-          || (get(/databases/(default)/documents/live_classes/$(classId)).data.student_ids is list
-            && request.auth.uid in get(/databases/(default)/documents/live_classes/$(classId)).data.student_ids)
-          || allowsLegacyLiveClassStorageAccess(get(/databases/(default)/documents/live_classes/$(classId)).data)
-          || (exists(/databases/(default)/documents/users/$(request.auth.uid))
-            && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+          isLiveClassTeacherOrAdmin(get(/databases/(default)/documents/live_classes/$(classId)).data)
+          || hasActiveEnrollmentForCourse(get(/databases/(default)/documents/live_classes/$(classId)).data.course_id)
         );
     }
 
