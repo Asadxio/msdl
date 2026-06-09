@@ -32,6 +32,7 @@ from jobs.storageCleanup import mark_orphan_media_for_cleanup
 from monitoring.health import build_health_snapshot
 from payments.webhook_verifier import verify_razorpay_signature, is_webhook_timestamp_valid
 from payments.payment_finalizer import finalize_successful_payment
+from payments.payment_state import payment_state_update
 from jobs.payment_reconciliation import recover_stale_processing_payments, expire_abandoned_pending_payments
 from queues.queue_manager import enqueue_job
 from workers.worker_runtime import run_worker_loop_once
@@ -1519,8 +1520,12 @@ def _has_completed_course(uid: str, course_id: str) -> bool:
 def _has_successful_course_payment(uid: str, course_id: str) -> bool:
     if firebase_db is None:
         return False
-    docs = firebase_db.collection("payments").where("user_id", "==", uid).where("course_id", "==", course_id).where("state", "==", "succeeded").limit(1).stream()
-    return any(True for _ in docs)
+    base = firebase_db.collection("payments").where("user_id", "==", uid).where("course_id", "==", course_id)
+    state_docs = base.where("state", "==", "succeeded").limit(1).stream()
+    if any(True for _ in state_docs):
+        return True
+    status_docs = base.where("status", "==", "succeeded").limit(1).stream()
+    return any(True for _ in status_docs)
 
 
 @api_router.post("/certificates/generate")
@@ -1594,26 +1599,27 @@ async def payments_initiate(payload: PaymentInitiateRequest, request: Request, a
     now_ms = int(time.time() * 1000)
     if snap.exists:
         data = snap.to_dict() or {}
-        return {"ok": True, "payment_id": pid, "state": data.get("state", "pending"), "idempotent": True}
+        state = data.get("state") or data.get("status") or "pending"
+        return {"ok": True, "payment_id": pid, "state": state, "status": state, "idempotent": True}
 
-    ref.set({
-        "payment_id": pid,
-        "user_id": uid,
-        "amount": amount,
-        "currency": str(payload.currency or "INR"),
-        "type": ptype,
+    ref.set(payment_state_update(
+        "pending",
+        payment_id=pid,
+        user_id=uid,
+        amount=amount,
+        currency=str(payload.currency or "INR"),
+        type=ptype,
         **({"course_id": course_id} if ptype == "fees" else {}),
-        "provider": "razorpay",
-        "state": "pending",
-        "review_mode": "manual",
-        "operation_id": op_id,
-        "created_at": admin_firestore.SERVER_TIMESTAMP,
-        "created_at_ms": now_ms,
-        "updated_at": admin_firestore.SERVER_TIMESTAMP,
-        "updated_at_ms": now_ms,
-    }, merge=True)
+        provider="razorpay",
+        review_mode="manual",
+        operation_id=op_id,
+        created_at=admin_firestore.SERVER_TIMESTAMP,
+        created_at_ms=now_ms,
+        updated_at=admin_firestore.SERVER_TIMESTAMP,
+        updated_at_ms=now_ms,
+    ), merge=True)
     firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": uid, "action": "initiate", "state": "pending", "created_at_ms": now_ms})
-    return {"ok": True, "payment_id": pid, "state": "pending", "idempotent": False}
+    return {"ok": True, "payment_id": pid, "state": "pending", "status": "pending", "idempotent": False}
 
 
 @api_router.post("/payments/confirm")
@@ -1629,21 +1635,21 @@ async def payments_confirm(payload: PaymentConfirmRequest, request: Request, aut
     data = snap.to_dict() or {}
     if data.get("user_id") != uid:
         raise HTTPException(status_code=403, detail="Not owner")
-    cur = str(data.get("state") or "pending")
+    cur = str(data.get("state") or data.get("status") or "pending")
     if not can_transition(cur, "processing") and cur != "processing":
         raise HTTPException(status_code=409, detail="Invalid payment state transition")
     now_ms = int(time.time() * 1000)
-    ref.set({
-        "state": "processing",
-        "transaction_ref": str(payload.transaction_ref or "")[:120],
-        "provider_ref": str(payload.provider_ref or "")[:120],
-        "submitted_at": admin_firestore.SERVER_TIMESTAMP,
-        "updated_at": admin_firestore.SERVER_TIMESTAMP,
-        "updated_at_ms": now_ms,
-    }, merge=True)
+    ref.set(payment_state_update(
+        "processing",
+        transaction_ref=str(payload.transaction_ref or "")[:120],
+        provider_ref=str(payload.provider_ref or "")[:120],
+        submitted_at=admin_firestore.SERVER_TIMESTAMP,
+        updated_at=admin_firestore.SERVER_TIMESTAMP,
+        updated_at_ms=now_ms,
+    ), merge=True)
     firebase_db.collection("payment_verification_queue").document(pid).set({"payment_id": pid, "status": "queued", "attempt": 0, "scheduled_at_ms": now_ms, "created_at_ms": now_ms}, merge=True)
     firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": uid, "action": "confirm", "state": "processing", "created_at_ms": now_ms})
-    return {"ok": True, "payment_id": pid, "state": "processing"}
+    return {"ok": True, "payment_id": pid, "state": "processing", "status": "processing"}
 
 
 @api_router.post("/payments/admin/action")
@@ -1674,13 +1680,15 @@ async def payments_admin_action(payload: PaymentAdminActionRequest, request: Req
         data = snap.to_dict() or {}
         cur = str(data.get("state") or data.get("status") or "pending")
         log_context = {**log_context, "current_state": cur, "payment_user_id": str(data.get("user_id") or "")}
+        if cur == nxt:
+            logger.warning("Admin payment action duplicate transition %s", json.dumps(log_context, ensure_ascii=False))
+            raise HTTPException(status_code=409, detail=f"Transition {cur} -> {nxt} is a no-op")
         if not can_transition(cur, nxt):
             logger.warning("Admin payment action invalid transition %s", json.dumps(log_context, ensure_ascii=False))
             raise HTTPException(status_code=409, detail=f"Transition {cur} -> {nxt} not allowed")
 
         now_ms = int(time.time() * 1000)
         review_update = {
-            "status": nxt,
             "reviewed_by": admin_uid,
             "review_note": reason[:500],
             "review_evidence": payload.evidence or {},
@@ -1693,7 +1701,7 @@ async def payments_admin_action(payload: PaymentAdminActionRequest, request: Req
             logger.info("Admin payment finalize result %s", json.dumps({**log_context, "finalize_result": finalize_result}, ensure_ascii=False))
             ref.set(review_update, merge=True)
         else:
-            ref.set({"state": nxt, **review_update}, merge=True)
+            ref.set(payment_state_update(nxt, **review_update), merge=True)
             logger.info("Admin payment state update wrote %s", json.dumps(log_context, ensure_ascii=False))
 
         firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": admin_uid, "actor_role": admin_role, "action": "state_change", "from": cur, "to": nxt, "reason": reason[:500], "evidence": payload.evidence or {}, "created_at_ms": now_ms})
@@ -1761,11 +1769,11 @@ async def payments_webhook(request: Request):
                 transition = "succeeded"
                 rec_action = "finalized"
             elif event_type in {"payment.failed"}:
-                firebase_db.collection("payments").document(payment_id).set({"state": "failed", "updated_at_ms": recv_ms}, merge=True)
+                firebase_db.collection("payments").document(payment_id).set(payment_state_update("failed", updated_at_ms=recv_ms), merge=True)
                 transition = "failed"
                 rec_action = "state_update"
             elif event_type in {"payment.refunded"}:
-                firebase_db.collection("payments").document(payment_id).set({"state": "refunded", "updated_at_ms": recv_ms}, merge=True)
+                firebase_db.collection("payments").document(payment_id).set(payment_state_update("refunded", updated_at_ms=recv_ms), merge=True)
                 transition = "refunded"
                 rec_action = "state_update"
         ev_ref.set({"processing_status": "processed", "reconciliation_status": rec_action}, merge=True)
