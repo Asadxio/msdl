@@ -16,6 +16,8 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { usePreventRemove } from '@react-navigation/native';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -129,6 +131,30 @@ function logAgoraWarning(operation: string, result: number | void): void {
   }
 }
 
+async function setLiveClassAudioSession(active: boolean): Promise<void> {
+  try {
+    await Audio.setAudioModeAsync(active ? {
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      shouldDuckAndroid: false,
+      playThroughEarpieceAndroid: false,
+    } : {
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: false,
+      staysActiveInBackground: false,
+      interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+      interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+  } catch (err) {
+    console.log('[LiveClass] audio session configuration failed', err);
+  }
+}
+
 export default function LiveClassroomScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const classId = Array.isArray(id) ? id[0] : id;
@@ -152,6 +178,7 @@ export default function LiveClassroomScreen() {
   const mountedRef = useRef(true);
   const joiningLockRef = useRef(false);
   const heartbeatLastWriteRef = useRef(0);
+  const intentionalNavigationRef = useRef(false);
 
   const [liveClass, setLiveClass] = useState<LiveClass | null>(null);
   const [participants, setParticipants] = useState<LiveClassParticipant[]>([]);
@@ -241,6 +268,7 @@ export default function LiveClassroomScreen() {
     engineRef.current = null;
     eventHandlerRef.current = null;
     setReconnecting(false);
+    void setLiveClassAudioSession(false);
     recordLiveMetric('rtc_cleanup', { classId: classId || '' });
   }, []);
 
@@ -271,13 +299,44 @@ export default function LiveClassroomScreen() {
       setJoined(false);
       setReconnecting(false);
       setRemoteUsers([]);
-      if (navigateBack) goBackOrReplace(router, '/(tabs)/courses');
+      if (navigateBack) {
+        intentionalNavigationRef.current = true;
+        goBackOrReplace(router, '/(tabs)/courses');
+      }
       if (classId && user?.uid) void clearLiveClassRecovery(classId, user.uid);
       setOpsMessage('');
     } finally {
       leavingRef.current = false;
     }
   }, [classId, cleanupAgora, localParticipant, router, user?.uid]);
+
+  const confirmLeaveLiveClass = useCallback(() => {
+    Alert.alert(
+      'Leave Live Class?',
+      'You are currently connected to the live class.',
+      [
+        { text: 'Stay Connected', style: 'cancel' },
+        {
+          text: 'Leave Class',
+          style: 'destructive',
+          onPress: () => {
+            intentionalNavigationRef.current = true;
+            void leaveClass(true);
+          },
+        },
+      ],
+    );
+  }, [leaveClass]);
+
+  usePreventRemove(joined && !intentionalNavigationRef.current, confirmLeaveLiveClass);
+
+  const handleHeaderBack = useCallback(() => {
+    if (joinedRef.current || joined) {
+      confirmLeaveLiveClass();
+      return;
+    }
+    goBackOrReplace(router, '/(tabs)/courses');
+  }, [confirmLeaveLiveClass, joined, router]);
 
   const postOpsEvent = useCallback(async (event: string, payload: Record<string, unknown> = {}) => {
     if (!LIVE_OPS.telemetryEnabled || !LIVE_OPS.opsEndpoint) return;
@@ -382,15 +441,20 @@ export default function LiveClassroomScreen() {
       appStateRef.current = nextState;
       if (!joinedRef.current || !classId || !user?.uid) return;
       if (nextState === 'background' || nextState === 'inactive') {
+        // Keep the RTC audio session alive like Meet/Zoom: do not leave the
+        // channel and do not mute the microphone just because the app is not
+        // foregrounded. Only stop publishing camera frames for privacy and
+        // battery while background audio continues.
         try { engineRef.current?.muteLocalVideoStream(true); } catch {}
-        try { engineRef.current?.muteLocalAudioStream(true); } catch {}
+        try { engineRef.current?.stopPreview(); } catch {}
         setCameraOn(false);
-        setMicOn(false);
-        await syncMediaState({ video_enabled: false, audio_enabled: false });
+        await syncMediaState({ video_enabled: false });
       } else if (previous.match(/inactive|background/) && nextState === 'active') {
+        await setLiveClassAudioSession(true);
         try { engineRef.current?.setEnableSpeakerphone(speakerOn); } catch {}
         const resumeVideoOn = localParticipant?.video_enabled !== false;
         const resumeAudioOn = localParticipant?.audio_enabled !== false && !localParticipant?.force_muted;
+        if (resumeVideoOn) try { engineRef.current?.startPreview(); } catch {}
         try { engineRef.current?.muteLocalVideoStream(!resumeVideoOn); } catch {}
         try { engineRef.current?.muteLocalAudioStream(!resumeAudioOn); } catch {}
         setCameraOn(resumeVideoOn);
@@ -453,6 +517,7 @@ export default function LiveClassroomScreen() {
         Alert.alert('Agora configuration mismatch', 'The app build Agora App ID does not match the live class token App ID.');
         return;
       }
+      await setLiveClassAudioSession(true);
       // Lazy-require Agora engine at join-time
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const Agora = require('react-native-agora');
@@ -815,7 +880,7 @@ export default function LiveClassroomScreen() {
         </View>
       ) : null}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
-        <TouchableOpacity style={styles.iconBtn} onPress={() => { void leaveClass(true); }}>
+        <TouchableOpacity style={styles.iconBtn} onPress={handleHeaderBack}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
