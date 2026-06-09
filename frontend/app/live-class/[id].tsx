@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  BackHandler,
   FlatList,
   Linking,
   PermissionsAndroid,
@@ -15,8 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { usePreventRemove } from '@react-navigation/native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -328,7 +328,15 @@ export default function LiveClassroomScreen() {
     );
   }, [leaveClass]);
 
-  usePreventRemove(joined && !intentionalNavigationRef.current, confirmLeaveLiveClass);
+  useEffect(() => {
+    if (!joined) return undefined;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (intentionalNavigationRef.current) return false;
+      confirmLeaveLiveClass();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [confirmLeaveLiveClass, joined]);
 
   const handleHeaderBack = useCallback(() => {
     if (joinedRef.current || joined) {
@@ -872,6 +880,7 @@ export default function LiveClassroomScreen() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ gestureEnabled: !joined, headerShown: false }} />
       <StatusBar barStyle="light-content" />
       {expoGo ? (
         <View style={styles.expoGoBanner}>
