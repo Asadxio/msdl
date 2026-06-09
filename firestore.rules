@@ -362,23 +362,20 @@ service cloud.firestore {
     }
 
     function isValidPaymentUpdateByAdmin() {
-      return hasOnlyAllowedKeys(
-          request.resource.data,
-          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'submitted_at', 'type', 'transaction_ref', 'reviewed_at', 'review_mode', 'currency']
-        )
-        && request.resource.data.user_id == resource.data.user_id
-        && request.resource.data.user_name == resource.data.user_name
-        && request.resource.data.amount == resource.data.amount
-        && request.resource.data.provider == resource.data.provider
-        && request.resource.data.review_mode == resource.data.review_mode
-        && request.resource.data.currency == resource.data.currency
-        && request.resource.data.created_at == resource.data.created_at
-        && request.resource.data.status in ['pending', 'submitted', 'verified', 'approved', 'rejected', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded', 'disputed', 'expired']
-        && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar'])
-        && (!('payment_ref' in request.resource.data) || request.resource.data.payment_ref == null || request.resource.data.payment_ref is string)
-        && (!('transaction_ref' in request.resource.data) || request.resource.data.transaction_ref == null || request.resource.data.transaction_ref is string)
-        && (!('submitted_at' in request.resource.data) || request.resource.data.submitted_at is timestamp)
-        && (!('reviewed_at' in request.resource.data) || request.resource.data.reviewed_at is timestamp);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'state', 'status', 'reviewed_by', 'review_note', 'review_evidence', 'reviewed_at',
+          'updated_at', 'updated_at_ms', 'reconciliation', 'entitlement_granted', 'finalized_at', 'finalized_at_ms'
+        ])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['state'])
+          || request.resource.data.state in ['pending', 'submitted', 'verified', 'approved', 'rejected', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded', 'disputed', 'expired'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+          || request.resource.data.status in ['pending', 'submitted', 'verified', 'approved', 'rejected', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded', 'disputed', 'expired'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reviewed_by']) || request.resource.data.reviewed_by == request.auth.uid)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['review_note']) || request.resource.data.review_note is string)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['review_evidence']) || request.resource.data.review_evidence is map)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reviewed_at']) || request.resource.data.reviewed_at is timestamp)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updated_at']) || request.resource.data.updated_at is timestamp)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updated_at_ms']) || request.resource.data.updated_at_ms is number);
     }
 
     function isValidFeedbackCreate() {

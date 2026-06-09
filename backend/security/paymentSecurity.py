@@ -1,14 +1,18 @@
 import time
 
 PAYMENT_STATES = {
-    "pending", "processing", "succeeded", "failed", "cancelled", "refunded", "disputed", "expired"
+    "pending", "submitted", "verified", "approved", "processing", "succeeded", "failed", "rejected", "cancelled", "refunded", "disputed", "expired"
 }
 
 ALLOWED_TRANSITIONS = {
-    "pending": {"processing", "cancelled", "expired", "failed"},
-    "processing": {"succeeded", "failed", "cancelled", "disputed", "expired"},
+    "pending": {"submitted", "processing", "cancelled", "expired", "failed", "rejected", "succeeded"},
+    "submitted": {"processing", "verified", "cancelled", "expired", "failed", "rejected", "succeeded"},
+    "verified": {"processing", "approved", "cancelled", "expired", "failed", "rejected", "succeeded"},
+    "approved": {"processing", "cancelled", "expired", "failed", "rejected", "succeeded"},
+    "processing": {"succeeded", "failed", "rejected", "cancelled", "disputed", "expired"},
     "succeeded": {"refunded", "disputed"},
     "failed": set(),
+    "rejected": set(),
     "cancelled": set(),
     "refunded": set(),
     "disputed": {"refunded"},

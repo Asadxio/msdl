@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
@@ -22,7 +22,7 @@ type PaymentItem = {
   user_id: string;
   user_name: string;
   amount: number;
-  status: 'pending' | 'processing' | 'succeeded' | 'failed' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'rejected' | 'verified' | 'submitted';
+  status: 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
   provider?: 'razorpay';
   type?: 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
   created_at?: { toDate?: () => Date };
@@ -52,57 +52,90 @@ export default function AdminPaymentsScreen() {
   const [statusFilter, setStatusFilter] = useState<'all' | PaymentItem['status']>('all');
   const [fetching, setFetching] = useState(false);
 
+  const loadPayments = useCallback(async (direction: 'reset' | 'next' | 'prev' = 'reset') => {
+    if (!isAdmin || fetching) return;
+    setFetching(true);
+    if (direction === 'reset') setLoading(true);
+    try {
+      const extra: any[] = [];
+      if (statusFilter !== 'all') extra.push(where('state', '==', statusFilter));
+      const page = await fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, cursor: direction === 'reset' ? null : cursor, direction: direction === 'reset' ? 'next' : direction, extra });
+      setPayments(page.items.map((item: any) => ({ ...item, status: item.state || item.status || 'pending' })) as PaymentItem[]);
+      setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
+      setError('');
+    } catch (err) {
+      console.log('[AdminPayments] load payments failed', err);
+      setError('Could not load payments. Please refresh and try again.');
+    } finally {
+      setLoading(false);
+      setFetching(false);
+    }
+  }, [cursor, fetching, isAdmin, statusFilter]);
+
   useEffect(() => {
     if (profile && !isAdmin) {
       router.replace('/unauthorized?required=admin');
       return;
     }
     if (!isAdmin) return;
-    const load = async (direction: 'reset' | 'next' | 'prev' = 'reset') => {
-      if (fetching) return;
-      setFetching(true);
-      if (direction === 'reset') setLoading(true);
-      try {
-        const extra: any[] = [];
-        if (statusFilter !== 'all') extra.push(where('state', '==', statusFilter));
-        const page = await fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, cursor: direction === 'reset' ? null : cursor, direction: direction === 'reset' ? 'next' : direction, extra });
-        setPayments(page.items.map((item: any) => ({ ...item, status: item.status || item.state || 'pending' })) as PaymentItem[]);
-        setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
-        setError('');
-      } catch {
-        setError('Could not load payments. Please refresh and try again.');
-      } finally {
-        setLoading(false);
-        setFetching(false);
-      }
-    };
-    load('reset');
+    loadPayments('reset');
     return () => {};
   }, [profile, isAdmin, router, statusFilter]);
 
-  const setStatus = async (id: string, status: 'succeeded' | 'failed' | 'refunded' | 'disputed') => {
+  const setStatus = async (id: string, status: 'succeeded' | 'rejected' | 'refunded' | 'disputed') => {
+    const currentUser = auth.currentUser;
+    const currentPayment = payments.find((payment) => payment.id === id);
+    if (!id || !currentPayment) {
+      Alert.alert('Update Failed', 'Payment document was not found in the current list. Refresh and try again.');
+      return;
+    }
+    if (!['pending', 'submitted', 'verified', 'processing'].includes(currentPayment.status)) {
+      Alert.alert('Already Finalized', `Payment ${id} is already ${currentPayment.status}.`);
+      return;
+    }
     setUpdatingId(id);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(apiUrl('/payments/admin/action'), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '', 'x-action-nonce': actionNonce('payment_admin') }, body: JSON.stringify({ payment_id: id, next_state: status, note: adminNote || `admin_${status}`, evidence: { panel: 'admin_payments' } }) });
-      if (!res.ok) throw new Error('admin payment action failed');
+      const token = await currentUser?.getIdToken();
+      const requestBody = { payment_id: id, next_state: status, note: adminNote || `admin_${status}`, evidence: { panel: 'admin_payments', previous_status: currentPayment.status } };
+      console.log('[AdminPayments] updating payment status', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', next_state: status });
+      const res = await fetch(apiUrl('/payments/admin/action'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '', 'x-action-nonce': actionNonce('payment_admin') },
+        body: JSON.stringify(requestBody),
+      });
+      const responseText = await res.text();
+      let responseJson: any = null;
+      try { responseJson = responseText ? JSON.parse(responseText) : null; } catch {}
+      console.log('[AdminPayments] payment status response', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', http_status: res.status, ok: res.ok, response: responseJson || responseText });
+      if (!res.ok) {
+        const detail = String(responseJson?.detail || responseText || `HTTP ${res.status}`);
+        if (res.status === 403 || detail.toLowerCase().includes('permission')) {
+          console.log('[AdminPayments] permission denied updating payment', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', detail });
+        }
+        throw new Error(detail);
+      }
+      setPayments((prev) => prev.map((payment) => (payment.id === id ? { ...payment, status } : payment)));
       await createAdminLog(profile, {
         action: `payment_${status}`,
         performed_by: profile?.email || profile?.name || 'admin',
         target_id: id,
       }).catch(() => {});
-    } catch {
-      Alert.alert('Update Failed', 'Could not update payment status. Please try again.');
+      await loadPayments('reset');
+      Alert.alert('Payment Updated', `Payment marked ${status}.`);
+    } catch (err: any) {
+      console.log('[AdminPayments] update payment status failed', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', error: err });
+      const reason = String(err?.message || err || 'Could not update payment status. Please try again.');
+      Alert.alert('Update Failed', __DEV__ ? reason : 'Could not update payment status. Please try again.');
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const confirmStatusChange = (id: string, status: 'succeeded' | 'failed' | 'refunded' | 'disputed') => {
-    const label = status === 'succeeded' ? 'Mark Succeeded' : status === 'failed' ? 'Mark Failed' : status === 'refunded' ? 'Mark Refunded' : 'Mark Disputed';
+  const confirmStatusChange = (id: string, status: 'succeeded' | 'rejected' | 'refunded' | 'disputed') => {
+    const label = status === 'succeeded' ? 'Mark Succeeded' : status === 'rejected' ? 'Reject' : status === 'refunded' ? 'Mark Refunded' : 'Mark Disputed';
     Alert.alert(`${label} Payment`, `Are you sure you want to ${label.toLowerCase()} this payment?`, [
       { text: 'Cancel' },
-      { text: label, style: status === 'failed' || status === 'disputed' ? 'destructive' : 'default', onPress: () => setStatus(id, status) },
+      { text: label, style: status === 'rejected' || status === 'disputed' ? 'destructive' : 'default', onPress: () => setStatus(id, status) },
     ]);
   };
 
@@ -151,7 +184,7 @@ export default function AdminPaymentsScreen() {
                   <TouchableOpacity style={[styles.verifyBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'succeeded')} disabled={updatingId === item.id}>
                     {updatingId === item.id ? <ActivityIndicator size="small" color="#166534" /> : <Text style={styles.verifyText}>Succeed</Text>}
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'failed')} disabled={updatingId === item.id}>
+                  <TouchableOpacity style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'rejected')} disabled={updatingId === item.id}>
                     {updatingId === item.id ? <ActivityIndicator size="small" color={COLORS.error} /> : <Text style={styles.rejectText}>Reject</Text>}
                   </TouchableOpacity>
                 </View>

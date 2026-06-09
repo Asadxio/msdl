@@ -15,7 +15,7 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
         if not snap.exists:
             raise ValueError("payment_not_found")
         p = snap.to_dict() or {}
-        state = str(p.get("state") or "pending")
+        state = str(p.get("state") or p.get("status") or "pending")
         now_ms = int(time.time() * 1000)
 
         already_finalized = state == "succeeded" and p.get("entitlement_granted") is True
@@ -27,13 +27,13 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
         uid = str(p.get("user_id") or "").strip()
         payment_type = str(p.get("type") or "fees").strip().lower()
         course_id = str(p.get("course_id") or "").strip()
-        grants_course_access = payment_type == "fees"
-        if grants_course_access and not course_id:
-            raise ValueError("missing_course_id")
+        grants_subscription = payment_type == "fees"
+        grants_course_access = grants_subscription and bool(course_id)
 
         tx.set(p_ref, {
             "state": "succeeded",
-            "entitlement_granted": grants_course_access,
+            "status": "succeeded",
+            "entitlement_granted": grants_subscription,
             "finalized_at": admin_firestore.SERVER_TIMESTAMP,
             "finalized_at_ms": now_ms,
             "reconciliation": {"finalized": True, "source_event_id": source_event_id, "updated_at_ms": now_ms},
@@ -41,9 +41,17 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
             "updated_at_ms": now_ms,
         }, merge=True)
 
+        if grants_subscription:
+            s_ref = firebase_db.collection("subscriptions").document(uid)
+            tx.set(s_ref, {
+                "user_id": uid,
+                "status": "active",
+                "last_payment_id": payment_id,
+                "updated_at": admin_firestore.SERVER_TIMESTAMP,
+            }, merge=True)
+
         if grants_course_access:
             enroll_id = f"{uid}:{course_id}"
-            s_ref = firebase_db.collection("subscriptions").document(uid)
             e_ref = firebase_db.collection("enrollments").document(enroll_id)
             tx.set(e_ref, {
                 "user_id": uid,
@@ -52,12 +60,6 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
                 "source": "payment",
                 "payment_id": payment_id,
                 "created_at": admin_firestore.SERVER_TIMESTAMP,
-                "updated_at": admin_firestore.SERVER_TIMESTAMP,
-            }, merge=True)
-            tx.set(s_ref, {
-                "user_id": uid,
-                "status": "active",
-                "last_payment_id": payment_id,
                 "updated_at": admin_firestore.SERVER_TIMESTAMP,
             }, merge=True)
         tx.set(firebase_db.collection("payment_audit_logs").document(), {
@@ -69,6 +71,6 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
             "created_at_ms": now_ms,
             "source_event_id": source_event_id,
         })
-        return {"ok": True, "idempotent": state == "succeeded", "state": "succeeded", "entitlement_granted": grants_course_access}
+        return {"ok": True, "idempotent": state == "succeeded", "state": "succeeded", "entitlement_granted": grants_subscription, "course_access_granted": grants_course_access}
 
     return _tx(admin_firestore.transaction())
