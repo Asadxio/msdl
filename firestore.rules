@@ -326,7 +326,7 @@ service cloud.firestore {
       return isApprovedVerifiedUser()
         && hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'amount', 'payment_ref', 'status', 'provider', 'created_at', 'type', 'transaction_ref', 'review_mode', 'currency', 'submitted_at']
+          ['user_id', 'user_name', 'amount', 'payment_ref', 'state', 'status', 'provider', 'created_at', 'type', 'transaction_ref', 'review_mode', 'currency', 'submitted_at']
         )
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.user_name is string
@@ -334,7 +334,8 @@ service cloud.firestore {
         && request.resource.data.amount is number
         && request.resource.data.amount > 0
         && request.resource.data.amount <= 1000000
-        && request.resource.data.status in ['pending']
+        && request.resource.data.state == 'pending'
+        && request.resource.data.status == 'pending'
         && request.resource.data.provider == 'razorpay'
         && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar'])
         && (!('transaction_ref' in request.resource.data) || (request.resource.data.transaction_ref is string && request.resource.data.transaction_ref.size() >= 4 && request.resource.data.transaction_ref.size() <= 80 && request.resource.data.transaction_ref.matches('^[a-zA-Z0-9_./# -]+$')))
@@ -345,7 +346,7 @@ service cloud.firestore {
     }
 
     function isValidPaymentUpdateByOwner() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payment_ref', 'transaction_ref', 'status', 'submitted_at'])
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payment_ref', 'transaction_ref', 'state', 'status', 'submitted_at'])
         && request.resource.data.user_id == resource.data.user_id
         && request.resource.data.user_name == resource.data.user_name
         && request.resource.data.amount == resource.data.amount
@@ -354,7 +355,8 @@ service cloud.firestore {
         && request.resource.data.review_mode == resource.data.review_mode
         && request.resource.data.currency == resource.data.currency
         && request.resource.data.created_at == resource.data.created_at
-        && resource.data.status == 'pending'
+        && ((('state' in resource.data) && resource.data.state == 'pending') || resource.data.status == 'pending')
+        && request.resource.data.state == 'submitted'
         && request.resource.data.status == 'submitted'
         && (!('payment_ref' in request.resource.data) || request.resource.data.payment_ref == null || request.resource.data.payment_ref is string)
         && (!('transaction_ref' in request.resource.data) || request.resource.data.transaction_ref == null || request.resource.data.transaction_ref is string)
@@ -370,6 +372,8 @@ service cloud.firestore {
           || request.resource.data.state in ['pending', 'submitted', 'verified', 'approved', 'rejected', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded', 'disputed', 'expired'])
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
           || request.resource.data.status in ['pending', 'submitted', 'verified', 'approved', 'rejected', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded', 'disputed', 'expired'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['state', 'status'])
+          || request.resource.data.state == request.resource.data.status)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reviewed_by']) || request.resource.data.reviewed_by == request.auth.uid)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['review_note']) || request.resource.data.review_note is string)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['review_evidence']) || request.resource.data.review_evidence is map)

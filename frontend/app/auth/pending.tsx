@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { sendEmailVerification } from 'firebase/auth';
@@ -9,6 +9,13 @@ import { useAuth } from '@/context/AuthContext';
 import { auth } from '@/lib/firebase';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+import {
+  getVerificationFunnelRecord,
+  markPendingScreenOpened,
+  markPendingSignout,
+  markVerificationEmailResent,
+  markVerificationStatus,
+} from '@/lib/emailVerificationAnalytics';
 
 const VERIFICATION_POLL_MS = 15000;
 const FIREBASE_AUTH_ACTION_TIMEOUT_MS = 15000;
@@ -18,12 +25,16 @@ type MessageState = { type: 'success' | 'error' | 'info'; text: string } | null;
 export default function PendingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signOut, refreshProfile, refreshUser, profile } = useAuth();
+  const colorScheme = useColorScheme();
+  const { user, signOut, refreshProfile, refreshUser, profile, profileIssue } = useAuth();
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [freshEmailVerified, setFreshEmailVerified] = useState(Boolean(auth.currentUser?.emailVerified));
   const [message, setMessage] = useState<MessageState>(null);
+  const [resendCount, setResendCount] = useState(0);
+  const [lastEmailSentAt, setLastEmailSentAt] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
   const mountedRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigationTriggeredRef = useRef(false);
@@ -37,12 +48,38 @@ export default function PendingScreen() {
     refreshUserRef.current = refreshUser;
   }, [refreshProfile, refreshUser]);
 
-  const isSuspended = profile?.status === 'deactivated' || profile?.status === 'suspended';
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
+    getVerificationFunnelRecord(user.uid).then((record) => {
+      if (cancelled) return;
+      const nextResendCount = record?.resendCount ?? 0;
+      setResendCount(nextResendCount);
+      setLastEmailSentAt(record?.lastEmailSentAt ?? null);
+      void markPendingScreenOpened(user.uid, nextResendCount);
+    }).catch((error) => logger.warn('Failed to load verification funnel record', { error: String(error) }));
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
+
+  const isDarkMode = colorScheme === 'dark';
+  const isDeactivated = profile?.status === 'deactivated' || profile?.status === 'suspended';
   const isRejected = profile?.status === 'rejected';
+  const hasProfileBlocker = Boolean(profileIssue);
   const displayEmailVerified = freshEmailVerified;
   const needsVerification = !displayEmailVerified && profile?.role !== 'admin';
   const displayStatus = displayEmailVerified ? 'active' : profile?.status;
   const busy = checking || resending || signingOut;
+  const cooldownRemainingSeconds = lastEmailSentAt
+    ? Math.max(0, Math.ceil((lastEmailSentAt + 60000 - nowMs) / 1000))
+    : 0;
+  const lastEmailSentLabel = lastEmailSentAt ? new Date(lastEmailSentAt).toLocaleTimeString() : 'Not sent in this session';
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -97,9 +134,11 @@ export default function PendingScreen() {
       await refreshUserRef.current();
 
       if (verified) {
+        await markVerificationStatus(currentUser.uid, true, resendCount);
         setMessage({ type: 'success', text: 'Email verified. Redirecting...' });
         await navigateAfterVerified();
       } else if (showUnverifiedMessage) {
+        await markVerificationStatus(currentUser.uid, false, resendCount);
         setMessage({ type: 'info', text: 'Email not verified yet. Please verify and try again.' });
       }
       return verified;
@@ -112,7 +151,7 @@ export default function PendingScreen() {
     } finally {
       verificationCheckInFlightRef.current = false;
     }
-  }, [navigateAfterVerified]);
+  }, [navigateAfterVerified, resendCount]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -151,6 +190,12 @@ export default function PendingScreen() {
     console.log('[EmailVerification] Resend button clicked');
     logger.info('Resend button clicked');
     const currentUser = auth.currentUser;
+    if (cooldownRemainingSeconds > 0) {
+      const text = `Please wait ${cooldownRemainingSeconds} seconds before requesting another email.`;
+      setMessage({ type: 'info', text });
+      Alert.alert('Please Wait', text);
+      return;
+    }
     if (!currentUser) {
       const text = 'Not signed in. Please log in again.';
       logger.warn('Verification email resend failed: no current user');
@@ -166,6 +211,10 @@ export default function PendingScreen() {
       await withTimeout(sendEmailVerification(currentUser), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
       console.log('[EmailVerification] Verification email sent');
       logger.info('Verification email sent', { uid: currentUser.uid, email: currentUser.email });
+      const nextResendCount = resendCount + 1;
+      setResendCount(nextResendCount);
+      setLastEmailSentAt(Date.now());
+      await markVerificationEmailResent(currentUser.uid, nextResendCount);
       const text = 'Verification email sent. Please check your inbox.';
       if (mountedRef.current) setMessage({ type: 'success', text });
       Alert.alert('Email Sent', text);
@@ -206,8 +255,8 @@ export default function PendingScreen() {
   };
 
   const handlePendingSignOut = async () => {
-    if (user?.uid) void markPendingSignout(user.uid, resendCount);
-    await signOut();
+    if (user?.uid) await markPendingSignout(user.uid, resendCount);
+    await handleSignOut();
   };
 
   // Deactivated state
@@ -225,7 +274,7 @@ export default function PendingScreen() {
               ? `Your signup request was rejected by an administrator.${'\n'}Please contact support for details.`
               : `Your account is currently suspended.${'\n'}Please contact support for assistance.`}
           </Text>
-          <TouchableOpacity style={[styles.logoutBtn, signingOut && styles.disabledBtn]} onPress={handleSignOut} disabled={busy} testID="deactivated-logout-btn">
+          <TouchableOpacity style={[styles.logoutBtn, signingOut && styles.disabledBtn]} onPress={handlePendingSignOut} disabled={busy} testID="deactivated-logout-btn">
             {signingOut ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="log-out-outline" size={18} color={COLORS.error} />}
             <Text style={styles.logoutBtnText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
           </TouchableOpacity>
@@ -260,7 +309,7 @@ export default function PendingScreen() {
               </>
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.logoutBtn} onPress={signOut} testID="profile-blocker-logout-btn">
+          <TouchableOpacity style={styles.logoutBtn} onPress={handlePendingSignOut} testID="profile-blocker-logout-btn">
             <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
             <Text style={styles.logoutBtnText}>Sign Out</Text>
           </TouchableOpacity>
@@ -303,7 +352,7 @@ export default function PendingScreen() {
             <TouchableOpacity
               style={[styles.resendBtn, busy && styles.disabledBtn]}
               onPress={handleResendVerification}
-              disabled={busy}
+              disabled={busy || cooldownRemainingSeconds > 0}
               testID="resend-verification-btn"
             >
               {resending ? <ActivityIndicator size="small" color={COLORS.secondary} /> : (
@@ -378,7 +427,7 @@ export default function PendingScreen() {
           <Text style={styles.checkBtnText}>{checking ? 'Checking...' : 'Check Status'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.logoutBtn, busy && styles.disabledBtn]} onPress={handleSignOut} disabled={busy} testID="pending-logout-btn">
+        <TouchableOpacity style={[styles.logoutBtn, busy && styles.disabledBtn]} onPress={handlePendingSignOut} disabled={busy} testID="pending-logout-btn">
           {signingOut ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="log-out-outline" size={18} color={COLORS.error} />}
           <Text style={styles.logoutBtnText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
         </TouchableOpacity>
@@ -411,6 +460,10 @@ const styles = StyleSheet.create({
   resendBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 24, paddingVertical: 14, marginTop: 4 },
   resendBtnDisabled: { opacity: 0.55 },
   resendBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.secondary },
+  changeEmailSection: { alignItems: 'center', gap: 8, marginTop: 4 },
+  changeEmailPrompt: { fontSize: 13, color: COLORS.textMuted, fontWeight: '600' },
+  changeEmailBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.primary, backgroundColor: COLORS.surface },
+  changeEmailBtnText: { fontSize: 13, color: COLORS.primary, fontWeight: '700' },
   disabledBtn: { opacity: 0.55 },
   messageBox: { width: '100%', borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10 },
   messageText: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
@@ -421,6 +474,7 @@ const styles = StyleSheet.create({
   infoMessage: { backgroundColor: '#E0F2FE' },
   infoMessageText: { color: '#075985' },
   infoCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, width: '100%', gap: SPACING.sm, marginTop: 8 },
+  infoCardDark: { backgroundColor: '#102820', borderColor: '#214438', borderWidth: 1 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   infoLabel: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500' },
   infoLabelDark: { color: '#A9BBB4' },

@@ -129,3 +129,29 @@ def test_backend_enforces_app_check_and_rate_limits_on_protected_user_endpoints(
 def test_backend_production_startup_requires_app_check_enabled():
     assert 'if app_env() == "production" and not REQUIRE_APP_CHECK:' in SERVER
     assert 'REQUIRE_APP_CHECK=true is required when APP_ENV=production' in SERVER
+
+
+def test_backend_payment_migration_compatibility_writes_state_and_status_together():
+    payment_finalizer = (ROOT / "backend" / "payments" / "payment_finalizer.py").read_text()
+    payment_state = (ROOT / "backend" / "payments" / "payment_state.py").read_text()
+
+    payment_reconciliation = (ROOT / "backend" / "jobs" / "payment_reconciliation.py").read_text()
+    firestore_rules = FIRESTORE_RULES
+
+    assert 'payment_state_update(' in payment_finalizer
+    assert '"succeeded",' in payment_finalizer
+    assert 'ref.set(payment_state_update(' in SERVER
+    assert '"pending",' in SERVER
+    assert '"processing",' in SERVER
+    assert 'payment_state_update("failed", updated_at_ms=recv_ms)' in SERVER
+    assert 'payment_state_update("refunded", updated_at_ms=recv_ms)' in SERVER
+    assert 'ref.set(payment_state_update(nxt, **review_update), merge=True)' in SERVER
+    assert 'if cur == nxt:' in SERVER
+    assert 'return {**extra, "state": state, "status": state}' in payment_state
+    assert '.where("state", "==", "processing")' in payment_reconciliation
+    assert '.where("status", "==", "processing")' in payment_reconciliation
+    assert '.where("state", "==", "pending")' in payment_reconciliation
+    assert '.where("status", "==", "pending")' in payment_reconciliation
+    assert "request.resource.data.state == 'pending'" in firestore_rules
+    assert "request.resource.data.status == 'pending'" in firestore_rules
+    assert "request.resource.data.state == request.resource.data.status" in firestore_rules

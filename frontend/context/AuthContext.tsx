@@ -1,5 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +12,7 @@ import {
   updateEmail,
   EmailAuthProvider,
   reauthenticateWithCredential,
+  reload,
 } from 'firebase/auth';
 import {
   collection, doc, getDoc, getDocs, increment, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where,
@@ -28,6 +27,7 @@ import {
   markVerificationEmailSent,
   trackEmailVerificationError,
 } from '@/lib/emailVerificationAnalytics';
+import { trackEvent } from '@/lib/analytics';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
@@ -58,6 +58,7 @@ export type ChangeEmailResult = {
 type AuthContextType = {
   user: User | null;
   profile: UserProfile | null;
+  profileIssue: ProfileIssue;
   authLoading: boolean;
   emailVerified: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
@@ -77,6 +78,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
+  profileIssue: null,
   authLoading: true,
   emailVerified: false,
   signIn: async () => null,
@@ -105,6 +107,7 @@ function generateReferralCode(name: string): string {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileIssue, setProfileIssue] = useState<ProfileIssue>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileOffline, setProfileOffline] = useState(false);
   const [showSignupVerificationPrompt, setShowSignupVerificationPrompt] = useState(false);
@@ -160,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cachedProfile = await readCachedProfile(uid, source);
     if (!cachedProfile) return false;
     setProfile(cachedProfile);
+    setProfileIssue(null);
     setProfileOffline(true);
     return true;
   };
@@ -210,15 +214,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const refreshUser = async () => {
-    if (auth.currentUser) {
-      try {
-        await auth.currentUser.reload();
-        logger.info('Auth user refreshed', { uid: auth.currentUser.uid, emailVerified: auth.currentUser.emailVerified });
-        setUser({ ...auth.currentUser, emailVerified: auth.currentUser.emailVerified } as User);
-      } catch (err) {
-        logger.error('Failed to refresh auth user:', err);
-      }
+  const refreshUser = async (): Promise<boolean> => {
+    if (!auth.currentUser) return false;
+    try {
+      await auth.currentUser.reload();
+      logger.info('Auth user refreshed', { uid: auth.currentUser.uid, emailVerified: auth.currentUser.emailVerified });
+      setUser({ ...auth.currentUser, emailVerified: auth.currentUser.emailVerified } as User);
+      return true;
+    } catch (err) {
+      logger.error('Failed to refresh auth user:', err);
+      return false;
     }
   };
 
@@ -541,9 +546,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, profile, authLoading, emailVerified,
+      user, profile, profileIssue, authLoading, emailVerified,
       signIn, signUp, signOut: signOutUser, refreshProfile,
-      resendVerification, resetPassword, refreshUser, profileOffline,
+      resendVerification, changeEmailAddress, resetPassword, refreshUser, profileOffline,
       showSignupVerificationPrompt, signupVerificationFlowActive, acknowledgeSignupVerificationPrompt,
     }}>
       {children}
