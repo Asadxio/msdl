@@ -104,7 +104,7 @@ def _env_list(name: str, default: str = "") -> list[str]:
 
 cors_origins = _env_list("CORS_ALLOW_ORIGINS", "http://localhost:8081,http://localhost:19006")
 cors_methods = _env_list("CORS_ALLOW_METHODS", "GET,POST,OPTIONS")
-cors_headers = _env_list("CORS_ALLOW_HEADERS", "Authorization,Content-Type")
+cors_headers = _env_list("CORS_ALLOW_HEADERS", "Authorization,Content-Type,x-action-nonce,x-action-confirm,x-firebase-appcheck")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1648,34 +1648,67 @@ async def payments_confirm(payload: PaymentConfirmRequest, request: Request, aut
 
 @api_router.post("/payments/admin/action")
 async def payments_admin_action(payload: PaymentAdminActionRequest, request: Request, authorization: str | None = Header(default=None)):
-    admin_uid, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "payments_admin_action")
+    admin_uid, admin_role = _require_capability(request, authorization, {"admin", "super_admin"}, "payments_admin_action")
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
+
     pid = str(payload.payment_id or "").strip()
     nxt = str(payload.next_state or "").strip().lower()
     reason = str(payload.note or "").strip()
+    log_context = {"payment_id": pid, "admin_uid": admin_uid, "admin_role": admin_role, "next_state": nxt}
+    logger.info("Admin payment action requested %s", json.dumps(log_context, ensure_ascii=False))
+
+    if not pid or "/" in pid:
+        logger.warning("Admin payment action invalid payment id %s", json.dumps(log_context, ensure_ascii=False))
+        raise HTTPException(status_code=400, detail="Invalid payment id")
     if len(reason) < 4:
         raise HTTPException(status_code=400, detail="Admin reason is required")
-    ref = firebase_db.collection("payments").document(pid)
-    snap = ref.get()
-    if not snap.exists:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    data = snap.to_dict() or {}
-    cur = str(data.get("state") or "pending")
-    if nxt == "succeeded":
-        if cur not in {"pending", "processing", "succeeded"} and not can_transition(cur, nxt):
-            raise HTTPException(status_code=409, detail=f"Transition {cur} -> {nxt} not allowed")
-    elif not can_transition(cur, nxt):
-        raise HTTPException(status_code=409, detail=f"Transition {cur} -> {nxt} not allowed")
-    now_ms = int(time.time() * 1000)
-    if nxt == "succeeded":
-        finalize_successful_payment(firebase_db, pid, admin_uid, source_event_id="admin_action")
-        ref.set({"reviewed_by": admin_uid, "review_note": reason[:500], "review_evidence": payload.evidence or {}, "reviewed_at": admin_firestore.SERVER_TIMESTAMP, "updated_at": admin_firestore.SERVER_TIMESTAMP, "updated_at_ms": now_ms}, merge=True)
-    else:
-        ref.set({"state": nxt, "reviewed_by": admin_uid, "review_note": reason[:500], "review_evidence": payload.evidence or {}, "reviewed_at": admin_firestore.SERVER_TIMESTAMP, "updated_at": admin_firestore.SERVER_TIMESTAMP, "updated_at_ms": now_ms}, merge=True)
 
-    firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": admin_uid, "action": "state_change", "from": cur, "to": nxt, "reason": reason[:500], "evidence": payload.evidence or {}, "created_at_ms": now_ms})
-    return {"ok": True, "payment_id": pid, "from": cur, "to": nxt}
+    ref = firebase_db.collection("payments").document(pid)
+    try:
+        snap = ref.get()
+        logger.info("Admin payment action Firestore get %s", json.dumps({**log_context, "exists": snap.exists}, ensure_ascii=False))
+        if not snap.exists:
+            raise HTTPException(status_code=404, detail="Payment not found")
+
+        data = snap.to_dict() or {}
+        cur = str(data.get("state") or data.get("status") or "pending")
+        log_context = {**log_context, "current_state": cur, "payment_user_id": str(data.get("user_id") or "")}
+        if not can_transition(cur, nxt):
+            logger.warning("Admin payment action invalid transition %s", json.dumps(log_context, ensure_ascii=False))
+            raise HTTPException(status_code=409, detail=f"Transition {cur} -> {nxt} not allowed")
+
+        now_ms = int(time.time() * 1000)
+        review_update = {
+            "status": nxt,
+            "reviewed_by": admin_uid,
+            "review_note": reason[:500],
+            "review_evidence": payload.evidence or {},
+            "reviewed_at": admin_firestore.SERVER_TIMESTAMP,
+            "updated_at": admin_firestore.SERVER_TIMESTAMP,
+            "updated_at_ms": now_ms,
+        }
+        if nxt == "succeeded":
+            finalize_result = finalize_successful_payment(firebase_db, pid, admin_uid, source_event_id="admin_action")
+            logger.info("Admin payment finalize result %s", json.dumps({**log_context, "finalize_result": finalize_result}, ensure_ascii=False))
+            ref.set(review_update, merge=True)
+        else:
+            ref.set({"state": nxt, **review_update}, merge=True)
+            logger.info("Admin payment state update wrote %s", json.dumps(log_context, ensure_ascii=False))
+
+        firebase_db.collection("payment_audit_logs").add({"payment_id": pid, "actor_id": admin_uid, "actor_role": admin_role, "action": "state_change", "from": cur, "to": nxt, "reason": reason[:500], "evidence": payload.evidence or {}, "created_at_ms": now_ms})
+        return {"ok": True, "payment_id": pid, "from": cur, "to": nxt}
+    except HTTPException:
+        raise
+    except PermissionError as exc:
+        logger.exception("Admin payment action permission denied %s", json.dumps(log_context, ensure_ascii=False))
+        raise HTTPException(status_code=403, detail=f"Permission denied updating payment: {exc}")
+    except ValueError as exc:
+        logger.exception("Admin payment action validation failed %s", json.dumps(log_context, ensure_ascii=False))
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Admin payment action failed %s", json.dumps(log_context, ensure_ascii=False))
+        raise HTTPException(status_code=500, detail=f"Payment update failed: {exc}")
 
 
 @api_router.post("/payments/webhook")

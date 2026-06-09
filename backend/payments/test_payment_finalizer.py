@@ -1,4 +1,3 @@
-import pytest
 from payments.payment_finalizer import finalize_successful_payment
 
 
@@ -162,7 +161,7 @@ def test_pending_manual_approval_grants_course_access(monkeypatch):
     assert db.root["subscriptions"]["student_4"]["status"] == "active"
 
 
-def test_fee_payment_without_course_id_is_rejected(monkeypatch):
+def test_legacy_fee_payment_without_course_id_activates_subscription_only(monkeypatch):
     import payments.payment_finalizer as module
 
     monkeypatch.setattr(module.admin_firestore, "transaction", lambda: FakeTransaction(), raising=False)
@@ -178,9 +177,14 @@ def test_fee_payment_without_course_id_is_rejected(monkeypatch):
         }
     }
 
-    with pytest.raises(ValueError, match="missing_course_id"):
-        finalize_successful_payment(db, "p_missing_course", "admin", "manual_approve")
+    result = finalize_successful_payment(db, "p_missing_course", "admin", "manual_approve")
 
+    assert result["ok"] is True
+    assert result["entitlement_granted"] is True
+    assert result["course_access_granted"] is False
+    assert db.root["payments"]["p_missing_course"]["state"] == "succeeded"
+    assert db.root["payments"]["p_missing_course"]["status"] == "succeeded"
+    assert db.root["subscriptions"]["student_missing"]["status"] == "active"
     assert db.root.get("enrollments", {}) == {}
 
 
