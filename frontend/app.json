@@ -14,7 +14,10 @@
         "NSCameraUsageDescription": "Allow camera access for profile photos, status media, live classes, and the native Camera Qibla Finder overlay.",
         "NSMicrophoneUsageDescription": "Allow microphone access for video status content and built-in live classes.",
         "NSLocationWhenInUseUsageDescription": "Allow location access to show accurate local prayer times, city details, and Qibla direction.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow location access to keep prayer times accurate while using the app."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow location access to keep prayer times accurate while using the app.",
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -30,7 +33,10 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.FOREGROUND_SERVICE"
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.FOREGROUND_SERVICE_CAMERA",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
