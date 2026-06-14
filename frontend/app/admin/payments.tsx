@@ -16,6 +16,7 @@ import { hasPermission } from '@/lib/rbac';
 import { createAdminLog } from '@/lib/adminLogs';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { actionNonce, apiUrl } from '@/lib/api';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
 
@@ -80,6 +81,7 @@ export default function AdminPaymentsScreen() {
       }
       setError('');
     } catch (err) {
+      logFirestoreFailure({ collection: 'payments', operation: 'get', query: statusFilter !== 'all' ? `state/status == ${statusFilter} orderBy created_at desc limit ${ADMIN_DEFAULT_PAGE_SIZE}` : `orderBy created_at desc limit ${ADMIN_DEFAULT_PAGE_SIZE}`, role: profile?.role, status: profile?.status }, err);
       console.log('[AdminPayments] load payments failed', err);
       setError('Could not load payments. Please refresh and try again.');
     } finally {

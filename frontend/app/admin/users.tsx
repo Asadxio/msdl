@@ -18,6 +18,7 @@ import { hasPermission } from '@/lib/rbac';
 import { bulkUpdateUserStatus, updateUserRoleSecure } from '@/lib/adminOps';
 import { APP_ROLES, canAssignRole, normalizeRole, type AppRole } from '@/lib/roles';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type UserWithId = UserProfile & { id: string };
 
@@ -61,7 +62,10 @@ export default function AdminUsersScreen() {
       });
       setUsers(page.items.map((u) => ({ ...u, role: normalizeRole((u as any).role, 'admin.users.list') })) as UserWithId[]);
       setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
-    } catch { setUsers([]); }
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'users', operation: 'get', query: `role == ${roleFilter}; status == ${statusFilter}; orderBy created_at desc limit ${ADMIN_DEFAULT_PAGE_SIZE}`, role: profile?.role, status: profile?.status }, error);
+      setUsers([]);
+    }
     setLoading(false);
     setFetching(false);
   };
@@ -85,6 +89,7 @@ export default function AdminUsersScreen() {
       }).catch(() => {});
       await fetchUsers();
     } catch (err: any) {
+      logFirestoreFailure({ collection: 'users', operation: 'update', path: `users/${uid}`, query: 'update user fields', role: profile?.role, status: profile?.status }, err);
       Alert.alert('Error', err?.message || 'Failed to update');
     }
   };
@@ -153,6 +158,7 @@ export default function AdminUsersScreen() {
                   await deleteDoc(doc(db, 'users', u.id));
                   await fetchUsers();
                 } catch (err: any) {
+                  logFirestoreFailure({ collection: 'users', operation: 'delete', path: `users/${u.id}`, query: 'permanently delete user', role: profile?.role, status: profile?.status }, err);
                   Alert.alert('Error', err?.message || 'Failed to delete user');
                 }
               },

@@ -17,6 +17,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import type { AppRole } from '@/lib/roles';
 import { createNotificationAsAdmin } from '@/lib/notifications';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
 import { registerPerformanceSurface, scheduleLowPriorityTask, throttleRealtimeUpdates, trackPerformanceMetric } from '@/lib/performanceEngine';
 import { registerDevicePushToken, requestNotificationPermission } from '@/lib/pushNotifications';
@@ -74,40 +75,54 @@ export default function NotificationsScreen() {
     if (!user?.uid) return;
     setLoadError('');
     setLoading(true);
-    const q = query(
-      collection(db, 'notifications'),
-      where('user_id', 'in', [user.uid, 'all', 'role_targeted']),
-      orderBy('created_at', 'desc'),
-      limit(50),
-    );
-    const lkey = stableQueryKey(['notifications', user?.uid || '', profile?.role || '']);
-    const unsub = subscribeDeduped(lkey, q as any, (snap) => {
-      const next: NotificationItem[] = [];
-      snap.forEach((d) => {
-        const safe = d.data() as any;
-        const targetUserIds = Array.isArray(safe.target_user_ids) ? safe.target_user_ids : [];
-        const targetRoles = Array.isArray(safe.target_roles) ? safe.target_roles : [];
-        const isRoleTargeted = safe.user_id === 'role_targeted';
-        const allowById = targetUserIds.includes(user.uid);
-        const allowByRole = profile?.role ? targetRoles.includes(profile.role) : false;
-        if ((!isRoleTargeted || allowById || allowByRole) && !(Array.isArray(safe.hidden_by) && safe.hidden_by.includes(user.uid))) {
-          next.push({ id: d.id, ...safe });
-        }
-      });
+    const notificationQueries = [
+      {
+        key: 'direct_or_all',
+        description: `notifications where user_id in [${user.uid}, all] orderBy created_at desc limit 50`,
+        ref: query(collection(db, 'notifications'), where('user_id', 'in', [user.uid, 'all']), orderBy('created_at', 'desc'), limit(50)),
+      },
+      ...(profile?.role ? [{
+        key: 'role_targeted_role',
+        description: `notifications where user_id == role_targeted and target_roles array-contains ${profile.role} orderBy created_at desc limit 50`,
+        ref: query(collection(db, 'notifications'), where('user_id', '==', 'role_targeted'), where('target_roles', 'array-contains', profile.role), orderBy('created_at', 'desc'), limit(50)),
+      }] : []),
+      {
+        key: 'role_targeted_user',
+        description: `notifications where user_id == role_targeted and target_user_ids array-contains ${user.uid} orderBy created_at desc limit 50`,
+        ref: query(collection(db, 'notifications'), where('user_id', '==', 'role_targeted'), where('target_user_ids', 'array-contains', user.uid), orderBy('created_at', 'desc'), limit(50)),
+      },
+    ];
+    const byId = new Map<string, NotificationItem>();
+    const publish = () => {
+      const next = Array.from(byId.values())
+        .filter((item) => !(Array.isArray(item.hidden_by) && item.hidden_by.includes(user.uid)))
+        .sort((a, b) => Number(b.created_at?.toDate?.()?.getTime?.() || 0) - Number(a.created_at?.toDate?.()?.getTime?.() || 0))
+        .slice(0, 50);
       throttleRealtimeUpdates<NotificationItem[]>('notifications_stream', [next], (batches) => {
         const latest = batches[batches.length - 1];
         setItems(Array.isArray(latest) ? latest : next);
       }, 180);
       setLoading(false);
       perfRef.current.touch();
-    }, (err: unknown) => {
-      setLoadError(err instanceof Error ? err.message : 'Failed to load notifications.');
-      setLoading(false);
+    };
+    const unsubs = notificationQueries.map((entry) => {
+      const lkey = stableQueryKey(['notifications', entry.key, user.uid, profile?.role || '']);
+      return subscribeDeduped(lkey, entry.ref as any, (snap) => {
+        snap.docChanges().forEach((change) => {
+          if (change.type === 'removed') byId.delete(change.doc.id);
+          else byId.set(change.doc.id, { id: change.doc.id, ...(change.doc.data() as any) });
+        });
+        publish();
+      }, (err: unknown) => {
+        logFirestoreFailure({ collection: 'notifications', operation: 'listen', query: entry.description }, err);
+        setLoadError(err instanceof Error ? err.message : 'Failed to load notifications.');
+        setLoading(false);
+      });
     });
     const cancelMetric = scheduleLowPriorityTask(() => trackPerformanceMetric('notifications_loaded', items.length, { role: profile?.role || 'unknown' }));
     return () => {
       cancelMetric();
-      unsub();
+      unsubs.forEach((unsub) => unsub());
     };
   }, [profile?.role, user?.uid, reloadKey]);
 
@@ -118,8 +133,8 @@ export default function NotificationsScreen() {
       await updateDoc(doc(db, 'notifications', item.id), {
         [`read.${user.uid}`]: true,
       });
-    } catch {
-      // no-op
+    } catch (err: unknown) {
+      logFirestoreFailure({ collection: 'notifications', operation: 'update', query: `doc notifications/${item.id} mark read` }, err);
     }
   };
 
@@ -195,6 +210,7 @@ export default function NotificationsScreen() {
       setEditingMessage('');
       setShowEditModal(false);
     } catch (err: unknown) {
+      logFirestoreFailure({ collection: 'notifications', operation: 'update', query: `doc notifications/${editingId} edit notification` }, err);
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update notification.');
     } finally {
       setUpdating(false);
@@ -227,6 +243,7 @@ export default function NotificationsScreen() {
             setItems((prev) => prev.filter((entry) => entry.id !== item.id));
             setFeedback({ type: 'success', text: isAdmin ? 'Notification deleted successfully.' : 'Notification removed from your list.' });
           } catch (err: unknown) {
+            logFirestoreFailure({ collection: 'notifications', operation: isAdmin ? 'delete' : 'update', query: `doc notifications/${item.id} delete/hide notification` }, err);
             Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete notification.');
           }
         },

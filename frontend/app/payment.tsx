@@ -14,6 +14,7 @@ import { db } from '@/lib/firebase';
 import { normalizeFirebaseError } from '@/lib/errors';
 import { isValidHttpsUrl, prepareExternalUrl } from '@/lib/links';
 import { apiUrl } from '@/lib/api';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type PaymentType = 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
@@ -74,6 +75,7 @@ export default function PaymentFlowScreen() {
           setStatusText(`${paymentState} • ${latest.type || 'fees'} • ₹${Number(latest.amount || 0).toFixed(2)}`);
         }
       } catch (err) {
+        logFirestoreFailure({ collection: 'app_settings/payments', operation: 'get', query: `get app_settings global/platform and payments where user_id == ${user?.uid || '<none>'} orderBy created_at desc`, role: profile?.role, status: profile?.status }, err);
         setError(normalizeFirebaseError(err, 'Could not load payment settings.'));
       }
     };
@@ -155,7 +157,8 @@ export default function PaymentFlowScreen() {
           setVerificationState('idle');
           clearInterval(timer);
         }
-      } catch {
+      } catch (error: unknown) {
+        logFirestoreFailure({ collection: 'payments', operation: 'get', path: `payments/${currentPaymentId}`, query: 'poll current payment status', role: profile?.role, status: profile?.status }, error);
         setVerificationState('recovery_pending');
       }
     }, 4000);
@@ -208,6 +211,7 @@ export default function PaymentFlowScreen() {
       setStatusText(`processing • ${paymentType}${selectedCourse ? ` • ${selectedCourse.name}` : ''} • awaiting admin verification`);
       setStep(4);
     } catch (err) {
+      logFirestoreFailure({ collection: 'payments', operation: 'add', query: 'API /payments/initiate then /payments/confirm creates/updates payment', role: profile?.role, status: profile?.status }, err);
       setVerificationState('recovery_pending');
       setError(normalizeFirebaseError(err, 'Failed to save payment confirmation.'));
     } finally {

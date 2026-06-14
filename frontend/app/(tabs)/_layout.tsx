@@ -9,6 +9,7 @@ import { db } from '@/lib/firebase';
 import * as Notifications from 'expo-notifications';
 import { stableQueryKey, subscribeDeduped, getListenerMetrics } from '@/lib/queryPerformance';
 import { trackPerformanceMetric } from '@/lib/performanceEngine';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type TabIconName =
   | 'home'
@@ -57,27 +58,43 @@ export default function TabLayout() {
       return;
     }
 
-    const notifQ = query(
-      collection(db, 'notifications'),
-      where('user_id', 'in', [user.uid, 'all', 'role_targeted']),
-      orderBy('created_at', 'desc'),
-      limit(80),
-    );
-    const notifKey = stableQueryKey(['tabs_notif', user.uid, profile?.role || '']);
-    const unsubNotif = subscribeDeduped(notifKey, notifQ as any, (snap) => {
-      let count = 0;
-      snap.forEach((d) => {
-        const data = d.data() as any;
-        if (data.user_id === 'role_targeted') {
-          const targetUserIds = Array.isArray(data.target_user_ids) ? data.target_user_ids : [];
-          const targetRoles = Array.isArray(data.target_roles) ? data.target_roles : [];
-          const visible = targetUserIds.includes(user.uid) || (profile?.role ? targetRoles.includes(profile.role) : false);
-          if (!visible) return;
-        }
-        if (!data.read?.[user.uid]) count += 1;
+    const notificationCounts = new Map<string, boolean>();
+    const recomputeNotifications = () => {
+      setUnreadNotifications(Array.from(notificationCounts.values()).filter(Boolean).length);
+    };
+    const notifQueries = [
+      {
+        key: 'direct_or_all',
+        description: `notifications where user_id in [${user.uid}, all] orderBy created_at desc limit 80`,
+        ref: query(collection(db, 'notifications'), where('user_id', 'in', [user.uid, 'all']), orderBy('created_at', 'desc'), limit(80)),
+      },
+      ...(profile?.role ? [{
+        key: 'role_targeted_role',
+        description: `notifications where user_id == role_targeted and target_roles array-contains ${profile.role} orderBy created_at desc limit 80`,
+        ref: query(collection(db, 'notifications'), where('user_id', '==', 'role_targeted'), where('target_roles', 'array-contains', profile.role), orderBy('created_at', 'desc'), limit(80)),
+      }] : []),
+      {
+        key: 'role_targeted_user',
+        description: `notifications where user_id == role_targeted and target_user_ids array-contains ${user.uid} orderBy created_at desc limit 80`,
+        ref: query(collection(db, 'notifications'), where('user_id', '==', 'role_targeted'), where('target_user_ids', 'array-contains', user.uid), orderBy('created_at', 'desc'), limit(80)),
+      },
+    ];
+    const unsubNotifs = notifQueries.map((entry) => {
+      const notifKey = stableQueryKey(['tabs_notif', entry.key, user.uid, profile?.role || '']);
+      return subscribeDeduped(notifKey, entry.ref as any, (snap) => {
+        snap.docChanges().forEach((change) => {
+          if (change.type === 'removed') notificationCounts.delete(change.doc.id);
+          else {
+            const data = change.doc.data() as any;
+            notificationCounts.set(change.doc.id, !data.read?.[user.uid]);
+          }
+        });
+        recomputeNotifications();
+      }, (err: unknown) => {
+        logFirestoreFailure({ collection: 'notifications', operation: 'listen', query: entry.description }, err);
+        setUnreadNotifications(0);
       });
-      setUnreadNotifications(count);
-    }, () => setUnreadNotifications(0));
+    });
 
     const chatsQ = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), limit(200));
     const chatsKey = stableQueryKey(['tabs_chats_unread', user.uid]);
@@ -88,10 +105,13 @@ export default function TabLayout() {
         count += Number(data.unread_counts?.[user.uid] || 0);
       });
       setUnreadChats(count);
-    }, () => setUnreadChats(0));
+    }, (err: unknown) => {
+      logFirestoreFailure({ collection: 'chats', operation: 'listen', query: `where participants array-contains ${user.uid} limit 200` }, err);
+      setUnreadChats(0);
+    });
 
     return () => {
-      unsubNotif();
+      unsubNotifs.forEach((unsubNotif) => unsubNotif());
       unsubChats();
     };
   }, [profile?.role, user?.uid]);

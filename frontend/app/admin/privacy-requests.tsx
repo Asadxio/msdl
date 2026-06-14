@@ -11,6 +11,7 @@ import { db } from '@/lib/firebase';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type PrivacyRequestState = 'requested' | 'reviewing' | 'processing' | 'completed' | 'rejected';
 
@@ -68,7 +69,8 @@ export default function AdminPrivacyRequestsScreen() {
         };
       }));
       setError('');
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'privacy_requests', operation: 'get', query: 'orderBy created_at desc', role: profile?.role, status: profile?.status }, error);
       setError('Could not load privacy requests. Please refresh and try again.');
     } finally {
       setLoading(false);
@@ -92,7 +94,8 @@ export default function AdminPrivacyRequestsScreen() {
         updated_at: serverTimestamp(),
       });
       setRequests((prev) => prev.map((item) => (item.id === request.id ? { ...item, state } : item)));
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'privacy_requests', operation: 'update', path: `privacy_requests/${request.id}`, query: `set state ${state}`, role: profile?.role, status: profile?.status }, error);
       Alert.alert('Update Failed', 'Could not update privacy request status. Please try again.');
     } finally {
       setUpdatingId(null);
