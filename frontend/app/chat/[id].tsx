@@ -26,6 +26,7 @@ import { dedupeMessages, mergeServerAndLocal } from '@/lib/chatReconciliation';
 import { logChatMetric } from '@/lib/chatTelemetry';
 import { ReportReasonModal } from '@/components/ReportReasonModal';
 import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type ChatMeta = {
   id: string;
@@ -193,6 +194,7 @@ export default function ChatDetailScreen() {
           setLoading(false);
         },
         (error) => {
+          logFirestoreFailure({ collection: 'chats', operation: 'listen', query: `doc chats/${id}` }, error);
           console.log('[ChatDetail] chat listener ERROR', error);
           setChat(null);
           setLoading(false);
@@ -201,6 +203,7 @@ export default function ChatDetailScreen() {
       );
       chatUnsubRef.current = unsub;
     } catch (error) {
+      logFirestoreFailure({ collection: 'chats', operation: 'listen', query: `doc chats/${id} setup` }, error);
       console.log('[ChatDetail] chat listener setup ERROR', error);
       setChat(null);
       setLoading(false);
@@ -254,12 +257,14 @@ export default function ChatDetailScreen() {
           lastSnapshotWasCacheRef.current = snap.metadata.fromCache;
         },
         (error) => {
+          logFirestoreFailure({ collection: 'messages', operation: 'listen', query: `where chat_id == ${id} orderBy created_at desc limit ${PAGE_SIZE}` }, error);
           console.log('[ChatDetail] messages listener ERROR', error);
           setSendError('Could not load messages. Please try again.');
         },
       );
       messagesUnsubRef.current = unsub;
     } catch (error) {
+      logFirestoreFailure({ collection: 'messages', operation: 'listen', query: `where chat_id == ${id} orderBy created_at desc limit ${PAGE_SIZE} setup` }, error);
       console.log('[ChatDetail] messages listener setup ERROR', error);
       setSendError('Could not load messages. Please try again.');
     }
@@ -298,6 +303,7 @@ export default function ChatDetailScreen() {
         }
       }
     } catch (error) {
+      logFirestoreFailure({ collection: 'messages', operation: 'get', query: `where chat_id == ${id} orderBy created_at desc startAfter cursor limit ${PAGE_SIZE}` }, error);
       console.log('[ChatDetail] loadMore ERROR', error);
       setSendError('Could not load older messages. Please try again.');
     } finally {
@@ -432,6 +438,7 @@ export default function ChatDetailScreen() {
         }).catch(() => {});
       }
     } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'messages', operation: 'set', query: `doc messages/${id}_${clientId} send text` }, error);
       setMessages((prev) => prev.map((m) => (m.client_id === clientId ? { ...m, failed: true, localOnly: false } : m)));
       setSendError(error instanceof Error ? error.message : 'Could not send message. Please try again.');
     } finally {
@@ -491,7 +498,10 @@ export default function ChatDetailScreen() {
         message_type: kind, media_url: mediaUrl, media_name: fileName, media_size: fileSize,
       });
       await updateDoc(doc(db, 'chats', id), { last_message: kind.toUpperCase(), updated_at: serverTimestamp() });
-    } catch (error: any) { setSendError(error?.message || 'Media send failed.'); }
+    } catch (error: any) {
+      logFirestoreFailure({ collection: 'messages', operation: 'set', query: `doc messages/${id}_<clientId> send ${kind}` }, error);
+      setSendError(error?.message || 'Media send failed.');
+    }
   }, [id, profile?.name, sending, user?.email, user?.uid]);
 
   const flushOutbox = useCallback(async () => {
@@ -601,7 +611,8 @@ export default function ChatDetailScreen() {
       });
       setLastCursor(messageSnap.docs.length ? messageSnap.docs[messageSnap.docs.length - 1] : null);
       setHasMore(messageSnap.docs.length === PAGE_SIZE);
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'chats/messages', operation: 'get', query: `doc chats/${id} + messages where chat_id == ${id}` }, error);
       setSendError('Could not refresh chat. Please try again.');
     } finally {
       setRefreshing(false);
@@ -618,7 +629,8 @@ export default function ChatDetailScreen() {
       await updateDoc(doc(db, 'messages', message.id), {
         deleted_for: arrayUnion(user.uid),
       });
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'messages', operation: 'update', query: `doc messages/${message.id} delete_for me` }, error);
       setSendError('Could not delete message. Please try again.');
     }
   }, [user?.uid]);
@@ -632,7 +644,8 @@ export default function ChatDetailScreen() {
         unsent_by: user.uid,
         unsent_at: serverTimestamp(),
       });
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'messages', operation: 'update', query: `doc messages/${message.id} unsend for everyone` }, error);
       setSendError('Could not unsend message. Please try again.');
     }
   }, [user?.uid]);

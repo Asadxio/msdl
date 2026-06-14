@@ -16,6 +16,7 @@ import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/comp
 import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
 import { ReportReasonModal } from '@/components/ReportReasonModal';
 import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type AppUser = { id: string; name: string; email?: string; role: string; status: string; photo_url?: string; avatar?: string };
 
@@ -153,6 +154,7 @@ export default function ChatsScreen() {
       setLoading(false);
       setFeedback({ type: 'success', text: 'Chats refreshed.' });
     } catch (err: unknown) {
+      logFirestoreFailure({ collection: 'chats', operation: 'get', query: `participants array-contains ${user.uid} + broadcasts type == broadcast orderBy updated_at desc` }, err);
       const message = err instanceof Error ? err.message : 'Failed to refresh chats.';
       setError(message);
       setFeedback({ type: 'error', text: message });
@@ -183,6 +185,7 @@ export default function ChatsScreen() {
       setLoading(false);
       setError('');
     }, (err: unknown) => {
+      logFirestoreFailure({ collection: 'chats', operation: 'listen', query: `where participants array-contains ${user.uid} orderBy updated_at desc` }, err);
       setLoading(false);
       setError(err instanceof Error ? err.message : 'Failed to load chats.');
     });
@@ -196,6 +199,7 @@ export default function ChatsScreen() {
         return merged.sort((x, y) => (y.updated_at?.seconds || 0) - (x.updated_at?.seconds || 0));
       });
     }, (err) => {
+      logFirestoreFailure({ collection: 'chats', operation: 'listen', query: 'where type == broadcast orderBy updated_at desc' }, err);
       console.log('[Chats] broadcast listener ERROR', err);
     });
 
@@ -219,7 +223,8 @@ export default function ChatsScreen() {
           });
         });
         setUsers(list);
-      } catch {
+      } catch (err: unknown) {
+        logFirestoreFailure({ collection: 'public_profiles', operation: 'get', query: 'where searchable == true' }, err);
         setError('Could not load users list.');
       }
     };
@@ -239,6 +244,7 @@ export default function ChatsScreen() {
         pinned_by: pinned ? arrayRemove(user.uid) : arrayUnion(user.uid),
       });
     } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'chats', operation: 'update', query: `doc chats/${chatItem.id} toggle pinned_by` }, error);
       console.log('[Chats] togglePinChat ERROR', error);
       Alert.alert('Action failed', error instanceof Error ? error.message : 'Could not update pin status.');
     }
@@ -267,6 +273,7 @@ export default function ChatsScreen() {
               setSelectedChatIds([]);
               setFeedback({ type: 'success', text: 'Selected chats deleted from your list.' });
             } catch (error: unknown) {
+              logFirestoreFailure({ collection: 'chats', operation: 'update', query: `hide ${selectedChatIds.length} selected chat docs` }, error);
               console.log('[Chats] deleteSelectedChats ERROR', error);
               Alert.alert('Delete failed', error instanceof Error ? error.message : 'Could not delete selected chats.');
             } finally {
@@ -311,6 +318,7 @@ export default function ChatsScreen() {
       setShowUsers(false);
       safePush(`/chat/${ref.id}`);
     } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'chats', operation: 'add', query: 'create direct chat' }, error);
       const message = error instanceof Error ? error.message : 'Please try again.';
       setFeedback({ type: 'error', text: message });
       Alert.alert('Could not start chat', message);
@@ -366,6 +374,7 @@ export default function ChatsScreen() {
       setSelected([]);
       safePush(`/chat/${ref.id}`);
     } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'chats', operation: 'add', query: 'create group chat' }, error);
       const message = error instanceof Error ? error.message : 'Please try again.';
       setFeedback({ type: 'error', text: message });
       Alert.alert('Could not create group', message);
@@ -397,6 +406,7 @@ export default function ChatsScreen() {
       });
       safePush(`/chat/${ref.id}`);
     } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'chats', operation: 'add', query: 'create broadcast chat' }, error);
       const message = error instanceof Error ? error.message : 'Please try again.';
       setFeedback({ type: 'error', text: message });
       Alert.alert('Could not open broadcast', message);

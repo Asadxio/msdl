@@ -15,6 +15,7 @@ import { FeedbackBanner, SkeletonCard } from '@/components/ui';
 import { UIButton } from '@/components/ui/Button';
 import { SectionCard } from '@/components/ui/SectionCard';
 import { trackSecurity } from '@/lib/securityMonitor';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type QuizQuestion = {
   id: string;
@@ -36,7 +37,7 @@ function shuffle<T>(arr: T[]): T[] {
 export default function QuizScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -89,6 +90,7 @@ export default function QuizScreen() {
         }
       }
     } catch (e: any) {
+      logFirestoreFailure({ collection: 'quizzes', operation: 'get', query: 'get all quizzes', role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to load quiz.');
       setQuestions([]);
     } finally {
@@ -146,6 +148,7 @@ export default function QuizScreen() {
       const quizKey = String(questions.map((q) => q.id).join('-')).slice(0, 180);
       await clearQuizSession(user.uid, quizKey).catch(() => {});
     } catch (e: any) {
+      logFirestoreFailure({ collection: 'quiz_results/notifications', operation: 'add', query: 'create quiz result and self notification', role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to submit quiz.');
     } finally {
       setSubmitting(false);
@@ -184,6 +187,7 @@ export default function QuizScreen() {
       setCategory('');
       await loadQuiz();
     } catch (e: any) {
+      logFirestoreFailure({ collection: 'quizzes', operation: editingId ? 'update' : 'add', path: editingId ? `quizzes/${editingId}` : 'quizzes', query: editingId ? 'update quiz question' : 'create quiz question', role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to save question.');
     } finally {
       setSavingQuestion(false);
@@ -205,6 +209,7 @@ export default function QuizScreen() {
       await deleteDoc(doc(db, 'quizzes', id));
       await loadQuiz();
     } catch (e: any) {
+      logFirestoreFailure({ collection: 'quizzes', operation: 'delete', path: `quizzes/${id}`, query: 'delete quiz question', role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to delete question.');
     }
   };

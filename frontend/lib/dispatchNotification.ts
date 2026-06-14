@@ -6,6 +6,7 @@ import type { DispatchNotificationInput, NotificationRecordInput } from '@/lib/n
 import { getNotificationPreferences } from '@/lib/notificationCenter';
 import { createTelemetryRecord, getTelemetryCreatedAtMs, markNotificationFailed, updateTelemetryStatus } from '@/lib/notificationTelemetryWriter';
 import { withTimeout } from '@/lib/errors';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 function toLegacyUserId(channel: string, recipientId: string, sendToAll?: boolean) {
   if (sendToAll) return 'all';
@@ -18,21 +19,27 @@ function makeDedupeId(input: DispatchNotificationInput): string {
 }
 
 export async function writeNotificationRecord(input: NotificationRecordInput): Promise<void> {
-  const ref = await addDoc(collection(db, 'notifications'), {
-    recipient_id: input.recipient_id,
-    actor_id: input.actor_id,
-    channel: input.channel,
-    event: input.event,
-    title: input.title,
-    message: input.body,
-    body: input.body,
-    route: input.route,
-    data: input.data,
-    read: { [input.recipient_id]: false },
-    user_id: toLegacyUserId(input.channel, input.recipient_id),
-    dedupe_id: input.dedupe_id,
-    created_at: serverTimestamp(),
-  });
+  let ref;
+  try {
+    ref = await addDoc(collection(db, 'notifications'), {
+      recipient_id: input.recipient_id,
+      actor_id: input.actor_id,
+      channel: input.channel,
+      event: input.event,
+      title: input.title,
+      message: input.body,
+      body: input.body,
+      route: input.route,
+      data: input.data,
+      read: { [input.recipient_id]: false },
+      user_id: toLegacyUserId(input.channel, input.recipient_id),
+      dedupe_id: input.dedupe_id,
+      created_at: serverTimestamp(),
+    });
+  } catch (error: unknown) {
+    logFirestoreFailure({ collection: 'notifications', operation: 'add', path: 'notifications', query: `dispatch notification ${input.event}/${input.channel}` }, error);
+    throw error;
+  }
   await createTelemetryRecord({
     notificationId: ref.id,
     dedupeId: input.dedupe_id,

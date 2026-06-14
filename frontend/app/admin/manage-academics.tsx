@@ -16,6 +16,7 @@ import { createNotificationAsAdmin, createRoleNotificationAsAdmin } from '@/lib/
 import { isValidHttpsUrl, normalizeMeetUrl } from '@/lib/links';
 import { createAdminLog } from '@/lib/adminLogs';
 import { hasPermission } from '@/lib/rbac';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type CourseItem = {
   id: string;
@@ -158,7 +159,8 @@ export default function ManageAcademicsScreen() {
       setLessons(nextLessons);
       setRecordings(nextRecordings);
       setLoadError('');
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'courses/teachers/lessons/recordings', operation: 'get', query: 'get all courses, teachers, lessons, recordings', role: profile?.role, status: profile?.status }, error);
       setLoadError('Could not load academic data. Please refresh.');
     } finally {
       setLoading(false);
@@ -253,7 +255,8 @@ export default function ManageAcademicsScreen() {
         });
       }
       await fetchData();
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'courses', operation: editingCourseId ? 'update' : 'add', path: editingCourseId ? `courses/${editingCourseId}` : 'courses', query: editingCourseId ? 'update course' : 'create course', role: profile?.role, status: profile?.status }, error);
       Alert.alert('Save Failed', 'Could not save course. Please try again.');
     } finally {
       setActionLoading(false);
@@ -282,7 +285,8 @@ export default function ManageAcademicsScreen() {
           try {
             await deleteDoc(doc(db, 'courses', course.id));
             await fetchData();
-          } catch {
+          } catch (error: unknown) {
+            logFirestoreFailure({ collection: 'courses', operation: 'delete', path: `courses/${course.id}`, query: 'delete course', role: profile?.role, status: profile?.status }, error);
             Alert.alert('Delete Failed', 'Could not delete course. Please try again.');
           }
         },
@@ -310,7 +314,8 @@ export default function ManageAcademicsScreen() {
       setTeacherTitle('');
       setTeacherPhoto('');
       await fetchData();
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'teachers', operation: 'add', path: 'teachers', query: 'create teacher', role: profile?.role, status: profile?.status }, error);
       Alert.alert('Add Failed', 'Could not add teacher. Please try again.');
     } finally {
       setActionLoading(false);
@@ -328,7 +333,8 @@ export default function ManageAcademicsScreen() {
             await deleteDoc(doc(db, 'teachers', teacher.id));
             if (selectedTeacherId === teacher.id) setSelectedTeacherId('');
             await fetchData();
-          } catch {
+          } catch (error: unknown) {
+            logFirestoreFailure({ collection: 'teachers', operation: 'delete', path: `teachers/${teacher.id}`, query: 'delete teacher', role: profile?.role, status: profile?.status }, error);
             Alert.alert('Remove Failed', 'Could not remove teacher. Please try again.');
           }
         },
@@ -361,7 +367,8 @@ export default function ManageAcademicsScreen() {
             });
             await fetchData();
             Alert.alert('Success', 'Courses assigned successfully');
-          } catch {
+          } catch (error: unknown) {
+            logFirestoreFailure({ collection: 'teachers', operation: 'update', path: `teachers/${selectedTeacherId}`, query: 'assign courses to teacher', role: profile?.role, status: profile?.status }, error);
             Alert.alert('Update Failed', 'Could not assign courses. Please try again.');
           } finally {
             setActionLoading(false);
@@ -390,7 +397,8 @@ export default function ManageAcademicsScreen() {
       });
       await fetchData();
       Alert.alert('Saved', 'Teacher profile updated.');
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'teachers', operation: 'update', path: `teachers/${selectedTeacherId}`, query: 'update teacher profile', role: profile?.role, status: profile?.status }, error);
       Alert.alert('Update Failed', 'Could not update teacher profile.');
     } finally {
       setActionLoading(false);
@@ -438,7 +446,8 @@ export default function ManageAcademicsScreen() {
       setEditingRecordingId(null);
       Alert.alert('Saved', editingRecordingId ? 'Recording updated successfully.' : 'Recording added successfully.');
       await fetchData();
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'recordings', operation: editingRecordingId ? 'update' : 'add', path: editingRecordingId ? `recordings/${editingRecordingId}` : 'recordings', query: editingRecordingId ? 'update recording' : 'create recording', role: profile?.role, status: profile?.status }, error);
       Alert.alert('Save Failed', 'Could not save recording.');
     } finally {
       setActionLoading(false);
@@ -475,7 +484,8 @@ export default function ManageAcademicsScreen() {
             await deleteDoc(doc(db, 'recordings', recording.id));
             if (editingRecordingId === recording.id) clearRecordingForm();
             await fetchData();
-          } catch {
+          } catch (error: unknown) {
+            logFirestoreFailure({ collection: 'recordings', operation: 'delete', path: `recordings/${recording.id}`, query: 'delete recording', role: profile?.role, status: profile?.status }, error);
             Alert.alert('Delete Failed', 'Could not delete recording.');
           } finally {
             setActionLoading(false);

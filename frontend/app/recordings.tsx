@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { prepareExternalUrl } from '@/lib/links';
 import { EmptyState, FullScreenLoader, RetryState } from '@/components/ui';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type RecordingItem = {
   id: string;
@@ -28,7 +29,7 @@ export default function RecordingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -64,7 +65,8 @@ export default function RecordingsScreen() {
       });
       setItems(next);
       setCourseMap(nextMap);
-    } catch {
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'recordings/courses', operation: 'get', query: 'recordings orderBy created_at desc and all courses', role: profile?.role, status: profile?.status }, error);
       setLoadError('Could not load recordings. Please refresh.');
     } finally {
       setLoading(false);
@@ -128,7 +130,8 @@ export default function RecordingsScreen() {
           try {
             await deleteDoc(doc(db, 'recordings', item.id));
             await fetchRecordings();
-          } catch {
+          } catch (error: unknown) {
+            logFirestoreFailure({ collection: 'recordings', operation: 'delete', path: `recordings/${item.id}`, query: 'delete recording', role: profile?.role, status: profile?.status }, error);
             Alert.alert('Delete Failed', 'Could not delete recording.');
           } finally {
             setUpdatingId(null);

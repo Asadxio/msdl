@@ -10,12 +10,13 @@ import {
 import { db } from '@/lib/firebase';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 export default function AdminAnalyticsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({ users: 0, activeUsers: 0, payments: 0, courses: 0, attendancePct: 0 });
 
@@ -49,6 +50,9 @@ export default function AdminAnalyticsScreen() {
         courses: coursesCount.data().count,
         attendancePct: total ? Math.round((present / total) * 100) : 0,
       });
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'users/payments/courses/attendance', operation: 'count', query: 'count users/payments/courses, users last_login_at >= 30d, get all attendance', role: profile?.role, status: profile?.status }, error);
+      setMetrics({ users: 0, activeUsers: 0, payments: 0, courses: 0, attendancePct: 0 });
     } finally {
       setLoading(false);
     }

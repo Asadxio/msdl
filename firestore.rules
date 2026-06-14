@@ -748,6 +748,16 @@ service cloud.firestore {
       return isAdmin() || (isApprovedTeacher() && data.teacher_id == request.auth.uid);
     }
 
+
+
+    function canReadLearningContent(data) {
+      return isApprovedVerifiedUser();
+    }
+
+    function canReadCourseData(courseId, data) {
+      return canReadLearningContent(data);
+    }
+
     function canReadRecordingData(data) {
       return isApprovedVerifiedUser()
         && (
