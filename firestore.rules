@@ -148,7 +148,6 @@ service cloud.firestore {
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
         && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
         && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
-        && (request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
         && ((request.resource.data.role == 'assistant_teacher') ? roleOf(request.auth.uid) in ['admin', 'super_admin'] : true);
     }
@@ -1010,7 +1009,23 @@ service cloud.firestore {
 
     match /public_profiles/{uid} {
       allow get, list: if isApprovedVerifiedUser();
-      allow create, update: if (isSelf(uid)
+      allow create: if (isSelf(uid)
+          && exists(/databases/$(database)/documents/users/$(uid))
+          && request.resource.data.uid == uid
+          && request.resource.data.role == userDoc(uid).role
+          && request.resource.data.status == userDoc(uid).status
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.searchable is bool
+          && request.resource.data.is_active is bool
+          && request.resource.data.searchable == (userDoc(uid).status == 'approved')
+          && request.resource.data.is_active == (userDoc(uid).status == 'approved')
+          && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
+          && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
+          && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp)
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'role', 'status', 'searchable', 'is_active', 'photo_url', 'avatar', 'updated_at']))
+        || isAdmin();
+      allow update: if (isSelf(uid)
           && isVerified()
           && exists(/databases/$(database)/documents/users/$(uid))
           && request.resource.data.uid == uid
@@ -1064,23 +1079,19 @@ service cloud.firestore {
       // Single-document reads use the existing flexible OR logic.
       allow get: if canReadNotification();
 
-      // Collection queries (list) need explicit, query-safe branches so Firestore
-      // can prove from query constraints that every returned document is allowed.
+      // Collection queries (list) need query-provable constraints.
+      // Firestore cannot prove `get().data.role in resource.data.target_roles`
+      // (combines runtime get() with resource.data) or `field is list` type
+      // guards from array-contains query constraints. Per-document role
+      // verification is enforced by the allow get rule via canReadNotification().
       allow list: if isApprovedVerifiedUser()
         && (
-          // Query shape: where user_id == 'all' orderBy created_at desc
+          // Query: where user_id == 'all' orderBy created_at desc
           resource.data.user_id == 'all'
-          // Query shape: where user_id in [<uid>, 'all'] orderBy created_at desc
+          // Query: where user_id in [<uid>, 'all'] orderBy created_at desc
           || resource.data.user_id == request.auth.uid
-          // Query shape: where user_id == 'role_targeted', target_roles array-contains <role>
-          || (resource.data.user_id == 'role_targeted'
-            && resource.data.target_roles is list
-            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in resource.data.target_roles)
-          // Query shape: where user_id == 'role_targeted', target_user_ids array-contains <uid>
-          || (resource.data.user_id == 'role_targeted'
-            && resource.data.target_user_ids is list
-            && request.auth.uid in resource.data.target_user_ids)
+          // Query: where user_id == 'role_targeted', target_roles array-contains <role>
+          || resource.data.user_id == 'role_targeted'
         );
 
       // Admin can create/modify; teachers can create direct class notifications; users can create own local result notifications.

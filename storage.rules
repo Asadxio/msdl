@@ -6,7 +6,16 @@ service firebase.storage {
     }
 
     function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn()
+        && (
+          request.auth.token.email_verified == true
+          // Temporary admin bypass: allow admin/super_admin even when
+          // email_verified is false, provided they have approved status.
+          // TODO: Remove this bypass once admin emails are verified.
+          || (exists(/databases/(default)/documents/users/$(request.auth.uid))
+            && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
+            && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved')
+        );
     }
 
     function userDoc() {

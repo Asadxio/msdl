@@ -363,10 +363,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return 'Invalid email format';
     if (normalizedPassword.length < 6) return 'Password must be at least 6 characters';
     setSignupVerificationFlowActive(true);
-    try {
+     try {
+      console.log('[SIGNUP_DEBUG] Attempting createUserWithEmailAndPassword for:', safeEmail);
       const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
+      console.log('[SIGNUP_DEBUG] createUserWithEmailAndPassword SUCCESS, uid:', cred.user.uid);
       // Send verification email
       try {
+        console.log('[SIGNUP_DEBUG] Attempting sendEmailVerification for uid:', cred.user.uid);
         trackEvent('verification_email_delivery_attempt', {
           source: 'signup',
           status: 'requested',
@@ -374,45 +377,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           emailDomain: safeEmail.split('@')[1] || 'unknown',
         }, `verification-email-signup-requested-${cred.user.uid}`);
         await withTimeout(sendEmailVerification(cred.user));
+        console.log('[SIGNUP_DEBUG] sendEmailVerification SUCCESS for uid:', cred.user.uid);
         void markVerificationEmailSent(cred.user.uid);
-      } catch (error) {
+      } catch (error: any) {
+        console.error('[SIGNUP_DEBUG] FAILED sendEmailVerification. Code:', error?.code, 'Message:', error?.message);
         trackEmailVerificationError('verification_email_send_failed', error, { uid: cred.user.uid });
       }
 
       let referrerId: string | null = null;
       const normalizedCode = (referralCode || '').trim().toUpperCase();
       if (normalizedCode) {
-        const refSnap = await getDocs(query(collection(db, 'users'), where('referral_code', '==', normalizedCode), limit(1)));
-        referrerId = refSnap.empty ? null : refSnap.docs[0].id;
+        console.log('[SIGNUP_DEBUG] Checking referral code:', normalizedCode);
+        try {
+          const refSnap = await getDocs(query(collection(db, 'users'), where('referral_code', '==', normalizedCode), limit(1)));
+          referrerId = refSnap.empty ? null : refSnap.docs[0].id;
+          console.log('[SIGNUP_DEBUG] Referral check success, referrerId:', referrerId);
+        } catch (refErr: any) {
+          console.error('[SIGNUP_DEBUG] Referral check failed. Code:', refErr?.code, 'Msg:', refErr?.message);
+        }
       }
 
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        name: safeName,
-        email: safeEmail,
-        role: safeRole,
-        status: 'pending',
-        referral_code: generateReferralCode(name),
-        referred_by: referrerId,
-        referral_count: 0,
-        last_login_at: serverTimestamp(),
-        created_at: serverTimestamp(),
-      });
-      await setDoc(doc(db, 'public_profiles', cred.user.uid), {
-        uid: cred.user.uid,
-        name: safeName,
-        role: safeRole,
-        status: 'pending',
-        searchable: false,
-        is_active: false,
-        photo_url: '',
-        avatar: 'person',
-        updated_at: serverTimestamp(),
-      }, { merge: true });
-      if (referrerId) {
-        await updateDoc(doc(db, 'users', referrerId), {
-          referral_count: increment(1),
+      console.log('[SIGNUP_DEBUG] Attempting write to users/', cred.user.uid);
+      try {
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          name: safeName,
+          email: safeEmail,
+          role: safeRole,
+          status: 'pending',
+          referral_code: generateReferralCode(name),
+          referred_by: referrerId,
+          referral_count: 0,
+          last_login_at: serverTimestamp(),
+          created_at: serverTimestamp(),
+        });
+        console.log('[SIGNUP_DEBUG] Successfully wrote users/', cred.user.uid);
+      } catch (userErr: any) {
+        console.error('[SIGNUP_DEBUG] FAILED write to users/. Code:', userErr?.code, 'Message:', userErr?.message, 'Full:', userErr);
+        throw userErr;
+      }
+
+      console.log('[SIGNUP_DEBUG] Attempting write to public_profiles/', cred.user.uid);
+      try {
+        await setDoc(doc(db, 'public_profiles', cred.user.uid), {
+          uid: cred.user.uid,
+          name: safeName,
+          role: safeRole,
+          status: 'pending',
+          searchable: false,
+          is_active: false,
+          photo_url: '',
+          avatar: 'person',
           updated_at: serverTimestamp(),
-        }).catch(() => {});
+        }, { merge: true });
+        console.log('[SIGNUP_DEBUG] Successfully wrote public_profiles/', cred.user.uid);
+      } catch (pubErr: any) {
+        console.error('[SIGNUP_DEBUG] FAILED write to public_profiles/. Code:', pubErr?.code, 'Message:', pubErr?.message, 'Full:', pubErr);
+        throw pubErr;
+      }
+
+      if (referrerId) {
+        console.log('[SIGNUP_DEBUG] Attempting update to referrer referral_count:', referrerId);
+        try {
+          await updateDoc(doc(db, 'users', referrerId), {
+            referral_count: increment(1),
+            updated_at: serverTimestamp(),
+          });
+          console.log('[SIGNUP_DEBUG] Successfully updated referrer:', referrerId);
+        } catch (refUpErr: any) {
+          console.error('[SIGNUP_DEBUG] FAILED update to referrer. Code:', refUpErr?.code, 'Message:', refUpErr?.message);
+        }
       }
       void markSignupCompleted(cred.user.uid);
       setShowSignupVerificationPrompt(true);
