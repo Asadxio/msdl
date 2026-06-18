@@ -16,10 +16,8 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
   const progress = getCourseProgress(course.id);
   const handlePress = () => {
     try {
-      const path = course?.id ? `/course/${course.id}` : '';
-      if (!path) return;
-      console.log('[Courses] course card pressed:', path);
-      router.push(path);
+      if (!course?.id) return;
+      router.push(`/course/${course.id}`);
     } catch (e) {
       console.log('[Courses] navigation ERROR:', e);
     }

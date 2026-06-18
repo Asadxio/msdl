@@ -6,7 +6,16 @@ service cloud.firestore {
     }
 
     function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn()
+        && (
+          request.auth.token.email_verified == true
+          // Temporary admin bypass: allow admin/super_admin even when
+          // email_verified is false, provided they have approved status.
+          // TODO: Remove this bypass once admin emails are verified.
+          || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
+        );
     }
 
     function isApprovedVerifiedUser() {
@@ -1052,8 +1061,27 @@ service cloud.firestore {
 
     // notifications collection
     match /notifications/{notificationId} {
-      // Signed-in users can read broadcast, own, and role-targeted notifications used by the app.
-      allow read: if canReadNotification();
+      // Single-document reads use the existing flexible OR logic.
+      allow get: if canReadNotification();
+
+      // Collection queries (list) need explicit, query-safe branches so Firestore
+      // can prove from query constraints that every returned document is allowed.
+      allow list: if isApprovedVerifiedUser()
+        && (
+          // Query shape: where user_id == 'all' orderBy created_at desc
+          resource.data.user_id == 'all'
+          // Query shape: where user_id in [<uid>, 'all'] orderBy created_at desc
+          || resource.data.user_id == request.auth.uid
+          // Query shape: where user_id == 'role_targeted', target_roles array-contains <role>
+          || (resource.data.user_id == 'role_targeted'
+            && resource.data.target_roles is list
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in resource.data.target_roles)
+          // Query shape: where user_id == 'role_targeted', target_user_ids array-contains <uid>
+          || (resource.data.user_id == 'role_targeted'
+            && resource.data.target_user_ids is list
+            && request.auth.uid in resource.data.target_user_ids)
+        );
 
       // Admin can create/modify; teachers can create direct class notifications; users can create own local result notifications.
       allow create: if isValidNotificationCreate();

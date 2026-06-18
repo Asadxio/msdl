@@ -271,7 +271,7 @@ export function useData() {
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const { profile, user } = useAuth();
+  const { profile, user, authLoading } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
@@ -979,9 +979,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [lessons, lessonProgress]);
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchData();
     fetchBooks();
-  }, [fetchBooks]);
+  }, [authLoading, user, fetchBooks]);
 
   useEffect(() => {
     fetchLearning().catch(() => {});
