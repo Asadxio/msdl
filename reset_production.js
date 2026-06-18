@@ -21,7 +21,9 @@
  *   gcloud firestore export gs://madrasa-app-50d6c-backups/pre-reset-YYYYMMDD
  */
 
-const admin = require('firebase-admin');
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const path = require('path');
 
 // ─── Configuration ───────────────────────────────────────────────────────────
@@ -135,8 +137,8 @@ function initFirebase() {
     const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
       || path.join(__dirname, 'serviceAccountKey.json');
     const serviceAccount = require(serviceAccountPath);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    initializeApp({
+      credential: cert(serviceAccount),
       projectId: PROJECT_ID,
     });
   } catch (e) {
@@ -147,8 +149,8 @@ function initFirebase() {
   }
 }
 
-const db = () => admin.firestore();
-const authSvc = () => admin.auth();
+const db = () => getFirestore();
+const authSvc = () => getAuth();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
