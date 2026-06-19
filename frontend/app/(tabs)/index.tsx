@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// Islamic Dashboard relocated to More
 import {
   View,
   Text,
@@ -28,6 +29,7 @@ import {
   doc,
   getDoc,
   limit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -270,15 +272,40 @@ function formatClock(date: Date) {
 
 let featuredCoursesExpandedCache = false;
 
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) {
+    return 'Just now';
+  } else if (diffMin < 60) {
+    return `${diffMin} ${diffMin === 1 ? 'minute' : 'minutes'} ago`;
+  } else if (diffHr < 24) {
+    return `${diffHr} ${diffHr === 1 ? 'hour' : 'hours'} ago`;
+  } else if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays < 7) {
+    return `${diffDays} days ago`;
+  } else {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+}
+
 function FeaturedCourseCard({
   course,
   imageUri,
   progressPercent,
+  totalLessons,
   onPress,
 }: {
   course: Course;
   imageUri: string;
   progressPercent: number;
+  totalLessons: number;
   onPress: () => void;
 }) {
   const safeProgress = Math.min(100, Math.max(0, progressPercent));
@@ -291,28 +318,27 @@ function FeaturedCourseCard({
     >
       <Image source={{ uri: imageUri }} style={styles.courseCardImage} />
       <View style={styles.courseCardContent}>
-        <Text style={styles.courseCardName} numberOfLines={2}>
+        <Text style={styles.courseCardName} numberOfLines={1}>
           {course.name}
         </Text>
-        <Text style={styles.courseCardDescription} numberOfLines={2}>
-          {course.description || "Course details coming soon."}
-        </Text>
-        <View style={styles.courseProgressRow}>
-          <Text style={styles.courseProgressLabel}>Progress {safeProgress}%</Text>
+        
+        <View style={styles.courseTeacherRow}>
+          <Ionicons name="person-circle-outline" size={14} color={COLORS.textMuted} />
+          <Text style={styles.courseTeacherName}>{course.teacher_name || 'Unknown Teacher'}</Text>
         </View>
+
+        <View style={styles.courseProgressRow}>
+          <Text style={styles.courseProgressLabel}>{safeProgress}% Complete</Text>
+          <Text style={styles.courseLessonsLabel}>
+            {totalLessons > 0 ? `${totalLessons} Lessons` : 'No lessons available yet'}
+          </Text>
+        </View>
+
         <View style={styles.courseProgressTrack}>
           <View
             style={[styles.courseProgressFill, { width: `${safeProgress}%` }]}
           />
         </View>
-        <TouchableOpacity
-          style={styles.continueBtn}
-          onPress={onPress}
-          testID={`continue-course-${course.id}`}
-        >
-          <Text style={styles.continueBtnText}>Continue</Text>
-          <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
-        </TouchableOpacity>
       </View>
     </ScalePressable>
   );
@@ -557,6 +583,46 @@ export default function HomeScreen() {
     featuredCoursesExpandedCache,
   );
 
+  const [hadithText, setHadithText] = useState("The best among you are those who learn the Qur'an and teach it.");
+  const [hadithRef, setHadithRef] = useState("Sahih al-Bukhari 5027");
+  const [hadithDraftText, setHadithDraftText] = useState("");
+  const [hadithDraftRef, setHadithDraftRef] = useState("");
+  const [recentNotifications, setRecentNotifications] = useState<any[]>([]);
+
+  const [activeLiveClass, setActiveLiveClass] = useState<any | null>(null);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "live_classes"),
+      where("status", "==", "live"),
+      limit(1)
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) {
+        setActiveLiveClass(null);
+      } else {
+        const docSnap = snapshot.docs[0];
+        setActiveLiveClass({
+          id: docSnap.id,
+          ...docSnap.data()
+        });
+      }
+    }, (error) => {
+      console.log("[HomeScreen] active live class snapshot error:", error);
+      setActiveLiveClass(null);
+    });
+    return unsub;
+  }, []);
+
+  const safePushLiveClass = (id: string) => {
+    try {
+      if (!id) return;
+      router.push({ pathname: "/live-class/[id]", params: { id } } as any);
+    } catch (e) {
+      console.log("[HomeScreen] navigation to live class failed:", e);
+    }
+  };
+
   const updateFeaturedCoursesExpanded = (expanded: boolean) => {
     featuredCoursesExpandedCache = expanded;
     setFeaturedCoursesExpanded(expanded);
@@ -586,11 +652,7 @@ export default function HomeScreen() {
 
     const timeout = setTimeout(checkAndStartTutorial, 800);
     return () => clearTimeout(timeout);
-  }, [profile?.uid, setShowTutorial, setCurrentStep]);
-
-  const requestLocation = useCallback(async () => {
-    // Stubbed: location-based Islamic dashboard was moved to More/Applications/Islamic Dashboard.
-  }, []);
+  }, [profile?.uid, showTutorial]);
 
   useEffect(() => {
     const loadNotice = async () => {
@@ -604,6 +666,12 @@ export default function HomeScreen() {
           setAnnouncementTitle(title || DEFAULT_ANNOUNCEMENT_TITLE);
           setAnnouncementMessage(message || DEFAULT_ANNOUNCEMENT_DESC);
           setUseCustomNotice(true);
+        }
+        if (data.hadith_text) {
+          setHadithText(data.hadith_text);
+        }
+        if (data.hadith_ref) {
+          setHadithRef(data.hadith_ref);
         }
       } catch {
         // ignore and fallback to announcement stream
@@ -647,6 +715,26 @@ export default function HomeScreen() {
     return unsub;
   }, [useCustomNotice]);
 
+  useEffect(() => {
+    if (!profile?.uid) return;
+    const q = query(
+      collection(db, "notifications"),
+      where("user_id", "in", [profile.uid, "all"]),
+      orderBy("created_at", "desc"),
+      limit(3)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const items: any[] = [];
+      snap.forEach((d) => {
+        items.push({ id: d.id, ...d.data() });
+      });
+      setRecentNotifications(items);
+    }, (err) => {
+      console.log("[HomeScreen] recent notifications error:", err);
+    });
+    return unsub;
+  }, [profile?.uid]);
+
   const isDefaultAnnouncement = useMemo(
     () =>
       announcementTitle === DEFAULT_ANNOUNCEMENT_TITLE &&
@@ -662,6 +750,8 @@ export default function HomeScreen() {
   const openNoticeEditor = () => {
     setNoticeDraftTitle(announcementTitle);
     setNoticeDraftMessage(announcementMessage);
+    setHadithDraftText(hadithText);
+    setHadithDraftRef(hadithRef);
     setNoticeModalVisible(true);
   };
 
@@ -678,12 +768,16 @@ export default function HomeScreen() {
         {
           notice_title: noticeDraftTitle.trim(),
           notice_message: noticeDraftMessage.trim(),
+          hadith_text: hadithDraftText.trim(),
+          hadith_ref: hadithDraftRef.trim(),
           updated_at: serverTimestamp(),
         },
         { merge: true },
       );
       setAnnouncementTitle(noticeDraftTitle.trim());
       setAnnouncementMessage(noticeDraftMessage.trim());
+      if (hadithDraftText.trim()) setHadithText(hadithDraftText.trim());
+      if (hadithDraftRef.trim()) setHadithRef(hadithDraftRef.trim());
       setUseCustomNotice(true);
       setNoticeModalVisible(false);
     } catch {
@@ -718,6 +812,16 @@ export default function HomeScreen() {
       },
     ]);
   }, [showQiblaFinderOpenError]);
+
+  const userName = profile?.name || 'Student';
+  const userRole = (profile?.role || 'student').charAt(0).toUpperCase() + (profile?.role || 'student').slice(1);
+
+  const QUICK_ACTIONS = [
+    { label: 'Live Classes', icon: 'videocam' as const, route: '/live-class', color: '#EF4444' },
+    { label: 'Library', icon: 'library' as const, route: '/(tabs)/library', color: '#3B82F6' },
+    { label: 'Quiz', icon: 'help-circle' as const, route: '/(tabs)/quiz', color: '#8B5CF6' },
+    { label: 'Attendance', icon: 'calendar' as const, route: '/(tabs)/attendance', color: '#F59E0B' },
+  ];
 
   return (
     <View style={styles.container}>
@@ -756,7 +860,102 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Islamic Dashboard relocated to More → Applications → Islamic Dashboard. */}
+        {/* SECTION 1: Welcome Banner */}
+        <View style={styles.welcomeBanner} testID="welcome-banner">
+          <View style={styles.welcomeAvatarCircle}>
+            <Text style={styles.welcomeAvatarText}>
+              {userName.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.welcomeName}>Assalamu Alaikum, {userName}</Text>
+            <View style={styles.roleBadge}>
+              <Ionicons
+                name={userRole === 'Admin' ? 'shield-checkmark' : userRole === 'Teacher' ? 'school' : 'person'}
+                size={12}
+                color={COLORS.goldText}
+              />
+              <Text style={styles.roleBadgeText}>{userRole}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* SECTION 2: Quick Actions */}
+        <View style={styles.quickActionsRow} testID="quick-actions">
+          {QUICK_ACTIONS.map((action) => (
+            <ScalePressable
+              key={action.label}
+              style={styles.quickActionCard}
+              onPress={() => safePush(action.route)}
+              testID={`qa-${action.label.toLowerCase().replace(/\s/g, '-')}`}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: action.color + '18' }]}>
+                <Ionicons name={action.icon} size={22} color={action.color} />
+              </View>
+              <Text style={styles.quickActionLabel} numberOfLines={1}>{action.label}</Text>
+            </ScalePressable>
+          ))}
+        </View>
+
+        {/* SECTION 3: Live Class */}
+        {activeLiveClass ? (
+          <ScalePressable
+            style={[styles.liveClassCard, styles.liveClassCardActive]}
+            onPress={() => safePushLiveClass(activeLiveClass.id)}
+            testID="live-class-card"
+          >
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>🔴 LIVE NOW</Text>
+            </View>
+            <Text style={styles.liveTitle} numberOfLines={1}>
+              {activeLiveClass.title}
+            </Text>
+            <Text style={styles.liveTeacher} numberOfLines={1}>
+              Teacher: {activeLiveClass.teacher_name}
+            </Text>
+            <Text style={styles.liveJoinedCount}>
+              {activeLiveClass.participant_count || 0} participants joined
+            </Text>
+            <TouchableOpacity
+              style={styles.liveJoinBtn}
+              onPress={() => safePushLiveClass(activeLiveClass.id)}
+            >
+              <Ionicons name="videocam" size={16} color="#fff" />
+              <Text style={styles.liveJoinBtnText}>Join Live Class</Text>
+            </TouchableOpacity>
+          </ScalePressable>
+        ) : (
+          <View style={styles.noLiveCard} testID="no-live-class-card">
+            <Ionicons name="videocam-off-outline" size={24} color={COLORS.textMuted} />
+            <Text style={styles.noLiveText}>No live classes currently running.</Text>
+            <TouchableOpacity
+              style={styles.scheduleBtn}
+              onPress={() => safePush('/live-class')}
+            >
+              <Text style={styles.scheduleBtnText}>View Schedule</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* SECTION 4: Today's Hadith */}
+        <View style={[styles.section, { paddingHorizontal: SPACING.lg }]} testID="hadith-section">
+          <View style={styles.hadithCard}>
+            <View style={styles.hadithIconRow}>
+              <View style={styles.hadithIconCircle}>
+                <Ionicons name="book" size={18} color={COLORS.primary} />
+              </View>
+              <Text style={styles.hadithLabel}>📖 Today's Hadith</Text>
+              {isAdmin ? (
+                <TouchableOpacity onPress={openNoticeEditor} style={{ marginLeft: 'auto' }}>
+                  <Ionicons name="create-outline" size={18} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <Text style={styles.hadithText}>"{hadithText}"</Text>
+            <Text style={styles.hadithReference}>— {hadithRef}</Text>
+          </View>
+        </View>
 
         {/* Loading State */}
         {loading ? (
@@ -765,7 +964,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* Featured Courses */}
+        {/* Resume Learning */}
         {resumeLearning ? (
           <View style={[styles.section, { paddingHorizontal: SPACING.lg }]}>
             <Text style={[styles.sectionTitle, { marginBottom: SPACING.md }]}>
@@ -801,9 +1000,9 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* Featured Courses */}
+        {/* My Courses */}
         <ExpandableSection
-          title="Featured Courses"
+          title="My Courses"
           count={featuredCourses.length}
           initiallyExpanded={featuredCoursesExpanded}
           onExpandedChange={updateFeaturedCoursesExpanded}
@@ -821,6 +1020,7 @@ export default function HomeScreen() {
                     course={item}
                     imageUri={getCourseImage(index)}
                     progressPercent={progress.completionPercent}
+                    totalLessons={progress.totalLessons || 0}
                     onPress={() => {
                       if (!item?.id) return;
                       safePush(`/course/${item.id}`);
@@ -925,6 +1125,47 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        {/* SECTION 5: Recent Notifications */}
+        <View style={[styles.section, { paddingHorizontal: SPACING.lg }]} testID="recent-notifications">
+          <View style={[styles.sectionHeader, { paddingHorizontal: 0, marginBottom: SPACING.md }]}>
+            <Text style={styles.sectionTitle}>Recent Notifications</Text>
+            <TouchableOpacity onPress={() => safePush('/notifications')}>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          {recentNotifications.length === 0 ? (
+            <EmptyState icon="notifications-outline" message="No notifications yet" />
+          ) : (
+            <View style={{ gap: SPACING.sm }}>
+              {recentNotifications.map((notif: any) => {
+                const notifDate = notif.created_at?.toDate ? notif.created_at.toDate() : new Date();
+                return (
+                  <ScalePressable
+                    key={notif.id}
+                    style={styles.notifCard}
+                    onPress={() => safePush('/notifications')}
+                  >
+                    <View style={styles.notifIconCircle}>
+                      <Ionicons
+                        name={notif.category === 'announcement' ? 'megaphone' : 'notifications'}
+                        size={16}
+                        color={COLORS.primary}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.notifTitle} numberOfLines={1}>{notif.title || 'Notification'}</Text>
+                      <Text style={styles.notifBody} numberOfLines={2}>{notif.message || ''}</Text>
+                      <Text style={styles.notifTime}>{formatRelativeTime(notifDate)}</Text>
+                    </View>
+                  </ScalePressable>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* Admin Notice & Hadith Editor Modal */}
         <Modal
           visible={noticeModalVisible}
           transparent
@@ -932,63 +1173,64 @@ export default function HomeScreen() {
           onRequestClose={() => setNoticeModalVisible(false)}
         >
           <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Edit Home Notice</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={noticeDraftTitle}
-                onChangeText={setNoticeDraftTitle}
-                placeholder="Notice title"
-                placeholderTextColor={COLORS.textMuted}
-              />
-              <TextInput
-                style={[styles.modalInput, styles.modalTextArea]}
-                value={noticeDraftMessage}
-                onChangeText={setNoticeDraftMessage}
-                placeholder="Notice message"
-                placeholderTextColor={COLORS.textMuted}
-                multiline
-              />
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.modalBtnGhost}
-                  onPress={() => setNoticeModalVisible(false)}
-                >
-                  <Text style={styles.modalBtnGhostText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalBtnPrimary}
-                  onPress={saveNotice}
-                  disabled={savingNotice}
-                >
-                  {savingNotice ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.modalBtnPrimaryText}>Save</Text>
-                  )}
-                </TouchableOpacity>
+            <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: SPACING.md }}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Edit Home Notice & Hadith</Text>
+                <Text style={styles.modalSectionLabel}>Announcement</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={noticeDraftTitle}
+                  onChangeText={setNoticeDraftTitle}
+                  placeholder="Notice title"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                <TextInput
+                  style={[styles.modalInput, styles.modalTextArea]}
+                  value={noticeDraftMessage}
+                  onChangeText={setNoticeDraftMessage}
+                  placeholder="Notice message"
+                  placeholderTextColor={COLORS.textMuted}
+                  multiline
+                />
+                <Text style={[styles.modalSectionLabel, { marginTop: SPACING.sm }]}>Today's Hadith</Text>
+                <TextInput
+                  style={[styles.modalInput, styles.modalTextArea]}
+                  value={hadithDraftText}
+                  onChangeText={setHadithDraftText}
+                  placeholder="Hadith text"
+                  placeholderTextColor={COLORS.textMuted}
+                  multiline
+                />
+                <TextInput
+                  style={styles.modalInput}
+                  value={hadithDraftRef}
+                  onChangeText={setHadithDraftRef}
+                  placeholder="Hadith reference (e.g. Sahih al-Bukhari 5027)"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.modalBtnGhost}
+                    onPress={() => setNoticeModalVisible(false)}
+                  >
+                    <Text style={styles.modalBtnGhostText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalBtnPrimary}
+                    onPress={saveNotice}
+                    disabled={savingNotice}
+                  >
+                    {savingNotice ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.modalBtnPrimaryText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            </ScrollView>
           </View>
         </Modal>
-
-        {/* Quick Stats */}
-        <View style={[styles.section, { paddingHorizontal: SPACING.lg }]}>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard} testID="stat-courses">
-              <Text style={styles.statNumber}>{safeCourses.length}</Text>
-              <Text style={styles.statLabel}>Courses</Text>
-            </View>
-            <View style={styles.statCard} testID="stat-teachers">
-              <Text style={styles.statNumber}>{safeTeachers.length}</Text>
-              <Text style={styles.statLabel}>Teachers</Text>
-            </View>
-            <View style={styles.statCard} testID="stat-students">
-              <Text style={styles.statNumber}>100+</Text>
-              <Text style={styles.statLabel}>Students</Text>
-            </View>
-          </View>
-        </View>
       </ScrollView>
     </View>
   );
@@ -1099,6 +1341,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.textMain,
     marginBottom: 2,
+  },
+  courseTeacherRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  courseTeacherName: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: "500",
+  },
+  courseLessonsLabel: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: "600",
   },
   courseCardDescription: {
     fontSize: 13,
@@ -1219,21 +1476,176 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.goldText,
   },
-  statsRow: { flexDirection: "row", gap: SPACING.md },
-  statCard: {
+  // Welcome Banner
+  welcomeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  welcomeAvatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.goldBg,
+    borderWidth: 2,
+    borderColor: COLORS.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  welcomeAvatarText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: COLORS.primary,
+  },
+  welcomeName: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginBottom: 4,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    backgroundColor: COLORS.goldBg,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  roleBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.goldText,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  // Quick Actions
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+  },
+  quickActionCard: {
     flex: 1,
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+    gap: 8,
+  },
+  quickActionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    textAlign: 'center',
+  },
+  // Hadith Card
+  hadithCard: {
+    backgroundColor: COLORS.goldBg,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.25)',
+  },
+  hadithIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  hadithIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(6,78,59,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hadithLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.goldText,
+  },
+  hadithText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textMain,
+    lineHeight: 24,
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  hadithReference: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  // Recent Notifications
+  notifCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
-    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
     ...SHADOWS.card,
   },
-  statNumber: { fontSize: 24, fontWeight: "800", color: COLORS.primary },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: COLORS.textMuted,
+  notifIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(6,78,59,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 2,
+  },
+  notifTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    marginBottom: 2,
+  },
+  notifBody: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    lineHeight: 19,
+  },
+  notifTime: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  // Modal section label
+  modalSectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   dashboardOuter: {
     marginHorizontal: SPACING.lg,
@@ -1571,4 +1983,98 @@ const styles = StyleSheet.create({
   },
   resumeCourse: { fontSize: 15, fontWeight: "700", color: COLORS.textMain },
   resumeLesson: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  liveClassCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(6, 78, 59, 0.08)',
+    ...SHADOWS.card,
+  },
+  liveClassCardActive: {
+    borderColor: 'rgba(185, 28, 28, 0.3)',
+    backgroundColor: '#FFF5F5',
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#EF4444',
+  },
+  liveBadgeText: {
+    color: '#EF4444',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  liveTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginBottom: 4,
+  },
+  liveTeacher: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginBottom: 8,
+  },
+  liveJoinedCount: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  liveJoinBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  liveJoinBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  noLiveCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    gap: 6,
+  },
+  noLiveText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  scheduleBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  scheduleBtnText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
 });

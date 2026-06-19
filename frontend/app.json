@@ -7,6 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "madars-tus-salikat-lilbanat",
     "userInterfaceStyle": "automatic",
+    "androidStatusBar": {
+      "backgroundColor": "#000000"
+    },
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -44,7 +47,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.madrasatussalikat.lilbanat",
-      "versionCode": 4
+      "versionCode": 6
     },
     "web": {
       "bundler": "metro",
@@ -76,7 +79,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#000"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

@@ -749,24 +749,58 @@ export default function AboutScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
         {profile && (
           <View style={styles.profileCard} testID="user-profile-card">
-            <View style={styles.profileIconCircle}>
-              {profile.photo_url ? (
-                <Image source={{ uri: profile.photo_url }} style={styles.profilePhoto} />
-              ) : (
-                <Ionicons name={(profile.avatar as any) || 'person'} size={24} color={COLORS.primary} />
-              )}
+            <View style={styles.profileAvatarSection}>
+              <View style={styles.profileIconCircle}>
+                {profile.photo_url ? (
+                  <Image source={{ uri: profile.photo_url }} style={styles.profilePhoto} />
+                ) : (
+                  <Text style={styles.profileInitialText}>
+                    {(profile.name || 'U').charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.profileName}>{profile.name}</Text>
               <Text style={styles.profileEmail}>{profile.email}</Text>
-              <Text style={styles.profileRole}>{profile.role}</Text>
-              {!!profile.referral_code && <Text style={styles.profileEmail}>Referral Code: {profile.referral_code}</Text>}
-              <Text style={styles.profileEmail}>Referrals: {profile.referral_count || 0}</Text>
+              <View style={styles.profileBadgesRow}>
+                <View style={styles.profileRoleBadge}>
+                  <Ionicons
+                    name={profile.role === 'admin' ? 'shield-checkmark' : profile.role === 'teacher' ? 'school' : 'person'}
+                    size={11}
+                    color={COLORS.goldText}
+                  />
+                  <Text style={styles.profileRoleBadgeText}>
+                    {(profile.role || 'student').charAt(0).toUpperCase() + (profile.role || 'student').slice(1)}
+                  </Text>
+                </View>
+                <View style={[
+                  styles.profileStatusBadge,
+                  profile.status === 'pending' && styles.profileStatusPending,
+                  (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.profileStatusInactive,
+                ]}>
+                  <View style={[
+                    styles.profileStatusDot,
+                    profile.status === 'pending' && styles.profileStatusDotPending,
+                    (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.profileStatusDotInactive,
+                  ]} />
+                  <Text style={[
+                    styles.profileStatusText,
+                    profile.status === 'pending' && styles.profileStatusTextPending,
+                    (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.profileStatusTextInactive,
+                  ]}>
+                    {profile.status === 'approved' ? 'Active' : profile.status === 'pending' ? 'Pending' : profile.status === 'deactivated' ? 'Deactivated' : profile.status === 'rejected' ? 'Rejected' : profile.status === 'suspended' ? 'Suspended' : 'Active'}
+                  </Text>
+                </View>
+              </View>
+              {!!profile.referral_code && <Text style={styles.profileDetail}>Referral: {profile.referral_code} • {profile.referral_count || 0} referrals</Text>}
               <View style={styles.profileActionRow}>
                 <TouchableOpacity style={[styles.profileMiniBtn, savingProfileMedia && styles.disabledBtn]} onPress={() => pickProfileImage('gallery')} disabled={savingProfileMedia}>
+                  <Ionicons name="image-outline" size={14} color={COLORS.primary} />
                   <Text style={styles.profileMiniBtnText}>Gallery</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.profileMiniBtn, savingProfileMedia && styles.disabledBtn]} onPress={() => pickProfileImage('camera')} disabled={savingProfileMedia}>
+                  <Ionicons name="camera-outline" size={14} color={COLORS.primary} />
                   <Text style={styles.profileMiniBtnText}>Camera</Text>
                 </TouchableOpacity>
               </View>
@@ -1157,15 +1191,35 @@ const styles = StyleSheet.create({
   bismillahDua: { fontSize: 20, color: COLORS.primary, fontWeight: '700', textAlign: 'center', marginTop: 12, marginBottom: 6 },
   bismillahTranslation: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', fontStyle: 'italic' },
   profileCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12, ...SHADOWS.card,
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border,
   },
-  profileIconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  profilePhoto: { width: 48, height: 48, borderRadius: 24 },
-  profileName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
-  profileEmail: { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
-  profileRole: { fontSize: 11, fontWeight: '700', color: COLORS.goldText, textTransform: 'capitalize', marginTop: 2 },
+  profileAvatarSection: { alignItems: 'center' },
+  profileIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.goldBg, borderWidth: 2.5, borderColor: COLORS.secondary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  profilePhoto: { width: 56, height: 56, borderRadius: 28 },
+  profileInitialText: { fontSize: 24, fontWeight: '900', color: COLORS.primary },
+  profileName: { fontSize: 17, fontWeight: '800', color: COLORS.textMain },
+  profileEmail: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  profileBadgesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  profileRoleBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: COLORS.goldBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full,
+  },
+  profileRoleBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.goldText, textTransform: 'uppercase', letterSpacing: 0.5 },
+  profileStatusBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#ECFDF5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full,
+  },
+  profileStatusPending: { backgroundColor: '#FFFBEB' },
+  profileStatusInactive: { backgroundColor: '#FEF2F2' },
+  profileStatusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
+  profileStatusDotPending: { backgroundColor: '#F59E0B' },
+  profileStatusDotInactive: { backgroundColor: '#EF4444' },
+  profileStatusText: { fontSize: 11, fontWeight: '700', color: '#10B981' },
+  profileStatusTextPending: { color: '#D97706' },
+  profileStatusTextInactive: { color: '#EF4444' },
+  profileDetail: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   profileActionRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  profileMiniBtn: { borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
+  profileMiniBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
   profileMiniBtnText: { color: COLORS.textMain, fontSize: 11, fontWeight: '600' },
   profileUploadText: { color: COLORS.textMuted, fontSize: 11, fontWeight: '600', marginTop: 6 },
   disabledBtn: { opacity: 0.55 },

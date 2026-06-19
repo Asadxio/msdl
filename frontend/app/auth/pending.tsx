@@ -256,7 +256,7 @@ export default function PendingScreen() {
 
   const handlePendingSignOut = async () => {
     if (user?.uid) await markPendingSignout(user.uid, resendCount);
-    await handleSignOut();
+    await handleSignOut(); // onPress={handleSignOut}
   };
 
   // Deactivated state

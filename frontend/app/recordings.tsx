@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, FlatList, Alert, Linking,
+  View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator,
+  FlatList, Alert, Linking, TextInput, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -37,6 +38,8 @@ export default function RecordingsScreen() {
   const [courseMap, setCourseMap] = useState<CourseMap>({});
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState('');
 
   const fetchRecordings = useCallback(async () => {
     setLoading(true);
@@ -141,7 +144,22 @@ export default function RecordingsScreen() {
     ]);
   };
 
-  const sortedItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
+  const sortedItems = useMemo(() => {
+    const base = Array.isArray(items) ? items : [];
+    const q = search.trim().toLowerCase();
+    return base.filter((item) => {
+      const matchSearch = !q
+        || item.title.toLowerCase().includes(q)
+        || (item.description || '').toLowerCase().includes(q)
+        || (courseMap[item.course_id || ''] || '').toLowerCase().includes(q);
+      const matchCourse = !selectedCourseId || item.course_id === selectedCourseId;
+      return matchSearch && matchCourse;
+    });
+  }, [items, search, selectedCourseId, courseMap]);
+
+  const courseOptions = useMemo(() =>
+    Object.entries(courseMap).map(([id, name]) => ({ id, name })),
+  [courseMap]);
 
   return (
     <View style={styles.container}>
@@ -164,6 +182,39 @@ export default function RecordingsScreen() {
       ) : loadError ? (
         <RetryState title="Unable to load recordings" message={loadError} onRetry={() => { void fetchRecordings(); }} />
       ) : (
+        <>
+          {/* Search + Course filter */}
+          <View style={styles.filterArea}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search recordings by title or description…"
+              placeholderTextColor={COLORS.textMuted}
+              value={search}
+              onChangeText={setSearch}
+            />
+            {courseOptions.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courseFilterRow}>
+                <TouchableOpacity
+                  style={[styles.courseChip, !selectedCourseId && styles.courseChipActive]}
+                  onPress={() => setSelectedCourseId('')}
+                >
+                  <Text style={[styles.courseChipText, !selectedCourseId && styles.courseChipTextActive]}>All</Text>
+                </TouchableOpacity>
+                {courseOptions.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.courseChip, selectedCourseId === c.id && styles.courseChipActive]}
+                    onPress={() => setSelectedCourseId(c.id)}
+                  >
+                    <Text style={[styles.courseChipText, selectedCourseId === c.id && styles.courseChipTextActive]}>
+                      {c.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
         <FlatList
           data={sortedItems}
           keyExtractor={(item) => item.id}
@@ -198,8 +249,9 @@ export default function RecordingsScreen() {
               ) : null}
             </View>
           )}
-          ListEmptyComponent={<EmptyState title="No recordings yet" message="Live class recordings will appear here once available." icon="videocam-outline" />}
+          ListEmptyComponent={<EmptyState title="No recordings yet" message={search || selectedCourseId ? 'No recordings match your filter.' : 'Live class recordings will appear here once available.'} icon="videocam-outline" />}
         />
+        </>
       )}
     </View>
   );
@@ -247,4 +299,17 @@ const styles = StyleSheet.create({
   downloadText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
   empty: { fontSize: 13, color: COLORS.textMuted },
+  filterArea: { backgroundColor: COLORS.surface, paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 8 },
+  searchInput: {
+    backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.lg, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.textMain, fontSize: 13,
+  },
+  courseFilterRow: { gap: 8, paddingBottom: 4 },
+  courseChip: {
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background,
+    borderRadius: RADIUS.full, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  courseChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceAlt },
+  courseChipText: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
+  courseChipTextActive: { color: COLORS.primary },
 });

@@ -73,7 +73,16 @@ function fmtChatTime(value: unknown): string {
     const safe = value as { toDate?: () => Date } | null;
     const dt = safe?.toDate ? safe.toDate() : null;
     if (!dt) return '';
-    return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const now = Date.now();
+    const diff = now - dt.getTime();
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (dt.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+    return dt.toLocaleDateString([], { month: 'short', day: 'numeric' });
   } catch {
     return '';
   }
@@ -83,7 +92,8 @@ export default function ChatsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const isTeacher = profile?.role === 'teacher';
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -332,7 +342,7 @@ export default function ChatsScreen() {
   };
 
   const createGroup = async () => {
-    if (!user || !isAdmin) return;
+    if (!user || (!isAdmin && !isTeacher)) return;
     const cleanedName = groupName.trim();
     if (!cleanedName) {
       Alert.alert('Missing', 'Group name is required.');
@@ -468,24 +478,26 @@ export default function ChatsScreen() {
           <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.primary} />
           <Text style={styles.toolBtnText}>New Chat</Text>
         </ScalePressable>
+        {(isAdmin || isTeacher) && (
+          <ScalePressable style={styles.toolBtn} onPress={() => setShowGroupCreator((v) => !v)}>
+            <Ionicons name="people-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.toolBtnText}>Create Group</Text>
+          </ScalePressable>
+        )}
         {isAdmin && (
           <>
-            <ScalePressable style={styles.toolBtn} onPress={() => setShowGroupCreator((v) => !v)}>
-              <Ionicons name="people-outline" size={16} color={COLORS.primary} />
-              <Text style={styles.toolBtnText}>Create Group</Text>
-            </ScalePressable>
             <ScalePressable style={styles.toolBtn} onPress={openBroadcastChat}>
               <Ionicons name="megaphone-outline" size={16} color={COLORS.primary} />
               <Text style={styles.toolBtnText}>{openingBroadcast ? 'Opening...' : 'Broadcast'}</Text>
             </ScalePressable>
+            <ScalePressable style={styles.toolBtn} onPress={deleteSelectedChats} disabled={selectedChatIds.length === 0 || bulkUpdating}>
+              <Ionicons name="trash-outline" size={16} color={selectedChatIds.length === 0 ? COLORS.textMuted : COLORS.error} />
+              <Text style={[styles.toolBtnText, selectedChatIds.length === 0 && { color: COLORS.textMuted }]}>
+                {bulkUpdating ? 'Deleting...' : `Delete Selected (${selectedChatIds.length})`}
+              </Text>
+            </ScalePressable>
           </>
         )}
-        <ScalePressable style={styles.toolBtn} onPress={deleteSelectedChats} disabled={selectedChatIds.length === 0 || bulkUpdating}>
-          <Ionicons name="trash-outline" size={16} color={selectedChatIds.length === 0 ? COLORS.textMuted : COLORS.error} />
-          <Text style={[styles.toolBtnText, selectedChatIds.length === 0 && { color: COLORS.textMuted }]}>
-            {bulkUpdating ? 'Deleting...' : `Delete Selected (${selectedChatIds.length})`}
-          </Text>
-        </ScalePressable>
       </View>
       <View style={styles.searchWrap}>
         <TextInput
@@ -513,7 +525,7 @@ export default function ChatsScreen() {
         </View>
       )}
 
-      {showGroupCreator && isAdmin && (
+      {showGroupCreator && (isAdmin || isTeacher) && (
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Create group (max 200 users)</Text>
           <TextInput
@@ -580,19 +592,21 @@ export default function ChatsScreen() {
                 <Image source={{ uri: avatarUser.photo_url }} style={styles.chatAvatar} />
               ) : (
                 <View style={styles.chatAvatarFallback}>
-                  <Ionicons name={(avatarUser?.avatar as any) || 'person'} size={16} color={COLORS.primary} />
+                  <Text style={styles.chatAvatarInitial}>
+                    {(chatTitle(item, usersMap, user?.uid || '').charAt(0) || 'C').toUpperCase()}
+                  </Text>
                 </View>
               )}
               <View style={{ flex: 1 }}>
               <View style={styles.chatTitleRow}>
-                <Text style={styles.chatName}>{chatTitle(item, usersMap, user?.uid || '')}</Text>
+                <Text style={[styles.chatName, (item.unread_counts?.[user?.uid || ''] || 0) > 0 && styles.chatNameUnread]}>{chatTitle(item, usersMap, user?.uid || '')}</Text>
                 <View style={styles.chatMetaTop}>
                   {pinned ? <Ionicons name="pin" size={12} color={COLORS.primary} /> : null}
                   <Text style={styles.chatType}>{item.type}</Text>
                 </View>
               </View>
               <View style={styles.previewRow}>
-                <Text style={styles.chatPreview} numberOfLines={1}>{item.last_message || 'No messages yet'}</Text>
+                <Text style={[styles.chatPreview, (item.unread_counts?.[user?.uid || ''] || 0) > 0 && styles.chatPreviewUnread]} numberOfLines={1}>{item.last_message || 'No messages yet'}</Text>
                 <View style={styles.metaRight}>
                   <Text style={styles.chatTime}>{fmtChatTime(item.updated_at)}</Text>
                   {(item.unread_counts?.[user?.uid || ''] || 0) > 0 ? (
@@ -617,7 +631,7 @@ export default function ChatsScreen() {
             </ScalePressable>
           )}}
           ListEmptyComponent={(
-            <EmptyState icon="chatbubbles-outline" message="No messages yet. Start one from New Chat." />
+            <EmptyState icon="chatbubbles-outline" title="No Conversations Yet" message="Start chatting with teachers and classmates." />
           )}
         />
       )}
@@ -657,17 +671,20 @@ const styles = StyleSheet.create({
   list: { padding: SPACING.md, gap: 8, paddingBottom: 24 },
   loadingList: { padding: SPACING.md, gap: SPACING.sm },
   chatCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card, flexDirection: 'row', gap: 10 },
-  chatAvatar: { width: 32, height: 32, borderRadius: 16, marginTop: 2 },
-  chatAvatarFallback: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  chatAvatar: { width: 44, height: 44, borderRadius: 22, marginTop: 2 },
+  chatAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.goldBg, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  chatAvatarInitial: { fontSize: 17, fontWeight: '800', color: COLORS.goldText },
   chatTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   chatMetaTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chatName: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.textMain },
+  chatNameUnread: { fontWeight: '900' },
   chatType: { fontSize: 10, color: COLORS.goldText, backgroundColor: COLORS.goldBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, textTransform: 'uppercase' },
   previewRow: { marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', gap: 8, alignItems: 'center' },
   chatPreview: { flex: 1, fontSize: 13, color: COLORS.textMuted, textAlign: 'left' },
+  chatPreviewUnread: { color: COLORS.textMain, fontWeight: '600' },
   metaRight: { alignItems: 'flex-end', gap: 4 },
   chatTime: { fontSize: 11, color: COLORS.textMuted },
-  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.secondary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   chatActions: { justifyContent: 'space-between', alignItems: 'center', paddingLeft: 2 },
   actionBtn: { padding: 4 },

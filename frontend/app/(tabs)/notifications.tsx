@@ -36,11 +36,22 @@ type NotificationItem = {
   hidden_by?: string[];
 };
 
-function formatDate(item: NotificationItem): string {
+function formatRelativeTime(item: NotificationItem): string {
   try {
     const dt = item.created_at?.toDate ? item.created_at.toDate() : null;
     if (!dt) return 'Just now';
-    return dt.toLocaleString();
+    const now = new Date();
+    const diffMs = now.getTime() - dt.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHr / 24);
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return `${diffMin} ${diffMin === 1 ? 'minute' : 'minutes'} ago`;
+    if (diffHr < 24) return `${diffHr} ${diffHr === 1 ? 'hour' : 'hours'} ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return dt.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return 'Just now';
   }
@@ -49,7 +60,7 @@ function formatDate(item: NotificationItem): string {
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +75,7 @@ export default function NotificationsScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [composerError, setComposerError] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [focusedField, setFocusedField] = useState<'title' | 'message' | 'recipient' | null>(null);
@@ -366,43 +378,64 @@ export default function NotificationsScreen() {
           maxToRenderPerBatch={12}
           windowSize={8}
           removeClippedSubviews
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            setReloadKey((v) => v + 1);
+            setTimeout(() => setRefreshing(false), 1000);
+          }}
           ListEmptyComponent={(
             <View style={styles.center}>
               <Ionicons name="notifications-off-outline" size={44} color={COLORS.border} />
-              <Text style={styles.emptyText}>No notifications yet. You’re all caught up.</Text>
+              <Text style={styles.emptyText}>No notifications yet.</Text>
+              <Text style={[styles.emptyText, { fontSize: 12 }]}>You'll see important updates here.</Text>
             </View>
           )}
-          renderItem={({ item }) => (
-            <ScalePressable
-              style={[styles.card, !item.read?.[user?.uid || ''] && styles.cardUnread]}
-              testID={`notification-${item.id}`}
-              onPress={() => markAsRead(item)}
-            >
-              <View style={styles.cardTop}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <View style={styles.badgesRow}>
-                  {!item.read?.[user?.uid || ''] ? <View style={styles.newDot} /> : null}
-                  {item.user_id === 'all' ? (
-                    <View style={styles.badge}><Text style={styles.badgeText}>Broadcast</Text></View>
-                  ) : (
-                    <View style={styles.badge}><Text style={styles.badgeText}>Private</Text></View>
-                  )}
+          renderItem={({ item }) => {
+            const isUnread = !item.read?.[user?.uid || ''];
+            return (
+              <ScalePressable
+                style={[
+                  styles.card,
+                  isUnread && styles.cardUnread,
+                ]}
+                testID={`notification-${item.id}`}
+                onPress={() => markAsRead(item)}
+              >
+                {isUnread && <View style={styles.unreadLeftBar} />}
+                <View style={styles.cardTop}>
+                  <View style={styles.cardIconCircle}>
+                    <Ionicons
+                      name={item.category === 'announcement' ? 'megaphone' : item.category === 'class_reminder' ? 'alarm' : 'notifications'}
+                      size={16}
+                      color={isUnread ? COLORS.primary : COLORS.textMuted}
+                    />
+                  </View>
+                  <Text style={[styles.cardTitle, isUnread && styles.cardTitleUnread]}>{item.title}</Text>
+                  <View style={styles.badgesRow}>
+                    {isUnread ? <View style={styles.newDot} /> : null}
+                    {item.user_id === 'all' ? (
+                      <View style={styles.badge}><Text style={styles.badgeText}>Broadcast</Text></View>
+                    ) : (
+                      <View style={styles.badge}><Text style={styles.badgeText}>Private</Text></View>
+                    )}
+                  </View>
                 </View>
-              </View>
-              <Text style={styles.cardMsg}>{item.message}</Text>
-              <Text style={styles.cardTime}>{formatDate(item)}</Text>
-              <View style={styles.adminActions}>
-                {isAdmin ? (
-                  <TouchableOpacity onPress={() => startEditNotification(item)}>
-                    <Text style={styles.editActionText}>Edit</Text>
+                <Text style={styles.cardMsg}>{item.message}</Text>
+                <Text style={styles.cardTime}>{formatRelativeTime(item)}</Text>
+                <View style={styles.adminActions}>
+                  {isAdmin ? (
+                    <TouchableOpacity onPress={() => startEditNotification(item)}>
+                      <Text style={styles.editActionText}>Edit</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity onPress={() => deleteNotification(item)}>
+                    <Text style={styles.deleteActionText}>Delete</Text>
                   </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity onPress={() => deleteNotification(item)}>
-                  <Text style={styles.deleteActionText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </ScalePressable>
-          )}
+                </View>
+              </ScalePressable>
+            );
+          }}
         />
       )}
       <Modal visible={showEditModal} transparent animationType="fade" onRequestClose={() => setShowEditModal(false)}>
@@ -534,16 +567,19 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 16, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
   list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 24 },
   loadingList: { padding: SPACING.md, gap: SPACING.sm },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card },
-  cardUnread: { borderWidth: 1, borderColor: COLORS.secondary },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card, overflow: 'hidden' },
+  cardUnread: { borderWidth: 1, borderColor: COLORS.secondary, backgroundColor: '#FEFDF5' },
+  unreadLeftBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: COLORS.secondary, borderTopLeftRadius: RADIUS.xl, borderBottomLeftRadius: RADIUS.xl },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardIconCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(6,78,59,0.08)', alignItems: 'center', justifyContent: 'center' },
   badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   newDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
-  cardTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.textMain },
+  cardTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.textMain },
+  cardTitleUnread: { fontWeight: '800' },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.goldBg },
   badgeText: { color: COLORS.goldText, fontSize: 10, fontWeight: '700' },
   cardMsg: { fontSize: 14, color: COLORS.textMuted, marginTop: 8, lineHeight: 20 },
-  cardTime: { fontSize: 11, color: COLORS.textMuted, marginTop: 8 },
+  cardTime: { fontSize: 11, color: COLORS.textMuted, marginTop: 8, fontWeight: '600' },
   adminActions: {
     marginTop: 10,
     borderTopWidth: 1,

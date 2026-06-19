@@ -23,6 +23,7 @@ const MORE_ITEMS: MoreItem[] = [
   { label: 'Recordings', subtitle: 'Watch lesson recordings', icon: 'play-circle-outline', route: '/recordings' },
   { label: 'Status', subtitle: 'Live status and announcements', icon: 'radio-outline', route: '/status' },
   { label: 'Teachers', subtitle: 'Meet your teachers', icon: 'people-outline', route: '/more/teachers' },
+  { label: 'Payment History', subtitle: 'View your payment records', icon: 'receipt-outline', route: '/payment-history' },
   { label: 'Settings', subtitle: 'App preferences and account', icon: 'settings-outline', route: '/settings' },
   { label: 'Privacy Policy', subtitle: 'Review your privacy rights', icon: 'shield-checkmark-outline', route: '/privacy' },
   { label: 'Terms & Conditions', subtitle: 'View app terms', icon: 'document-text-outline', route: '/terms' },
@@ -32,6 +33,7 @@ const MORE_ITEMS: MoreItem[] = [
   { label: 'Manage Academics', subtitle: 'Admin controls for academics', icon: 'school-outline', route: '/admin/manage-academics', adminOnly: true },
   { label: 'Admin Payments', subtitle: 'Admin billing tools', icon: 'card-outline', route: '/admin/payments', adminOnly: true },
   { label: 'Admin Users', subtitle: 'Manage registered users', icon: 'people-circle-outline', route: '/admin/users', adminOnly: true },
+  { label: 'Analytics Dashboard', subtitle: 'Platform-wide metrics and reports', icon: 'bar-chart-outline', route: '/admin/analytics', adminOnly: true },
 ];
 
 export default function MoreLandingScreen() {

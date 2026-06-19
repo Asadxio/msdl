@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,12 +15,37 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData, Book } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { collection, getDocs, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
+
+const RECENTLY_VIEWED_KEY = 'library_recently_viewed_v1';
+const MAX_RECENTLY_VIEWED = 10;
+
+async function getRecentlyViewed(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(RECENTLY_VIEWED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function addRecentlyViewed(bookId: string): Promise<void> {
+  try {
+    const prev = await getRecentlyViewed();
+    const next = [bookId, ...prev.filter((id) => id !== bookId)].slice(0, MAX_RECENTLY_VIEWED);
+    await AsyncStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   Islamic: { bg: '#E8F5E9', text: '#2E7D32' },
@@ -40,8 +65,7 @@ const BOOK_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Tafseer: 'reader',
 };
 
-function BookCard({ book, isAdmin, onDelete }: { book: Book; isAdmin: boolean; onDelete: (book: Book) => void }) {
-  const router = useRouter();
+function BookCard({ book, isAdmin, onDelete, onOpen }: { book: Book; isAdmin: boolean; onDelete: (book: Book) => void; onOpen: (book: Book) => void }) {
   const catColor = CATEGORY_COLORS[book.category] || { bg: COLORS.surfaceAlt, text: COLORS.textMuted };
   const iconName = BOOK_ICONS[book.category] || 'book';
 
@@ -49,7 +73,7 @@ function BookCard({ book, isAdmin, onDelete }: { book: Book; isAdmin: boolean; o
     <ScalePressable
       style={styles.card}
       testID={`book-card-${book.id}`}
-      onPress={() => router.push(`/book/${book.id}`)}
+      onPress={() => onOpen(book)}
     >
       <View style={[styles.coverArea, { backgroundColor: catColor.bg }]}>
         <Ionicons name={iconName} size={36} color={catColor.text} />
@@ -88,7 +112,28 @@ export default function LibraryScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
   const refreshSpin = useRef(new Animated.Value(0)).current;
+
+  // Load recently viewed IDs on mount
+  useEffect(() => {
+    getRecentlyViewed().then(setRecentlyViewedIds).catch(() => {});
+  }, []);
+
+  const handleOpenBook = useCallback(async (book: Book) => {
+    await addRecentlyViewed(book.id);
+    const updated = await getRecentlyViewed();
+    setRecentlyViewedIds(updated);
+    router.push(`/book/${book.id}`);
+  }, [router]);
+
+  const recentlyViewedBooks = useMemo(
+    () => recentlyViewedIds
+      .map((id) => books.find((b) => b.id === id))
+      .filter((b): b is Book => !!b)
+      .slice(0, 6),
+    [recentlyViewedIds, books],
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -276,7 +321,29 @@ export default function LibraryScreen() {
           data={filteredBooks}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          renderItem={({ item }) => <BookCard book={item} isAdmin={isAdmin} onDelete={handleDeleteBook} />}
+          ListHeaderComponent={recentlyViewedBooks.length > 0 && !debouncedSearch ? (
+            <View style={styles.recentlyViewedSection}>
+              <Text style={styles.recentlyViewedTitle}>Recently Viewed</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentlyViewedRow}>
+                {recentlyViewedBooks.map((book) => {
+                  const catColor = CATEGORY_COLORS[book.category] || { bg: COLORS.surfaceAlt, text: COLORS.textMuted };
+                  return (
+                    <TouchableOpacity
+                      key={book.id}
+                      style={[styles.recentChip, { backgroundColor: catColor.bg }]}
+                      onPress={() => { void handleOpenBook(book); }}
+                    >
+                      <Ionicons name={BOOK_ICONS[book.category] || 'book'} size={14} color={catColor.text} />
+                      <Text style={[styles.recentChipText, { color: catColor.text }]} numberOfLines={1}>
+                        {book.title}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
+          renderItem={({ item }) => <BookCard book={item} isAdmin={isAdmin} onDelete={handleDeleteBook} onOpen={handleOpenBook} />}
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
@@ -355,4 +422,13 @@ const styles = StyleSheet.create({
     width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#FEF2F2',
   },
+  recentlyViewedSection: { marginBottom: SPACING.md },
+  recentlyViewedTitle: { fontSize: 13, fontWeight: '800', color: COLORS.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
+  recentlyViewedRow: { gap: 8 },
+  recentChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: RADIUS.full,
+    maxWidth: 180,
+  },
+  recentChipText: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
 });

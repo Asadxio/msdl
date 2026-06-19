@@ -211,7 +211,6 @@ export default function AdminUsersScreen() {
     const rc = ROLE_COLORS[item.role] || ROLE_COLORS.student;
     return (
       <View style={styles.userCard} testID={`user-card-${item.id}`}>
-        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingBottom: 8 }}><TouchableOpacity style={styles.roleBtn} onPress={() => setRoleFilter(roleFilter === 'all' ? 'student' : 'all')}><Text style={styles.roleBtnText}>Role: {roleFilter}</Text></TouchableOpacity><TouchableOpacity style={styles.roleBtn} onPress={() => setStatusFilter(statusFilter === 'all' ? 'pending' : 'all')}><Text style={styles.roleBtnText}>Status: {statusFilter}</Text></TouchableOpacity></View>
       {canBulk ? (
           <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8 }} onPress={() => toggleSelected(item.id)}>
             <Ionicons name={selectedIds.includes(item.id) ? 'checkbox' : 'square-outline'} size={20} color={COLORS.primary} />
@@ -322,13 +321,39 @@ export default function AdminUsersScreen() {
       ) : (
         <FlatList
           ListHeaderComponent={(
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search users by name or email"
-              placeholderTextColor={COLORS.textMuted}
-              value={search}
-              onChangeText={setSearch}
-            />
+            <View style={{ gap: 8, marginBottom: 10 }}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search users by name or email"
+                placeholderTextColor={COLORS.textMuted}
+                value={search}
+                onChangeText={setSearch}
+              />
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <TouchableOpacity 
+                  style={[styles.roleBtn, { flex: 1, alignItems: 'center' }]} 
+                  onPress={() => {
+                    const roles: ('all' | AppRole)[] = ['all', 'student', 'teacher', 'admin'];
+                    const nextIndex = (roles.indexOf(roleFilter) + 1) % roles.length;
+                    setRoleFilter(roles[nextIndex]);
+                  }}
+                  testID="role-filter-btn"
+                >
+                  <Text style={styles.roleBtnText}>Role: {roleFilter}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.roleBtn, { flex: 1, alignItems: 'center' }]} 
+                  onPress={() => {
+                    const statuses: ('all' | UserWithId['status'])[] = ['all', 'pending', 'approved', 'deactivated', 'rejected'];
+                    const nextIndex = (statuses.indexOf(statusFilter) + 1) % statuses.length;
+                    setStatusFilter(statuses[nextIndex]);
+                  }}
+                  testID="status-filter-btn"
+                >
+                  <Text style={styles.roleBtnText}>Status: {statusFilter}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
           data={filteredUsers}
           keyExtractor={(item) => item.id}

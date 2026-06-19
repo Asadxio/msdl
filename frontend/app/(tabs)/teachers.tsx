@@ -8,18 +8,25 @@ import { useData, Teacher } from '@/context/DataContext';
 import { EmptyState, FadeInView, ScalePressable } from '@/components/ui';
 import { normalizeGoogleDriveFileUrl } from '@/lib/links';
 
-function TeacherCard({ teacher }: { teacher: Teacher }) {
+function TeacherCard({ teacher, isOnly }: { teacher: Teacher; isOnly: boolean }) {
   const router = useRouter();
   const avatarUri = teacher.photo_url ? normalizeGoogleDriveFileUrl(teacher.photo_url) : getTeacherAvatar(teacher.id);
+  const initial = (teacher.name || 'T').charAt(0).toUpperCase();
 
   return (
     <ScalePressable
-      style={styles.card}
+      style={[styles.card, isOnly && styles.cardCentered]}
       testID={`teacher-card-${teacher.id}`}
       onPress={() => router.push(`/teacher/${teacher.id}`)}
     >
       <View style={styles.cardTop}>
-        <Image source={{ uri: avatarUri }} style={styles.avatar} />
+        {teacher.photo_url ? (
+          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarFallback}>
+            <Text style={styles.avatarInitial}>{initial}</Text>
+          </View>
+        )}
       </View>
       <View style={styles.cardBody}>
         <Text style={styles.teacherName}>{teacher.name}</Text>
@@ -27,7 +34,17 @@ function TeacherCard({ teacher }: { teacher: Teacher }) {
           <Ionicons name="school-outline" size={14} color={COLORS.primary} />
           <Text style={styles.titleText}>{teacher.title}</Text>
         </View>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Ionicons name="book-outline" size={13} color={COLORS.textMuted} />
+            <Text style={styles.statText}>{teacher.courses.length} Courses</Text>
+          </View>
+        </View>
         <Text style={styles.coursesText} numberOfLines={2}>Teaches: {teacher.courses.join(', ')}</Text>
+        <View style={styles.viewProfileBtn}>
+          <Text style={styles.viewProfileText}>View Profile</Text>
+          <Ionicons name="chevron-forward" size={14} color={COLORS.goldText} />
+        </View>
       </View>
     </ScalePressable>
   );
@@ -36,6 +53,7 @@ function TeacherCard({ teacher }: { teacher: Teacher }) {
 export default function TeachersScreen() {
   const insets = useSafeAreaInsets();
   const { teachers, loading, refetch } = useData();
+  const isOnly = teachers.length === 1;
 
   return (
     <View style={styles.container}>
@@ -47,18 +65,18 @@ export default function TeachersScreen() {
             <Text style={styles.headerSubtitle}>Guiding with knowledge & wisdom</Text>
           </View>
           <TouchableOpacity style={styles.refreshBtn} onPress={refetch}>
-            <Text style={styles.refreshText}>Refresh</Text>
+            <Ionicons name="refresh" size={16} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
       </FadeInView>
       {loading ? (
-        <EmptyState icon="hourglass-outline" message="Loading teachers..." />
+        <EmptyState icon="hourglass-outline" title="Loading" message="Loading teachers..." />
       ) : teachers.length === 0 ? (
-        <EmptyState icon="people-outline" message="No teachers available" />
+        <EmptyState icon="people-outline" title="No Teachers Yet" message="Teachers will appear here once added." />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent} testID="teachers-list">
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.listContent, isOnly && styles.listCentered]} testID="teachers-list">
           {teachers.map((teacher) => (
-            <TeacherCard key={teacher.id} teacher={teacher} />
+            <TeacherCard key={teacher.id} teacher={teacher} isOnly={isOnly} />
           ))}
         </ScrollView>
       )}
@@ -72,15 +90,56 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   headerTitle: { ...TYPOGRAPHY.title, color: COLORS.text },
   headerSubtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
-  refreshBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingVertical: 6 },
-  refreshText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  refreshBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center', justifyContent: 'center',
+  },
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg, gap: SPACING.md },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, overflow: 'hidden', ...SHADOWS.card },
-  cardTop: { alignItems: 'center', paddingVertical: SPACING.md, backgroundColor: COLORS.background },
-  avatar: { width: 84, height: 84, borderRadius: 42, borderWidth: 2, borderColor: COLORS.primary },
+  listCentered: { flexGrow: 1, justifyContent: 'center' },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    ...SHADOWS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  cardCentered: { maxWidth: 400, alignSelf: 'center', width: '100%' },
+  cardTop: {
+    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  avatar: {
+    width: 96, height: 96, borderRadius: 48,
+    borderWidth: 3, borderColor: COLORS.primary,
+  },
+  avatarFallback: {
+    width: 96, height: 96, borderRadius: 48,
+    backgroundColor: COLORS.goldBg,
+    borderWidth: 3, borderColor: COLORS.secondary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarInitial: { fontSize: 36, fontWeight: '800', color: COLORS.goldText },
   cardBody: { padding: SPACING.md, gap: SPACING.xs },
-  teacherName: { ...TYPOGRAPHY.heading, color: COLORS.text },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  teacherName: { ...TYPOGRAPHY.heading, color: COLORS.text, textAlign: 'center' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs },
   titleText: { ...TYPOGRAPHY.label, color: COLORS.primary },
-  coursesText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  statsRow: {
+    flexDirection: 'row', justifyContent: 'center',
+    gap: SPACING.md, marginTop: 4,
+  },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statText: { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
+  coursesText: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', marginTop: 4 },
+  viewProfileBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, marginTop: SPACING.sm,
+    backgroundColor: COLORS.goldBg,
+    borderRadius: RADIUS.full,
+    paddingVertical: 10,
+  },
+  viewProfileText: { color: COLORS.goldText, fontSize: 13, fontWeight: '700' },
 });

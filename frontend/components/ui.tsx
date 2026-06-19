@@ -76,8 +76,10 @@ export function AppCard({ children, style }: PropsWithChildren<{ style?: StylePr
 
 export function EmptyState({ icon, title, message }: { icon: keyof typeof Ionicons.glyphMap; title?: string; message: string }) {
   return (
-    <View style={styles.emptyState}>
-      <Ionicons name={icon} size={36} color={COLORS.textMuted} />
+    <View style={styles.emptyStateCard}>
+      <View style={styles.emptyIconCircle}>
+        <Ionicons name={icon} size={32} color={COLORS.secondary} />
+      </View>
       {title ? <Text style={styles.emptyTitle}>{title}</Text> : null}
       <Text style={styles.emptyText}>{message}</Text>
     </View>
@@ -186,22 +188,39 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     ...SHADOWS.card,
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
+  emptyStateCard: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.xl,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: SPACING.sm,
-    padding: SPACING.lg,
+    marginVertical: SPACING.md,
+    ...SHADOWS.card,
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.goldBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
   },
   emptyTitle: {
-    ...TYPOGRAPHY.heading,
+    fontSize: 16,
+    fontWeight: '800',
     color: COLORS.textMain,
     textAlign: 'center',
   },
   emptyText: {
-    ...TYPOGRAPHY.body,
+    fontSize: 13,
     color: COLORS.textMuted,
     textAlign: 'center',
+    lineHeight: 18,
+    fontWeight: '500',
   },
   field: { gap: SPACING.xs },
   label: {

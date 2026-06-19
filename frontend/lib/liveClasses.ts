@@ -9,6 +9,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   Timestamp,
@@ -339,7 +340,7 @@ function getLiveApiBaseUrl(): string {
 async function requestLiveBackend<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const baseUrl = getLiveApiBaseUrl();
   if (!auth.currentUser) throw new Error('Please sign in again.');
-  const idToken = await auth.currentUser.getIdToken();
+  const idToken = await auth.currentUser.getIdToken(true);
   const runFetch = () => fetch(`${baseUrl}${path}`, {
     method: 'POST',
     headers: {
@@ -385,70 +386,102 @@ export async function stopCloudRecording(classId: string): Promise<Record<string
 export async function markParticipantJoined(classId: string, profile: UserProfile, userId: string, agoraUid = getAgoraUid(userId)): Promise<void> {
   const sessionId = `${classId}_${userId}`;
   const participantRef = doc(db, 'live_classes', classId, 'participants', userId);
-  const existing = await getDoc(participantRef).catch(() => null);
-  const wasJoined = existing?.exists() && existing.data()?.joined === true;
-  await setDoc(participantRef, {
-    user_id: userId,
-    agora_uid: agoraUid,
-    name: profile.name || 'Participant',
-    role: profile.role || 'student',
-    joined: true,
-    audio_enabled: true,
-    video_enabled: true,
-    force_muted: false,
-    hand_raised: false,
-    moderation: {
-      mic_allowed: true,
-      camera_allowed: true,
-      removed: false,
-    },
-    reconnect_count: increment(1),
-    disconnected: false,
-    session_id: sessionId,
-    joined_session_at: serverTimestamp(),
-    last_reconnected_at: serverTimestamp(),
-    total_connected_duration: increment(0),
-    joined_at: serverTimestamp(),
-    last_joined_at: serverTimestamp(),
-    ...heartbeatPayload(),
-    updated_at: serverTimestamp(),
-  }, { merge: true });
-  if (!wasJoined) {
-    await setDoc(doc(db, 'live_classes', classId), { participant_count: increment(1), updated_at: serverTimestamp() }, { merge: true });
-  }
-  await addDoc(collection(db, 'live_classes', classId, 'attendance_events'), {
-    user_id: userId,
-    event: 'join',
-    at: serverTimestamp(),
-  }).catch(() => {});
+  const classRef = doc(db, 'live_classes', classId);
+  const attendanceRef = doc(collection(db, 'live_classes', classId, 'attendance_events'));
+
+  await runTransaction(db, async (transaction) => {
+    const participantSnap = await transaction.get(participantRef);
+    const classSnap = await transaction.get(classRef);
+
+    const wasJoined = participantSnap.exists() && participantSnap.data()?.joined === true;
+    const currentReconnectCount = participantSnap.exists() ? (participantSnap.data()?.reconnect_count || 0) : 0;
+    const currentConnectedDuration = participantSnap.exists() ? (participantSnap.data()?.total_connected_duration || 0) : 0;
+
+    transaction.set(participantRef, {
+      user_id: userId,
+      agora_uid: agoraUid,
+      name: profile.name || 'Participant',
+      role: profile.role || 'student',
+      joined: true,
+      audio_enabled: true,
+      video_enabled: true,
+      force_muted: false,
+      hand_raised: false,
+      moderation: {
+        mic_allowed: true,
+        camera_allowed: true,
+        removed: false,
+      },
+      reconnect_count: currentReconnectCount + 1,
+      disconnected: false,
+      session_id: sessionId,
+      joined_session_at: serverTimestamp(),
+      last_reconnected_at: serverTimestamp(),
+      total_connected_duration: currentConnectedDuration,
+      joined_at: serverTimestamp(),
+      last_joined_at: serverTimestamp(),
+      ...heartbeatPayload(),
+      updated_at: serverTimestamp(),
+    }, { merge: true });
+
+    if (!wasJoined) {
+      const currentCount = classSnap.exists() ? (classSnap.data()?.participant_count || 0) : 0;
+      transaction.set(classRef, {
+        participant_count: currentCount + 1,
+        updated_at: serverTimestamp()
+      }, { merge: true });
+    }
+
+    transaction.set(attendanceRef, {
+      user_id: userId,
+      event: 'join',
+      at: serverTimestamp(),
+    });
+  });
 }
 
 export async function markParticipantLeft(classId: string, userId: string, joinedAt?: Date | null): Promise<void> {
   const now = new Date();
   const duration = joinedAt ? Math.min(MAX_LIVE_ATTENDANCE_SECONDS, Math.max(0, Math.round((now.getTime() - joinedAt.getTime()) / 1000))) : 0;
   const participantRef = doc(db, 'live_classes', classId, 'participants', userId);
-  const existing = await getDoc(participantRef).catch(() => null);
-  const wasJoined = existing?.exists() && existing.data()?.joined === true;
-  await setDoc(participantRef, {
-    joined: false,
-    audio_enabled: false,
-    video_enabled: false,
-    left_at: serverTimestamp(),
-    disconnected: true,
-    ...heartbeatPayload(),
-    total_duration_seconds: increment(duration),
-    total_connected_duration: increment(duration),
-    updated_at: serverTimestamp(),
-  }, { merge: true });
-  if (wasJoined) {
-    await setDoc(doc(db, 'live_classes', classId), { participant_count: increment(-1), updated_at: serverTimestamp() }, { merge: true });
-  }
-  await addDoc(collection(db, 'live_classes', classId, 'attendance_events'), {
-    user_id: userId,
-    event: 'leave',
-    duration_seconds: duration,
-    at: serverTimestamp(),
-  }).catch(() => {});
+  const classRef = doc(db, 'live_classes', classId);
+  const attendanceRef = doc(collection(db, 'live_classes', classId, 'attendance_events'));
+
+  await runTransaction(db, async (transaction) => {
+    const participantSnap = await transaction.get(participantRef);
+    const classSnap = await transaction.get(classRef);
+
+    const wasJoined = participantSnap.exists() && participantSnap.data()?.joined === true;
+    const currentDuration = participantSnap.exists() ? (participantSnap.data()?.total_duration_seconds || 0) : 0;
+    const currentConnectedDuration = participantSnap.exists() ? (participantSnap.data()?.total_connected_duration || 0) : 0;
+
+    transaction.set(participantRef, {
+      joined: false,
+      audio_enabled: false,
+      video_enabled: false,
+      left_at: serverTimestamp(),
+      disconnected: true,
+      ...heartbeatPayload(),
+      total_duration_seconds: currentDuration + duration,
+      total_connected_duration: currentConnectedDuration + duration,
+      updated_at: serverTimestamp(),
+    }, { merge: true });
+
+    if (wasJoined) {
+      const currentCount = classSnap.exists() ? (classSnap.data()?.participant_count || 0) : 0;
+      transaction.set(classRef, {
+        participant_count: Math.max(0, currentCount - 1),
+        updated_at: serverTimestamp()
+      }, { merge: true });
+    }
+
+    transaction.set(attendanceRef, {
+      user_id: userId,
+      event: 'leave',
+      duration_seconds: duration,
+      at: serverTimestamp(),
+    });
+  });
 }
 
 export async function updateParticipantMediaState(

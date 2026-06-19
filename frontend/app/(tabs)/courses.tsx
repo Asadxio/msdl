@@ -17,7 +17,7 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
   const handlePress = () => {
     try {
       if (!course?.id) return;
-      router.push(`/course/${course.id}`);
+      router.push(`/course/${course.id}`); // router.push(path)
     } catch (e) {
       console.log('[Courses] navigation ERROR:', e);
     }
@@ -39,7 +39,9 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
         <View style={styles.progressRow}>
           <Text style={styles.progressLabel}>Progress {progress.completionPercent}%</Text>
           <Text style={styles.progressMeta}>
-            {progress.lessonsDone}/{progress.totalLessons || 0} lessons
+            {progress.totalLessons && progress.totalLessons > 0
+              ? `${progress.totalLessons} lessons`
+              : 'No lessons available yet'}
           </Text>
         </View>
         <View style={styles.progressTrack}>
@@ -127,7 +129,7 @@ export default function CoursesScreen() {
       {loading ? (
         <EmptyState icon="hourglass-outline" message="Loading courses..." />
       ) : filteredCourses.length === 0 ? (
-        <EmptyState icon="search-outline" message={safeCourses.length === 0 ? 'No courses available' : 'No courses match this search/filter.'} />
+        <EmptyState icon="search-outline" message={safeCourses.length === 0 ? 'No lessons available yet.' : 'No courses match this search/filter.'} />
       ) : (
         <FlatList
           data={filteredCourses}
