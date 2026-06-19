@@ -31,6 +31,7 @@ import type {
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { isExpoGo } from '@/lib/runtime';
 import { useAuth } from '@/context/AuthContext';
+import { auth } from '@/lib/firebase';
 import {
   AGORA_APP_ID,
   canCurrentUserJoinLiveClass,
@@ -160,7 +161,7 @@ export default function LiveClassroomScreen() {
   const classId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, profile } = useAuth();
+  const { user, profile, refreshUser } = useAuth();
   const engineRef = useRef<IRtcEngine | null>(null);
   const eventHandlerRef = useRef<IRtcEngineEventHandler | null>(null);
   const tokenRenewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -500,14 +501,38 @@ export default function LiveClassroomScreen() {
     setError('');
     setJoining(true);
     try {
+      const refreshed = await refreshUser().catch((err) => {
+        console.log('[LiveClass] refreshUser failed:', err);
+        return false;
+      });
+      if (!refreshed) {
+        Alert.alert('Join failed', 'Unable to verify account status.');
+        joiningLockRef.current = false;
+        setJoining(false);
+        return;
+      }
+
+
+
+      if (!auth.currentUser?.emailVerified) {
+        Alert.alert('Join failed', 'Please verify your email first.');
+        joiningLockRef.current = false;
+        setJoining(false);
+        return;
+      }
+
       const allowed = await canCurrentUserJoinLiveClass(liveClass, profile);
       if (!allowed) {
         Alert.alert('Access denied', 'You are not enrolled for this live class.');
+        joiningLockRef.current = false;
+        setJoining(false);
         return;
       }
       const permissionsOk = await requestClassroomPermissions();
       if (!permissionsOk) {
         Alert.alert('Permissions required', 'Camera and microphone permissions are required to join live class.');
+        joiningLockRef.current = false;
+        setJoining(false);
         return;
       }
       if (engineRef.current) cleanupAgora();
@@ -654,8 +679,9 @@ export default function LiveClassroomScreen() {
       assertAgoraResult('Agora join', joinResult);
     } catch (err: any) {
       cleanupAgora();
-      setError(err?.message || 'Could not join live class.');
-      Alert.alert('Join failed', err?.message || 'Could not join live class.');
+      console.log('[LiveClass] Join failed error:', err);
+      setError('Unable to join live class. Please try again.');
+      Alert.alert('Join failed', 'Unable to join live class. Please try again.');
     } finally {
       joiningLockRef.current = false;
       setJoining(false);
