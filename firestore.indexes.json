@@ -176,16 +176,7 @@
         }
       ]
     },
-    {
-      "collectionGroup": "recordings",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        }
-      ]
-    },
+
     {
       "collectionGroup": "quiz_results",
       "queryScope": "COLLECTION",
@@ -274,16 +265,7 @@
         }
       ]
     },
-    {
-      "collectionGroup": "participants",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "joined_at",
-          "order": "ASCENDING"
-        }
-      ]
-    },
+
     {
       "collectionGroup": "enrollments",
       "queryScope": "COLLECTION",
@@ -358,16 +340,7 @@
         }
       ]
     },
-    {
-      "collectionGroup": "users",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        }
-      ]
-    },
+
     {
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
