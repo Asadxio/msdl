@@ -73,4 +73,4 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
         })
         return {"ok": True, "idempotent": state == "succeeded", "state": "succeeded", "entitlement_granted": grants_subscription, "course_access_granted": grants_course_access}
 
-    return _tx(admin_firestore.transaction())
+    return _tx(firebase_db.transaction())

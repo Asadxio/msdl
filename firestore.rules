@@ -123,6 +123,8 @@ service cloud.firestore {
             'donation_content',
             'notice_title',
             'notice_message',
+            'hadith_text',
+            'hadith_ref',
             'profile',
             'updated_at'
           ]
