@@ -1457,6 +1457,28 @@ service cloud.firestore {
       allow create: if false;
       allow update, delete: if false;
     }
+
+    match /admin_logs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /role_transition_audit_logs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /notification_dedupe/{dedupeId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    match /notification_delivery_logs/{logId} {
+      allow read: if isAdmin();
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+    }
+
     // Deny all other document access by default.
     match /{document=**} {
       allow read, write: if false;

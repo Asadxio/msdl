@@ -26,6 +26,6 @@ export async function createAdminLog(profile: UserProfile | null, input: AdminLo
     });
   } catch (error: unknown) {
     logFirestoreFailure({ collection: 'admin_logs', operation: 'add', path: 'admin_logs', query: `create admin log ${input.action}`, role: profile?.role, status: profile?.status }, error);
-    throw error;
+    console.warn('[adminLogs] Failed to write admin log, ignoring error:', error);
   }
 }

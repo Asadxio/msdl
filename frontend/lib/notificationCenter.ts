@@ -141,7 +141,9 @@ export async function createNotificationRecord(input: {
   const markerRef = doc(db, 'notification_dedupe', dedupe);
   const marker = await getDoc(markerRef).catch(() => null);
   if (marker?.exists()) return false;
-  await setDoc(markerRef, { created_at: serverTimestamp(), created_at_ms: Date.now(), user_id: input.user_id }, { merge: true });
+  await setDoc(markerRef, { created_at: serverTimestamp(), created_at_ms: Date.now(), user_id: input.user_id }, { merge: true }).catch((err) => {
+    logger.warn('Failed to write notification_dedupe marker', err);
+  });
   await addDoc(collection(db, 'notifications'), {
     title: input.title,
     message: input.message,

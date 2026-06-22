@@ -20,39 +20,49 @@ export function classifyNotificationFailure(error: unknown): NotificationFailure
 }
 
 export async function createTelemetryRecord(input: { dedupeId: string; recipientId: string; event: string; channel: string; notificationId?: string; route?: string; transport?: 'expo_push' | 'fcm' | 'unknown' }) {
-  const ref = doc(db, 'notification_delivery_logs', key(input.dedupeId, input.recipientId));
-  await setDoc(ref, {
-    notification_id: input.notificationId || '',
-    dedupe_id: input.dedupeId,
-    recipient_id: input.recipientId,
-    event: input.event,
-    channel: input.channel,
-    status: 'created',
-    created_at: serverTimestamp(),
-    updated_at: serverTimestamp(),
-    retry_count: 0,
-    last_error: '',
-    transport: input.transport || 'expo_push',
-    device_id: String(Constants.sessionId || ''),
-    app_state: nowState(),
-    route: input.route || '',
-    app_version: String(Constants.expoConfig?.version || ''),
-    platform: Platform.OS,
-  }, { merge: true });
-  logger.info('[notification_telemetry_created]', { dedupe_id: input.dedupeId, recipient_id: input.recipientId, event: input.event, channel: input.channel });
+  try {
+    const ref = doc(db, 'notification_delivery_logs', key(input.dedupeId, input.recipientId));
+    await setDoc(ref, {
+      notification_id: input.notificationId || '',
+      dedupe_id: input.dedupeId,
+      recipient_id: input.recipientId,
+      event: input.event,
+      channel: input.channel,
+      status: 'created',
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+      retry_count: 0,
+      last_error: '',
+      transport: input.transport || 'expo_push',
+      device_id: String(Constants.sessionId || ''),
+      app_state: nowState(),
+      route: input.route || '',
+      app_version: String(Constants.expoConfig?.version || ''),
+      platform: Platform.OS,
+    }, { merge: true });
+    logger.info('[notification_telemetry_created]', { dedupe_id: input.dedupeId, recipient_id: input.recipientId, event: input.event, channel: input.channel });
+  } catch (error) {
+    logger.warn('[notificationTelemetryWriter] Failed to create telemetry record:', error);
+  }
 }
 
 export async function updateTelemetryStatus(input: { dedupeId: string; recipientId: string; status: NotificationDeliveryStatus; latencyMs?: number; lastError?: string; failureCategory?: NotificationFailureCategory }) {
-  const ref = doc(db, 'notification_delivery_logs', key(input.dedupeId, input.recipientId));
-  const patch: Record<string, unknown> = { status: input.status, updated_at: serverTimestamp(), app_state: nowState() };
-  if (typeof input.latencyMs === 'number') patch.latency_ms = input.latencyMs;
-  if (input.lastError) patch.last_error = input.lastError;
-  if (input.failureCategory) patch.failure_category = input.failureCategory;
-  if (input.status === 'sent') patch.sent_at = serverTimestamp();
-  if (input.status === 'delivered') patch.delivered_at = serverTimestamp();
-  if (input.status === 'opened') patch.opened_at = serverTimestamp();
-  if (input.status === 'failed') patch.failed_at = serverTimestamp();
-  await updateDoc(ref, patch).catch(async () => setDoc(ref, patch, { merge: true }));
+  try {
+    const ref = doc(db, 'notification_delivery_logs', key(input.dedupeId, input.recipientId));
+    const patch: Record<string, unknown> = { status: input.status, updated_at: serverTimestamp(), app_state: nowState() };
+    if (typeof input.latencyMs === 'number') patch.latency_ms = input.latencyMs;
+    if (input.lastError) patch.last_error = input.lastError;
+    if (input.failureCategory) patch.failure_category = input.failureCategory;
+    if (input.status === 'sent') patch.sent_at = serverTimestamp();
+    if (input.status === 'delivered') patch.delivered_at = serverTimestamp();
+    if (input.status === 'opened') patch.opened_at = serverTimestamp();
+    if (input.status === 'failed') patch.failed_at = serverTimestamp();
+    await updateDoc(ref, patch).catch(async () => {
+      await setDoc(ref, patch, { merge: true }).catch(() => {});
+    });
+  } catch (error) {
+    logger.warn('[notificationTelemetryWriter] Failed to update telemetry status:', error);
+  }
 }
 
 export async function markNotificationOpened(dedupeId: string, recipientId: string, route: string) {
@@ -106,9 +116,15 @@ export async function updateProviderReceipt(dedupeId: string, recipientId: strin
 }
 
 export async function incrementRetryCount(dedupeId: string, recipientId: string) {
-  const ref = doc(db, 'notification_delivery_logs', key(dedupeId, recipientId));
-  await updateDoc(ref, { retry_count: increment(1), status: 'retrying', updated_at: serverTimestamp() }).catch(async () => setDoc(ref, { retry_count: 1, status: 'retrying', updated_at: serverTimestamp() }, { merge: true }));
-  logger.info('[notification_retry]', { dedupe_id: dedupeId, recipient_id: recipientId });
+  try {
+    const ref = doc(db, 'notification_delivery_logs', key(dedupeId, recipientId));
+    await updateDoc(ref, { retry_count: increment(1), status: 'retrying', updated_at: serverTimestamp() }).catch(async () => {
+      await setDoc(ref, { retry_count: 1, status: 'retrying', updated_at: serverTimestamp() }, { merge: true }).catch(() => {});
+    });
+    logger.info('[notification_retry]', { dedupe_id: dedupeId, recipient_id: recipientId });
+  } catch (error) {
+    logger.warn('[notificationTelemetryWriter] Failed to increment retry count:', error);
+  }
 }
 
 export async function getTelemetryCreatedAtMs(dedupeId: string, recipientId: string): Promise<number> {

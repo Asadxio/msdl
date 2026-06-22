@@ -191,7 +191,7 @@ export default function AdminUsersScreen() {
               previousRole: u.role,
               nextRole,
             });
-            await createAdminLog(profile, { action: 'user_role_update', performed_by: profile?.email || profile?.name || 'admin', target_id: u.id, details: `${currentRole}->${nextRole}` });
+            await createAdminLog(profile, { action: 'user_role_update', performed_by: profile?.email || profile?.name || 'admin', target_id: u.id, details: `${currentRole}->${nextRole}` }).catch(() => {});
             await fetchUsers();
           } catch (err: any) {
             Alert.alert('Error', err?.message || 'Failed to update role');

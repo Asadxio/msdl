@@ -47,7 +47,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.madrasatussalikat.lilbanat",
-      "versionCode": 8
+      "versionCode": 9
     },
     "web": {
       "bundler": "metro",

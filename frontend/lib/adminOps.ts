@@ -33,6 +33,8 @@ export async function updateUserRoleSecure(input: {
     timestamp: serverTimestamp(),
     source: input.source || 'admin.users',
     request_id: input.requestId || '',
+  }).catch((err) => {
+    console.warn('[adminOps] Role transition audit log write failed:', err);
   });
   return { previousRole: prevRole, newRole };
 }

@@ -26,4 +26,13 @@ declare module "expo-location" {
       isoCountryCode?: string | null;
     }>
   >;
+  export function geocodeAsync(
+    address: string
+  ): Promise<
+    Array<{
+      latitude: number;
+      longitude: number;
+      altitude?: number | null;
+    }>
+  >;
 }

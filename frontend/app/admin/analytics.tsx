@@ -109,7 +109,7 @@ export default function AdminAnalyticsScreen() {
         getCountFromServer(query(collection(db, 'courses'), where('status', '==', 'active'))),
         getCountFromServer(collection(db, 'quiz_results')),
         getDocs(query(collection(db, 'attendance'), limit(2000))),
-        getDocs(query(collection(db, 'live_class_sessions'), orderBy('started_at', 'desc'), limit(200))),
+        getDocs(query(collection(db, 'live_classes'), orderBy('started_at', 'desc'), limit(200))),
         getDocs(query(collection(db, 'payments'), limit(2000))),
       ]);
 

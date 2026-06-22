@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   StatusBar,
   Linking,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -149,12 +150,31 @@ export default function LoginScreen() {
           </View>
           <TouchableOpacity
             style={styles.helpBtn}
-            onPress={() => {
-              const url = normalizeWhatsAppUrl(WHATSAPP_HELP_URL);
-              if (!url) return;
-              Linking.openURL(url).catch(() => {
-                Linking.openURL(WHATSAPP_HELP_URL).catch(() => {});
-              });
+            onPress={async () => {
+              const phone = '916366919122';
+              const text = 'Salam. I am interested in guidance services. I clicked from your website and would like more information.';
+              const webUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+              const directUrl = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
+              try {
+                if (Platform.OS === 'android') {
+                  // On Android 11+, canOpenURL requires <queries> in manifest.
+                  // Use wa.me URL which opens WhatsApp directly if installed.
+                  await Linking.openURL(webUrl);
+                } else {
+                  const canOpen = await Linking.canOpenURL(directUrl);
+                  if (canOpen) {
+                    await Linking.openURL(directUrl);
+                  } else {
+                    await Linking.openURL(webUrl);
+                  }
+                }
+              } catch {
+                try {
+                  await Linking.openURL(WHATSAPP_HELP_URL);
+                } catch {
+                  Alert.alert('WhatsApp Unavailable', 'Could not open WhatsApp. Please install WhatsApp or contact us directly.');
+                }
+              }
             }}
           >
             <Text style={styles.helpBtnText}>Need Help? WhatsApp Us</Text>
