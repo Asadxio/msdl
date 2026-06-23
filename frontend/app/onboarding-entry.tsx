@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect } from 'react';
 import {
   Image,
   Platform,
@@ -19,21 +19,22 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useOnboardingSession } from '@/context/OnboardingContext';
 import { markOnboardingEntryComplete } from '@/lib/onboarding';
 
 const SWIPE_DISTANCE = 220;
-const COMPLETE_THRESHOLD = 0.64;
-const GOLD = '#D4AF37';
+const COMPLETE_THRESHOLD = 0.65;
+const ROYAL_GOLD = '#D4AF37';
 const EMERALD = '#064E3B';
-const DEEP_EMERALD = '#032D23';
-const SOFT_GOLD = '#FFF7D8';
+const WARM_IVORY = '#FAF9F6';
 
 function clamp(value: number, min: number, max: number) {
   'worklet';
@@ -43,14 +44,20 @@ function clamp(value: number, min: number, max: number) {
 export default function OnboardingEntryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { height, width } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const { user } = useAuth();
   const { markEntryCompleteInSession } = useOnboardingSession();
+  
+  // Interaction Values
   const progress = useSharedValue(0);
   const crossedThreshold = useSharedValue(false);
   const completing = useSharedValue(false);
 
-  const motifItems = useMemo(() => Array.from({ length: 9 }, (_, index) => index), []);
+  // Entrance Animation Values
+  const entryFade = useSharedValue(0);
+  const dividerWidth = useSharedValue(0);
+  const noorPulse = useSharedValue(1);
+  const handlePulse = useSharedValue(1);
 
   const hapticSelect = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -65,6 +72,32 @@ export default function OnboardingEntryScreen() {
     markEntryCompleteInSession();
     router.replace(user ? '/' : '/auth/login');
   }, [markEntryCompleteInSession, router, user]);
+
+  useEffect(() => {
+    // Entrance Animations
+    entryFade.value = withTiming(1, { duration: 1600 });
+    dividerWidth.value = withDelay(800, withSpring(80, { damping: 15, stiffness: 100 }));
+    
+    // Breathing Noor Animation
+    noorPulse.value = withRepeat(
+      withSequence(
+        withTiming(1.05, { duration: 4000 }),
+        withTiming(1, { duration: 4000 })
+      ),
+      -1,
+      true
+    );
+
+    // Subtle Handle Pulse
+    handlePulse.value = withRepeat(
+      withSequence(
+        withTiming(1.02, { duration: 2500 }),
+        withTiming(1, { duration: 2500 })
+      ),
+      -1,
+      true
+    );
+  }, [entryFade, dividerWidth, noorPulse, handlePulse]);
 
   useAnimatedReaction(
     () => progress.value >= COMPLETE_THRESHOLD,
@@ -99,7 +132,7 @@ export default function OnboardingEntryScreen() {
       const shouldComplete = progress.value >= COMPLETE_THRESHOLD || event.velocityY < -820;
       if (shouldComplete) {
         completing.value = true;
-        progress.value = withTiming(1, { duration: 520 }, (finished) => {
+        progress.value = withTiming(1, { duration: 600 }, (finished) => {
           if (finished) runOnJS(finish)();
         });
       } else {
@@ -107,113 +140,128 @@ export default function OnboardingEntryScreen() {
       }
     });
 
-  const emeraldRiseStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [height, 0], Extrapolation.CLAMP) }],
-    opacity: interpolate(progress.value, [0, 0.2, 1], [0, 0.92, 1], Extrapolation.CLAMP),
+  // Animated Styles
+
+  const backgroundStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -height * 0.1], Extrapolation.CLAMP) }],
   }));
 
   const logoStyle = useAnimatedStyle(() => ({
+    opacity: entryFade.value,
     transform: [
-      { translateY: interpolate(progress.value, [0, 1], [0, -18], Extrapolation.CLAMP) },
-      { scale: interpolate(progress.value, [0, 1], [1, 1.08], Extrapolation.CLAMP) },
+      { scale: interpolate(progress.value, [0, 1], [1, 1.15], Extrapolation.CLAMP) },
+      { translateY: interpolate(progress.value, [0, 1], [0, -30], Extrapolation.CLAMP) }
     ],
   }));
 
-  const copyStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 0.72, 1], [1, 0.35, 0], Extrapolation.CLAMP),
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -28], Extrapolation.CLAMP) }],
+  const noorStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: noorPulse.value * interpolate(progress.value, [0, 1], [1, 1.4], Extrapolation.CLAMP) }
+    ],
+    opacity: interpolate(progress.value, [0, 1], [0.6, 1], Extrapolation.CLAMP),
   }));
 
-  const handleStyle = useAnimatedStyle(() => ({
+  const textGroupStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.6, 1], [entryFade.value, 0.2, 0], Extrapolation.CLAMP),
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -40], Extrapolation.CLAMP) }],
+  }));
+
+  const dividerStyle = useAnimatedStyle(() => ({
+    width: dividerWidth.value,
+    opacity: interpolate(progress.value, [0, 0.6], [1, 0], Extrapolation.CLAMP),
+  }));
+
+  const handleContainerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.8, 1], [entryFade.value, 0.2, 0], Extrapolation.CLAMP),
     transform: [
-      { translateY: interpolate(progress.value, [0, 1], [0, -SWIPE_DISTANCE * 0.72], Extrapolation.CLAMP) },
-      { scale: interpolate(progress.value, [0, 1], [1, 0.9], Extrapolation.CLAMP) },
+      { translateY: interpolate(progress.value, [0, 1], [0, -SWIPE_DISTANCE * 0.8], Extrapolation.CLAMP) },
+      { scale: handlePulse.value }
     ],
   }));
 
-  const fadeStyle = useAnimatedStyle(() => ({
+  const handlePillStyle = useAnimatedStyle(() => ({
+    backgroundColor: `rgba(255, 255, 255, ${interpolate(progress.value, [0, 1], [0.85, 0.4])})`,
+    borderColor: `rgba(212, 175, 55, ${interpolate(progress.value, [0, 1], [0.3, 0.8])})`,
+    shadowOpacity: interpolate(progress.value, [0, 1], [0.15, 0.4]),
+  }));
+
+  const sweepStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0.8, 1], [0, 1], Extrapolation.CLAMP),
   }));
 
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" translucent backgroundColor="transparent" />
-      <LinearGradient
-        colors={['#FFFFFF', '#FFFDF4', '#F8FBF7']}
-        locations={[0, 0.54, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <View pointerEvents="none" style={styles.geometricLayer}>
-        {motifItems.map((item) => {
-          const size = width * (item % 2 === 0 ? 0.34 : 0.24);
-          return (
-            <View
-              key={item}
-              style={[
-                styles.motif,
-                {
-                  width: size,
-                  height: size,
-                  left: (item % 3) * (width / 2.5) - size / 2,
-                  top: 54 + item * 76,
-                  transform: [{ rotate: `${45 + item * 9}deg` }],
-                  borderColor: item % 2 === 0 ? 'rgba(212,175,55,0.18)' : 'rgba(6,78,59,0.12)',
-                },
-              ]}
-            />
-          );
-        })}
-        <View style={[styles.star, { top: height * 0.15, left: width * 0.12 }]} />
-        <View style={[styles.star, styles.starEmerald, { top: height * 0.7, right: width * 0.12 }]} />
-      </View>
-
-      <Animated.View pointerEvents="none" style={[styles.emeraldRise, emeraldRiseStyle]}>
+      
+      {/* Background Layer */}
+      <Animated.View style={[StyleSheet.absoluteFill, backgroundStyle]}>
         <LinearGradient
-          colors={[DEEP_EMERALD, EMERALD, '#0E7A5D']}
-          start={{ x: 0.5, y: 1 }}
-          end={{ x: 0.5, y: 0 }}
+          colors={['#FFFFFF', '#FAF9F6', '#F3EFE6']}
+          locations={[0, 0.6, 1]}
           style={StyleSheet.absoluteFill}
         />
-        <View style={styles.riseGlow} />
+        
+        {/* Faint Islamic Arch Silhouette */}
+        <View style={styles.archSilhouetteContainer}>
+          <View style={styles.archSilhouette} />
+        </View>
       </Animated.View>
 
-      <View style={[styles.content, { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 28 }]}>
+      <View style={[styles.content, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 }]}>
+        
+        {/* Top Text Group */}
+        <Animated.View style={[styles.topTextGroup, textGroupStyle]}>
+          <Text style={styles.bismillah}>بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْم</Text>
+        </Animated.View>
+
+        {/* Center Logo */}
         <Animated.View style={[styles.hero, logoStyle]}>
-          <View style={styles.logoAura}>
-            <View style={styles.logoRing}>
-              <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="cover" />
-              <View style={styles.logoMonogramOverlay}>
-                <Text style={styles.logoArabic}>م</Text>
-              </View>
+          {/* Noor Glow Layer */}
+          <Animated.View style={[styles.noorGlow, noorStyle]} />
+          <Animated.View style={[styles.noorGlowCore, noorStyle]} />
+          
+          <View style={styles.logoRing}>
+            <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="cover" />
+            <View style={styles.logoMonogramOverlay}>
+              <Text style={styles.logoArabic}>م</Text>
             </View>
           </View>
         </Animated.View>
 
-        <Animated.View style={[styles.copy, copyStyle]}>
-          <Text style={styles.arabicName}>مدرسۃ السالکات للبنات</Text>
-          <Text style={styles.englishName}>Madars tus salikat Lilbanat</Text>
-          <View style={styles.divider} />
-          <Text style={styles.subtitle}>A refined learning space for sacred knowledge.</Text>
+        {/* Typography Group */}
+        <Animated.View style={[styles.copy, textGroupStyle]}>
+          <Text style={styles.arabicName}>مدرسة السالكات للبنات</Text>
+          <Text style={styles.englishName}>MADARSA TUS SALIKAT LIL BANAT</Text>
+          
+          {/* Animated Gold Divider */}
+          <Animated.View style={[styles.divider, dividerStyle]} />
+          
+          <Text style={styles.subtitle}>Where Sacred Knowledge Meets Noble Character</Text>
+          <Text style={styles.secondarySubtitle}>Nurturing Faith, Knowledge & Adab</Text>
         </Animated.View>
 
+        {/* Swipe CTA */}
         <GestureDetector gesture={panGesture}>
-          <Animated.View style={[styles.swipeZone, { bottom: insets.bottom + 28 }, handleStyle]}>
-            <View style={styles.handleGlow} />
-            <LinearGradient
-              colors={[SOFT_GOLD, GOLD, '#B88916']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.handle}
-            >
-              <View style={styles.handlePill} />
-            </LinearGradient>
-            <Text style={styles.swipeText}>Swipe Up To Begin</Text>
+          <Animated.View style={[styles.swipeZone, { bottom: insets.bottom + 30 }, handleContainerStyle]}>
+            <Animated.View style={[styles.swipePill, handlePillStyle]}>
+              <View style={styles.swipeGlow} />
+              <View style={styles.swipeHandleIndicator} />
+              <Text style={styles.swipeArabic}>ابدئي رحلتكِ</Text>
+              <Text style={styles.swipeEnglish}>✦ Begin Your Journey ✦</Text>
+            </Animated.View>
           </Animated.View>
         </GestureDetector>
+
       </View>
 
-      <Animated.View pointerEvents="none" style={[styles.fadeOverlay, fadeStyle]} />
+      {/* Golden Light Sweep on Completion */}
+      <Animated.View pointerEvents="none" style={[styles.sweepOverlay, sweepStyle]}>
+        <LinearGradient
+          colors={['rgba(212,175,55,0)', 'rgba(212,175,55,0.15)', 'rgba(250,249,246,1)']}
+          locations={[0, 0.4, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
     </View>
   );
 }
@@ -221,175 +269,190 @@ export default function OnboardingEntryScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: WARM_IVORY,
     overflow: 'hidden',
   },
-  geometricLayer: {
+  archSilhouetteContainer: {
     ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    top: '12%',
+    opacity: 0.04,
   },
-  motif: {
-    position: 'absolute',
-    borderWidth: 1,
-    borderRadius: 22,
-    opacity: 0.9,
-  },
-  star: {
-    position: 'absolute',
-    width: 124,
-    height: 124,
-    borderColor: 'rgba(212,175,55,0.2)',
-    borderWidth: 1,
-    transform: [{ rotate: '45deg' }],
-  },
-  starEmerald: {
-    borderColor: 'rgba(6,78,59,0.14)',
-    transform: [{ rotate: '22deg' }],
-  },
-  emeraldRise: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  riseGlow: {
-    position: 'absolute',
-    top: -70,
-    left: -40,
-    right: -40,
-    height: 150,
-    borderRadius: 80,
-    backgroundColor: 'rgba(212,175,55,0.24)',
+  archSilhouette: {
+    width: '82%',
+    height: '90%',
+    borderTopLeftRadius: 1000,
+    borderTopRightRadius: 1000,
+    borderWidth: 2,
+    borderColor: EMERALD,
+    borderBottomWidth: 0,
+    backgroundColor: 'rgba(6,78,59,0.1)',
   },
   content: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 28,
+  },
+  topTextGroup: {
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  bismillah: {
+    color: ROYAL_GOLD,
+    fontSize: 22,
+    fontWeight: '500',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    marginBottom: 4,
   },
   hero: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 28,
+    marginVertical: 20,
+    zIndex: 10,
   },
-  logoAura: {
-    width: 176,
-    height: 176,
-    borderRadius: 88,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    shadowColor: GOLD,
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.22,
-    shadowRadius: 32,
-    elevation: 12,
+  noorGlow: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(212,175,55,0.08)',
+    shadowColor: ROYAL_GOLD,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 50,
+    elevation: 10,
+  },
+  noorGlowCore: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 30,
   },
   logoRing: {
-    width: 136,
-    height: 136,
-    borderRadius: 68,
-    borderWidth: 2,
-    borderColor: GOLD,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#FDF8E8',
+    backgroundColor: 'rgba(255,255,255,0.98)',
   },
   logoImage: {
-    width: 136,
-    height: 136,
-    opacity: 0.18,
+    width: 160,
+    height: 160,
+    opacity: 0.12,
   },
   logoMonogramOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.76)',
+    backgroundColor: 'transparent',
   },
   logoArabic: {
     color: EMERALD,
-    fontSize: 72,
+    fontSize: 76,
     fontWeight: '800',
     includeFontPadding: false,
-    textShadowColor: 'rgba(212,175,55,0.42)',
-    textShadowRadius: 16,
-    textShadowOffset: { width: 0, height: 5 },
   },
   copy: {
     alignItems: 'center',
+    marginBottom: 100,
   },
   arabicName: {
     color: EMERALD,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
     textAlign: 'center',
     writingDirection: 'rtl',
+    marginBottom: 4,
   },
   englishName: {
-    marginTop: 10,
-    color: '#173C31',
-    fontSize: 20,
+    color: '#032D23',
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 0.8,
+    letterSpacing: 2.5,
     textAlign: 'center',
     textTransform: 'uppercase',
   },
   divider: {
+    height: 1.5,
+    backgroundColor: ROYAL_GOLD,
     marginVertical: 18,
-    width: 74,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: GOLD,
+    borderRadius: 1,
   },
   subtitle: {
-    maxWidth: 280,
-    color: 'rgba(15,47,37,0.7)',
-    fontSize: 14,
+    color: EMERALD,
+    fontSize: 16,
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }),
     fontWeight: '600',
-    lineHeight: 21,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginBottom: 6,
+  },
+  secondarySubtitle: {
+    color: 'rgba(6,78,59,0.7)',
+    fontSize: 13,
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }),
+    fontWeight: '500',
     textAlign: 'center',
   },
   swipeZone: {
     position: 'absolute',
     alignItems: 'center',
+    width: '100%',
+    zIndex: 20,
   },
-  handleGlow: {
-    position: 'absolute',
-    top: -20,
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    backgroundColor: 'rgba(212,175,55,0.24)',
-    shadowColor: GOLD,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: Platform.OS === 'android' ? 0.8 : 0.44,
-    shadowRadius: 24,
-    elevation: 16,
-  },
-  handle: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
+  swipePill: {
+    width: 250,
+    height: 76,
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.68)',
+    shadowColor: ROYAL_GOLD,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 4,
+    overflow: 'hidden',
   },
-  handlePill: {
-    width: 30,
-    height: 7,
-    borderRadius: 7,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    transform: [{ rotate: '-18deg' }],
+  swipeGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.4)',
   },
-  swipeText: {
-    marginTop: 16,
+  swipeHandleIndicator: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: ROYAL_GOLD,
+    marginBottom: 8,
+    opacity: 0.8,
+  },
+  swipeArabic: {
     color: EMERALD,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 2.2,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  swipeEnglish: {
+    color: EMERALD,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
-  fadeOverlay: {
+  sweepOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: COLORS.background,
+    zIndex: 30,
   },
 });

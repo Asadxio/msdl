@@ -1,5 +1,6 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import {
   arrayRemove, arrayUnion, doc, serverTimestamp, updateDoc,
 } from 'firebase/firestore';
@@ -119,7 +120,8 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
       return null;
     }
 
-    const tokenResponse = await Notifications.getExpoPushTokenAsync().catch((error) => {
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId }).catch((error) => {
       console.log('[Notifications] getExpoPushTokenAsync ERROR', error);
       return null;
     });

@@ -289,6 +289,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
               const { profile: nextProfile, issue } = validateProfileData(snap.data(), firebaseUser.uid, 'auth.snapshotProfile');
               startupLog('Profile loaded', { exists: true, status: nextProfile.status, role: nextProfile.role, issue, fromCache: snap.metadata.fromCache });
+
+              if (nextProfile.status === 'approved' && !firebaseUser.emailVerified) {
+                console.log('[APPROVAL_FIX] Detected approved status but potentially stale claims.');
+                console.log(`[APPROVAL_FIX] profile.status: ${nextProfile.status}`);
+                console.log(`[APPROVAL_FIX] firebaseUser.emailVerified BEFORE reload: ${firebaseUser.emailVerified}`);
+                
+                try {
+                  await firebaseUser.reload();
+                  await firebaseUser.getIdToken(true);
+                  console.log(`[APPROVAL_FIX] firebaseUser.emailVerified AFTER reload: ${firebaseUser.emailVerified}`);
+                  console.log('[APPROVAL_FIX] token refreshed');
+                  
+                  setUser({ ...firebaseUser, emailVerified: firebaseUser.emailVerified } as User);
+                } catch (reloadErr) {
+                  console.error('[APPROVAL_FIX] Failed to reload user token:', reloadErr);
+                }
+              }
+
               setProfile(nextProfile);
               setProfileIssue(issue);
               await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});

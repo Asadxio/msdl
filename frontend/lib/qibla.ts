@@ -126,10 +126,10 @@ export function getLegacyQiblaTurnGuidance(offset: number) {
   return normalized > 0 ? "Turn right toward Qibla" : "Turn left toward Qibla";
 }
 
-export function getCompassAccuracyLabel(accuracyDegrees?: number | null) {
-  if (typeof accuracyDegrees !== "number" || !Number.isFinite(accuracyDegrees)) return "Medium";
-  if (accuracyDegrees <= 15) return "High";
-  if (accuracyDegrees <= 35) return "Medium";
+export function getCompassAccuracyLabel(accuracyLevel?: number | null) {
+  if (typeof accuracyLevel !== "number") return "Low";
+  if (accuracyLevel >= 3) return "High";
+  if (accuracyLevel === 2) return "Medium";
   return "Low";
 }
 

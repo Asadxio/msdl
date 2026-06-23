@@ -4,7 +4,6 @@ import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { Camera, CameraView } from 'expo-camera';
-import { Magnetometer, type MagnetometerMeasurement } from 'expo-sensors';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { goBackOrReplace } from '@/lib/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -65,11 +64,6 @@ const SENSOR_UPDATE_MS = 120;
 const COMPASS_SIZE = Math.min(Dimensions.get('window').width - 44, 340);
 const DEGREE_MARKS = Array.from({ length: 72 }, (_, index) => index * 5);
 
-function headingFromMagnetometer(sample: Pick<MagnetometerMeasurement, 'x' | 'y'>) {
-  let angle = Math.atan2(sample.y, sample.x) * (180 / Math.PI);
-  angle = angle >= 0 ? angle : angle + 360;
-  return (450 - angle) % 360;
-}
 
 function formatCoordinate(value: number, axis: 'lat' | 'lng') {
   const direction = axis === 'lat' ? (value >= 0 ? 'N' : 'S') : (value >= 0 ? 'E' : 'W');
@@ -99,6 +93,7 @@ export default function QiblaScreen() {
   const [location, setLocation] = useState<QiblaLocation>(FALLBACK_LOCATION);
   const [heading, setHeading] = useState(0);
   const [headingAccuracy, setHeadingAccuracy] = useState<number | null>(null);
+  const [headingSource, setHeadingSource] = useState<'True North' | 'Magnetic North' | 'Unknown'>('Unknown');
   const [sensorStatus, setSensorStatus] = useState<'checking' | 'active' | 'unavailable'>('checking');
   const [cameraMode, setCameraMode] = useState(false);
   const [cameraPermission, setCameraPermission] = useState<CameraPermission>('idle');
@@ -109,7 +104,7 @@ export default function QiblaScreen() {
   const qiblaLine = useMemo(() => calculateMapLine(location), [location]);
   const modalSurfaceStyle = colorScheme === 'dark' ? styles.entryModalDark : styles.entryModal;
 
-  const setSmoothHeading = useCallback((next: number, accuracyDegrees?: number | null) => {
+  const setSmoothHeading = useCallback((next: number, accuracyLevel?: number | null) => {
     const previous = lastHeadingRef.current;
     let target = next;
     const delta = target - previous;
@@ -117,7 +112,7 @@ export default function QiblaScreen() {
     if (delta < -180) target += 360;
     lastHeadingRef.current = target;
     setHeading(((target % 360) + 360) % 360);
-    if (typeof accuracyDegrees === 'number') setHeadingAccuracy(accuracyDegrees);
+    if (typeof accuracyLevel === 'number') setHeadingAccuracy(accuracyLevel);
     Animated.timing(headingAnim, {
       toValue: -target,
       duration: SENSOR_UPDATE_MS,
@@ -196,20 +191,38 @@ export default function QiblaScreen() {
   useEffect(() => {
     if (!isFocused || !appActive || appStateRef.current !== 'active') return undefined;
     let subscription: { remove?: () => void } | null = null;
-    if (Magnetometer?.addListener) {
+    let mounted = true;
+
+    setSensorStatus('checking');
+
+    Location.watchHeadingAsync((headingObj) => {
+      if (!mounted) return;
       setSensorStatus('active');
-      Magnetometer.setUpdateInterval?.(SENSOR_UPDATE_MS);
-      subscription = Magnetometer.addListener((sample) => {
-        setSmoothHeading(headingFromMagnetometer(sample), headingAccuracy);
-      });
-    } else {
-      setSensorStatus('unavailable');
-    }
+      let newHeading = -1;
+      if (headingObj.trueHeading >= 0) {
+        newHeading = headingObj.trueHeading;
+        setHeadingSource('True North');
+      } else if (headingObj.magHeading >= 0) {
+        newHeading = headingObj.magHeading;
+        setHeadingSource('Magnetic North');
+      }
+
+      if (newHeading >= 0) {
+        newHeading = ((newHeading % 360) + 360) % 360;
+        setSmoothHeading(newHeading, headingObj.accuracy);
+      }
+    }).then(sub => {
+      if (mounted) subscription = sub;
+      else sub.remove();
+    }).catch(() => {
+      if (mounted) setSensorStatus('unavailable');
+    });
 
     return () => {
+      mounted = false;
       subscription?.remove?.();
     };
-  }, [appActive, headingAccuracy, isFocused, setSmoothHeading]);
+  }, [appActive, isFocused, setSmoothHeading]);
 
   useEffect(() => {
     Animated.timing(qiblaAnim, {
@@ -359,35 +372,43 @@ export default function QiblaScreen() {
             <View style={styles.cacheBanner}><Text style={styles.cacheText}>Using last known location</Text></View>
           ) : null}
 
-          <View style={styles.heroCard} testID="qibla-compass-section">
-            <Text style={styles.heroLabel}>Live Compass Qibla Finder</Text>
-            <Text style={styles.degreeDisplay}>{Math.round(qibla.qiblaAngle)}°</Text>
-            <Text style={styles.heroSubtitle}>{qibla.guidance}</Text>
-            <View style={[styles.compassWrap, { width: COMPASS_SIZE, height: COMPASS_SIZE, borderRadius: COMPASS_SIZE / 2 }]}>
-              <Animated.View style={[styles.compassDial, { width: COMPASS_SIZE - 28, height: COMPASS_SIZE - 28, borderRadius: (COMPASS_SIZE - 28) / 2, transform: [{ rotate: compassRotation }] }]}> 
-                {DEGREE_MARKS.map((mark) => (
-                  <View key={mark} style={[styles.degreeMark, { height: mark % 30 === 0 ? 18 : 10, transform: [{ rotate: `${mark}deg` }, { translateY: -(COMPASS_SIZE / 2 - 28) }] }]} />
-                ))}
-                {['N', 'E', 'S', 'W'].map((label, index) => (
-                  <Text key={label} style={[styles.compassPoint, { transform: [{ rotate: `${index * 90}deg` }, { translateY: -(COMPASS_SIZE / 2 - 52) }, { rotate: `${-index * 90}deg` }] }]}>{label}</Text>
-                ))}
-              </Animated.View>
-              <View style={styles.qiblaLine} />
-              <Animated.View style={[styles.qiblaNeedle, { transform: [{ rotate: qiblaRotation }] }]}> 
-                <Ionicons name="navigate" size={64} color={COLORS.secondary} />
-              </Animated.View>
-              <View style={styles.kaabaCenter}><MaterialCommunityIcons name={'mosque' as any} size={34} color={COLORS.primary} /><Text style={styles.kaabaText}>Kaaba</Text></View>
+          {sensorStatus === 'unavailable' ? (
+            <View style={[styles.heroCard, { backgroundColor: '#7f1d1d' }]} testID="qibla-compass-unavailable">
+              <Ionicons name="warning" size={48} color="#fca5a5" style={{ marginBottom: 12 }} />
+              <Text style={[styles.heroLabel, { color: '#fca5a5' }]}>Error</Text>
+              <Text style={[styles.heroSubtitle, { textAlign: 'center' }]}>Compass unavailable on this device.</Text>
             </View>
-            <View style={styles.accuracyPills}>
-              {(['Low', 'Medium', 'High'] as AccuracyLabel[]).map((item) => <View key={item} style={[styles.accuracyPill, accuracy === item && styles.accuracyPillActive]}><Text style={[styles.accuracyText, accuracy === item && styles.accuracyTextActive]}>Accuracy: {item}</Text></View>)}
+          ) : (
+            <View style={styles.heroCard} testID="qibla-compass-section">
+              <Text style={styles.heroLabel}>Live Compass Qibla Finder</Text>
+              <Text style={styles.degreeDisplay}>{Math.round(qibla.qiblaAngle)}°</Text>
+              <Text style={styles.heroSubtitle}>{qibla.guidance}</Text>
+              <View style={[styles.compassWrap, { width: COMPASS_SIZE, height: COMPASS_SIZE, borderRadius: COMPASS_SIZE / 2 }]}>
+                <Animated.View style={[styles.compassDial, { width: COMPASS_SIZE - 28, height: COMPASS_SIZE - 28, borderRadius: (COMPASS_SIZE - 28) / 2, transform: [{ rotate: compassRotation }] }]}> 
+                  {DEGREE_MARKS.map((mark) => (
+                    <View key={mark} style={[styles.degreeMark, { height: mark % 30 === 0 ? 18 : 10, transform: [{ rotate: `${mark}deg` }, { translateY: -(COMPASS_SIZE / 2 - 28) }] }]} />
+                  ))}
+                  {['N', 'E', 'S', 'W'].map((label, index) => (
+                    <Text key={label} style={[styles.compassPoint, { transform: [{ rotate: `${index * 90}deg` }, { translateY: -(COMPASS_SIZE / 2 - 52) }, { rotate: `${-index * 90}deg` }] }]}>{label}</Text>
+                  ))}
+                </Animated.View>
+                <View style={styles.qiblaLine} />
+                <Animated.View style={[styles.qiblaNeedle, { transform: [{ rotate: qiblaRotation }] }]}> 
+                  <Ionicons name="navigate" size={64} color={COLORS.secondary} />
+                </Animated.View>
+                <View style={styles.kaabaCenter}><MaterialCommunityIcons name={'mosque' as any} size={34} color={COLORS.primary} /><Text style={styles.kaabaText}>Kaaba</Text></View>
+              </View>
+              <View style={styles.accuracyPills}>
+                {(['Low', 'Medium', 'High'] as AccuracyLabel[]).map((item) => <View key={item} style={[styles.accuracyPill, accuracy === item && styles.accuracyPillActive]}><Text style={[styles.accuracyText, accuracy === item && styles.accuracyTextActive]}>Accuracy: {item}</Text></View>)}
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.metricGrid}>
             <Metric label="Qibla Bearing" value={`${Math.round(qibla.qiblaAngle)}°`} />
-            <Metric label="Device Heading" value={`${Math.round(qibla.heading)}°`} />
-            <Metric label="Turn Direction" value={qibla.guidance} />
-            <Metric label="Direction" value={qibla.directionLongText} />
+            <Metric label="Device Heading" value={sensorStatus === 'unavailable' ? '--' : `${Math.round(qibla.heading)}°`} />
+            <Metric label="Heading Source" value={sensorStatus === 'unavailable' ? '--' : headingSource} />
+            <Metric label="Turn Direction" value={sensorStatus === 'unavailable' ? '--' : qibla.guidance} />
             <Metric label="Distance" value={formatDistanceToKaaba(qibla.distanceKm)} />
             <Metric label="Compass Sensor" value={sensorStatus === 'active' ? 'Live' : sensorStatus} />
           </View>
