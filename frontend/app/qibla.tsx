@@ -3,6 +3,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
+import { Magnetometer } from 'expo-sensors';
 import { Camera, CameraView } from 'expo-camera';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -195,25 +196,29 @@ export default function QiblaScreen() {
 
     setSensorStatus('checking');
 
-    Location.watchHeadingAsync((headingObj) => {
+    Magnetometer.isAvailableAsync().then(available => {
       if (!mounted) return;
-      setSensorStatus('active');
-      let newHeading = -1;
-      if (headingObj.trueHeading >= 0) {
-        newHeading = headingObj.trueHeading;
-        setHeadingSource('True North');
-      } else if (headingObj.magHeading >= 0) {
-        newHeading = headingObj.magHeading;
+      if (!available) {
+        setSensorStatus('unavailable');
+        return;
+      }
+      
+      Magnetometer.setUpdateInterval(SENSOR_UPDATE_MS);
+      subscription = Magnetometer.addListener((data) => {
+        if (!mounted) return;
+        setSensorStatus('active');
+        const { x, y } = data;
+        
+        // Calculate heading in degrees from magnetometer. 
+        // Y+ points to top of phone, X+ points to right.
+        let newHeading = Math.atan2(-x, y) * (180 / Math.PI);
+        if (newHeading < 0) {
+          newHeading += 360;
+        }
+        
         setHeadingSource('Magnetic North');
-      }
-
-      if (newHeading >= 0) {
-        newHeading = ((newHeading % 360) + 360) % 360;
-        setSmoothHeading(newHeading, headingObj.accuracy);
-      }
-    }).then(sub => {
-      if (mounted) subscription = sub;
-      else sub.remove();
+        setSmoothHeading(newHeading, 3); // High accuracy fallback
+      });
     }).catch(() => {
       if (mounted) setSensorStatus('unavailable');
     });
