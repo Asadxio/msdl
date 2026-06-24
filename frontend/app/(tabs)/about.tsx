@@ -75,6 +75,14 @@ function paymentState(payment: Pick<PaymentItem, 'state' | 'status'>): string {
   return payment.state ?? payment.status ?? 'pending';
 }
 
+const DEFAULT_ABOUT_CONTENT = `Madarsa Tus Salikat Lil Banat is dedicated to nurturing Islamic knowledge, noble character, and academic excellence for girls through authentic Quranic education, Tajweed, Hadith, Fiqh, and spiritual development.
+
+Our mission is to create confident, knowledgeable, and practicing Muslim women who embody Islamic values while contributing positively to society.
+
+Through structured courses, experienced teachers, live classes, digital learning resources, and continuous guidance, we strive to provide a safe and inspiring environment for lifelong learning.
+
+May Allah ﷻ accept this effort and make it a means of beneficial knowledge for generations to come.`;
+
 const DEFAULT_SETTINGS: AppSettings = {
   fees_amount: 0,
   razorpay_link: '',
@@ -84,7 +92,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   youtube_link: '',
   telegram_link: '',
   donation_content: 'Your sadaqah, zakat, fitrah and langar support help students access Islamic education with dignity and consistency.',
-  about_madrasa: '',
+  about_madrasa: DEFAULT_ABOUT_CONTENT,
 };
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
@@ -182,7 +190,7 @@ const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadra
   return (
     <SectionCard title="🌿 About Our Madrasa" icon="leaf-outline">
       <Text style={styles.bodyText}>
-        {aboutMadrasa || 'About Our Madrasa content has not been added yet.'}
+        {aboutMadrasa || DEFAULT_ABOUT_CONTENT}
       </Text>
       {isAdmin ? (
         <>
@@ -1088,25 +1096,42 @@ export default function AboutScreen() {
               </TouchableOpacity>
             </>
           ) : (
-            <>
-              <View style={styles.row}>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(normalizeWhatsAppUrl(settings.whatsapp_channel) || settings.whatsapp_channel, 'WhatsApp Channel'); }}>
-                  <Text style={styles.linkBtnText}>WhatsApp Channel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.instagram, 'Instagram'); }}>
-                  <Text style={styles.linkBtnText}>Instagram</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.youtube_link, 'YouTube'); }}>
-                  <Text style={styles.linkBtnText}>YouTube</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.linkBtn} onPress={() => { void openSocialLink(settings.telegram_link, 'Telegram'); }}>
-                  <Text style={styles.linkBtnText}>Telegram</Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={styles.linkBtn} onPress={openHelp}>
-                <Text style={styles.linkBtnText}>WhatsApp Support</Text>
+            <View style={{ marginTop: 8 }}>
+              <TouchableOpacity style={styles.premiumSocialBtn} onPress={() => { void openSocialLink(normalizeWhatsAppUrl(settings.whatsapp_channel) || settings.whatsapp_channel, 'WhatsApp Channel'); }}>
+                <View style={styles.socialIconContainer}>
+                  <Ionicons name="logo-whatsapp" size={20} color={COLORS.secondary} />
+                </View>
+                <Text style={styles.premiumSocialBtnText}>WhatsApp Channel</Text>
               </TouchableOpacity>
-            </>
+
+              <TouchableOpacity style={styles.premiumSocialBtn} onPress={() => { void openSocialLink(settings.instagram, 'Instagram'); }}>
+                <View style={styles.socialIconContainer}>
+                  <Ionicons name="logo-instagram" size={20} color={COLORS.secondary} />
+                </View>
+                <Text style={styles.premiumSocialBtnText}>Instagram</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.premiumSocialBtn} onPress={() => { void openSocialLink(settings.youtube_link, 'YouTube'); }}>
+                <View style={styles.socialIconContainer}>
+                  <Ionicons name="logo-youtube" size={20} color={COLORS.secondary} />
+                </View>
+                <Text style={styles.premiumSocialBtnText}>YouTube</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.premiumSocialBtn} onPress={() => { void openSocialLink(settings.telegram_link, 'Telegram'); }}>
+                <View style={styles.socialIconContainer}>
+                  <Ionicons name="paper-plane" size={20} color={COLORS.secondary} />
+                </View>
+                <Text style={styles.premiumSocialBtnText}>Telegram</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.premiumSocialBtn, { marginTop: 8, borderColor: COLORS.primary, backgroundColor: COLORS.goldBg }]} onPress={openHelp}>
+                <View style={[styles.socialIconContainer, { backgroundColor: 'rgba(6, 78, 59, 0.1)' }]}>
+                  <Ionicons name="logo-whatsapp" size={20} color={COLORS.primary} />
+                </View>
+                <Text style={[styles.premiumSocialBtnText, { color: COLORS.primary }]}>WhatsApp Support</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           <View style={styles.row}>
@@ -1171,8 +1196,9 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: COLORS.goldText, fontWeight: '700', fontSize: 13 },
   secondaryBtn: { borderWidth: 1, borderColor: COLORS.goldText, borderRadius: RADIUS.full, paddingVertical: 10, alignItems: 'center' },
   secondaryBtnText: { color: COLORS.goldText, fontWeight: '700' },
-  linkBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingVertical: 10, alignItems: 'center', marginBottom: 8 },
-  linkBtnText: { color: COLORS.textMain, fontWeight: '600' },
+  premiumSocialBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 20, borderRadius: RADIUS.lg, marginBottom: 12, borderWidth: 1, borderColor: COLORS.secondary, shadowColor: COLORS.secondary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  premiumSocialBtnText: { color: COLORS.secondary, fontWeight: '700', fontSize: 16, marginLeft: 16 },
+  socialIconContainer: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(212, 175, 55, 0.15)', alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   statusCard: { backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: 10, marginVertical: 8 },
   statusLabel: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },

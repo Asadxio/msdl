@@ -721,7 +721,9 @@ export default function ChatDetailScreen() {
   const keyExtractor = useCallback((item: MessageItem) => item.id, []);
   const listFooter = useMemo(() => (loadingMore ? <ActivityIndicator size="small" color={COLORS.primary} /> : null), [loadingMore]);
   const listEmpty = useMemo(() => (
-    <EmptyState icon="chatbubble-ellipses-outline" message="No messages yet. Start the conversation." />
+    <View style={{ transform: [{ scaleY: -1 }] }}>
+      <EmptyState icon="chatbubble-ellipses-outline" message="No messages yet. Start the conversation." />
+    </View>
   ), []);
 
   const renderMessage = useCallback(({ item }: { item: MessageItem }) => {

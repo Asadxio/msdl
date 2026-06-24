@@ -704,7 +704,7 @@ service cloud.firestore {
     function isValidLiveClassWrite() {
       return hasOnlyAllowedKeys(request.resource.data, [
           'course_id', 'lesson_id', 'teacher_id', 'teacher_name', 'title', 'status', 'channel_name',
-          'agora_app_id', 'meet_fallback_url', 'student_ids', 'enrollment_source',
+          'agora_app_id', 'meet_fallback_url', 'meet_url', 'student_ids', 'enrollment_source',
           'participant_count', 'recording', 'screen_share', 'started_at', 'ended_at', 'created_at', 'updated_at'
         ])
         && request.resource.data.course_id is string
@@ -712,6 +712,7 @@ service cloud.firestore {
         && request.resource.data.title is string
         && request.resource.data.status in ['scheduled', 'waiting_room', 'live', 'paused', 'reconnecting', 'ended', 'cancelled']
         && request.resource.data.channel_name is string
+        && (!('meet_url' in request.resource.data) || request.resource.data.meet_url is string)
         && (!('lesson_id' in request.resource.data) || request.resource.data.lesson_id is string)
         && (!('student_ids' in request.resource.data) || (request.resource.data.student_ids is list && request.resource.data.student_ids.size() <= 500))
         && (!('participant_count' in request.resource.data) || (request.resource.data.participant_count is number && request.resource.data.participant_count >= 0 && request.resource.data.participant_count <= 500))

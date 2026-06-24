@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Madars tus salikat Lilbanat - مدرسۃ السالکات للبنات",
+    "name": "Madars tus salikat Lilbanat - \u0645\u062f\u0631\u0633\u06c3 \u0627\u0644\u0633\u0627\u0644\u06a9\u0627\u062a \u0644\u0644\u0628\u0646\u0627\u062a",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -47,7 +47,11 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.madrasatussalikat.lilbanat",
-      "versionCode": 9
+      "versionCode": 9,
+      "notification": {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#0FA958"
+      }
     },
     "web": {
       "bundler": "metro",
