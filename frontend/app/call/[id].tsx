@@ -1,280 +1,97 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, PermissionsAndroid, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { goBackOrReplace } from '@/lib/navigation';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
-import { ChannelProfileType, ClientRoleType } from 'react-native-agora';
-import type { RenderModeType, VideoSourceType, IRtcEngine, IRtcEngineEventHandler } from 'react-native-agora';
 import { useAuth } from '@/context/AuthContext';
-import { classifyCallFailure, evaluateCallTimeout, requestCallToken, setCallState, subscribeCallSession, transitionCallState, updateHeartbeat, type CallSession } from '@/lib/calls';
-import { trackCallMetric } from '@/lib/callTelemetry';
-
-async function grantPermissions(): Promise<boolean> {
-  if (Platform.OS !== 'android') return true;
-  const needed = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, PermissionsAndroid.PERMISSIONS.CAMERA];
-  const r = await PermissionsAndroid.requestMultiple(needed);
-  return r[needed[0]] === PermissionsAndroid.RESULTS.GRANTED && r[needed[1]] === PermissionsAndroid.RESULTS.GRANTED;
-}
+import { subscribeCallSession, setCallState, type CallSession } from '@/lib/calls';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
+import { goBackOrReplace } from '@/lib/navigation';
 
 export default function CallScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const callId = String(id || '');
   const { user } = useAuth();
   const router = useRouter();
+  
   const [call, setCall] = useState<CallSession | null>(null);
-  const [joined, setJoined] = useState(false);
-  const [statusText, setStatusText] = useState('Connecting…');
-  const engineRef = useRef<IRtcEngine | null>(null);
-  const appStateRef = useRef(AppState.currentState);
-  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutEvalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reconnectAttemptRef = useRef(0);
-  const joiningLockRef = useRef(false);
-  const releaseLockRef = useRef(false);
-  const mountedRef = useRef(true);
-  const lastHeartbeatWriteRef = useRef(0);
-  const tokenRetryRef = useRef(0);
-  const callRef = useRef<CallSession | null>(null);
-  const joinStartedAtRef = useRef(0);
-  const reconnectStartedAtRef = useRef(0);
-  const joinedAtRef = useRef(0);
-  const permissionLockRef = useRef(false);
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
-
-  const isCaller = useMemo(() => call?.caller_id === user?.uid, [call?.caller_id, user?.uid]);
-
-  // Lazy-load Agora runtime surface view and constants when available
-  let AgoraRuntimeForCall: any = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    AgoraRuntimeForCall = require('react-native-agora');
-  } catch {
-    AgoraRuntimeForCall = null;
-  }
-  const RtcSurfaceViewCompCall: any = AgoraRuntimeForCall?.RtcSurfaceView ?? null;
-  const VideoSourceTypeCall: any = AgoraRuntimeForCall?.VideoSourceType ?? { VideoSourceCameraPrimary: 0 };
-  const RenderModeTypeCall: any = AgoraRuntimeForCall?.RenderModeType ?? { RenderModeHidden: 1 };
-
-  const leave = useCallback(async (finalState: 'ended' | 'declined' | 'missed' = 'ended') => {
-    if (releaseLockRef.current) return;
-    releaseLockRef.current = true;
-    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-    if (timeoutEvalRef.current) clearInterval(timeoutEvalRef.current);
-    heartbeatRef.current = null;
-    timeoutEvalRef.current = null;
-    try { engineRef.current?.leaveChannel(); } catch {}
-    try { engineRef.current?.release(); } catch {}
-    engineRef.current = null;
-    if (callId) {
-      const durationMs = joinedAtRef.current > 0 ? Date.now() - joinedAtRef.current : 0;
-      trackCallMetric('avg_call_duration', callId, { duration_ms: durationMs, ended_as: finalState });
-      await setCallState(callId, finalState, { termination_reason: finalState === 'ended' ? 'local_end' : finalState }).catch(() => {});
-    }
-    if (mountedRef.current) goBackOrReplace(router, '/(tabs)/chats');
-    releaseLockRef.current = false;
-  }, [callId, router]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    mountedRef.current = true;
-    if (!callId) return;
+    if (!callId) {
+      setLoading(false);
+      return;
+    }
     return subscribeCallSession(callId, (next) => {
       setCall(next);
-      callRef.current = next;
-      if (!next) return;
-      if (next.finalized_at) setStatusText(`Finalized: ${next.termination_reason || next.status}`);
-      else setStatusText(next.status);
-      const timeoutDecision = evaluateCallTimeout(next);
-      if (timeoutDecision) {
-        trackCallMetric('cleanup_cause', next.id, { reason: timeoutDecision.reason, via: 'client_timeout_guard' });
-        void transitionCallState(next.id, next.status, timeoutDecision.nextState, {
-          timeout_reason: timeoutDecision.reason,
-          termination_reason: timeoutDecision.reason === 'ring_timeout' ? 'expired' : timeoutDecision.reason === 'heartbeat_stale' ? 'heartbeat_timeout' : 'network_failure',
-        });
-      }
-      if (next.status === 'ended' || next.status === 'declined' || next.status === 'missed') void leave('ended');
-    });
-  }, [callId, leave]);
-
-  useEffect(() => () => {
-    mountedRef.current = false;
-    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-    if (timeoutEvalRef.current) clearInterval(timeoutEvalRef.current);
-    heartbeatRef.current = null;
-    timeoutEvalRef.current = null;
-    try { engineRef.current?.leaveChannel(); } catch {}
-    try { engineRef.current?.release(); } catch {}
-    engineRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    if (!call || !user?.uid || joined || joiningLockRef.current) return;
-    (async () => {
-      joiningLockRef.current = true;
-      joinStartedAtRef.current = Date.now();
-      const ok = await grantPermissions();
-      if (!ok) {
-        if (!permissionLockRef.current) {
-          permissionLockRef.current = true;
-          trackCallMetric('join_failure', callId, { category: classifyCallFailure('permission_denied') });
-          Alert.alert('Permissions required');
-        }
-        return;
-      }
-      if (call.expires_at_epoch && Math.floor(Date.now() / 1000) > call.expires_at_epoch) {
-        setStatusText('Call expired');
-        await transitionCallState(callId, ['ringing', 'initiating', 'connecting'], 'missed', { termination_reason: 'expired' });
-        return;
-      }
-      const token = await requestCallToken(callId).catch(() => null);
-      if (!token?.rtcToken || !token.channelName || !token.agoraUid) {
-        trackCallMetric('token_renewal_failure', callId, { category: classifyCallFailure('token_failure') });
-        return;
-      }
-      await transitionCallState(callId, ['ringing', 'initiating'], 'connecting').catch(() => false);
-      if (engineRef.current) return;
-      // Lazy-require Agora native module to avoid loading native code in Expo Go
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const Agora = require('react-native-agora');
-      const createAgoraRtcEngine = Agora.createAgoraRtcEngine;
-      const engine = createAgoraRtcEngine();
-      engineRef.current = engine as IRtcEngine;
-      const h: IRtcEngineEventHandler = {
-        onJoinChannelSuccess: async () => {
-          reconnectAttemptRef.current = 0;
-          setJoined(true);
-          setStatusText('Connected');
-          await transitionCallState(callId, ['ringing', 'connecting', 'reconnecting'], 'connected').catch(() => false);
-        },
-        onConnectionStateChanged: async (_c, state) => {
-          if (state === 3) {
-            if (reconnectStartedAtRef.current === 0) {
-              reconnectStartedAtRef.current = Date.now();
-              trackCallMetric('reconnect_frequency', callId, { attempt: reconnectAttemptRef.current + 1 });
-            }
-            reconnectAttemptRef.current += 1;
-            setStatusText('Reconnecting…');
-            await transitionCallState(callId, ['connected', 'connecting'], 'reconnecting').catch(() => false);
-            if (reconnectAttemptRef.current > 8) {
-              setStatusText('Connection failed');
-              await transitionCallState(callId, 'reconnecting', 'failed', { failed_reason: 'reconnect_attempt_limit', termination_reason: 'reconnect_timeout' });
-              void leave('ended');
-            }
-          }
-          if (state === 4) {
-            setStatusText('Connected');
-            if (reconnectStartedAtRef.current > 0) {
-              const durationMs = Date.now() - reconnectStartedAtRef.current;
-              reconnectStartedAtRef.current = 0;
-              trackCallMetric('reconnect_duration', callId, { duration_ms: durationMs });
-              trackCallMetric('rtc_reconnect_recovered', callId, { recovered: true });
-            }
-          }
-          if (state === 5) {
-            setStatusText('Connection failed');
-            await transitionCallState(callId, ['connecting', 'reconnecting', 'connected'], 'failed', { termination_reason: 'network_failure' }).catch(() => false);
-          }
-        },
-        onRequestToken: async () => {
-          if (tokenRetryRef.current >= 3) return;
-          tokenRetryRef.current += 1;
-          const next = await requestCallToken(callId).catch(() => null);
-          if (!next?.rtcToken) return;
-          engineRef.current?.renewToken(next.rtcToken);
-          tokenRetryRef.current = 0;
-        },
-      };
-      try {
-        engine.initialize({ appId: token.appId });
-      } catch {
-        trackCallMetric('join_failure', callId, { category: classifyCallFailure('engine_init_failure') });
-        throw new Error('engine_init_failure');
-      }
-      engine.registerEventHandler(h);
-      engine.enableAudio();
-      if (call.mode === 'video') engine.enableVideo();
-      engine.joinChannel(token.rtcToken, call.channel_name || token.channelName, token.agoraUid, {
-        channelProfile: ChannelProfileType.ChannelProfileCommunication,
-        clientRoleType: ClientRoleType.ClientRoleBroadcaster,
-      });
-    })().catch(() => {
-      trackCallMetric('join_failure', callId, { category: classifyCallFailure('join_failure') });
-      setStatusText('Failed');
-    }).finally(() => { joiningLockRef.current = false; });
-  }, [call, callId, joined, user?.uid]);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (next) => {
-      const prev = appStateRef.current;
-      appStateRef.current = next;
-      if (next === 'background') engineRef.current?.muteLocalAudioStream(true);
-      if (prev !== 'active' && next === 'active') {
-        engineRef.current?.muteLocalAudioStream(!micOn);
-        if (callRef.current?.mode === 'video') engineRef.current?.muteLocalVideoStream(!camOn);
+      setLoading(false);
+      if (next?.status === 'ended' || next?.status === 'missed' || next?.status === 'declined') {
+        Alert.alert('Call Ended', 'The call has been terminated.');
+        goBackOrReplace(router, '/(tabs)/chats');
       }
     });
-    return () => sub.remove();
-  }, [micOn, camOn]);
+  }, [callId, router]);
 
-  useEffect(() => {
-    if (!callId || !joined || heartbeatRef.current || timeoutEvalRef.current) return;
-    heartbeatRef.current = setInterval(() => {
-      const now = Date.now();
-      if (now - lastHeartbeatWriteRef.current < 15000) return;
-      lastHeartbeatWriteRef.current = now;
-      if (call) updateHeartbeat(callId, call.caller_id === user?.uid ? 'caller' : 'callee').catch(() => {});
-    }, 17000);
-    timeoutEvalRef.current = setInterval(() => {
-      if (!call) return;
-      const timeoutDecision = evaluateCallTimeout(call);
-      if (timeoutDecision) {
-        trackCallMetric('heartbeat_miss', call.id, { reason: timeoutDecision.reason });
-        transitionCallState(call.id, call.status, timeoutDecision.nextState, { timeout_reason: timeoutDecision.reason }).catch(() => false);
-      }
-    }, 10000);
-    return () => {
-      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      if (timeoutEvalRef.current) clearInterval(timeoutEvalRef.current);
-      heartbeatRef.current = null;
-      timeoutEvalRef.current = null;
-    };
-  }, [call, callId, joined, user?.uid]);
+  const isCaller = call?.caller_id === user?.uid;
 
-  useEffect(() => {
-    if (!joined || !callId) return;
-    joinedAtRef.current = Date.now();
-    trackCallMetric('call_setup_latency', callId, { latency_ms: joinedAtRef.current - joinStartedAtRef.current });
-  }, [joined, callId]);
+  const handleJoinCall = async () => {
+    if (!call) return;
+    try {
+      await setCallState(callId, 'connected');
+      const meetUrl = `https://meet.jit.si/${call.channel_name}`;
+      await WebBrowser.openBrowserAsync(meetUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not join call.');
+    }
+  };
 
-  if (!call) return <View style={styles.center}><ActivityIndicator /></View>;
+  const handleEndCall = async () => {
+    if (!callId) return;
+    try {
+      await setCallState(callId, isCaller && call?.status === 'ringing' ? 'missed' : 'ended');
+      goBackOrReplace(router, '/(tabs)/chats');
+    } catch (e) {
+      goBackOrReplace(router, '/(tabs)/chats');
+    }
+  };
+
+  if (loading || !call) {
+    return <View style={styles.center}><ActivityIndicator color={COLORS.primary} size="large" /></View>;
+  }
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <Text style={styles.title}>{isCaller ? 'Calling…' : 'Incoming Call'}</Text>
-      <Text style={styles.sub}>{statusText}</Text>
-      {call.mode === 'video' ? (
-        RtcSurfaceViewCompCall ? (
-          <RtcSurfaceViewCompCall style={styles.video} canvas={{ uid: 0, sourceType: VideoSourceTypeCall.VideoSourceCameraPrimary, renderMode: RenderModeTypeCall.RenderModeHidden }} />
-        ) : null
-      ) : null}
-      <View style={styles.row}>
-        <TouchableOpacity style={styles.btn} onPress={() => { const n = !micOn; setMicOn(n); engineRef.current?.muteLocalAudioStream(!n); }}><Ionicons name={micOn ? 'mic' : 'mic-off'} size={22} color="#fff" /></TouchableOpacity>
-        {call.mode === 'video' ? <TouchableOpacity style={styles.btn} onPress={() => { const n = !camOn; setCamOn(n); engineRef.current?.muteLocalVideoStream(!n); }}><Ionicons name={camOn ? 'videocam' : 'videocam-off'} size={22} color="#fff" /></TouchableOpacity> : null}
-        <TouchableOpacity style={[styles.btn, styles.end]} onPress={() => { void leave('ended'); }}><Ionicons name="call" size={22} color="#fff" /></TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.content}>
+        <Text style={styles.title}>{isCaller ? 'Outgoing Call' : 'Incoming Call'}</Text>
+        <Text style={styles.subtitle}>{call.status === 'ringing' ? 'Waiting to join...' : call.status}</Text>
+        
+        <View style={styles.card}>
+          <Ionicons name={call.mode === 'video' ? 'videocam' : 'call'} size={64} color={COLORS.primary} style={styles.icon} />
+          
+          <TouchableOpacity style={styles.primaryBtn} onPress={handleJoinCall}>
+            <Text style={styles.primaryBtnText}>Join Call</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.dangerBtn} onPress={handleEndCall}>
+            <Text style={styles.dangerBtnText}>{call.status === 'ringing' && !isCaller ? 'Decline' : 'End Call'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#081016', alignItems: 'center', justifyContent: 'center', gap: 16 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#fff', fontSize: 24, fontWeight: '800' },
-  sub: { color: 'rgba(255,255,255,0.8)' },
-  video: { width: '92%', height: 340, borderRadius: 16, overflow: 'hidden', backgroundColor: '#111827' },
-  row: { flexDirection: 'row', gap: 12 },
-  btn: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: '#374151' },
-  end: { backgroundColor: '#B91C1C', transform: [{ rotate: '135deg' }] },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.lg },
+  title: { color: COLORS.text, fontSize: 24, fontWeight: 'bold', marginBottom: SPACING.xs },
+  subtitle: { color: COLORS.textMuted, fontSize: 16, marginBottom: SPACING.xl },
+  card: { backgroundColor: COLORS.surface, width: '100%', maxWidth: 400, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: 'center' },
+  icon: { marginBottom: SPACING.xl },
+  primaryBtn: { backgroundColor: COLORS.primary, width: '100%', padding: SPACING.md, borderRadius: RADIUS.md, alignItems: 'center', marginBottom: SPACING.md },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  dangerBtn: { backgroundColor: 'transparent', width: '100%', padding: SPACING.md, borderRadius: RADIUS.md, alignItems: 'center', borderWidth: 1, borderColor: COLORS.error },
+  dangerBtnText: { color: COLORS.error, fontSize: 16, fontWeight: 'bold' }
 });

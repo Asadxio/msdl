@@ -169,6 +169,8 @@ export default function CourseDetailScreen() {
   const [reviewing, setReviewing] = useState(false);
   const [activeLiveClass, setActiveLiveClass] = useState<LiveClass | null>(null);
   const [startingLiveClass, setStartingLiveClass] = useState(false);
+  const [meetUrlModalVisible, setMeetUrlModalVisible] = useState(false);
+  const [meetUrlInput, setMeetUrlInput] = useState("");
   const [fatalError] = useState<string>("");
   const [audioLessons, setAudioLessons] = useState<AudioLesson[]>([]);
   const [audioSearch, setAudioSearch] = useState("");
@@ -725,12 +727,23 @@ export default function CourseDetailScreen() {
     }
   };
 
-  const handleStartLiveClass = async () => {
+  const openStartClassModal = () => {
     if (!course || !user?.uid || !profile) return;
     if (profile.role !== "teacher" && profile.role !== "admin") {
       Alert.alert("Access denied", "Only teachers/admins can start live classes.");
       return;
     }
+    setMeetUrlInput(meetLink || "");
+    setMeetUrlModalVisible(true);
+  };
+
+  const handleStartLiveClass = async () => {
+    if (!course || !user?.uid || !profile) return;
+    if (!meetUrlInput.trim()) {
+      Alert.alert("Required", "Please enter a valid Google Meet URL.");
+      return;
+    }
+    setMeetUrlModalVisible(false);
     setStartingLiveClass(true);
     try {
       const classId = await startLiveClass({
@@ -738,7 +751,7 @@ export default function CourseDetailScreen() {
         title: course.name,
         teacherId: user.uid,
         teacherName: profile.name || user.email || "Teacher",
-        meetFallbackUrl: meetLink,
+        meetUrl: meetUrlInput.trim(),
         profile,
       });
       safePushLiveClass(classId);
@@ -1539,7 +1552,7 @@ export default function CourseDetailScreen() {
                   style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
                   activeOpacity={0.8}
                   disabled={startingLiveClass}
-                  onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : handleStartLiveClass}
+                  onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : openStartClassModal}
                 >
                   {startingLiveClass ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
@@ -1833,11 +1846,59 @@ export default function CourseDetailScreen() {
           )}
         </View>
       </Modal>
+
+      <Modal
+        visible={meetUrlModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMeetUrlModalVisible(false)}
+      >
+        <View style={styles.startClassModalOverlay}>
+          <View style={styles.startClassModalContent}>
+            <View style={styles.startClassModalHeader}>
+              <Text style={styles.startClassModalTitle}>Start Live Class</Text>
+              <TouchableOpacity onPress={() => setMeetUrlModalVisible(false)}>
+                <Ionicons name="close" size={24} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ color: COLORS.textMuted, marginBottom: 16 }}>
+              Enter the Google Meet link for this session.
+            </Text>
+            <TextInput
+              style={styles.startClassModalInput}
+              placeholder="https://meet.google.com/..."
+              placeholderTextColor={COLORS.textMuted}
+              value={meetUrlInput}
+              onChangeText={setMeetUrlInput}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+            <TouchableOpacity
+              style={[styles.startClassPrimaryModalBtn, { marginTop: 24 }]}
+              onPress={handleStartLiveClass}
+              disabled={startingLiveClass}
+            >
+              {startingLiveClass ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.startClassPrimaryModalBtnText}>Start Class</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  startClassModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
+  startClassModalContent: { width: "90%", maxWidth: 400, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.xl },
+  startClassModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.md },
+  startClassModalTitle: { fontSize: 20, fontWeight: "bold", color: COLORS.textMain },
+  startClassModalInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, padding: SPACING.md, color: COLORS.textMain, backgroundColor: COLORS.background },
+  startClassPrimaryModalBtn: { backgroundColor: COLORS.primary, padding: SPACING.md, borderRadius: RADIUS.md, alignItems: "center" },
+  startClassPrimaryModalBtnText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
   container: { flex: 1, backgroundColor: COLORS.background },
   loadingContainer: {
     flex: 1,

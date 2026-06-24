@@ -11,7 +11,6 @@ _health: dict[str, Any] = {
     "queue_pressure": 0,
     "upload_failure_rate": 0,
     "memory_pressure_score": 0,
-    "rtc_instability": 0,
 }
 _failure_counts: dict[str, int] = defaultdict(int)
 
@@ -52,7 +51,7 @@ def register_operational_trace(name: str, trace_id: str, context: dict[str, Any]
 
 def track_runtime_health(patch: dict[str, Any]) -> dict[str, Any]:
     _health.update(patch or {})
-    score = int(_health.get("reconnect_frequency", 0)) + int(_health.get("queue_pressure", 0)) + int(_health.get("upload_failure_rate", 0)) + int(_health.get("memory_pressure_score", 0)) + int(_health.get("rtc_instability", 0))
+    score = int(_health.get("reconnect_frequency", 0)) + int(_health.get("queue_pressure", 0)) + int(_health.get("upload_failure_rate", 0)) + int(_health.get("memory_pressure_score", 0))
     _health["risk_level"] = "high" if score >= 16 else ("medium" if score >= 8 else "low")
     _health["degraded"] = _health["risk_level"] != "low"
     return dict(_health)
