@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "675123731963",
+    "firebase_url": "https://madrasa-app-50d6c-default-rtdb.firebaseio.com",
+    "project_id": "madrasa-app-50d6c",
+    "storage_bucket": "madrasa-app-50d6c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:675123731963:android:7d9c13daaa6378fa2cbf5e",
+        "android_client_info": {
+          "package_name": "com.madrasatussalikat.lilbanat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "675123731963-45c3g6lhqa3d37jl8l9b24i81lbo1gi2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4L8fnfXisqAzeEH0snYuxncP-gHMU6yA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "675123731963-45c3g6lhqa3d37jl8l9b24i81lbo1gi2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

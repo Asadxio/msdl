@@ -51,7 +51,8 @@
       "notification": {
         "icon": "./assets/images/notification-icon.png",
         "color": "#0FA958"
-      }
+      },
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
