@@ -7,8 +7,9 @@ import {
   StatusBar,
   TouchableOpacity,
   ActivityIndicator,
-  RefreshControl,
 } from 'react-native';
+import { ScreenRefreshControl } from '@/components/ui';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -33,7 +34,6 @@ export default function LiveClassesScreen() {
   const insets = useSafeAreaInsets();
   const [classes, setClasses] = useState<LiveClassItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'live' | 'scheduled'>('live');
 
   const fetchClasses = () => {
@@ -58,12 +58,11 @@ export default function LiveClassesScreen() {
         });
         setClasses(items);
         setLoading(false);
-        setRefreshing(false);
+        setLoading(false);
       },
       (error) => {
         console.error('[LiveClassesScreen] Error fetching live classes:', error);
         setLoading(false);
-        setRefreshing(false);
       }
     );
     return unsub;
@@ -74,10 +73,10 @@ export default function LiveClassesScreen() {
     return () => unsub();
   }, []);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchClasses();
-  };
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    // Revalidation only - listeners are active
+    await new Promise((r) => setTimeout(r, 500));
+  });
 
   const filteredClasses = useMemo(() => {
     return classes.filter((c) => c.status === activeTab);
@@ -173,9 +172,7 @@ export default function LiveClassesScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderClassItem}
           contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[COLORS.primary]} />
-          }
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <EmptyState

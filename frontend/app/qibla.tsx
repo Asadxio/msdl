@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
@@ -163,6 +165,10 @@ export default function QiblaScreen() {
       setLocation((current) => ({ ...current, permission: current.source === 'cache' ? 'offline' : 'unavailable' }));
     }
   }, []);
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await refreshLocation();
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -354,7 +360,11 @@ export default function QiblaScreen() {
           </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.md }]} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.md }]} 
+          showsVerticalScrollIndicator={false}
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           <View style={styles.headerRow}>
             <TouchableOpacity style={styles.backButton} onPress={() => goBackOrReplace(router, '/more')} accessibilityLabel="Go back">
               <Ionicons name="chevron-back" size={20} color={COLORS.primary} />

@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, StatusBar, ActivityIndicator,
@@ -588,7 +590,11 @@ export default function ManageAcademicsScreen() {
 
           {courseNames.length === 0 ? <Text style={styles.helper}>No courses available for assignment.</Text> : courseNames.map((name) => {
             const selected = selectedCourses.includes(name);
-            return (
+          
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    // Static dashboard, no explicit refetch needed; handled by sub-screens.
+  });
+  return (
               <TouchableOpacity
                 key={name}
                 style={[styles.courseChip, selected && styles.courseChipSelected]}

@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { memo, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, StatusBar, TouchableOpacity, TextInput,
@@ -56,6 +58,9 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
 });
 
 export default function CoursesScreen() {
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    if (refetch) await refetch();
+  });
   const insets = useSafeAreaInsets();
   const { courses, loading, refetch } = useData();
   const safeCourses = useMemo(() => (Array.isArray(courses) ? courses : []), [courses]);
@@ -133,7 +138,8 @@ export default function CoursesScreen() {
       ) : (
         <FlatList
           data={filteredCourses}
-          keyExtractor={(item) => item.id}
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          keyExtractor={(item) => String(item.id)}
           renderItem={({ item, index }) => <CourseCard course={item} index={index} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

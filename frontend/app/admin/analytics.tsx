@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, ScrollView,
@@ -206,6 +208,10 @@ export default function AdminAnalyticsScreen() {
     }
   };
 
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await loadAnalytics();
+  });
+
   useEffect(() => {
     if (profile && !isAdmin) {
       router.replace('/unauthorized?required=admin');
@@ -257,7 +263,11 @@ export default function AdminAnalyticsScreen() {
           <Text style={styles.loadingText}>Loading analytics...</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+        contentContainerStyle={styles.body} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
 
           {/* USERS */}
           <SectionHeader title="Users" icon="people-outline" />

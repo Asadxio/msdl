@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
@@ -359,8 +361,16 @@ export default function PrayerTimesScreen() {
     return PRAYER_METHODS[settings.method]?.method || 'Custom';
   }, [settings]);
 
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await handleAutoDetect();
+  });
+
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.md }]}>
+    <ScrollView 
+      refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      style={styles.screen} 
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.md }]}
+    >
       <View style={styles.headerRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => goBackOrReplace(router, '/more')} accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={20} color={COLORS.primary} />
@@ -465,7 +475,11 @@ export default function PrayerTimesScreen() {
                 {(['auto', 'muslimWorldLeague', 'egyptian', 'karachi', 'ummAlQura', 'northAmerica'] as const).map((methodKey) => {
                   const label = methodKey === 'auto' ? 'Automatic (Based on Country)' : (PRAYER_METHODS[methodKey]?.method || methodKey);
                   const isSelected = methodOverride === methodKey;
-                  return (
+                
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await handleAutoDetect();
+  });
+  return (
                     <TouchableOpacity
                       key={methodKey}
                       style={[styles.methodItem, isSelected && styles.methodItemActive]}

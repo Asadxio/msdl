@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // Islamic Dashboard relocated to More
 import {
@@ -141,11 +143,15 @@ function formatDuration(ms: number) {
 }
 
 export default function HomeScreen() {
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    if (refetch) await refetch();
+    if (refreshProfile) await refreshProfile();
+  });
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { courses, teachers, loading, getResumeLearning, getCourseProgress } =
+  const { courses, teachers, loading, getResumeLearning, getCourseProgress, refetch } =
     useData();
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const { showTutorial, setShowTutorial, setCurrentStep } = useTutorial();
   const tutorialStartedRef = useRef(false);
   const isAdmin = profile?.role === "admin";
@@ -391,6 +397,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <ScrollView
+        refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 30 }}
       >

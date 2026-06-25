@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
@@ -17,6 +17,8 @@ import { createAdminLog } from '@/lib/adminLogs';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { actionNonce, apiUrl } from '@/lib/api';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 
 type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
 
@@ -89,6 +91,10 @@ export default function AdminPaymentsScreen() {
       setFetching(false);
     }
   }, [cursor, fetching, isAdmin, statusFilter]);
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await loadPayments('reset');
+  });
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -183,6 +189,7 @@ export default function AdminPaymentsScreen() {
         <Text style={{ paddingHorizontal: 16, color: COLORS.textMuted }}>Filter status: {statusFilter}</Text>
         <FlatList
           data={payments}
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (

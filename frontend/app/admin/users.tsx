@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
@@ -69,6 +71,10 @@ export default function AdminUsersScreen() {
     setLoading(false);
     setFetching(false);
   };
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await fetchUsers('reset');
+  });
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -356,6 +362,7 @@ export default function AdminUsersScreen() {
             </View>
           )}
           data={filteredUsers}
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyExtractor={(item) => item.id}
           renderItem={renderUser}
           contentContainerStyle={styles.list}

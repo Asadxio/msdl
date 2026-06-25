@@ -5,8 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY, getTeacherAvatar } from '@/constants/theme';
 import { useData, Teacher } from '@/context/DataContext';
-import { EmptyState, FadeInView, ScalePressable } from '@/components/ui';
+import { EmptyState, FadeInView, ScalePressable, ScreenRefreshControl } from '@/components/ui';
 import { normalizeGoogleDriveFileUrl } from '@/lib/links';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 
 function TeacherCard({ teacher, isOnly }: { teacher: Teacher; isOnly: boolean }) {
   const router = useRouter();
@@ -51,8 +52,11 @@ function TeacherCard({ teacher, isOnly }: { teacher: Teacher; isOnly: boolean })
 }
 
 export default function TeachersScreen() {
-  const insets = useSafeAreaInsets();
   const { teachers, loading, refetch } = useData();
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    if (refetch) await refetch();
+  });
+  const insets = useSafeAreaInsets();
   const isOnly = teachers.length === 1;
 
   return (
@@ -74,7 +78,12 @@ export default function TeachersScreen() {
       ) : teachers.length === 0 ? (
         <EmptyState icon="people-outline" title="No Teachers Yet" message="Teachers will appear here once added." />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.listContent, isOnly && styles.listCentered]} testID="teachers-list">
+        <ScrollView
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={[styles.listContent, isOnly && styles.listCentered]} 
+          testID="teachers-list"
+        >
           {teachers.map((teacher) => (
             <TeacherCard key={teacher.id} teacher={teacher} isOnly={isOnly} />
           ))}

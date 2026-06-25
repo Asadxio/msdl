@@ -1,5 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
 import {
@@ -75,12 +77,16 @@ export default function NotificationsScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
   const [composerError, setComposerError] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [focusedField, setFocusedField] = useState<'title' | 'message' | 'recipient' | null>(null);
   const [focusedEditField, setFocusedEditField] = useState<'editTitle' | 'editMessage' | null>(null);
   const perfRef = useRef(registerPerformanceSurface({ surface: 'notifications_screen', cleanupIntervalMs: 120000, lowEndSafe: true }));
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    setReloadKey((v) => v + 1);
+    await new Promise(r => setTimeout(r, 600));
+  });
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -276,9 +282,7 @@ export default function NotificationsScreen() {
               </View>
             ) : null}
           </View>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Refresh notifications" style={styles.refreshBtn} onPress={() => setReloadKey((v) => v + 1)}>
-            <Ionicons name="refresh" size={16} color={COLORS.primary} />
-          </TouchableOpacity>
+          
         </View>
         <Text style={styles.headerSubtitle}>Latest updates and class reminders</Text>
       </View>
@@ -372,18 +376,14 @@ export default function NotificationsScreen() {
       ) : (
         <FlatList
           data={items}
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           initialNumToRender={10}
           maxToRenderPerBatch={12}
           windowSize={8}
           removeClippedSubviews
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            setReloadKey((v) => v + 1);
-            setTimeout(() => setRefreshing(false), 1000);
-          }}
+          
           ListEmptyComponent={(
             <View style={styles.center}>
               <Ionicons name="notifications-off-outline" size={44} color={COLORS.border} />
@@ -393,7 +393,11 @@ export default function NotificationsScreen() {
           )}
           renderItem={({ item }) => {
             const isUnread = !item.read?.[user?.uid || ''];
-            return (
+          
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    
+  });
+  return (
               <ScalePressable
                 style={[
                   styles.card,

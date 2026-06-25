@@ -12,11 +12,12 @@ import {
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
+import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard, ScreenRefreshControl } from '@/components/ui';
 import { stableQueryKey, subscribeDeduped } from '@/lib/queryPerformance';
 import { ReportReasonModal } from '@/components/ReportReasonModal';
 import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 
 type AppUser = { id: string; name: string; email?: string; role: string; status: string; photo_url?: string; avatar?: string };
 
@@ -89,6 +90,9 @@ function fmtChatTime(value: unknown): string {
 }
 
 export default function ChatsScreen() {
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await refreshChats();
+  });
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile } = useAuth();
@@ -96,7 +100,6 @@ export default function ChatsScreen() {
   const isTeacher = profile?.role === 'teacher';
 
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [users, setUsers] = useState<AppUser[]>([]);
   const [chats, setChats] = useState<ChatItem[]>([]);
@@ -148,8 +151,7 @@ export default function ChatsScreen() {
 
 
   const refreshChats = useCallback(async () => {
-    if (!user?.uid || refreshing) return;
-    setRefreshing(true);
+    if (!user?.uid) return;
     setError('');
     try {
       const participantsQ = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updated_at', 'desc'));
@@ -162,16 +164,12 @@ export default function ChatsScreen() {
       const merged = [...directAndGroups, ...broadcasts.filter((bc) => !directAndGroups.some((x) => x.id === bc.id))];
       setChats(merged.sort((x, y) => (y.updated_at?.seconds || 0) - (x.updated_at?.seconds || 0)));
       setLoading(false);
-      setFeedback({ type: 'success', text: 'Chats refreshed.' });
     } catch (err: unknown) {
       logFirestoreFailure({ collection: 'chats', operation: 'get', query: `participants array-contains ${user.uid} + broadcasts type == broadcast orderBy updated_at desc` }, err);
       const message = err instanceof Error ? err.message : 'Failed to refresh chats.';
       setError(message);
-      setFeedback({ type: 'error', text: message });
-    } finally {
-      setRefreshing(false);
     }
-  }, [refreshing, user?.uid]);
+  }, [user?.uid]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -456,15 +454,6 @@ export default function ChatsScreen() {
             <Text style={styles.title}>Chats</Text>
             <Text style={styles.subtitle}>1-to-1, groups, and broadcast</Text>
           </View>
-          <TouchableOpacity
-            style={styles.refreshBtn}
-            onPress={refreshChats}
-            disabled={refreshing}
-            accessibilityRole="button"
-            accessibilityLabel="Refresh chats"
-          >
-            {refreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
-          </TouchableOpacity>
         </View>
       </View>
       {feedback ? (
@@ -571,6 +560,7 @@ export default function ChatsScreen() {
       ) : (
         <FlatList
           data={filteredChats}
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           initialNumToRender={12}

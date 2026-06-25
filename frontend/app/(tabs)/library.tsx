@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from "@/components/ui";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   View,
@@ -101,6 +103,9 @@ function BookCard({ book, isAdmin, onDelete, onOpen }: { book: Book; isAdmin: bo
 }
 
 export default function LibraryScreen() {
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    if (refetchBooks) await refetchBooks();
+  });
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { books, booksLoading, deleteBook, refetchBooks, error } = useData();
@@ -111,7 +116,6 @@ export default function LibraryScreen() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
   const refreshSpin = useRef(new Animated.Value(0)).current;
 
@@ -171,7 +175,7 @@ export default function LibraryScreen() {
 
   const handleRefreshLibrary = async () => {
     if (refreshing) return;
-    setRefreshing(true);
+    
     setFeedback(null);
     try {
       const ok = await refetchBooks();
@@ -180,7 +184,7 @@ export default function LibraryScreen() {
     } catch {
       setFeedback({ type: 'error', text: 'Unable to refresh library. Please try again.' });
     } finally {
-      setRefreshing(false);
+      
     }
   };
 
@@ -319,6 +323,7 @@ export default function LibraryScreen() {
       ) : (
         <FlatList
           data={filteredBooks}
+          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyExtractor={(item) => item.id}
           numColumns={2}
           ListHeaderComponent={recentlyViewedBooks.length > 0 && !debouncedSearch ? (
