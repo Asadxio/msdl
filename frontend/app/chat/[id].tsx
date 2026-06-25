@@ -1,5 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import { ScreenRefreshControl } from '@/components/ui';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, AppState,
@@ -167,7 +169,6 @@ export default function ChatDetailScreen() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [reportTarget, setReportTarget] = useState<MessageItem | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<MessageItem>>(null);
   const chatUnsubRef = useRef<(() => void) | null>(null);
@@ -589,7 +590,7 @@ export default function ChatDetailScreen() {
 
   const refreshMessages = useCallback(async () => {
     if (!id || refreshing) return;
-    setRefreshing(true);
+    
     try {
       const [chatSnap, messageSnap] = await Promise.all([
         getDoc(doc(db, 'chats', id)),
@@ -615,9 +616,9 @@ export default function ChatDetailScreen() {
       logFirestoreFailure({ collection: 'chats/messages', operation: 'get', query: `doc chats/${id} + messages where chat_id == ${id}` }, error);
       setSendError('Could not refresh chat. Please try again.');
     } finally {
-      setRefreshing(false);
+      
     }
-  }, [id, refreshing]);
+  }, [id]);
 
   const deleteForMe = useCallback(async (message: MessageItem) => {
     if (!user?.uid) return;
@@ -766,6 +767,10 @@ export default function ChatDetailScreen() {
 
   const title = chat.type === 'group' ? (chat.name || 'Group Chat') : chat.type === 'broadcast' ? 'Broadcast' : 'Direct Chat';
 
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await new Promise(r => setTimeout(r, 500));
+  });
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -806,6 +811,7 @@ export default function ChatDetailScreen() {
         ListFooterComponent={listFooter}
         ListEmptyComponent={listEmpty}
         renderItem={renderMessage}
+      refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       />
 
       <ReportReasonModal

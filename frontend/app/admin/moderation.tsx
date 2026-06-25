@@ -9,6 +9,8 @@ import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination'
 import { db } from '@/lib/firebase';
 import { applyModerationDecision } from '@/lib/moderationOps';
 import { normalizeModerationState, type ModerationSeverity } from '@/lib/moderationDomain';
+import { ScreenRefreshControl } from '@/components/ui';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 
 export default function ModerationDashboard() {
   const { profile } = useAuth();
@@ -35,6 +37,11 @@ export default function ModerationDashboard() {
   };
 
   useEffect(() => { load('reset'); }, [severity, state, allowed]);
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await load('reset');
+  });
+
   const filtered = useMemo(() => items.filter((i) => !q || String(i.reason || '').toLowerCase().includes(q.toLowerCase()) || String(i.accused_user_id || '').includes(q)), [items, q]);
 
   const act = async (item: any, action: 'warn_user' | 'temporary_suspension' | 'dismiss_report') => {
@@ -74,7 +81,7 @@ export default function ModerationDashboard() {
     <Text style={styles.title}>Moderation Queue</Text>
     <TextInput value={q} onChangeText={setQ} placeholder="Search reason/user" style={styles.input} />
     <View style={styles.row}><TouchableOpacity onPress={() => setSeverity(severity === 'all' ? 'high' : 'all')}><Text>Severity: {severity}</Text></TouchableOpacity><TouchableOpacity onPress={() => setState(state === 'pending' ? 'under_review' : 'pending')}><Text>Tab: {state}</Text></TouchableOpacity></View>
-    {loading ? <ActivityIndicator /> : <FlatList data={filtered} keyExtractor={(i) => i.id} removeClippedSubviews windowSize={8} maxToRenderPerBatch={10} renderItem={({ item }) => <View style={styles.card}><Text>{item.reason}</Text><Text>{item.state} • {item.severity}</Text><Text>{item.accused_user_id}</Text><Text numberOfLines={2}>Evidence: {item.evidence_ref || 'n/a'}</Text><View style={styles.row}><TouchableOpacity disabled={busy===item.id} onPress={() => act(item, 'warn_user')}><Text>Warn</Text></TouchableOpacity><TouchableOpacity disabled={busy===item.id} onPress={() => act(item, 'temporary_suspension')}><Text>Suspend</Text></TouchableOpacity><TouchableOpacity disabled={busy===item.id} onPress={() => act(item, 'dismiss_report')}><Text>Dismiss</Text></TouchableOpacity></View></View>} ListFooterComponent={<View style={styles.row}><TouchableOpacity onPress={() => load('prev')}><Text>Prev</Text></TouchableOpacity><TouchableOpacity onPress={() => load('next')}><Text>Next</Text></TouchableOpacity></View>} />}
+    {loading ? <ActivityIndicator /> : <FlatList refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />} data={filtered} keyExtractor={(i) => i.id} removeClippedSubviews windowSize={8} maxToRenderPerBatch={10} renderItem={({ item }) => <View style={styles.card}><Text>{item.reason}</Text><Text>{item.state} • {item.severity}</Text><Text>{item.accused_user_id}</Text><Text numberOfLines={2}>Evidence: {item.evidence_ref || 'n/a'}</Text><View style={styles.row}><TouchableOpacity disabled={busy===item.id} onPress={() => act(item, 'warn_user')}><Text>Warn</Text></TouchableOpacity><TouchableOpacity disabled={busy===item.id} onPress={() => act(item, 'temporary_suspension')}><Text>Suspend</Text></TouchableOpacity><TouchableOpacity disabled={busy===item.id} onPress={() => act(item, 'dismiss_report')}><Text>Dismiss</Text></TouchableOpacity></View></View>} ListFooterComponent={<View style={styles.row}><TouchableOpacity onPress={() => load('prev')}><Text>Prev</Text></TouchableOpacity><TouchableOpacity onPress={() => load('next')}><Text>Next</Text></TouchableOpacity></View>} />}
   </View>;
 }
 

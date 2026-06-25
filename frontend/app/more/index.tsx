@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from '@/components/ui';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,8 +47,12 @@ export default function MoreLandingScreen() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
 
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await new Promise(r => setTimeout(r, 500));
+  });
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.lg }]} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.lg }]} showsVerticalScrollIndicator={false} refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <View style={styles.header}>
         <Text style={styles.title}>More</Text>
         <Text style={styles.subtitle}>Explore tools and settings</Text>

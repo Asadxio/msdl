@@ -1,3 +1,5 @@
+import { ScreenRefreshControl } from '@/components/ui';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, ScrollView, FlatList, Image } from 'react-native';
 import { dispatchNotification } from '@/lib/notificationCenter';
@@ -102,7 +104,11 @@ export default function AdminSendPush() {
             style={{ maxHeight: 220, marginTop: 8 }}
             renderItem={({ item }) => {
               const selected = selectedIds.includes(item.id);
-              return (
+            
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await new Promise(r => setTimeout(r, 500));
+  });
+  return (
                 <TouchableOpacity
                   onPress={() => {
                     setSelectedIds((prev) => selected ? prev.filter((p) => p !== item.id) : [...prev, item.id]);

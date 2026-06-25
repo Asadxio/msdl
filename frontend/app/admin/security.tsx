@@ -6,6 +6,8 @@ import * as Sharing from 'expo-sharing';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { fetchSecurityEvents, detectAnomalies, buildIncidentTimeline, toCsvIncidentReport, type SecuritySeverity } from '@/lib/securityMonitoring';
 import { useAuth } from '@/context/AuthContext';
+import { ScreenRefreshControl } from '@/components/ui';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { hasPermission } from '@/lib/rbac';
 
 export default function SecurityDashboard() {
@@ -21,6 +23,10 @@ export default function SecurityDashboard() {
     setEvents(items);
   };
   useEffect(() => { load(); }, [allowed, severity]);
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await load();
+  });
 
   const anomalies = useMemo(() => detectAnomalies(events), [events]);
   const timeline = useMemo(() => buildIncidentTimeline(events), [events]);
@@ -40,7 +46,7 @@ export default function SecurityDashboard() {
     <View style={styles.row}><TouchableOpacity onPress={() => setSeverity(severity === 'all' ? 'high' : 'all')}><Text>Severity: {severity}</Text></TouchableOpacity><TouchableOpacity onPress={exportReport}><Text>Export CSV</Text></TouchableOpacity></View>
     <Text style={styles.subtitle}>Anomalies: {anomalies.length}</Text>
     <Text style={styles.subtitle}>Heatmap proxy (events loaded): {events.length}</Text>
-    <FlatList data={events} keyExtractor={(i) => i.id} renderItem={({ item }) => <View style={styles.card}><Text>{item.event}</Text><Text>{item.severity || 'n/a'} • {item.created_at_ms || ''}</Text></View>} />
+    <FlatList refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />} data={events} keyExtractor={(i) => i.id} renderItem={({ item }) => <View style={styles.card}><Text>{item.event}</Text><Text>{item.severity || 'n/a'} • {item.created_at_ms || ''}</Text></View>} />
   </View>;
 }
 

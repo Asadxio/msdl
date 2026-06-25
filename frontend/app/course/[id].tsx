@@ -1,5 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import { ScreenRefreshControl } from '@/components/ui';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -1336,7 +1338,11 @@ export default function CourseDetailScreen() {
                                   )
                                     ? assignmentSubmissionsRaw
                                     : [];
-                                  return (
+                                
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await new Promise(r => setTimeout(r, 500));
+  });
+  return (
                                     <View
                                       key={assignment.id}
                                       style={styles.assignmentCard}
