@@ -1,0 +1,4 @@
+.metro-cache/
+scratch/
+.git/
+node_modules/
