@@ -45,7 +45,7 @@ export default function MoreLandingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
