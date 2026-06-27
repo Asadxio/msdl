@@ -1,0 +1,182 @@
+[
+  {
+    "question": "Masjid mein dakhil hote waqt pehle kaunsa paon rakhna Sunnat hai?",
+    "option1": "Dahina (Right) paon",
+    "option2": "Baaya (Left) paon",
+    "option3": "Dono paon",
+    "option4": "Koi bhi",
+    "correctAnswer": "Dahina (Right) paon",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein dakhil hote waqt kya padhna Sunnat hai?",
+    "option1": "Masjid mein dakhil hone ki Dua",
+    "option2": "Sirf Bismillah",
+    "option3": "Kuch bhi nahi",
+    "option4": "Takbeer",
+    "correctAnswer": "Masjid mein dakhil hone ki Dua",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein kis tarah rehna chahiye?",
+    "option1": "Sukoon aur Adab ke saath",
+    "option2": "Buland Aawaz se",
+    "option3": "Hansna aur Shor karna",
+    "option4": "Daudna",
+    "correctAnswer": "Sukoon aur Adab ke saath",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid kis liye banayi gayi hai?",
+    "option1": "Allah Ta'ala ki Ibadat ke liye",
+    "option2": "Tijarat ke liye",
+    "option3": "Khel ke liye",
+    "option4": "Sone ke liye",
+    "correctAnswer": "Allah Ta'ala ki Ibadat ke liye",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid kis ilm ka hissa hai?",
+    "option1": "Akhlaq-e-Islamiyyah",
+    "option2": "Nahw",
+    "option3": "Hisab",
+    "option4": "Balaghat",
+    "correctAnswer": "Akhlaq-e-Islamiyyah",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein buland aawaz se baat karna kaisa hai?",
+    "option1": "Na-Pasandeedah",
+    "option2": "Mustahab",
+    "option3": "Sunnat",
+    "option4": "Farz",
+    "correctAnswer": "Na-Pasandeedah",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein Tahiyyatul Masjid padhna kaisa hai?",
+    "option1": "Mustahab",
+    "option2": "Farz",
+    "option3": "Makruh",
+    "option4": "Na-Jaiz",
+    "correctAnswer": "Mustahab",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein duniya ki fuzool baatein karna kaisa hai?",
+    "option1": "Na-Pasandeedah",
+    "option2": "Mustahab",
+    "option3": "Jaiz",
+    "option4": "Farz",
+    "correctAnswer": "Na-Pasandeedah",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein safai ka khayal rakhna kaisa hai?",
+    "option1": "Zaroori Adab",
+    "option2": "Makruh",
+    "option3": "Na-Jaiz",
+    "option4": "Ghalat",
+    "correctAnswer": "Zaroori Adab",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein kis cheez ki kasrat karni chahiye?",
+    "option1": "Zikr aur Dua",
+    "option2": "Mazaaq",
+    "option3": "Jhagda",
+    "option4": "Mobile chalana",
+    "correctAnswer": "Zikr aur Dua",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid se nikalte waqt pehle kaunsa paon nikalna Sunnat hai?",
+    "option1": "Baaya (Left) paon",
+    "option2": "Dahina (Right) paon",
+    "option3": "Dono paon",
+    "option4": "Koi bhi",
+    "correctAnswer": "Baaya (Left) paon",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid se nikalte waqt kya padhna Sunnat hai?",
+    "option1": "Masjid se nikalne ki Dua",
+    "option2": "Takbeer",
+    "option3": "Kuch bhi nahi",
+    "option4": "Sirf Alhamdulillah",
+    "correctAnswer": "Masjid se nikalne ki Dua",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein Qur'an ki tilawat karna kaisa hai?",
+    "option1": "Bohot Afzal Amal",
+    "option2": "Makruh",
+    "option3": "Na-Jaiz",
+    "option4": "Ghalat",
+    "correctAnswer": "Bohot Afzal Amal",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein Namaziyon ko takleef dena kaisa hai?",
+    "option1": "Na-Jaiz",
+    "option2": "Jaiz",
+    "option3": "Mustahab",
+    "option4": "Farz",
+    "correctAnswer": "Na-Jaiz",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid ka ehteram karna kis ki nishani hai?",
+    "option1": "Taqwa",
+    "option2": "Takabbur",
+    "option3": "Hasad",
+    "option4": "Munafiqat",
+    "correctAnswer": "Taqwa",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Adab-e-Masjid ke masail seekhna kaisa hai?",
+    "option1": "Aham",
+    "option2": "Ghair Zaroori",
+    "option3": "Makruh",
+    "option4": "Sirf Ulema ke liye",
+    "correctAnswer": "Aham",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein kis niyyat se jana chahiye?",
+    "option1": "Allah Ta'ala ki Ibadat ke liye",
+    "option2": "Logon se milne ke liye",
+    "option3": "Aaram karne ke liye",
+    "option4": "Tijarat ke liye",
+    "correctAnswer": "Allah Ta'ala ki Ibadat ke liye",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Masjid mein mobile ka istemal kaisa hona chahiye?",
+    "option1": "Zarurat ke mutabiq aur Khamoshi ke saath",
+    "option2": "Buland ringtone ke saath",
+    "option3": "Video dekhna",
+    "option4": "Game khelna",
+    "correctAnswer": "Zarurat ke mutabiq aur Khamoshi ke saath",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Adab-e-Masjid par amal karna kaisa hai?",
+    "option1": "Zaroori",
+    "option2": "Ikhtiyari",
+    "option3": "Makruh",
+    "option4": "Na-Jaiz",
+    "correctAnswer": "Zaroori",
+    "category": "Adab-e-Masjid"
+  },
+  {
+    "question": "Adab-e-Masjid ka sabse bada faidah kya hai?",
+    "option1": "Allah Ta'ala ki Raza aur Iman mein Mazbooti",
+    "option2": "Sirf Daulat",
+    "option3": "Sirf Shohrat",
+    "option4": "Sirf Dunyawi Kamyabi",
+    "correctAnswer": "Allah Ta'ala ki Raza aur Iman mein Mazbooti",
+    "category": "Adab-e-Masjid"
+  }
+]
