@@ -745,6 +745,11 @@ export default function CourseDetailScreen() {
       Alert.alert("Required", "Please enter a valid Google Meet URL.");
       return;
     }
+    const meetRegex = /^https?:\/\/(meet\.google\.com\/[a-z0-9\-]+|meet\.google\.com\/lookup\/[a-z0-9\-]+)(?:\?.*)?$/i;
+    if (!meetRegex.test(meetUrlInput.trim())) {
+      Alert.alert("Invalid URL", "Please enter a valid Google Meet link (e.g. https://meet.google.com/abc-defg-hij)");
+      return;
+    }
     setMeetUrlModalVisible(false);
     setStartingLiveClass(true);
     try {

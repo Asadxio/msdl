@@ -32,8 +32,8 @@ type AnalyticsMetrics = {
   absentCount: number;
   // Live Classes
   classesHosted: number;
-  classesAttended: number;
-  avgAttendance: number;
+  
+  
   // Payments
   totalRevenue: number;
   totalDonations: number;
@@ -46,7 +46,7 @@ type AnalyticsMetrics = {
 const EMPTY_METRICS: AnalyticsMetrics = {
   totalStudents: 0, totalTeachers: 0, totalAdmins: 0, totalUsers: 0, activeUsers30d: 0,
   totalCourses: 0, activeCourses: 0, quizAttempts: 0, attendancePct: 0, presentCount: 0, absentCount: 0,
-  classesHosted: 0, classesAttended: 0, avgAttendance: 0,
+  classesHosted: 0,  
   totalRevenue: 0, totalDonations: 0, totalFees: 0, failedPayments: 0, monthlyRevenue: 0, pendingPayments: 0,
 };
 
@@ -128,15 +128,13 @@ export default function AdminAnalyticsScreen() {
 
       // Live class calculations
       let classesHosted = 0;
-      let totalAttended = 0;
       liveClassesSnap.forEach((d) => {
-        const data = d.data() as { participant_count?: number; ended_at?: unknown };
+        const data = d.data() as { ended_at?: unknown };
         if (data.ended_at) {
           classesHosted++;
-          totalAttended += Number(data.participant_count || 0);
         }
       });
-      const avgAttendance = classesHosted ? Math.round(totalAttended / classesHosted) : 0;
+      
 
       // Payment calculations
       let totalRevenue = 0;
@@ -184,8 +182,8 @@ export default function AdminAnalyticsScreen() {
         presentCount,
         absentCount,
         classesHosted,
-        classesAttended: totalAttended,
-        avgAttendance,
+        
+        
         totalRevenue,
         totalDonations,
         totalFees,
@@ -322,15 +320,10 @@ export default function AdminAnalyticsScreen() {
           {/* LIVE CLASSES */}
           <SectionHeader title="Live Classes" icon="videocam-outline" />
           <View style={styles.row}>
-            <View style={[styles.metricCard, styles.halfCard]}>
+            <View style={[styles.metricCard, styles.halfCard, { width: '100%' }]}>
               <Ionicons name="radio-outline" size={18} color="#1565C0" />
-              <Text style={styles.metricLabel}>Hosted</Text>
+              <Text style={styles.metricLabel}>Classes Hosted</Text>
               <Text style={[styles.metricValue, { color: '#1565C0' }]}>{metrics.classesHosted}</Text>
-            </View>
-            <View style={[styles.metricCard, styles.halfCard]}>
-              <Ionicons name="people-circle-outline" size={18} color="#7B1FA2" />
-              <Text style={styles.metricLabel}>Avg Attendance</Text>
-              <Text style={[styles.metricValue, { color: '#7B1FA2' }]}>{metrics.avgAttendance}</Text>
             </View>
           </View>
 

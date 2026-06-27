@@ -485,9 +485,6 @@ export default function HomeScreen() {
             <Text style={styles.liveTeacher} numberOfLines={1}>
               Teacher: {activeLiveClass.teacher_name}
             </Text>
-            <Text style={styles.liveJoinedCount}>
-              {activeLiveClass.participant_count || 0} participants joined
-            </Text>
             <TouchableOpacity
               style={styles.liveJoinBtn}
               onPress={() => safePushLiveClass(activeLiveClass.id)}
@@ -1601,12 +1598,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textMuted,
     marginBottom: 8,
-  },
-  liveJoinedCount: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    fontWeight: '600',
-    marginBottom: 12,
   },
   liveJoinBtn: {
     backgroundColor: COLORS.primary,

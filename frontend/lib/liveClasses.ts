@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -27,9 +28,7 @@ export type LiveClass = {
   teacher_name: string;
   title: string;
   status: LiveClassStatus;
-  channel_name: string;
   meet_url: string;
-  participant_count?: number;
   started_at?: { toDate?: () => Date } | null;
   ended_at?: { toDate?: () => Date } | null;
   created_at?: { toDate?: () => Date } | null;
@@ -66,8 +65,22 @@ export async function startLiveClass(input: LiveClassCreateInput): Promise<strin
   if (input.profile?.role !== 'admin' && input.profile?.role !== 'super_admin' && input.profile?.role !== 'teacher') {
     throw new Error('Only admins and teachers can start live classes');
   }
-  const timestamp = Date.now();
-  const roomName = `MSDL-${input.courseId}-${timestamp}`;
+
+  const meetRegex = /^https?:\/\/(meet\.google\.com\/[a-z0-9\-]+|meet\.google\.com\/lookup\/[a-z0-9\-]+)(?:\?.*)?$/i;
+  if (!meetRegex.test(input.meetUrl.trim())) {
+    throw new Error('Invalid Google Meet URL. Please provide a valid link (e.g. https://meet.google.com/abc-defg-hij)');
+  }
+
+  const activeQ = query(
+    collection(db, 'live_classes'),
+    where('course_id', '==', input.courseId),
+    where('status', '==', 'live'),
+    limit(1)
+  );
+  const activeDocs = await getDocs(activeQ);
+  if (!activeDocs.empty) {
+    throw new Error('A live class is already running for this course.');
+  }
 
   const docRef = await addDoc(collection(db, 'live_classes'), {
     course_id: input.courseId,
@@ -76,23 +89,33 @@ export async function startLiveClass(input: LiveClassCreateInput): Promise<strin
     teacher_name: input.teacherName,
     title: input.title,
     status: 'live',
-    channel_name: roomName,
-    meet_url: input.meetUrl,
-    participant_count: 0,
+    meet_url: input.meetUrl.trim(),
     started_at: serverTimestamp(),
     created_at: serverTimestamp(),
     updated_at: serverTimestamp(),
   });
 
-  await dispatchNotification({
-    channel: 'live_classes',
-    event: 'live_class_started',
-    title: '🔴 Live Class Started',
-    body: `${input.teacherName} has started the live class: ${input.title}. Tap to join now!`,
-    recipientIds: [],
-    sendToAll: true,
-    route: { pathname: '/course/[id]', params: { id: input.courseId } },
-  });
+  try {
+    const enrolledQ = query(
+      collection(db, 'enrollments'),
+      where('course_id', '==', input.courseId),
+      where('status', '==', 'active')
+    );
+    const enrolledDocs = await getDocs(enrolledQ);
+    const enrolledUids = enrolledDocs.docs.map(d => d.data().user_id).filter(Boolean);
+
+    await dispatchNotification({
+      channel: 'live_classes',
+      event: 'live_class_started',
+      title: '🔴 Live Class Started',
+      body: `${input.teacherName} has started a live class for ${input.title}. Tap to join now!`,
+      recipientIds: enrolledUids,
+      sendToAll: false,
+      route: { pathname: '/course/[id]', params: { id: input.courseId } },
+    });
+  } catch (err) {
+    console.error('Failed to send live class push notification:', err);
+  }
 
   return docRef.id;
 }

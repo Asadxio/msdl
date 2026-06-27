@@ -24,7 +24,6 @@ type LiveClassItem = {
   title: string;
   teacher_name: string;
   status: 'scheduled' | 'live' | 'ended';
-  participant_count?: number;
   class_time?: string;
   time?: string;
 };
@@ -51,7 +50,6 @@ export default function LiveClassesScreen() {
               title: data.title || 'Untitled Class',
               teacher_name: data.teacher_name || 'Unknown Teacher',
               status: data.status || 'scheduled',
-              participant_count: data.participant_count || 0,
               class_time: data.class_time || data.time || 'TBD',
             });
           }
@@ -104,12 +102,6 @@ export default function LiveClassesScreen() {
               {isLive ? '🔴 LIVE NOW' : '📅 SCHEDULED'}
             </Text>
           </View>
-          {isLive && (
-            <View style={styles.participantsBadge}>
-              <Ionicons name="people-outline" size={14} color={COLORS.textMuted} />
-              <Text style={styles.participantsText}>{item.participant_count || 0} Joined</Text>
-            </View>
-          )}
         </View>
 
         <Text style={styles.classTitle}>{item.title}</Text>
@@ -286,20 +278,6 @@ const styles = StyleSheet.create({
   },
   badgeTextScheduled: {
     color: COLORS.goldText,
-  },
-  participantsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.surfaceAlt,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: RADIUS.full,
-  },
-  participantsText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textMuted,
   },
   classTitle: {
     ...TYPOGRAPHY.heading,

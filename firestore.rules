@@ -705,19 +705,15 @@ service cloud.firestore {
 
     function isValidLiveClassWrite() {
       return hasOnlyAllowedKeys(request.resource.data, [
-          'course_id', 'lesson_id', 'teacher_id', 'teacher_name', 'title', 'status', 'channel_name',
-          'agora_app_id', 'meet_fallback_url', 'meet_url', 'student_ids', 'enrollment_source',
-          'participant_count', 'recording', 'screen_share', 'started_at', 'ended_at', 'created_at', 'updated_at'
+          'course_id', 'lesson_id', 'teacher_id', 'teacher_name', 'title', 'status',
+          'meet_url', 'started_at', 'ended_at', 'created_at', 'updated_at'
         ])
         && request.resource.data.course_id is string
         && request.resource.data.teacher_id is string
         && request.resource.data.title is string
         && request.resource.data.status in ['scheduled', 'waiting_room', 'live', 'paused', 'reconnecting', 'ended', 'cancelled']
-        && request.resource.data.channel_name is string
         && (!('meet_url' in request.resource.data) || request.resource.data.meet_url is string)
         && (!('lesson_id' in request.resource.data) || request.resource.data.lesson_id is string)
-        && (!('student_ids' in request.resource.data) || (request.resource.data.student_ids is list && request.resource.data.student_ids.size() <= 500))
-        && (!('participant_count' in request.resource.data) || (request.resource.data.participant_count is number && request.resource.data.participant_count >= 0 && request.resource.data.participant_count <= 500))
         && (!('started_at' in request.resource.data) || request.resource.data.started_at is timestamp)
         && (!('ended_at' in request.resource.data) || request.resource.data.ended_at is timestamp)
         && request.resource.data.updated_at is timestamp;
@@ -1367,33 +1363,8 @@ service cloud.firestore {
           && request.resource.data.teacher_id == resource.data.teacher_id
           && request.resource.data.course_id == resource.data.course_id
           && request.resource.data.created_at == resource.data.created_at
-        ) || isValidParticipantCountOnlyUpdate(classId);
+        );
       allow delete: if isAdmin();
-
-      match /participants/{userId} {
-        allow read: if canReadLiveClassData(liveClassDoc(classId).data);
-        allow create: if isApprovedVerifiedUser() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId);
-        allow update: if isValidLiveParticipantModeration(classId, userId) || (isApprovedVerifiedUser() && request.auth.uid == userId && isValidLiveParticipantWrite(classId, userId));
-        allow delete: if isAdmin();
-      }
-
-      match /attendance_events/{eventId} {
-        allow read: if isTeacherOrAdmin();
-        allow create: if isApprovedVerifiedUser()
-          && hasOnlyAllowedKeys(request.resource.data, ['user_id', 'event', 'duration_seconds', 'at'])
-          && canJoinLiveClassData(liveClassDoc(classId).data)
-          && request.resource.data.user_id == request.auth.uid
-          && request.resource.data.event in ['join', 'leave']
-          && (!('duration_seconds' in request.resource.data) || (request.resource.data.duration_seconds is number && request.resource.data.duration_seconds >= 0 && request.resource.data.duration_seconds <= 43200))
-          && request.resource.data.at is timestamp;
-        allow update, delete: if false;
-      }
-
-      match /moderation_events/{eventId} {
-        allow read: if isLiveClassTeacherOrAdmin(liveClassDoc(classId).data);
-        allow create: if isValidLiveModerationEventCreate(classId);
-        allow update, delete: if false;
-      }
 
       match /recordings/{recordingId} {
         allow read: if canReadLiveClassData(liveClassDoc(classId).data);
