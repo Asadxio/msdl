@@ -1,0 +1,1122 @@
+
+--- MATCH 1 ---
+<USER_REQUEST>
+You are working on the Madrasa Tus Salikat Lil Banat app.
+
+Your task is to populate the Quiz collection with the quiz data that I provide.
+
+Requirements
+Do NOT change any existing UI, database structure, models, services, or business logic.
+Only insert the quiz data.
+Preserve the existing schema exactly.
+
+Each quiz document must contain only these fields:
+
+{
+  "question": "",
+  "option1": "",
+  "option2": "",
+  "option3": "",
+  "option4": "",
+  "correctAnswer": "",
+  "category": ""
+}
+Categories
+
+Insert the quiz questions exactly as provided.
+
+Current categories:
+
+Wudu (20 Questions)
+Ghusl (20 Questions)
+Tayammum (20 Questions)
+
+Total Questions: 60
+
+Important
+Do NOT rewrite or modify any wording.
+Do NOT generate your own questions.
+Do NOT translate anything.
+Do NOT change spellings.
+Insert the questions exactly as provided.
+Preserve the order (Question 1 → Question 20).
+Ensure correctAnswer exactly matches one of the four options.
+Prevent duplicate entries.
+If a question already exists, skip it instead of creating a duplicate.
+Validation
+
+Before finishing, verify:
+
+✅ 60 quiz documents exist.
+✅ Every document has all 7 required fields.
+✅ No empty fields.
+✅ No duplicate questions.
+✅ Every correctAnswer matches one of the options.
+✅ Categories are correctly assigned (Wudu, Ghusl, Tayammum).
+
+Return a summary showing:
+
+Total inserted
+Total skipped (duplicates)
+Any validation errors (if found)                 Perfect. Ab Next Category: Ghusl.
+
+Question 1
+
+Question
+Ghusl mein kitne farz hain?
+
+Option 1
+2
+
+Option 2
+3
+
+Option 3
+4
+
+Option 4
+5
+
+Correct Answer
+3
+
+Category
+Ghusl
+
+Question 2
+
+Question
+Ghusl ka pehla farz kya hai?
+
+Option 1
+Kulli karna
+
+Option 2
+Naak mein paani chadhana
+
+Option 3
+Pura badan dhona
+
+Option 4
+Haath dhona
+
+Correct Answer
+Kulli karna
+
+Category
+Ghusl
+
+Question 3
+
+Question
+Ghusl ka doosra farz kya hai?
+
+Option 1
+Pura badan dhona
+
+Option 2
+Naak mein paani chadhana
+
+Option 3
+Sar ka Masah
+
+Option 4
+Chehra dhona
+
+Correct Answer
+Naak mein paani chadhana
+
+Category
+Ghusl
+
+Question 4
+
+Question
+Ghusl ka teesra farz kya hai?
+
+Option 1
+Chehra dhona
+
+Option 2
+Pura badan dhona
+
+Option 3
+Pair dhona
+
+Option 4
+Haath dhona
+
+Correct Answer
+Pura badan dhona
+
+Category
+Ghusl
+
+Question 5
+
+Question
+Ghusl mein munh ke kis hissa tak paani pahunchana farz hai?
+
+Option 1
+Sirf Honth tak
+
+Option 2
+Pura Munh
+
+Option 3
+Sirf Daant
+
+Option 4
+Sirf Zubaan
+
+Correct Answer
+Pura Munh
+
+Category
+Ghusl
+
+Question 6
+
+Question
+Ghusl mein naak ke kis hissa tak paani pahunchana farz hai?
+
+Option 1
+Sirf Naak ke Bahar
+
+Option 2
+Naram Haddi tak
+
+Option 3
+Sirf Naak ki Nok
+
+Option 4
+Aadhi Naak
+
+Correct Answer
+Naram Haddi tak
+
+Category
+Ghusl
+
+Question 7
+
+Question
+Ghusl mein poore badan par kitni baar paani bahana farz hai?
+
+Option 1
+1 Baar
+
+Option 2
+2 Baar
+
+Option 3
+3 Baar
+
+Option 4
+4 Baar
+
+Correct Answer
+1 Baar
+
+Category
+Ghusl
+
+Question 8
+
+Question
+Ghusl se pehle Bismillah padhna kya hai?
+
+Option 1
+Farz
+
+Option 2
+Sunnat
+
+Option 3
+Wajib
+
+Option 4
+Makruh
+
+Correct Answer
+Sunnat
+
+Category
+Ghusl
+
+Question 9
+
+Question
+Ghusl se pehle Wudu karna kya hai?
+
+Option 1
+Farz
+
+Option 2
+Sunnat
+
+Option 3
+Makruh
+
+Option 4
+Wajib
+
+Correct Answer
+Sunnat
+
+Category
+Ghusl
+
+Question 10
+
+Question
+Ghusl mein pehle kis taraf paani bahana Sunnat hai?
+
+Option 1
+Baayi Taraf
+
+Option 2
+Daayi Taraf
+
+Option 3
+Sirf Sar par
+
+Option 4
+Pairon par
+
+Correct Answer
+Daayi Taraf
+
+Category
+Ghusl
+
+Question 11
+
+Question
+Janabat ki halat mein Namaz padhna kaisa hai?
+
+Option 1
+Jaiz
+
+Option 2
+Na-Jaiz
+
+Option 3
+Mustahab
+
+Option 4
+Makruh
+
+Correct Answer
+Na-Jaiz
+
+Category
+Ghusl
+
+Question 12
+
+Question
+Janabat ki halat mein Quran-e-Kareem padhna kaisa hai?
+
+Option 1
+Jaiz
+
+Option 2
+Na-Jaiz
+
+Option 3
+Mustahab
+
+Option 4
+Sunnat
+
+Correct Answer
+Na-Jaiz
+
+Category
+Ghusl
+
+Question 13
+
+Question
+Ghusl ke farz ada na hon to Ghusl ka kya hukm hai?
+
+Option 1
+Ho jayega
+
+Option 2
+Nahi hoga
+
+Option 3
+Sirf Wudu hoga
+
+Option 4
+Namaz ho jayegi
+
+Correct Answer
+Nahi hoga
+
+Category
+Ghusl
+
+Question 14
+
+Question
+Ghusl ke baad agar Wudu na toote to Namaz ke liye alag Wudu ki zarurat hai?
+
+Option 1
+Haan
+
+Option 2
+Nahi
+
+Option 3
+Sirf Jummah mein
+
+Option 4
+Sirf Eid mein
+
+Correct Answer
+Nahi
+
+Category
+Ghusl
+
+Question 15
+
+Question
+Jis hissa par paani na pahunche us hissa ka kya hukm hai?
+
+Option 1
+Maaf hai
+
+Option 2
+Ghusl mukammal nahi hoga
+
+Option 3
+Sirf Wudu karna hoga
+
+Option 4
+Koi Hukm nahi
+
+Correct Answer
+Ghusl mukammal nahi hoga
+
+Category
+Ghusl
+
+Question 16
+
+Question
+Ghusl ke dauran anguthi tang ho to kya karna chahiye?
+
+Option 1
+Utarna ya hila kar paani pahunchana
+
+Option 2
+Waise hi chhod dena
+
+Option 3
+Kapde se ponchna
+
+Option 4
+Sirf Masah karna
+
+Correct Answer
+Utarna ya hila kar paani pahunchana
+
+Category
+Ghusl
+
+Question 17
+
+Question
+Ghusl ke baad sabse pehli kaunsi ibadat ada ki ja sakti hai?
+
+Option 1
+Namaz
+
+Option 2
+Zakat
+
+Option 3
+Qurbani
+
+Option 4
+Azaan
+
+Correct Answer
+Namaz
+
+Category
+Ghusl
+
+Question 18
+
+Question
+Ghusl kis cheez ko door karta hai?
+
+Option 1
+Hadas-e-Akbar
+
+Option 2
+Hadas-e-Asghar
+
+Option 3
+Sirf Najasat
+
+Option 4
+Kuch nahi
+
+Correct Answer
+Hadas-e-Akbar
+
+Category
+Ghusl
+
+Question 19
+
+Question
+Aurat ko Haiz ke baad kya karna farz hai?
+
+Option 1
+Sirf Wudu
+
+Option 2
+Ghusl
+
+Option 3
+Tayammum
+
+Option 4
+Kuch nahi
+
+Correct Answer
+Ghusl
+
+Category
+Ghusl
+
+Question 20
+
+Question
+Nifas khatam hone ke baad kya farz hota hai?
+
+Option 1
+Sirf Wudu
+
+Option 2
+Ghusl
+
+Option 3
+Roza
+
+Option 4
+Sadqah
+
+Correct Answer
+Ghusl
+
+Category
+Ghusl
+
+Next
+
+Perfect. Next Category: Tayammum (تيمم)
+
+Question 1
+
+Question
+Tayammum kab jaiz hota hai?
+
+Option 1
+Jab paani maujood ho
+
+Option 2
+Jab paani istemal na kar sakte hon ya na mile
+
+Option 3
+Har waqt
+
+Option 4
+Sirf Ramzan mein
+
+Correct Answer
+Jab paani istemal na kar sakte hon ya na mile
+
+Category
+Tayammum
+
+Question 2
+
+Question
+Tayammum ke kitne farz hain?
+
+Option 1
+2
+
+Option 2
+3
+
+Option 3
+4
+
+Option 4
+5
+
+Correct Answer
+2
+
+Category
+Tayammum
+
+Question 3
+
+Question
+Tayammum ka pehla farz kya hai?
+
+Option 1
+Chehre ka Masah
+
+Option 2
+Haath dhona
+
+Option 3
+Pair dhona
+
+Option 4
+Kulli karna
+
+Correct Answer
+Chehre ka Masah
+
+Category
+Tayammum
+
+Question 4
+
+Question
+Tayammum ka doosra farz kya hai?
+
+Option 1
+Sar ka Masah
+
+Option 2
+Dono haathon ka kohniyon samet Masah
+
+Option 3
+Pair dhona
+
+Option 4
+Naak saaf karna
+
+Correct Answer
+Dono haathon ka kohniyon samet Masah
+
+Category
+Tayammum
+
+Question 5
+
+Question
+Tayammum kis cheez se kiya jata hai?
+
+Option 1
+Paani
+
+Option 2
+Paak mitti ya us jaisi zameeni cheez
+
+Option 3
+Doodh
+
+Option 4
+Tel
+
+Correct Answer
+Paak mitti ya us jaisi zameeni cheez
+
+Category
+Tayammum
+
+Question 6
+
+Question
+Tayammum mein kitni baar zameen par haath mara jata hai?
+
+Option 1
+1 Baar
+
+Option 2
+2 Baar
+
+Option 3
+3 Baar
+
+Option 4
+4 Baar
+
+Correct Answer
+2 Baar
+
+Category
+Tayammum
+
+Question 7
+
+Question
+Pehli baar haath marne ke baad kis ka Masah kiya jata hai?
+
+Option 1
+Sar
+
+Option 2
+Chehra
+
+Option 3
+Pair
+
+Option 4
+Gardan
+
+Correct Answer
+Chehra
+
+Category
+Tayammum
+
+Question 8
+
+Question
+Doosri baar haath marne ke baad kis ka Masah kiya jata hai?
+
+Option 1
+Pair
+
+Option 2
+Haath kohniyon samet
+
+Option 3
+Sar
+
+Option 4
+Seena
+
+Correct Answer
+Haath kohniyon samet
+
+Category
+Tayammum
+
+Question 9
+
+Question
+Paani mil jane par Tayammum ka kya hukm hai?
+
+Option 1
+Qaim rahega
+
+Option 2
+Toot jayega
+
+Option 3
+Mustahab ho jayega
+
+Option 4
+Makruh ho jayega
+
+Correct Answer
+Toot jayega
+
+Category
+Tayammum
+
+Question 10
+
+Question
+Tayammum kis ka badal hai?
+
+Option 1
+Namaz
+
+Option 2
+Wudu aur Ghusl
+
+Option 3
+Roza
+
+Option 4
+Zakat
+
+Correct Answer
+Wudu aur Ghusl
+
+Category
+Tayammum
+
+Question 11
+
+Question
+Tayammum ke liye niyyat karna kya hai?
+
+Option 1
+Farz
+
+Option 2
+Sunnat
+
+Option 3
+Mustahab
+
+Option 4
+Makruh
+
+Correct Answer
+Farz
+
+Category
+Tayammum
+
+Question 12
+
+Question
+Geeli mitti se Tayammum karna kaisa hai?
+
+Option 1
+Jaiz hai agar us par mitti ka gubaar ho
+
+Option 2
+Hamesha na-jaiz
+
+Option 3
+Sirf Ramzan mein jaiz
+
+Option 4
+Sirf Safar mein jaiz
+
+Correct Answer
+Jaiz hai agar us par mitti ka gubaar ho
+
+Category
+Tayammum
+
+Question 13
+
+Question
+Tayammum ke baad Wudu tootne wali cheez ho jaye to kya hoga?
+
+Option 1
+Tayammum toot jayega
+
+Option 2
+Kuch nahi hoga
+
+Option 3
+Sirf Namaz tootegi
+
+Option 4
+Sirf Roza tootega
+
+Correct Answer
+Tayammum toot jayega
+
+Category
+Tayammum
+
+Question 14
+
+Question
+Tayammum ke baad Farz Namaz padhna kaisa hai?
+
+Option 1
+Jaiz
+
+Option 2
+Na-Jaiz
+
+Option 3
+Makruh
+
+Option 4
+Mustahab
+
+Correct Answer
+Jaiz
+
+Category
+Tayammum
+
+Question 15
+
+Question
+Tayammum mein chehre ka kitna hissa masah kiya jata hai?
+
+Option 1
+Sirf Peshani
+
+Option 2
+Jitna Wudu mein dhona farz hai
+
+Option 3
+Sirf Gaal
+
+Option 4
+Sirf Naak
+
+Correct Answer
+Jitna Wudu mein dhona farz hai
+
+Category
+Tayammum
+
+Question 16
+
+Question
+Tayammum mein haathon ka masah kahan tak kiya jata hai?
+
+Option 1
+Kalai tak
+
+Option 2
+Kohniyon samet
+
+Option 3
+Kandhon tak
+
+Option 4
+Ungliyon tak
+
+Correct Answer
+Kohniyon samet
+
+Category
+Tayammum
+
+Question 17
+
+Question
+Paani ke nuksan ka yaqeen ho to kya Tayammum kiya ja sakta hai?
+
+Option 1
+Haan
+
+Option 2
+Nahi
+
+Option 3
+Sirf Safar mein
+
+Option 4
+Sirf Bimari mein
+
+Correct Answer
+Haan
+
+Category
+Tayammum
+
+Question 18
+
+Question
+Tayammum ke liye paak mitti ka hona kaisa hai?
+
+Option 1
+Farz
+
+Option 2
+Shart
+
+Option 3
+Makruh
+
+Option 4
+Mustahab
+
+Correct Answer
+Shart
+
+Category
+Tayammum
+
+Question 19
+
+Question
+Tayammum karne ke baad paani mil jaye to agali Namaz ke liye kya karna hoga?
+
+Option 1
+Phir Tayammum
+
+Option 2
+Wudu ya zarurat ho to Ghusl
+
+Option 3
+Kuch nahi
+
+Option 4
+Sirf Dua
+
+Correct Answer
+Wudu ya zarurat ho to Ghusl
+
+Category
+Tayammum
+
+Question 20
+
+Question
+Tayammum ka zikr Quran-e-Kareem ki kis Surah mein hai?
+
+Option 1
+Surah Al-Ma'idah
+
+Option 2
+Surah Yaseen
+
+Option 3
+Surah Al-Kahf
+
+Option 4
+Surah Al-Mulk
+
+Correct Answer
+Surah Al-Ma'idah
+
+Category
+Tayammum
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-28T00:39:48+05:30.
+</ADDITIONAL_METADATA>
+--- MATCH 2 ---
+<USER_REQUEST>
+The Firebase Service Account Key is now available.
+
+Location:
+`backend/serviceAccountKey.json`
+
+Use this file to initialize the Firebase Admin SDK.
+
+Do not ask me to manually seed the database.
+
+Run the quiz seeding process using the existing `seed_quizzes.py` script (or create it if needed).
+
+Populate the Quiz collection with:
+
+* Wudu: 20 questions
+* Ghusl: 20 questions
+* Tayammum: 20 questions
+
+Requirements:
+
+* Skip duplicates.
+* Validate all required fields.
+* Ensure `correctAnswer` exactly matches one option.
+* Batch write to Firestore.
+* Verify the final document count.
+* Return the insertion summary and any validation errors.
+
+If authentication still fails, identify the exact error message and the exact file path you attempted to load. Do not simply report "service account revoked"; explain why initialization failed.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-28T00:47:50+05:30.
+</ADDITIONAL_METADATA>
+--- MATCH 3 ---
+
+--- MATCH 4 ---
+Created At: 2026-06-27T19:26:13Z
+Completed At: 2026-06-27T19:26:15Z
+
+				The command completed successfully.
+				Output:
+				--- FOUND MATCH ---
+{"step_index":8639,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-06-27T19:09:48Z","content":"<USER_REQUEST>\nYou are working on the Madrasa Tus Salikat Lil Banat app.\n\nYour task is to populate the Quiz collection with the quiz data that I provide.\n\nRequirements\nDo NOT change any existing UI, database structure, models, services, or business logic.\nOnly insert the quiz data.\nPreserve the existing schema exactly.\n\nEach quiz document must contain only these fields:\n\n{\n  \"question\": \"\",\n  \"option1\": \"\",\n  \"option2\": \"\",\n  \"option3\": \"\",\n  \"option4\": \"\",\n  \"correctAnswer\": \"\",\n  \"category\": \"\"\n}\nCategories\n\nInsert the quiz questions exactly as provided.\n\nCurrent categories:\n\nWudu (20 Questions)\nGhusl (20 Questions)\nTayammum (20 Questions)\n\nTotal Questions: 60\n\nImportant\nDo NOT rewrite or modify any wording.\nDo NOT generate your own questions.\nDo NOT translate anything.\nDo NOT change spellings.\nInsert the questions exactly as provided.\nPreserve the order (Question 1 → Question 20).\nEnsure correctAnswer exactly matches one of the four options.\nPrevent duplicate entries.\nIf a question already exists, skip it instead of creating a duplicate.\nValidation\n\nBefore finishing, verify:\n\n✅ 60 quiz documents exist.\n✅ Every document has all 7 required fields.\n✅ No empty fields.\n✅ No duplicate questions.\n✅ Every correctAnswer matches one of the options.\n✅ Categories are correctly assi
+--- FOUND MATCH ---
+{"step_index":8661,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-06-27T19:17:50Z","content":"<USER_REQUEST>\nThe Firebase Service Account Key is now available.\r\n\r\nLocation:\r\n`backend/serviceAccountKey.json`\r\n\r\nUse this file to initialize the Firebase Admin SDK.\r\n\r\nDo not ask me to manually seed the database.\r\n\r\nRun the quiz seeding process using the existing `seed_quizzes.py` script (or create it if needed).\r\n\r\nPopulate the Quiz collection with:\r\n\r\n* Wudu: 20 questions\r\n* Ghusl: 20 questions\r\n* Tayammum: 20 questions\r\n\r\nRequirements:\r\n\r\n* Skip duplicates.\r\n* Validate all required fields.\r\n* Ensure `correctAnswer` exactly matches one option.\r\n* Batch write to Firestore.\r\n* Verify the final document count.\r\n* Return the insertion summary and any validation errors.\r\n\r\nIf authentication still fails, identify the exact error message and the exact file path you attempted to load. Do not simply report \"service account revoked\"; explain why initialization failed.\r\n\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-06-28T00:47:50+05:30.\n</ADDITIONAL_METADATA>"}
+
+
+--- MATCH 5 ---
+
+--- MATCH 6 ---
+Created At: 2026-06-27T19:26:22Z
+Completed At: 2026-06-27T19:26:24Z
+
+				The command completed successfully.
+				Output:
+				[
+  'ns exactly as provided.\\n\\nCurrent categories:\\n\\nWudu (20 Questions)\\nGhusl (20 Questions)\\nTayammum (20 Questions)\\n\\nTotal Questions: 60\\n\\nImportant\\nDo NOT rewrite or modify any wording.\\nDo NOT generate your own questions.\\nDo NOT translate anythin',
+  'he options.\\n✅ Categories are correctly assigned (Wudu, Ghusl, Tayammum).\\n\\nReturn a summary showing:\\n\\nTotal inserted\\nTotal skipped (duplicates)\\nAny validation errors (if found)                 Perfect. Ab Next Category: Ghusl.\\n\\nQuestion 1\\n\\nQues',
+  'mmum\\n\\nQuestion 13\\n\\nQuestion\\nTayammum ke baad Wudu tootne wali cheez ho jaye to kya hoga?\\n\\nOption 1\\nTayammum toot jayega\\n\\nOption 2\\nKuch nahi hoga\\n\\nOption 3\\nSirf Namaz tootegi\\n\\nOption 4\\nSirf Roza tootega\\n\\nCorrect Answer\\nTayammum toot ja',
+  'hai?\\n\\nOption 1\\nSirf Peshani\\n\\nOption 2\\nJitna Wudu mein dhona farz hai\\n\\nOption 3\\nSirf Gaal\\n\\nOption 4\\nSirf Naak\\n\\nCorrect Answer\\nJitna Wudu mein dhona farz hai\\n\\nCategory\\nTayammum\\n\\nQuestion 16\\n\\nQuestion\\nTayammum mein haathon ka masah ka',
+  'rna hoga?\\n\\nOption 1\\nPhir Tayammum\\n\\nOption 2\\nWudu ya zarurat ho to Ghusl\\n\\nOption 3\\nKuch nahi\\n\\nOption 4\\nSirf Dua\\n\\nCorrect Answer\\nWudu ya zarurat ho to Ghusl\\n\\nCategory\\nTayammum\\n\\nQuestion 20\\n\\nQuestion\\nTayammum ka zikr Quran-e-Kareem ki'
+]
+[
+  '\\n\\r\\nPopulate the Quiz collection with:\\r\\n\\r\\n* Wudu: 20 questions\\r\\n* Ghusl: 20 questions\\r\\n* Tayammum: 20 questions\\r\\n\\r\\nRequirements:\\r\\n\\r\\n* Skip duplicates.\\r\\n* Validate all required fields.\\r\\n* Ensure `correctAnswer` exactly matches one op'
+]
+[
+  'act specific data from JSONL files, specifically `Wudu` questions.\\n\\n\\n","tool_calls":[{"name":"run_command","args":{"CommandLine":"\\"node -e \\\\\\"\\\\nconst fs = require(\'fs\');\\\\nconst readline = require(\'readline\');\\\\nconst fileStream = fs.createReadStre',
+  "fileStream, crlfDelay: Infinity });\\\\n\\\\nlet foundWudu = false;\\\\nrl.on('line', (line) => {\\\\n  if (line.includes('USER_INPUT') && line.includes('Wudu')) {\\\\n      console.log('--- FOUND MATCH ---');\\\\n      console.log(line.substring(0, 1500));\\\\n  }\\\\n"
+]
+[
+  'xactly as provided.\\\\n\\\\nCurrent categories:\\\\n\\\\nWudu (20 Questions)\\\\nGhusl (20 Questions)\\\\nTayammum (20 Questions)\\\\n\\\\nTotal Questions: 60\\\\n\\\\nImportant\\\\nDo NOT rewrite or modify any wording.\\\\nDo NOT generate your own questions.\\\\nDo NOT translat',
+  '\\nPopulate the Quiz collection with:\\\\r\\\\n\\\\r\\\\n* Wudu: 20 questions\\\\r\\\\n* Ghusl: 20 questions\\\\r\\\\n* Tayammum: 20 questions\\\\r\\\\n\\\\r\\\\nRequirements:\\\\r\\\\n\\\\r\\\\n* Skip duplicates.\\\\r\\\\n* Validate all required fields.\\\\r\\\\n* Ensure `correctAnswer` exactl'
+]
+
+
+--- MATCH 7 ---
+
+--- MATCH 8 ---
+
+--- MATCH 9 ---
+
+--- MATCH 10 ---
+Created At: 2026-06-27T19:27:01Z
+Completed At: 2026-06-27T19:27:03Z
+
+				The command completed successfully.
+				Output:
+				﻿{"step_index":8639,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-06-27T19:09:48Z","content":"<USER_REQUEST>\nYou are working on the Madrasa Tus Salikat Lil Banat app.\n\nYour task is to populate the Quiz collection with the quiz data that I provide.\n\nRequirements\nDo NOT change any existing UI, database structure, models, services, or business logic.\nOnly insert the quiz data.\nPreserve the existing schema exactly.\n\nEach quiz document must contain only these fields:\n\n{\n  \"question\": \"\",\n  \"option1\": \"\",\n  \"option2\": \"\",\n  \"option3\": \"\",\n  \"option4\": \"\",\n  \"correctAnswer\": \"\",\n  \"category\": \"\"\n}\nCategories\n\nInsert the quiz questions exactly as provided.\n\nCurrent categories:\n\nWudu (20 Questions)\nGhusl (20 Questions)\nTayammum (20 Questions)\n\nTotal Questions: 60\n\nImportant\nDo NOT rewrite or modify any wording.\nDo NOT generate your own questions.\nDo NOT translate anything.\nDo NOT change spellings.\nInsert the questions exactly as provided.\nPreserve the order (Question 1 → Question 20).\nEnsure correctAnswer exactly matches one of the four options.\nPrevent duplicate entries.\nIf a question already exists, skip it instead of creating a duplicate.\nValidation\n\nBefore finishing, verify:\n\n✅ 60 quiz documents exist.\n✅ Every document has all 7 required fields.\n✅ No empty fields.\n✅ No duplicate questions.\n✅ Every correctAnswer matches one of the options.\n✅ Categories are correctly assigned (Wudu, Ghusl, Tayammum).\n\nReturn a summary showing:\n\nTotal inserted\nTotal skipped (duplicates)\nAny validation errors (if found)                 Perfect. Ab Next Category: Ghusl.\n\nQuestion 1\n\nQuestion\nGhusl mein kitne farz hain?\n\nOption 1\n2\n\nOption 2\n3\n\nOption 3\n4\n\nOption 4\n5\n\nCorrect Answer\n3\n\nCategory\nGhusl\n\nQuestion 2\n\nQuestion\nGhusl ka pehla farz kya hai?\n\nOption 1\nKulli karna\n\nOption 2\nNaak mein paani chadhana\n\nOption 3\nPura badan dhona\n\nOption 4\nHaath dhona\n\nCorrect Answer\nKulli karna\n\nCategory\nGhusl\n\nQuestion 3\n\nQuestion\nGhusl ka doosra farz kya hai?\n\nOption 1\nPura badan dhona\n\nOption 2\nNaak mein paani chadhana\n\nOption 3\nSar ka Masah\n\nOption 4\nChehra dhona\n\nCorrect Answer\nNaak mein paani chadhana\n\nCategory\nGhusl\n\nQuestio\n<truncated 5787 bytes>\nHamesha na-jaiz\n\nOption 3\nSirf Ramzan mein jaiz\n\nOption 4\nSirf Safar mein jaiz\n\nCorrect Answer\nJaiz hai agar us par mitti ka gubaar ho\n\nCategory\nTayammum\n\nQuestion 13\n\nQuestion\nTayammum ke baad Wudu tootne wali cheez ho jaye to kya hoga?\n\nOption 1\nTayammum toot jayega\n\nOption 2\nKuch nahi hoga\n\nOption 3\nSirf Namaz tootegi\n\nOption 4\nSirf Roza tootega\n\nCorrect Answer\nTayammum toot jayega\n\nCategory\nTayammum\n\nQuestion 14\n\nQuestion\nTayammum ke baad Farz Namaz padhna kaisa hai?\n\nOption 1\nJaiz\n\nOption 2\nNa-Jaiz\n\nOption 3\nMakruh\n\nOption 4\nMustahab\n\nCorrect Answer\nJaiz\n\nCategory\nTayammum\n\nQuestion 15\n\nQuestion\nTayammum mein chehre ka kitna hissa masah kiya jata hai?\n\nOption 1\nSirf Peshani\n\nOption 2\nJitna Wudu mein dhona farz hai\n\nOption 3\nSirf Gaal\n\nOption 4\nSirf Naak\n\nCorrect Answer\nJitna Wudu mein dhona farz hai\n\nCategory\nTayammum\n\nQuestion 16\n\nQuestion\nTayammum mein haathon ka masah kahan tak kiya jata hai?\n\nOption 1\nKalai tak\n\nOption 2\nKohniyon samet\n\nOption 3\nKandhon tak\n\nOption 4\nUngliyon tak\n\nCorrect Answer\nKohniyon samet\n\nCategory\nTayammum\n\nQuestion 17\n\nQuestion\nPaani ke nuksan ka yaqeen ho to kya Tayammum kiya ja sakta hai?\n\nOption 1\nHaan\n\nOption 2\nNahi\n\nOption 3\nSirf Safar mein\n\nOption 4\nSirf Bimari mein\n\nCorrect Answer\nHaan\n\nCategory\nTayammum\n\nQuestion 18\n\nQuestion\nTayammum ke liye paak mitti ka hona kaisa hai?\n\nOption 1\nFarz\n\nOption 2\nShart\n\nOption 3\nMakruh\n\nOption 4\nMustahab\n\nCorrect Answer\nShart\n\nCategory\nTayammum\n\nQuestion 19\n\nQuestion\nTayammum karne ke baad paani mil jaye to agali Namaz ke liye kya karna hoga?\n\nOption 1\nPhir Tayammum\n\nOption 2\nWudu ya zarurat ho to Ghusl\n\nOption 3\nKuch nahi\n\nOption 4\nSirf Dua\n\nCorrect Answer\nWudu ya zarurat ho to Ghusl\n\nCategory\nTayammum\n\nQuestion 20\n\nQuestion\nTayammum ka zikr Quran-e-Kareem ki kis Surah mein hai?\n\nOption 1\nSurah Al-Ma'idah\n\nOption 2\nSurah Yaseen\n\nOption 3\nSurah Al-Kahf\n\nOption 4\nSurah Al-Mulk\n\nCorrect Answer\nSurah Al-Ma'idah\n\nCategory\nTayammum\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-06-28T00:39:48+05:30.\n</ADDITIONAL_METADATA>","truncated_fields":["content"]}
+
+
+
+--- MATCH 11 ---
+<USER_REQUEST>
+Authentication is now successful.
+
+Firestore is connected.
+
+Please insert the remaining **20 Wudu quiz questions** into the existing Quiz collection.
+
+Requirements:
+
+* Category: Wudu
+* Total Questions: 20
+* Use the exact Wudu questions already provided earlier in this conversation.
+* Do not modify any wording.
+* Skip duplicates if any already exist.
+* Validate every document before insertion.
+* Ensure `correctAnswer` exactly matches one of the four options.
+* Use batch writes.
+
+After insertion verify:
+
+* Wudu: 20
+* Ghusl: 20
+* Tayammum: 20
+
+Final total documents must be **60**.
+
+Return only:
+
+* Authentication Status
+* Inserted
+* Skipped
+* Final Category Counts
+* Final Total Count
+* Success/Failure
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-28T00:58:08+05:30.
+</ADDITIONAL_METADATA>
+--- MATCH 12 ---

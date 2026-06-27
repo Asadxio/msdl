@@ -97,3 +97,10 @@ credentials.json
 *.pem
 *.key
 .credentials
+serviceAccountKey.json
+*serviceAccountKey.json
+
+*serviceAccountKey.json
+serviceAccountKey.json
+
+*serviceAccountKey*

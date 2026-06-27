@@ -1,0 +1,33 @@
+<USER_REQUEST>
+The Firebase Service Account Key is now available.
+
+Location:
+`backend/serviceAccountKey.json`
+
+Use this file to initialize the Firebase Admin SDK.
+
+Do not ask me to manually seed the database.
+
+Run the quiz seeding process using the existing `seed_quizzes.py` script (or create it if needed).
+
+Populate the Quiz collection with:
+
+* Wudu: 20 questions
+* Ghusl: 20 questions
+* Tayammum: 20 questions
+
+Requirements:
+
+* Skip duplicates.
+* Validate all required fields.
+* Ensure `correctAnswer` exactly matches one option.
+* Batch write to Firestore.
+* Verify the final document count.
+* Return the insertion summary and any validation errors.
+
+If authentication still fails, identify the exact error message and the exact file path you attempted to load. Do not simply report "service account revoked"; explain why initialization failed.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-28T00:47:50+05:30.
+</ADDITIONAL_METADATA>

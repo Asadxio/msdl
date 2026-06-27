@@ -54,6 +54,8 @@ export default function QuizScreen() {
   const [sessionExpired, setSessionExpired] = useState(false);
 
   const loadQuiz = useCallback(async () => {
+    console.log('[DEBUG] --- START loadQuiz ---');
+    console.log('[DEBUG] Firestore collection name: quizzes');
     setLoading(true);
     setError('');
     setResult(null);
@@ -61,39 +63,84 @@ export default function QuizScreen() {
     setIndex(0);
     try {
       const snap = await getDocs(collection(db, 'quizzes'));
+      console.log(`[DEBUG] Total documents returned from Firestore: ${snap.size}`);
       const all: QuizQuestion[] = [];
+      let i = 0;
       snap.forEach((d) => {
         const data = d.data() as any;
-        if (!data.question || !Array.isArray(data.options) || data.options.length < 2 || !data.correct_answer) return;
+        if (i === 0) {
+           console.log(`[DEBUG] Raw first document:`, JSON.stringify(data));
+        }
+        
+        const question = data.question;
+        const options = Array.isArray(data.options) 
+          ? data.options 
+          : [data.option1, data.option2, data.option3, data.option4].filter(Boolean);
+        const correctAnswer = data.correct_answer || data.correctAnswer;
+        
+        if (i === 0) {
+           console.log(`[DEBUG] Parsed first document:`, JSON.stringify({ question, options, correctAnswer }));
+        }
+
+        if (!question) {
+            console.log(`[DEBUG] Early return: missing question at doc ${d.id}`);
+            return;
+        }
+        if (!Array.isArray(options)) {
+            console.log(`[DEBUG] Early return: options not array at doc ${d.id}`);
+            return;
+        }
+        if (options.length < 2) {
+            console.log(`[DEBUG] Early return: options length < 2 at doc ${d.id}`);
+            return;
+        }
+        if (!correctAnswer) {
+            console.log(`[DEBUG] Early return: missing correctAnswer at doc ${d.id}`);
+            return;
+        }
+        
+        if (i === 0) console.log(`[DEBUG] Render condition PASSED for first document`);
+        
         all.push({
           id: d.id,
-          question: data.question,
-          options: data.options,
-          correct_answer: data.correct_answer,
+          question: question,
+          options: options,
+          correct_answer: correctAnswer,
           category: data.category || '',
         });
+        i++;
       });
+      console.log(`[DEBUG] Final quiz array length: ${all.length}`);
+      
       if (all.length === 0) {
+        console.log(`[DEBUG] Setting error: No quiz questions available yet.`);
         setQuestions([]);
         setError('No quiz questions available yet. Admin can add questions.');
       } else {
         const shuffled = shuffle(all);
+        console.log(`[DEBUG] Shuffled array length: ${shuffled.length}`);
         setQuestions(shuffled);
         if (user?.uid) {
           const quizKey = String(shuffled.map((q) => q.id).join('-')).slice(0, 180);
+          console.log(`[DEBUG] Loading session for key: ${quizKey}`);
           const prior = await loadQuizSession(user.uid, quizKey).catch(() => null);
           if (prior) {
+            console.log(`[DEBUG] Found prior session`);
             setAnswers(prior.answers || {});
             const idx = Math.max(0, shuffled.findIndex((q) => !prior.answers?.[q.id]));
             setIndex(idx === -1 ? 0 : idx);
+          } else {
+            console.log(`[DEBUG] No prior session found`);
           }
         }
       }
     } catch (e: any) {
+      console.log(`[DEBUG] Crash in loadQuiz:`, e?.message);
       logFirestoreFailure({ collection: 'quizzes', operation: 'get', query: 'get all quizzes', role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to load quiz.');
       setQuestions([]);
     } finally {
+      console.log(`[DEBUG] loadQuiz finally block reached`);
       setLoading(false);
     }
   }, [user?.uid]);
