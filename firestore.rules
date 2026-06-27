@@ -5,25 +5,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isTrustedSystemAdmin() {
-      return isSignedIn() && request.auth.token.email in ['sumraftm@gmail.com', 'xioasad@gmail.com'];
-    }
-
     function isVerified() {
-      return isTrustedSystemAdmin() || (isSignedIn()
+      return (isSignedIn()
         && (
           request.auth.token.email_verified == true
           // Temporary admin bypass: allow admin/super_admin even when
           // email_verified is false, provided they have approved status.
           // TODO: Remove this bypass once admin emails are verified.
           || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin'
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.founder == true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
         ));
     }
 
     function isApprovedVerifiedUser() {
-      return isTrustedSystemAdmin() || (isVerified()
+      return (isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && userDoc(request.auth.uid).status == 'approved');
     }
@@ -38,7 +35,7 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isTrustedSystemAdmin() || (isVerified() && roleOf(request.auth.uid) == 'super_admin' && userDoc(request.auth.uid).status == 'approved');
+      return (isVerified() && roleOf(request.auth.uid) == 'super_admin' && userDoc(request.auth.uid).status == 'approved');
     }
 
     function hasRole(uid, roles) {
@@ -46,18 +43,18 @@ service cloud.firestore {
     }
 
     function isModerator() {
-      return isTrustedSystemAdmin() || (isVerified() && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin']) && userDoc(request.auth.uid).status == 'approved');
+      return (isVerified() && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin']) && userDoc(request.auth.uid).status == 'approved');
     }
 
     function isAdmin() {
-      return isTrustedSystemAdmin() || (isVerified()
+      return (isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) in ['admin', 'super_admin']
         && userDoc(request.auth.uid).status == 'approved');
     }
 
     function isTeacherOrAdmin() {
-      return isTrustedSystemAdmin() || (isVerified()
+      return (isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) in ['teacher', 'assistant_teacher', 'admin', 'super_admin', 'moderator']
         && userDoc(request.auth.uid).status == 'approved');
@@ -160,7 +157,7 @@ service cloud.firestore {
     function isValidUserUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at']
+          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'founder']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -175,7 +172,8 @@ service cloud.firestore {
         && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
         && (request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
-        && ((request.resource.data.role == 'assistant_teacher') ? isAdmin() : true);
+        && ((request.resource.data.role == 'assistant_teacher') ? isAdmin() : true)
+    && (!resource.data.get('founder', false) || isSuperAdmin());
     }
 
     function isValidSelfUserMetadataUpdate(uid) {
@@ -1004,7 +1002,7 @@ service cloud.firestore {
 
       // Admin can fully update users; users can update own push/profile/login metadata.
       allow update: if (isAdmin() && isValidUserUpdateByAdmin()) || isValidSelfUserMetadataUpdate(uid) || isValidReferralCountIncrement();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && (!resource.data.get('founder', false) || isSuperAdmin());
     }
 
     match /users/{uid}/compliance/{docId} {

@@ -188,6 +188,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const inAuth = segments[0] === 'auth';
     const inPendingAuthRoute = segmentKey === 'auth/pending' || segmentKey === 'auth/change-email';
     const inOnboardingEntry = segments[0] === 'onboarding-entry';
+    const isSuperAdminFounder = profile?.role === 'super_admin' && profile?.founder === true;
     const isAdmin = (profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved';
     const inAdmin = segments[0] === 'admin';
     const inUnauthorized = segments[0] === 'unauthorized';
@@ -265,7 +266,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'missing-profile-document' });
       }
-    } else if (!emailVerified && !isAdmin) {
+    } else if (!emailVerified && !isAdmin && !isSuperAdminFounder) {
       // Email not verified (non-admin) -> pending screen for verification
       if (!inPendingAuthRoute) {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'email-unverified' });
@@ -273,7 +274,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
-    } else if (user && (profile?.status === 'approved' || isAdmin)) {
+    } else if (user && (profile?.status === 'approved' || isAdmin || isSuperAdminFounder)) {
       if (user.uid && emailVerified && enteredAppTrackedRef.current !== user.uid) {
         enteredAppTrackedRef.current = user.uid;
         void markUserEnteredApp(user.uid);
@@ -290,7 +291,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (shouldShowTutorial || authLoading || onboardingStatus !== 'complete' || !user?.uid) return;
     const isAdmin = (profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved';
-    if (!profile || !(profile.status === 'approved' || isAdmin) || needsLegalAcceptance) return;
+    const isSuperAdminFounder = profile?.role === 'super_admin' && profile?.founder === true;
+    if (!profile || !(profile.status === 'approved' || isAdmin || isSuperAdminFounder) || needsLegalAcceptance) return;
 
     let cancelled = false;
     void (async () => {

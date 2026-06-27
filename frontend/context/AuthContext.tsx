@@ -45,6 +45,7 @@ export type UserProfile = {
   avatar?: string;
   referral_code?: string;
   referral_count?: number;
+  founder?: boolean;
 };
 
 export type ProfileIssue = 'missing_profile_document' | 'profile_incomplete' | 'role_missing' | null;
@@ -595,14 +596,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSignupVerificationFlowActive(false);
   };
 
-  const TRUSTED_ADMINS = ['sumraftm@gmail.com', 'xioasad@gmail.com'];
-  const isTrustedAdmin = user?.email && TRUSTED_ADMINS.includes(user.email);
-  const effectiveEmailVerified = isTrustedAdmin ? true : emailVerified;
-  const effectiveProfile = isTrustedAdmin && profile ? { ...profile, status: 'approved', role: 'super_admin' } as UserProfile : profile;
-
   return (
     <AuthContext.Provider value={{
-      user, profile: effectiveProfile, profileIssue, authLoading, emailVerified: effectiveEmailVerified,
+      user, profile, profileIssue, authLoading, emailVerified,
       signIn, signUp, signOut: signOutUser, refreshProfile,
       resendVerification, changeEmailAddress, resetPassword, refreshUser, profileOffline,
       showSignupVerificationPrompt, signupVerificationFlowActive, acknowledgeSignupVerificationPrompt,
