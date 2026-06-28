@@ -195,13 +195,6 @@ export default function QuizScreen() {
         user_id: user.uid,
         score,
         total_questions: questions.length,
-        category: selectedCategory,
-        created_at: serverTimestamp(),
-      });
-      await addDoc(collection(db, 'notifications'), {
-        title: `${selectedCategory} Quiz Completed`,
-        message: `You scored ${score}/${questions.length} in ${selectedCategory}.`,
-        user_id: user.uid,
         created_at: serverTimestamp(),
       });
       setResult({ score, total: questions.length });

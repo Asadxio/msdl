@@ -38,6 +38,7 @@ type ChatItem = {
   participants: string[];
   participant_names?: Record<string, string>;
   last_message?: string;
+  last_sender_id?: string;
   updated_at?: { toDate?: () => Date; seconds?: number } | null;
   unread_counts?: Record<string, number>;
   pinned_by?: string[];
@@ -53,6 +54,7 @@ function normalizeChatItem(id: string, raw: unknown): ChatItem {
     participants: Array.isArray(safe.participants) ? safe.participants.filter((p: unknown) => typeof p === 'string') : [],
     participant_names: recordOfStrings(safe.participant_names),
     last_message: typeof safe.last_message === 'string' ? safe.last_message : '',
+    last_sender_id: typeof safe.last_sender_id === 'string' ? safe.last_sender_id : undefined,
     updated_at: safe.updated_at || null,
     unread_counts: recordOfNumbers(safe.unread_counts),
     pinned_by: Array.isArray(safe.pinned_by) ? safe.pinned_by.filter((v: unknown) => typeof v === 'string') : [],
@@ -427,7 +429,7 @@ export default function ChatsScreen() {
     u.id !== user?.uid && (
       !debouncedSearch
       || u.name.toLowerCase().includes(debouncedSearch)
-      || (u.email || '').toLowerCase().includes(debouncedSearch)
+      || (u.role || '').toLowerCase().includes(debouncedSearch)
     )
   ));
 
@@ -596,7 +598,9 @@ export default function ChatsScreen() {
                 </View>
               </View>
               <View style={styles.previewRow}>
-                <Text style={[styles.chatPreview, (item.unread_counts?.[user?.uid || ''] || 0) > 0 && styles.chatPreviewUnread]} numberOfLines={1}>{item.last_message || 'No messages yet'}</Text>
+                <Text style={[styles.chatPreview, (item.unread_counts?.[user?.uid || ''] || 0) > 0 && styles.chatPreviewUnread]} numberOfLines={1}>
+                  {item.last_message ? (item.last_sender_id === user?.uid ? `You: ${item.last_message}` : item.last_message) : 'No messages yet'}
+                </Text>
                 <View style={styles.metaRight}>
                   <Text style={styles.chatTime}>{fmtChatTime(item.updated_at)}</Text>
                   {(item.unread_counts?.[user?.uid || ''] || 0) > 0 ? (

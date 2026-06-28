@@ -59,6 +59,8 @@ type MessageItem = {
   message_type?: 'text' | 'image' | 'video' | 'audio';
   media_url?: string;
   media_name?: string;
+  reply_to?: string;
+  reply_snippet?: string;
   media_size?: number;
   status?: MessageDeliveryStatus;
 };
@@ -132,6 +134,11 @@ const MessageBubble = React.memo(function MessageBubble({
     <View style={[styles.bubbleWrap, mine ? styles.mineWrap : styles.otherWrap]}>
       <View style={[styles.bubble, mine ? styles.mineBubble : styles.otherBubble, item.failed && styles.failedBubble]}>
         {showSender ? <Text style={styles.sender}>{item.sender_name || 'User'}</Text> : null}
+        {item.reply_snippet ? (
+          <View style={[styles.bubbleReply, mine && { backgroundColor: 'rgba(255,255,255,0.15)', borderLeftColor: '#fff' }]}>
+            <Text style={[styles.bubbleReplyText, mine && { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={1}>↩ {item.reply_snippet}</Text>
+          </View>
+        ) : null}
         <Text style={[styles.msgText, mine && { color: '#fff' }]}>{item.text}</Text>
         {item.message_type === 'image' && item.media_url ? <Image source={{ uri: item.media_url }} style={styles.msgImage} /> : null}
         {item.message_type && item.message_type !== 'text' && item.message_type !== 'image' ? <Text style={[styles.attachmentText, mine && { color: 'rgba(255,255,255,0.88)' }]}>{item.message_type.toUpperCase()} attachment {item.media_name ? `• ${item.media_name}` : ''}</Text> : null}
@@ -153,6 +160,30 @@ const MessageBubble = React.memo(function MessageBubble({
   );
 });
 
+
+function formatLastSeen(timestamp: any) {
+  if (!timestamp) return 'Offline';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp.seconds * 1000);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  
+  if (minutes < 2) return 'Just now';
+  
+  const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  if (isToday) {
+    return 'Last seen today at ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+  if (isYesterday) {
+    return 'Last seen yesterday at ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  
+  return 'Last seen ' + date.toLocaleDateString();
+}
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -170,6 +201,9 @@ export default function ChatDetailScreen() {
   const [sendError, setSendError] = useState('');
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [reportTarget, setReportTarget] = useState<MessageItem | null>(null);
+  const [replyTarget, setReplyTarget] = useState<MessageItem | null>(null);
+  const [targetPresence, setTargetPresence] = useState<{ is_online: boolean; last_seen?: any } | null>(null);
+  const targetId = chat?.type === 'direct' ? chat?.participants.find((p) => p !== user?.uid) : undefined;
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<MessageItem>>(null);
   const chatUnsubRef = useRef<(() => void) | null>(null);
@@ -180,7 +214,16 @@ export default function ChatDetailScreen() {
   const lastSnapshotWasCacheRef = useRef(false);
   const lastAckedRef = useRef<string>('');
 
+  
   useEffect(() => {
+    if (!targetId) return;
+    const unsub = onSnapshot(doc(db, 'presence', targetId), (snap) => {
+      if (snap.exists()) setTargetPresence(snap.data() as any);
+    });
+    return () => unsub();
+  }, [targetId]);
+
+useEffect(() => {
     if (!id) return;
     chatUnsubRef.current?.();
     try {
@@ -376,10 +419,12 @@ export default function ChatDetailScreen() {
       read_by: [user.uid],
       client_id: clientId,
       localOnly: true,
+      ...(replyTarget ? { reply_to: replyTarget.id, reply_snippet: replyTarget.text } : {}),
     };
 
     setMessages((prev) => [optimisticMessage, ...prev]);
     setText('');
+    setReplyTarget(null);
     setTyping(false);
     setSending(true);
     setSendError('');
@@ -413,6 +458,7 @@ export default function ChatDetailScreen() {
         media_url: '',
         media_name: '',
         media_size: 0,
+      ...(replyTarget ? { reply_to: replyTarget.id, reply_snippet: replyTarget.text } : {}),
       });
       const participants = chatParticipants;
       const unreadUpdates: Record<string, any> = { [`unread_counts.${user.uid}`]: 0 };
@@ -422,6 +468,7 @@ export default function ChatDetailScreen() {
 
       await updateDoc(doc(db, 'chats', id), {
         last_message: msg,
+        last_sender_id: user.uid,
         updated_at: serverTimestamp(),
         [`typing.${user.uid}`]: { is_typing: false, updated_at: serverTimestamp() },
         ...unreadUpdates,
@@ -657,6 +704,7 @@ export default function ChatDetailScreen() {
     const canUnsend = item.sender_id === user?.uid && !item.localOnly;
     Alert.alert('Message options', 'Choose an action for this message.', [
       { text: 'Cancel', style: 'cancel' },
+      { text: 'Reply', onPress: () => setReplyTarget(item) },
       { text: 'Delete for me', onPress: () => { void deleteForMe(item); } },
       { text: 'Report message', onPress: () => setReportTarget(item) },
       ...(canUnsend ? [{ text: 'Unsend for everyone', style: 'destructive' as const, onPress: () => { void unsendForEveryone(item); } }] : []),
@@ -777,7 +825,13 @@ export default function ChatDetailScreen() {
           <Ionicons name="arrow-back" size={20} color={COLORS.textMain} />
         </ScalePressable>
         <View style={{ flex: 1 }}>
+          
           <Text style={styles.topTitle}>{title}</Text>
+          {targetPresence && (
+            <Text style={styles.presenceText}>
+              {targetPresence.is_online ? '● Online' : formatLastSeen(targetPresence.last_seen)}\n            </Text>
+          )}
+
           {othersTyping ? <Text style={styles.typingText}>Typing...</Text> : null}
         </View>
         <ScalePressable style={styles.backBtn} onPress={refreshMessages} disabled={manualRefreshing}>
@@ -886,4 +940,39 @@ const styles = StyleSheet.create({
   mediaBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt },
   msgImage: { width: 180, height: 180, borderRadius: 10, marginTop: 6 },
   attachmentText: { marginTop: 4, fontSize: 12, color: COLORS.textMuted },
+
+  presenceText: {
+    fontSize: 12,
+    color: '#059669', // Emerald
+    fontWeight: '500',
+  },
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 8,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: -8, // tuck under inputRow
+    zIndex: -1,
+  },
+  replyBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#4B5563',
+    marginRight: 8,
+  },
+  bubbleReply: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    padding: 6,
+    borderRadius: 8,
+    marginBottom: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#10B981',
+  },
+  bubbleReplyText: {
+    fontSize: 12,
+    color: '#4B5563',
+  },
 });

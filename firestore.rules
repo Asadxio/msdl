@@ -507,7 +507,7 @@ service cloud.firestore {
     }
 
     function hasValidMessageKeys(data) {
-      return hasOnlyAllowedKeys(data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by', 'client_id', 'deleted_for', 'deleted_for_everyone', 'unsent_by', 'unsent_at', 'message_type', 'media_url', 'media_name', 'media_size', 'status', 'sent_at', 'delivered_at', 'seen_at', 'failed_reason', 'retry_count', 'push_dedupe_id']);
+      return hasOnlyAllowedKeys(data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by', 'client_id', 'deleted_for', 'deleted_for_everyone', 'unsent_by', 'unsent_at', 'message_type', 'media_url', 'media_name', 'media_size', 'status', 'sent_at', 'delivered_at', 'seen_at', 'failed_reason', 'retry_count', 'push_dedupe_id', 'reply_to', 'reply_snippet']);
     }
 
     function isValidMessageCreate() {
@@ -526,6 +526,8 @@ service cloud.firestore {
         && (!('media_url' in request.resource.data) || request.resource.data.media_url is string)
         && (!('media_name' in request.resource.data) || request.resource.data.media_name is string)
         && (!('media_size' in request.resource.data) || request.resource.data.media_size is number)
+        && (!('reply_to' in request.resource.data) || request.resource.data.reply_to is string)
+        && (!('reply_snippet' in request.resource.data) || request.resource.data.reply_snippet is string)
         && (!('status' in request.resource.data) || request.resource.data.status in ['sending', 'sent', 'delivered', 'seen', 'failed', 'retrying'])
         && (!('sent_at' in request.resource.data) || request.resource.data.sent_at is timestamp)
         && (!('delivered_at' in request.resource.data) || request.resource.data.delivered_at == null || request.resource.data.delivered_at is timestamp)
@@ -1005,6 +1007,14 @@ service cloud.firestore {
       allow read: if isAdmin() || isSelf(uid);
       allow create, update: if docId == 'legal_acceptance' && isValidLegalAcceptance(uid);
       allow delete: if isAdmin();
+    }
+
+    match /presence/{uid} {
+      allow read: if isApprovedVerifiedUser();
+      allow write: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(['is_online', 'last_seen', 'device_type'])
+        && request.resource.data.is_online is bool
+        && request.resource.data.last_seen is timestamp;
     }
 
     match /public_profiles/{uid} {
