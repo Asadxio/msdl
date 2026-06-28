@@ -5,7 +5,7 @@ import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, getCountFromServer, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -16,6 +16,7 @@ import { UIButton } from '@/components/ui/Button';
 import { SectionCard } from '@/components/ui/SectionCard';
 import { trackSecurity } from '@/lib/securityMonitor';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { QUIZ_CATEGORIES } from '@/constants/quizCategories';
 
 type QuizQuestion = {
   id: string;
@@ -38,120 +39,131 @@ export default function QuizScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
-  const [loading, setLoading] = useState(true);
+  
+  // App State
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
+  const [loadingCounts, setLoadingCounts] = useState(true);
+
+  // Quiz State
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const [error, setError] = useState('');
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Admin State
   const [editingId, setEditingId] = useState('');
   const [questionInput, setQuestionInput] = useState('');
   const [optionInputs, setOptionInputs] = useState(['', '', '', '']);
   const [correctAnswer, setCorrectAnswer] = useState('');
-  const [category, setCategory] = useState('');
+  const [categoryInput, setCategoryInput] = useState('');
   const [savingQuestion, setSavingQuestion] = useState(false);
-  const [sessionExpired, setSessionExpired] = useState(false);
 
-  const loadQuiz = useCallback(async () => {
-    console.log('[DEBUG] --- START loadQuiz ---');
-    console.log('[DEBUG] Firestore collection name: quizzes');
+  // Load category counts on mount
+  useEffect(() => {
+    let mounted = true;
+    const fetchCounts = async () => {
+      setLoadingCounts(true);
+      const counts: Record<string, number> = {};
+      
+      // Batch promises in chunks of 10 to avoid any potential connection saturation, although JS SDK handles it.
+      const batchSize = 10;
+      for (let i = 0; i < QUIZ_CATEGORIES.length; i += batchSize) {
+        const chunk = QUIZ_CATEGORIES.slice(i, i + batchSize);
+        await Promise.all(chunk.map(async (cat) => {
+          try {
+            const q = query(collection(db, 'quizzes'), where('category', '==', cat));
+            const snap = await getCountFromServer(q);
+            counts[cat] = snap.data().count;
+          } catch (e) {
+            console.log(`Failed to fetch count for ${cat}`);
+            counts[cat] = 0;
+          }
+        }));
+      }
+      if (mounted) {
+        setCategoryCounts(counts);
+        setLoadingCounts(false);
+      }
+    };
+    fetchCounts();
+    return () => { mounted = false; };
+  }, []);
+
+  const loadQuiz = useCallback(async (category: string) => {
     setLoading(true);
     setError('');
     setResult(null);
     setAnswers({});
     setIndex(0);
+    setSessionExpired(false);
+    
     try {
-      const snap = await getDocs(collection(db, 'quizzes'));
-      console.log(`[DEBUG] Total documents returned from Firestore: ${snap.size}`);
+      const q = query(collection(db, 'quizzes'), where('category', '==', category));
+      const snap = await getDocs(q);
+      
       const all: QuizQuestion[] = [];
-      let i = 0;
       snap.forEach((d) => {
         const data = d.data() as any;
-        if (i === 0) {
-           console.log(`[DEBUG] Raw first document:`, JSON.stringify(data));
-        }
-        
         const question = data.question;
         const options = Array.isArray(data.options) 
           ? data.options 
           : [data.option1, data.option2, data.option3, data.option4].filter(Boolean);
-        const correctAnswer = data.correct_answer || data.correctAnswer;
+        const correct_answer = data.correct_answer || data.correctAnswer;
         
-        if (i === 0) {
-           console.log(`[DEBUG] Parsed first document:`, JSON.stringify({ question, options, correctAnswer }));
+        if (question && Array.isArray(options) && options.length >= 2 && correct_answer) {
+          all.push({
+            id: d.id,
+            question,
+            options,
+            correct_answer,
+            category: data.category || '',
+          });
         }
-
-        if (!question) {
-            console.log(`[DEBUG] Early return: missing question at doc ${d.id}`);
-            return;
-        }
-        if (!Array.isArray(options)) {
-            console.log(`[DEBUG] Early return: options not array at doc ${d.id}`);
-            return;
-        }
-        if (options.length < 2) {
-            console.log(`[DEBUG] Early return: options length < 2 at doc ${d.id}`);
-            return;
-        }
-        if (!correctAnswer) {
-            console.log(`[DEBUG] Early return: missing correctAnswer at doc ${d.id}`);
-            return;
-        }
-        
-        if (i === 0) console.log(`[DEBUG] Render condition PASSED for first document`);
-        
-        all.push({
-          id: d.id,
-          question: question,
-          options: options,
-          correct_answer: correctAnswer,
-          category: data.category || '',
-        });
-        i++;
       });
-      console.log(`[DEBUG] Final quiz array length: ${all.length}`);
       
       if (all.length === 0) {
-        console.log(`[DEBUG] Setting error: No quiz questions available yet.`);
         setQuestions([]);
-        setError('No quiz questions available yet. Admin can add questions.');
+        setError(`No quiz questions available for ${category}.`);
       } else {
         const shuffled = shuffle(all);
-        console.log(`[DEBUG] Shuffled array length: ${shuffled.length}`);
         setQuestions(shuffled);
+        
         if (user?.uid) {
           const quizKey = String(shuffled.map((q) => q.id).join('-')).slice(0, 180);
-          console.log(`[DEBUG] Loading session for key: ${quizKey}`);
           const prior = await loadQuizSession(user.uid, quizKey).catch(() => null);
-          if (prior) {
-            console.log(`[DEBUG] Found prior session`);
+          if (prior && !prior.submitted) {
             setAnswers(prior.answers || {});
             const idx = Math.max(0, shuffled.findIndex((q) => !prior.answers?.[q.id]));
             setIndex(idx === -1 ? 0 : idx);
-          } else {
-            console.log(`[DEBUG] No prior session found`);
           }
         }
       }
     } catch (e: any) {
-      console.log(`[DEBUG] Crash in loadQuiz:`, e?.message);
-      logFirestoreFailure({ collection: 'quizzes', operation: 'get', query: 'get all quizzes', role: profile?.role, status: profile?.status }, e);
+      logFirestoreFailure({ collection: 'quizzes', operation: 'get', query: `get quizzes where category=${category}`, role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to load quiz.');
       setQuestions([]);
     } finally {
-      console.log(`[DEBUG] loadQuiz finally block reached`);
       setLoading(false);
     }
-  }, [user?.uid]);
+  }, [user?.uid, profile]);
 
-  useEffect(() => {
-    loadQuiz().catch(() => {});
-  }, [loadQuiz]);
+  const selectCategory = (cat: string) => {
+    setSelectedCategory(cat);
+    loadQuiz(cat);
+  };
 
-  useFocusEffect(useCallback(() => {
-    loadQuiz().catch(() => {});
-  }, [loadQuiz]));
+  const quitQuiz = () => {
+    setSelectedCategory(null);
+    setQuestions([]);
+    setResult(null);
+    setError('');
+    setAnswers({});
+  };
 
   const current = questions[index];
   const isLast = index === questions.length - 1;
@@ -183,11 +195,12 @@ export default function QuizScreen() {
         user_id: user.uid,
         score,
         total_questions: questions.length,
+        category: selectedCategory,
         created_at: serverTimestamp(),
       });
       await addDoc(collection(db, 'notifications'), {
-        title: 'Quiz Submitted',
-        message: `You scored ${score}/${questions.length} in Quiz.`,
+        title: `${selectedCategory} Quiz Completed`,
+        message: `You scored ${score}/${questions.length} in ${selectedCategory}.`,
         user_id: user.uid,
         created_at: serverTimestamp(),
       });
@@ -195,7 +208,7 @@ export default function QuizScreen() {
       const quizKey = String(questions.map((q) => q.id).join('-')).slice(0, 180);
       await clearQuizSession(user.uid, quizKey).catch(() => {});
     } catch (e: any) {
-      logFirestoreFailure({ collection: 'quiz_results/notifications', operation: 'add', query: 'create quiz result and self notification', role: profile?.role, status: profile?.status }, e);
+      logFirestoreFailure({ collection: 'quiz_results/notifications', operation: 'add', query: 'create quiz result', role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to submit quiz.');
     } finally {
       setSubmitting(false);
@@ -205,8 +218,8 @@ export default function QuizScreen() {
   const saveQuestion = async () => {
     if (!isAdmin) return;
     const normalized = optionInputs.map((o) => o.trim()).filter(Boolean);
-    if (!questionInput.trim() || normalized.length < 2 || !correctAnswer.trim()) {
-      setError('Question, at least 2 options, and correct answer are required.');
+    if (!questionInput.trim() || normalized.length < 2 || !correctAnswer.trim() || !categoryInput.trim()) {
+      setError('Question, at least 2 options, correct answer, and category are required.');
       return;
     }
     if (!normalized.includes(correctAnswer.trim())) {
@@ -219,7 +232,7 @@ export default function QuizScreen() {
         question: questionInput.trim(),
         options: optionInputs.map((o) => o.trim()).filter(Boolean),
         correct_answer: correctAnswer.trim(),
-        category: category.trim(),
+        category: categoryInput.trim(),
         updated_at: serverTimestamp(),
       };
       if (editingId) {
@@ -231,8 +244,9 @@ export default function QuizScreen() {
       setQuestionInput('');
       setOptionInputs(['', '', '', '']);
       setCorrectAnswer('');
-      setCategory('');
-      await loadQuiz();
+      if (selectedCategory) {
+        await loadQuiz(selectedCategory);
+      }
     } catch (e: any) {
       logFirestoreFailure({ collection: 'quizzes', operation: editingId ? 'update' : 'add', path: editingId ? `quizzes/${editingId}` : 'quizzes', query: editingId ? 'update quiz question' : 'create quiz question', role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to save question.');
@@ -247,23 +261,22 @@ export default function QuizScreen() {
     const opts = [...q.options, '', '', '', ''].slice(0, 4);
     setOptionInputs(opts);
     setCorrectAnswer(q.correct_answer);
-    setCategory(q.category || '');
+    setCategoryInput(q.category || selectedCategory || '');
   };
 
   const removeQuestion = async (id: string) => {
     if (!isAdmin || !id) return;
     try {
       await deleteDoc(doc(db, 'quizzes', id));
-      await loadQuiz();
+      if (selectedCategory) await loadQuiz(selectedCategory);
     } catch (e: any) {
       logFirestoreFailure({ collection: 'quizzes', operation: 'delete', path: `quizzes/${id}`, query: 'delete quiz question', role: profile?.role, status: profile?.status }, e);
       setError(e?.message || 'Failed to delete question.');
     }
   };
 
-
   useEffect(() => {
-    if (!user?.uid || questions.length === 0 || result) return;
+    if (!user?.uid || questions.length === 0 || result || !selectedCategory) return;
     const quizKey = String(questions.map((q) => q.id).join('-')).slice(0, 180);
     saveQuizSession(user.uid, {
       quiz_key: quizKey,
@@ -273,7 +286,7 @@ export default function QuizScreen() {
       question_order: questions.map((q) => q.id),
       submitted: false,
     }).catch(() => {});
-  }, [answers, questions, user?.uid, result]);
+  }, [answers, questions, user?.uid, result, selectedCategory]);
 
   useEffect(() => {
     if (loading || result || questions.length === 0) return;
@@ -287,22 +300,67 @@ export default function QuizScreen() {
     return () => clearInterval(timer);
   }, [loading, result, questions.length]);
 
+  // CATEGORY LIST RENDERER
+  if (!selectedCategory) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" />
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <View style={styles.headerTopRow}>
+            <View>
+              <Text style={styles.title}>Quizzes</Text>
+              <Text style={styles.subtitle}>Select a category to begin</Text>
+            </View>
+          </View>
+        </View>
+
+        {loadingCounts ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={{ marginTop: 10, color: COLORS.textMuted }}>Loading categories...</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.categoryGrid}>
+            {QUIZ_CATEGORIES.map((cat) => {
+              const count = categoryCounts[cat] || 0;
+              return (
+                <TouchableOpacity 
+                  key={cat} 
+                  style={styles.categoryCard} 
+                  onPress={() => selectCategory(cat)}
+                  disabled={count === 0 && !isAdmin}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.categoryTitle}>{cat}</Text>
+                  <Text style={styles.categoryCount}>
+                    {count === 1 ? '1 Question' : `${count} Questions`}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+    );
+  }
+
+  // QUIZ PLAYER RENDERER
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerTopRow}>
-          <View>
-            <Text style={styles.title}>Quiz</Text>
-            <Text style={styles.subtitle}>Attempt with available questions</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title} numberOfLines={1}>{selectedCategory}</Text>
+            <Text style={styles.subtitle}>Quiz Session</Text>
           </View>
-          <TouchableOpacity style={styles.refreshBtn} onPress={loadQuiz} disabled={loading} accessibilityRole="button" accessibilityLabel="Refresh quiz">
-            {loading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.refreshText}>Refresh</Text>}
+          <TouchableOpacity style={styles.refreshBtn} onPress={quitQuiz} accessibilityRole="button">
+            <Text style={styles.refreshText}>Exit</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {isAdmin ? (
+      {isAdmin && !result ? (
         <SectionCard style={styles.adminCard}>
           <Text style={styles.adminTitle}>{editingId ? 'Edit Quiz Question' : 'Add Quiz Question'}</Text>
           <Text style={styles.inputLabel}>Question</Text>
@@ -321,17 +379,17 @@ export default function QuizScreen() {
           <Text style={styles.inputLabel}>Correct Answer</Text>
           <TextInput style={styles.input} value={correctAnswer} onChangeText={setCorrectAnswer} placeholder="Type the correct answer exactly as one option" placeholderTextColor={COLORS.textMuted} />
           <Text style={styles.inputLabel}>Category</Text>
-          <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="Category (optional)" placeholderTextColor={COLORS.textMuted} />
+          <TextInput style={styles.input} value={categoryInput || selectedCategory} onChangeText={setCategoryInput} placeholder="Category" placeholderTextColor={COLORS.textMuted} />
           <UIButton label={editingId ? 'Update Question' : 'Add Question'} onPress={saveQuestion} loading={savingQuestion} accessibilityLabel="Save quiz question" />
           {editingId ? (
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => { setEditingId(''); setQuestionInput(''); setOptionInputs(['', '', '', '']); setCorrectAnswer(''); setCategory(''); }}>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => { setEditingId(''); setQuestionInput(''); setOptionInputs(['', '', '', '']); setCorrectAnswer(''); }}>
               <Text style={styles.secondaryBtnText}>Cancel Edit</Text>
             </TouchableOpacity>
           ) : null}
         </SectionCard>
       ) : null}
 
-      {isAdmin && questions.length > 0 ? (
+      {isAdmin && questions.length > 0 && !result ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adminQuestionList}>
           {questions.map((q) => (
             <View key={q.id} style={styles.adminQuestionChip}>
@@ -360,7 +418,7 @@ export default function QuizScreen() {
       ) : error && questions.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.btn} onPress={loadQuiz}><Text style={styles.btnText}>Retry</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.btn} onPress={() => loadQuiz(selectedCategory)}><Text style={styles.btnText}>Retry</Text></TouchableOpacity>
         </View>
       ) : result ? (
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -392,7 +450,7 @@ export default function QuizScreen() {
               ) : null}
             </View>
           ))}
-          <TouchableOpacity style={styles.btn} onPress={loadQuiz}><Text style={styles.btnText}>Try New Random Quiz</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.btn} onPress={quitQuiz}><Text style={styles.btnText}>Back to Categories</Text></TouchableOpacity>
         </ScrollView>
       ) : (
         <View style={styles.body}>
@@ -443,6 +501,23 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 13, color: COLORS.textMuted },
   body: { padding: SPACING.md, gap: 10 },
+  
+  // Category Grid UI
+  categoryGrid: { padding: SPACING.md, gap: 12 },
+  categoryCard: { 
+    backgroundColor: COLORS.surface, 
+    borderRadius: RADIUS.lg, 
+    padding: SPACING.lg, 
+    ...SHADOWS.card, 
+    borderWidth: 1, 
+    borderColor: COLORS.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  categoryTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textMain, flex: 1 },
+  categoryCount: { fontSize: 13, fontWeight: '600', color: COLORS.primary, backgroundColor: COLORS.surfaceAlt, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full },
+
   adminCard: { margin: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, gap: 8, ...SHADOWS.card },
   adminTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
   inputLabel: { color: COLORS.textMain, fontSize: 12, fontWeight: '700', marginTop: 4 },
