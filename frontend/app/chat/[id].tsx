@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { ScreenRefreshControl } from '@/components/ui';
-import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+// Removed unused usePullToRefresh import
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, AppState,
@@ -168,6 +168,7 @@ export default function ChatDetailScreen() {
   const [lastCursor, setLastCursor] = useState<any>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const [reportTarget, setReportTarget] = useState<MessageItem | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<MessageItem>>(null);
@@ -589,8 +590,9 @@ export default function ChatDetailScreen() {
   }, [flushOutbox, id]);
 
   const refreshMessages = useCallback(async () => {
-    if (!id || refreshing) return;
+    if (!id || manualRefreshing) return;
     
+    setManualRefreshing(true);
     try {
       const [chatSnap, messageSnap] = await Promise.all([
         getDoc(doc(db, 'chats', id)),
@@ -616,9 +618,9 @@ export default function ChatDetailScreen() {
       logFirestoreFailure({ collection: 'chats/messages', operation: 'get', query: `doc chats/${id} + messages where chat_id == ${id}` }, error);
       setSendError('Could not refresh chat. Please try again.');
     } finally {
-      
+      setManualRefreshing(false);
     }
-  }, [id]);
+  }, [id, manualRefreshing]);
 
   const deleteForMe = useCallback(async (message: MessageItem) => {
     if (!user?.uid) return;
@@ -767,10 +769,6 @@ export default function ChatDetailScreen() {
 
   const title = chat.type === 'group' ? (chat.name || 'Group Chat') : chat.type === 'broadcast' ? 'Broadcast' : 'Direct Chat';
 
-
-  const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await new Promise(r => setTimeout(r, 500));
-  });
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -782,8 +780,8 @@ export default function ChatDetailScreen() {
           <Text style={styles.topTitle}>{title}</Text>
           {othersTyping ? <Text style={styles.typingText}>Typing...</Text> : null}
         </View>
-        <ScalePressable style={styles.backBtn} onPress={refreshMessages} disabled={refreshing}>
-          {refreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
+        <ScalePressable style={styles.backBtn} onPress={refreshMessages} disabled={manualRefreshing}>
+          {manualRefreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
         </ScalePressable>
         <ScalePressable style={styles.backBtn} onPress={() => { void toggleMuteChat(); }}>
           <Ionicons name={(chat.muted_by || []).includes(user?.uid || '') ? 'notifications-off-outline' : 'notifications-outline'} size={18} color={COLORS.primary} />
@@ -811,7 +809,6 @@ export default function ChatDetailScreen() {
         ListFooterComponent={listFooter}
         ListEmptyComponent={listEmpty}
         renderItem={renderMessage}
-      refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       />
 
       <ReportReasonModal
