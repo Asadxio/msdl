@@ -393,11 +393,17 @@ def _verify_firebase_request(authorization: str | None) -> tuple[str, str]:
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid auth token")
     uid = decoded.get("uid", "")
-    if decoded.get("email_verified") is not True:
-        raise HTTPException(status_code=403, detail="Verified email required")
     role = _fetch_user_role(uid)
     if not uid or not role:
         raise HTTPException(status_code=403, detail="Approved user required")
+        
+    if decoded.get("email_verified") is not True:
+        if role == "super_admin":
+            if firebase_db:
+                snap = firebase_db.collection("users").document(uid).get()
+                if snap.exists and snap.to_dict().get("founder") is True:
+                    return uid, role
+        raise HTTPException(status_code=403, detail="Verified email required")
     return uid, role
 
 
