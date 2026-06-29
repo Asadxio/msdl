@@ -129,7 +129,7 @@ service cloud.firestore {
             'updated_at'
           ]
         )
-        && !request.resource.data.keys().hasAny(['about', 'about_content', 'introduction_content'])
+        && !appSettingsChangedKeys(docId).hasAny(['about', 'about_content', 'introduction_content'])
         && isValidProfileAboutSettings(request.resource.data);
     }
 
