@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -14,7 +14,6 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -148,7 +147,7 @@ export default function PrayerTimesScreen() {
           state = place.region || 'Unknown Region';
           country = place.country || 'Unknown Country';
         }
-      } catch (e) {
+      } catch {
         console.warn('Reverse geocoding failed, using fallbacks');
       }
 
@@ -165,7 +164,7 @@ export default function PrayerTimesScreen() {
 
       await savePrayerSettings(updated);
       Alert.alert('Location Updated', `Detected: ${city}, ${state}, ${country}`);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Unable to auto-detect location. Please search or enter manually.');
     } finally {
       setStatus('ready');
@@ -196,7 +195,7 @@ export default function PrayerTimesScreen() {
             state = place.region || '';
             country = place.country || '';
           }
-        } catch (e) {
+        } catch {
           console.warn('Reverse geocoding failed for search result');
         }
 
@@ -217,7 +216,7 @@ export default function PrayerTimesScreen() {
       } else {
         Alert.alert('Not Found', 'Could not resolve that location. Try a different query.');
       }
-    } catch (e) {
+    } catch {
       Alert.alert('Search Failed', 'An error occurred while geocoding the city.');
     } finally {
       setSearching(false);
@@ -350,7 +349,7 @@ export default function PrayerTimesScreen() {
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
   }, [nextPrayer]);
 
-  const hijriDate = useMemo(() => toHijriApprox(new Date()), [prayerTimes]);
+  const hijriDate = useMemo(() => toHijriApprox(new Date()), []);
   const gregorianDate = useMemo(() => new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }), []);
 
   const currentMethodName = useMemo(() => {
@@ -476,9 +475,7 @@ export default function PrayerTimesScreen() {
                   const label = methodKey === 'auto' ? 'Automatic (Based on Country)' : (PRAYER_METHODS[methodKey]?.method || methodKey);
                   const isSelected = methodOverride === methodKey;
                 
-  const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await handleAutoDetect();
-  });
+
   return (
                     <TouchableOpacity
                       key={methodKey}
@@ -514,7 +511,7 @@ export default function PrayerTimesScreen() {
               {activeTab === 'auto' && (
                 <View style={styles.tabContent}>
                   <Text style={styles.tabHelpText}>
-                    Automatically fetch your coordinates using your device's GPS and resolve the city name.
+                    Automatically fetch your coordinates using your device&apos;s GPS and resolve the city name.
                   </Text>
                   <TouchableOpacity style={styles.actionButton} onPress={handleAutoDetect}>
                     <Ionicons name="location-outline" size={18} color="#fff" />

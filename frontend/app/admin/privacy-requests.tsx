@@ -75,7 +75,7 @@ export default function AdminPrivacyRequestsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, [isAdmin, profile?.role, profile?.status]);
 
   useEffect(() => {
     if (profile && !isAdmin) {

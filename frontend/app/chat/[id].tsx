@@ -1,6 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { ScreenRefreshControl } from '@/components/ui';
 // Removed unused usePullToRefresh import
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -18,7 +17,7 @@ import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { dispatchNotification } from '@/lib/dispatchNotification';
-import { EmptyState, ScalePressable, SkeletonCard } from '@/components/ui';
+import { EmptyState, ScalePressable, SkeletonCard, ScreenRefreshControl } from '@/components/ui';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Network from 'expo-network';

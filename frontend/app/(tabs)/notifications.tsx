@@ -388,15 +388,12 @@ export default function NotificationsScreen() {
             <View style={styles.center}>
               <Ionicons name="notifications-off-outline" size={44} color={COLORS.border} />
               <Text style={styles.emptyText}>No notifications yet.</Text>
-              <Text style={[styles.emptyText, { fontSize: 12 }]}>You'll see important updates here.</Text>
+              <Text style={[styles.emptyText, { fontSize: 12 }]}>You&apos;ll see important updates here.</Text>
             </View>
           )}
           renderItem={({ item }) => {
             const isUnread = !item.read?.[user?.uid || ''];
           
-  const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    
-  });
   return (
               <ScalePressable
                 style={[

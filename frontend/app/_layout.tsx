@@ -286,6 +286,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         startupLog('Navigation complete', { route: segmentKey || '/', reason: 'approved-user' });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance, onboardingStatus, signupVerificationFlowActive]);
 
   useEffect(() => {

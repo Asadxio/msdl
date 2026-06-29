@@ -80,7 +80,7 @@ export default function PaymentFlowScreen() {
       }
     };
     load().catch(() => {});
-  }, [user?.uid]);
+  }, [user?.uid, profile?.role, profile?.status]);
 
   useEffect(() => {
     if (paymentType === 'fees') {
@@ -163,7 +163,7 @@ export default function PaymentFlowScreen() {
       }
     }, 4000);
     return () => clearInterval(timer);
-  }, [user?.uid, currentPaymentId, verificationState, paymentType, parsedAmount]);
+  }, [user?.uid, currentPaymentId, verificationState, paymentType, parsedAmount, profile?.role, profile?.status]);
 
   const onConfirmPayment = async () => {
     if (!user?.uid || !profile) return;

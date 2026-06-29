@@ -18,7 +18,7 @@ export function usePresence() {
           last_seen: serverTimestamp(),
           device_type: Platform.OS,
         });
-      } catch (error) {
+      } catch {
         // Silently fail if offline or permissions issue
       }
     };

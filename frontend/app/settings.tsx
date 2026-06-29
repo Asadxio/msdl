@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';
 import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
@@ -168,7 +168,7 @@ export default function SettingsScreen() {
         <SettingsSection title="Islamic Features" icon="moon-outline">
           <TouchableOpacity style={styles.linkRow} onPress={() => {
             const methods = ['Umm al-Qura', 'Muslim World League', 'ISNA', 'Egyptian General Authority'];
-            const currentIdx = Math.max(0, methods.findIndex(m => m.toLowerCase().replace(/[^a-z]/g, '_').includes(prayerMethod.replace('umm_al_qura', 'umm'))));
+
             Alert.alert('Prayer Calculation Method', 'Select your preferred method:', [
               ...methods.map(m => ({
                 text: m,

@@ -10,7 +10,7 @@ type ListenerEntry = {
 
 const registry = new Map<string, ListenerEntry>();
 
-export function stableQueryKey(parts: Array<string | number | boolean | undefined | null>): string {
+export function stableQueryKey(parts: (string | number | boolean | undefined | null)[]): string {
   return parts.map((p) => String(p ?? '')).join('|');
 }
 

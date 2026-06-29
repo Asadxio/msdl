@@ -74,7 +74,7 @@ export default function RecordingsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile?.role, profile?.status]);
 
   useEffect(() => {
     fetchRecordings().catch(() => {});

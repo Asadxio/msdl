@@ -220,7 +220,7 @@ export default function PaymentHistoryScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.uid, isAdmin]);
+  }, [user?.uid, isAdmin, profile?.role, profile?.status]);
 
   useEffect(() => {
     fetchPayments().catch(() => {});

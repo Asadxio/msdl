@@ -513,14 +513,14 @@ export default function HomeScreen() {
               <View style={styles.hadithIconCircle}>
                 <Ionicons name="book" size={18} color={COLORS.primary} />
               </View>
-              <Text style={styles.hadithLabel}>📖 Today's Hadith</Text>
+              <Text style={styles.hadithLabel}>📖 Today&apos;s Hadith</Text>
               {isAdmin ? (
                 <TouchableOpacity onPress={openNoticeEditor} style={{ marginLeft: 'auto' }}>
                   <Ionicons name="create-outline" size={18} color={COLORS.textMuted} />
                 </TouchableOpacity>
               ) : null}
             </View>
-            <Text style={styles.hadithText}>"{hadithText}"</Text>
+            <Text style={styles.hadithText}>&quot;{hadithText}&quot;</Text>
             <Text style={styles.hadithReference}>— {hadithRef}</Text>
           </View>
         </View>
@@ -760,7 +760,7 @@ export default function HomeScreen() {
                   placeholderTextColor={COLORS.textMuted}
                   multiline
                 />
-                <Text style={[styles.modalSectionLabel, { marginTop: SPACING.sm }]}>Today's Hadith</Text>
+                <Text style={[styles.modalSectionLabel, { marginTop: SPACING.sm }]}>Today&apos;s Hadith</Text>
                 <TextInput
                   style={[styles.modalInput, styles.modalTextArea]}
                   value={hadithDraftText}

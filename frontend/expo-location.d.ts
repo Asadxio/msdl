@@ -17,22 +17,22 @@ declare module "expo-location" {
     latitude: number;
     longitude: number;
   }): Promise<
-    Array<{
+    {
       city?: string | null;
       district?: string | null;
       subregion?: string | null;
       region?: string | null;
       country?: string | null;
       isoCountryCode?: string | null;
-    }>
+    }[]
   >;
   export function geocodeAsync(
     address: string
   ): Promise<
-    Array<{
+    {
       latitude: number;
       longitude: number;
       altitude?: number | null;
-    }>
+    }[]
   >;
 }

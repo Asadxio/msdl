@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { ScreenRefreshControl } from '@/components/ui';
+
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -38,7 +38,7 @@ import {
 import { useData } from "@/context/DataContext";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { ScalePressable } from "@/components/ui";
+import { ScalePressable, ScreenRefreshControl } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 import { uploadUriFile } from "@/lib/storage";
 import { normalizeMeetUrl, prepareExternalUrl } from "@/lib/links";
@@ -1344,10 +1344,7 @@ export default function CourseDetailScreen() {
                                     ? assignmentSubmissionsRaw
                                     : [];
                                 
-  const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await new Promise(r => setTimeout(r, 500));
-  });
-  return (
+                                  return (
                                     <View
                                       key={assignment.id}
                                       style={styles.assignmentCard}

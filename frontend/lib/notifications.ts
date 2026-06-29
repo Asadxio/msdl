@@ -43,7 +43,7 @@ export async function createNotificationAsAdmin(
 
 export async function createRoleNotificationAsAdmin(
   profile: UserProfile | null,
-  payload: NotificationPayload & { roles: Array<'student' | 'teacher'>; category?: string }
+  payload: NotificationPayload & { roles: ('student' | 'teacher')[]; category?: string }
 ): Promise<boolean> {
   if (profile?.role !== 'admin') return false;
   const title = payload.title.trim();
@@ -77,7 +77,7 @@ export async function createRoleNotificationAsAdmin(
 }
 
 export async function createRoleNotification(
-  payload: NotificationPayload & { roles: Array<'student' | 'teacher'>; category?: string }
+  payload: NotificationPayload & { roles: ('student' | 'teacher')[]; category?: string }
 ): Promise<boolean> {
   const title = payload.title.trim();
   const message = payload.message.trim();

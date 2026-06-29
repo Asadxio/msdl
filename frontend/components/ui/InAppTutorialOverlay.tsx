@@ -18,8 +18,7 @@ const STEP_ORDER: TutorialScreen[] = ['dashboard', 'courses', 'live_classes', 'n
 
 export function InAppTutorialOverlay() {
   const insets = useSafeAreaInsets();
-  const { showTutorial, setShowTutorial, currentStep, setCurrentStep, completedSteps, markStepComplete } = useTutorial();
-  const [index, setIndex] = useState(0);
+  const { showTutorial, setShowTutorial, currentStep, setCurrentStep, markStepComplete } = useTutorial();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const rtl = I18nManager.isRTL;
 

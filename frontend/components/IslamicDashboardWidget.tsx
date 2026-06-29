@@ -129,7 +129,7 @@ export default function IslamicDashboardWidget() {
       };
 
       await savePrayerSettings(newSettings);
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Could not resolve location. Please configure it manually in settings.");
     } finally {
       setRequesting(false);

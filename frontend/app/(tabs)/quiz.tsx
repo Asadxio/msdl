@@ -5,7 +5,7 @@ import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, deleteDoc, doc, getDocs, getCountFromServer, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, getCountFromServer, query, serverTimestamp, updateDoc, where, Timestamp } from 'firebase/firestore';
 import { useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -191,12 +191,19 @@ export default function QuizScreen() {
     setSubmitting(true);
     try {
       const score = questions.reduce((sum, q) => (answers[q.id] === q.correct_answer ? sum + 1 : sum), 0);
-      await addDoc(collection(db, 'quiz_results'), {
+      
+      const payload = {
         user_id: user.uid,
         score,
         total_questions: questions.length,
-        created_at: serverTimestamp(),
-      });
+        created_at: Timestamp.now(),
+      };
+
+      await Promise.race([
+        addDoc(collection(db, 'quiz_results'), payload),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Network timeout. Please check your connection.')), 8000))
+      ]);
+
       setResult({ score, total: questions.length });
       const quizKey = String(questions.map((q) => q.id).join('-')).slice(0, 180);
       await clearQuizSession(user.uid, quizKey).catch(() => {});

@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { ScreenRefreshControl } from '@/components/ui';
+import { ScreenRefreshControl , EmptyState, ScalePressable } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY } from '@/constants/theme';
 import { db } from '@/lib/firebase';
-import { EmptyState, ScalePressable } from '@/components/ui';
+
 import { goBackOrReplace } from '@/lib/navigation';
 
 type LiveClassItem = {
@@ -55,7 +55,6 @@ export default function LiveClassesScreen() {
           }
         });
         setClasses(items);
-        setLoading(false);
         setLoading(false);
       },
       (error) => {

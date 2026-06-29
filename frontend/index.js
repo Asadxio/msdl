@@ -1,6 +1,6 @@
-import 'react-native-gesture-handler';
-import { registerRootComponent } from 'expo';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { registerRootComponent } from 'expo';
+
 import { ExpoRoot } from 'expo-router';
 
 // Keep the app route context explicit so Android exports do not depend on

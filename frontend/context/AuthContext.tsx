@@ -32,8 +32,6 @@ import { trackEvent } from '@/lib/analytics';
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
 const PROFILE_CACHE_TIMEOUT_MS = 1200;
-const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
-const VERIFICATION_RESEND_DAILY_LIMIT = 5;
 
 export type UserProfile = {
   uid?: string;
@@ -348,6 +346,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileUnsub) profileUnsub();
       if (authUnsub) authUnsub();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
@@ -483,11 +482,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resendVerification = async (): Promise<string | null> => {
     if (!auth.currentUser) return 'Not signed in';
-    const currentUser = auth.currentUser;
-    const now = Date.now();
-    const key = getVerificationResendKey(currentUser.uid);
-    const today = new Date(now).toISOString().slice(0, 10);
-    const emailDomain = currentUser.email?.split('@')[1] || 'unknown';
     try {
       await sendEmailVerification(auth.currentUser);
       logger.info('Verification email sent', { uid: auth.currentUser.uid, email: auth.currentUser.email });

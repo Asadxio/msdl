@@ -175,6 +175,7 @@ export default function ManageAcademicsScreen() {
       return;
     }
     if (isAdmin) fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, isAdmin, router]);
 
   useEffect(() => {
@@ -591,9 +592,6 @@ export default function ManageAcademicsScreen() {
           {courseNames.length === 0 ? <Text style={styles.helper}>No courses available for assignment.</Text> : courseNames.map((name) => {
             const selected = selectedCourses.includes(name);
           
-  const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    // Static dashboard, no explicit refetch needed; handled by sub-screens.
-  });
   return (
               <TouchableOpacity
                 key={name}

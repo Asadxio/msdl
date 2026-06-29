@@ -105,9 +105,6 @@ export default function AdminSendPush() {
             renderItem={({ item }) => {
               const selected = selectedIds.includes(item.id);
             
-  const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await new Promise(r => setTimeout(r, 500));
-  });
   return (
                 <TouchableOpacity
                   onPress={() => {
