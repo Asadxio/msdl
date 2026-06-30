@@ -1571,7 +1571,7 @@ export default function CourseDetailScreen() {
 
 const styles = StyleSheet.create({
   startClassModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  startClassModalContent: { width: "90%", maxWidth: 400, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.xl },
+  startClassModalContent: { width: "90%", maxWidth: 400, backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.xl },
   startClassModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.md },
   startClassModalTitle: { fontSize: 20, fontWeight: "bold", color: COLORS.textMain },
   startClassModalInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, padding: SPACING.md, color: COLORS.textMain, backgroundColor: COLORS.background },
@@ -1625,7 +1625,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.xxl,
     padding: 12,
     ...SHADOWS.card,
   },
@@ -1636,7 +1636,7 @@ const styles = StyleSheet.create({
 
   infoCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 18,
+    borderRadius: RADIUS.xxl,
     padding: 14,
     gap: 8,
     borderWidth: 1,
@@ -1665,7 +1665,7 @@ const styles = StyleSheet.create({
     gap: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: COLORS.surfaceAlt,
@@ -1677,7 +1677,7 @@ const styles = StyleSheet.create({
   lessonDetailCard: {
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     backgroundColor: COLORS.surface,
     marginTop: 8,
     padding: 10,
@@ -1704,7 +1704,7 @@ const styles = StyleSheet.create({
   assignmentCard: {
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     padding: 10,
     backgroundColor: COLORS.surfaceAlt,
     gap: 4,
@@ -1809,7 +1809,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.surfaceAlt,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     padding: 12,
   },
 
@@ -1819,7 +1819,7 @@ const styles = StyleSheet.create({
     gap: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     padding: 10,
     backgroundColor: COLORS.surfaceAlt,
     marginTop: 8,
@@ -1850,7 +1850,7 @@ const styles = StyleSheet.create({
   audioPlayerCard: {
     borderWidth: 1,
     borderColor: "#B7E4CC",
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     padding: 10,
     gap: 8,
     backgroundColor: "#F2FBF6",
@@ -1884,7 +1884,7 @@ const styles = StyleSheet.create({
   audioLessonRow: {
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     backgroundColor: COLORS.surfaceAlt,
     padding: 10,
     gap: 8,
@@ -1909,7 +1909,7 @@ const styles = StyleSheet.create({
   recorderPanel: {
     borderWidth: 1,
     borderColor: "#CFE9DB",
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     padding: 10,
     gap: 8,
     backgroundColor: "#F7FBF9",
@@ -2023,7 +2023,7 @@ const styles = StyleSheet.create({
   playerCloseBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: RADIUS.xxl,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.surfaceAlt,

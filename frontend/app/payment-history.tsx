@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
   list: { padding: SPACING.md, gap: 10, paddingBottom: 24 },
   card: {
-    backgroundColor: COLORS.surface, borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl,
     padding: SPACING.md, ...SHADOWS.card, gap: 6,
   },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },

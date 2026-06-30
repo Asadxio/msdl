@@ -183,13 +183,13 @@ const styles = StyleSheet.create({
   teacherName: { fontSize: 22, fontWeight: '800', color: COLORS.textMain, textAlign: 'center', paddingHorizontal: SPACING.lg },
   statsRow: { flexDirection: 'row', gap: SPACING.md, paddingHorizontal: SPACING.lg, marginTop: SPACING.lg },
   statCard: {
-    flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
+    flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl,
     padding: SPACING.md, alignItems: 'center', ...SHADOWS.card,
   },
   statNumber: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
   statLabel: { fontSize: 12, fontWeight: '500', color: COLORS.textMuted, marginTop: 2 },
   sectionCard: {
-    backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg,
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg,
     marginHorizontal: SPACING.lg, marginTop: SPACING.lg, ...SHADOWS.card,
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md },
