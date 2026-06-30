@@ -16,6 +16,8 @@ type MoreItem = {
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
   route: string;
+  colorBg?: string;
+  colorIcon?: string;
 };
 
 type Category = {
@@ -32,6 +34,7 @@ const CATEGORIES: Category[] = [
     colorBg: '#EEF2FF',
     colorIcon: '#4F46E5',
     items: [
+      { label: 'Applications', subtitle: 'Islamic tools and features', icon: 'apps-outline', route: '/more/applications' },
       { label: 'Library', subtitle: 'Course materials and books', icon: 'library-outline', route: '/more/library' },
       { label: 'Quiz', subtitle: 'Tests and assessments', icon: 'help-circle-outline', route: '/more/quiz' },
       { label: 'Recordings', subtitle: 'Watch lesson recordings', icon: 'play-circle-outline', route: '/recordings' },
@@ -45,7 +48,6 @@ const CATEGORIES: Category[] = [
     items: [
       { label: 'Attendance', subtitle: 'Track your attendance', icon: 'calendar-outline', route: '/more/attendance' },
       { label: 'Payment History', subtitle: 'View your payment records', icon: 'receipt-outline', route: '/payment-history' },
-      { label: 'Applications', subtitle: 'Islamic tools and features', icon: 'apps-outline', route: '/more/applications' },
       { label: 'Announcements', subtitle: 'Live status and announcements', icon: 'radio-outline', route: '/status' },
     ]
   },
@@ -55,10 +57,10 @@ const CATEGORIES: Category[] = [
     colorIcon: '#64748B',
     items: [
       { label: 'Settings', subtitle: 'App preferences and account', icon: 'settings-outline', route: '/settings' },
-      { label: 'Privacy Policy', subtitle: 'Review your privacy rights', icon: 'shield-checkmark-outline', route: '/privacy' },
-      { label: 'Terms & Conditions', subtitle: 'View app terms', icon: 'document-text-outline', route: '/terms' },
+      { label: 'Privacy Policy', subtitle: 'Review your privacy rights', icon: 'shield-checkmark-outline', route: '/privacy', colorBg: '#F5F3FF', colorIcon: '#8B5CF6' },
+      { label: 'Terms & Conditions', subtitle: 'View app terms', icon: 'document-text-outline', route: '/terms', colorBg: '#F5F3FF', colorIcon: '#8B5CF6' },
       { label: 'Community Guidelines', subtitle: 'Respectful behavior rules', icon: 'people-outline', route: '/community-guidelines' },
-      { label: 'Data & Privacy Controls', subtitle: 'Manage your data settings', icon: 'lock-closed-outline', route: '/data-privacy' },
+      { label: 'Data & Privacy Controls', subtitle: 'Manage your data settings', icon: 'lock-closed-outline', route: '/data-privacy', colorBg: '#F5F3FF', colorIcon: '#8B5CF6' },
     ]
   },
   {
@@ -155,9 +157,7 @@ export default function MoreLandingScreen() {
         </View>
       </View>
 
-      {CATEGORIES.map((category) => {
-        if (category.adminOnly && !isAdmin) return null;
-
+      {CATEGORIES.filter(c => c.adminOnly ? isAdmin : true).map((category, index, arr) => {
         return (
           <View key={category.title} style={styles.categorySection}>
             <Text style={styles.categoryTitle}>{category.title}</Text>
@@ -170,8 +170,8 @@ export default function MoreLandingScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={item.label}
                 >
-                  <View style={[styles.rowIconContainer, { backgroundColor: category.colorBg }]}>
-                    <Ionicons name={item.icon} size={22} color={category.colorIcon} />
+                  <View style={[styles.rowIconContainer, { backgroundColor: item.colorBg || category.colorBg }]}>
+                    <Ionicons name={item.icon} size={22} color={item.colorIcon || category.colorIcon} />
                   </View>
                   <View style={styles.rowContent}>
                     <Text style={styles.rowLabel}>{item.label}</Text>
@@ -181,6 +181,7 @@ export default function MoreLandingScreen() {
                 </ScalePressable>
               ))}
             </View>
+            {index < arr.length - 1 && <View style={styles.divider} />}
           </View>
         );
       })}
@@ -267,8 +268,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   statCard: {
-    flex: 1,
-    minWidth: '45%',
+    width: '48%',
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: SPACING.md,
@@ -311,6 +311,12 @@ const styles = StyleSheet.create({
   },
   categoryList: {
     gap: SPACING.sm,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginTop: SPACING.xl,
+    marginHorizontal: SPACING.md,
   },
   
   rowCard: {
