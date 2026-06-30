@@ -54,16 +54,7 @@ import {
   type AudioLesson,
 } from "@/lib/audioLessons";
 
-const MAX_ASSIGNMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
-const ALLOWED_ASSIGNMENT_MIME_TYPES = new Set([
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-]);
+
 
 function sanitizeFileName(fileName?: string | null): string {
   const base = String(fileName || "submission")
@@ -155,13 +146,7 @@ export default function CourseDetailScreen() {
   const [activeAssignmentId, setActiveAssignmentId] = useState<string>("");
   const [submissionModalVisible, setSubmissionModalVisible] = useState(false);
   const [submittingAssignment, setSubmittingAssignment] = useState(false);
-  const [assignmentUploadProgress, setAssignmentUploadProgress] = useState(0);
   const [submissionText, setSubmissionText] = useState("");
-  const [selectedUpload, setSelectedUpload] = useState<{
-    uri: string;
-    name: string;
-    mimeType?: string;
-  } | null>(null);
   const [externalFileUrl, setExternalFileUrl] = useState("");
 
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
@@ -775,11 +760,6 @@ export default function CourseDetailScreen() {
       const current = getSubmissionForAssignment(assignmentId);
       setActiveAssignmentId(assignmentId);
       setSubmissionText(current?.text_answer || "");
-      setSelectedUpload(
-        current?.file_url
-          ? { uri: current.file_url, name: "Existing file" }
-          : null,
-      );
       setExternalFileUrl(current?.file_url || "");
       if (user?.uid) {
         const draft = await loadAssignmentDraft(user.uid, assignmentId).catch(() => null);
@@ -795,55 +775,12 @@ export default function CourseDetailScreen() {
     }
   };
 
-  const pickSubmissionFile = async () => {
-    try {
-      const picked = await DocumentPicker.getDocumentAsync({
-        type: [
-          "application/pdf",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "image/*",
-        ],
-        multiple: false,
-        copyToCacheDirectory: true,
-      });
-      if (picked.canceled) return;
-      const file = picked.assets?.[0];
-      if (!file?.uri) return;
-      const mimeType = String(file.mimeType || "").toLowerCase().trim();
-      if (!ALLOWED_ASSIGNMENT_MIME_TYPES.has(mimeType)) {
-        Alert.alert(
-          "Unsupported file",
-          "Please upload a PDF, DOC, DOCX, JPG, PNG, or WebP file.",
-        );
-        return;
-      }
-      if ((file.size || 0) <= 0) {
-        Alert.alert("Invalid file", "Selected file is empty.");
-        return;
-      }
-      if ((file.size || 0) > MAX_ASSIGNMENT_UPLOAD_BYTES) {
-        Alert.alert("File too large", "Maximum assignment file size is 10MB.");
-        return;
-      }
-      setSelectedUpload({
-        uri: file.uri,
-        name: sanitizeFileName(file.name),
-        mimeType,
-      });
-      setExternalFileUrl("");
-    } catch (e) {
-      console.log("[CourseDetail] pickSubmissionFile ERROR:", e);
-      Alert.alert("Error", "Unable to select a file right now.");
-    }
-  };
-
   const submitAssignmentHandler = async () => {
     if (!activeAssignmentId) return;
-    if (!submissionText.trim() && !selectedUpload && !externalFileUrl.trim()) {
+    if (!submissionText.trim() && !externalFileUrl.trim()) {
       Alert.alert(
         "Missing data",
-        "Please add a text answer, image upload, or file URL.",
+        "Please add a text answer or file URL.",
       );
       return;
     }
@@ -852,41 +789,14 @@ export default function CourseDetailScreen() {
       console.log("[CourseDetail] submitAssignmentHandler started", {
         activeAssignmentId,
       });
-      let fileUrl = "";
-      if (externalFileUrl.trim()) {
-        fileUrl = externalFileUrl.trim();
-      } else if (selectedUpload?.uri) {
-        if (!selectedUpload.uri.trim()) {
-          throw new Error("Invalid file URI for upload.");
-        }
-        fileUrl = selectedUpload.uri;
-        if (!selectedUpload.uri.startsWith("http")) {
-          setAssignmentUploadProgress(0);
-          const safeName = sanitizeFileName(selectedUpload.name);
-          const storageFileName = `${Date.now()}_${safeName}`;
-          fileUrl = await uploadUriFile({
-            uri: selectedUpload.uri,
-            path: `assignment_submissions/${user?.uid || "anonymous"}/${storageFileName}`,
-            contentType: selectedUpload.mimeType,
-            maxBytes: MAX_ASSIGNMENT_UPLOAD_BYTES,
-            customMetadata: {
-              upload_context: "assignment_submission",
-              user_id: user?.uid || "anonymous",
-              assignment_id: activeAssignmentId,
-            },
-            onProgress: setAssignmentUploadProgress,
-          });
-        }
-      }
       const ok = await submitAssignment({
         assignmentId: activeAssignmentId,
         textAnswer: submissionText.trim(),
-        fileUrl,
+        fileUrl: externalFileUrl.trim(),
       });
       if (ok) {
         Alert.alert("Submitted", "Assignment submitted successfully.");
         setSubmissionModalVisible(false);
-        setAssignmentUploadProgress(0);
       } else {
         Alert.alert("Error", "Unable to submit assignment. Please try again.");
       }
@@ -1612,16 +1522,7 @@ export default function CourseDetailScreen() {
               placeholder="Write your answer..."
               multiline
             />
-            <TouchableOpacity
-              style={styles.secondaryModalBtn}
-              onPress={pickSubmissionFile}
-            >
-              <Text style={styles.secondaryModalBtnText}>
-                {selectedUpload
-                  ? `Image: ${selectedUpload.name}`
-                  : "Upload Image"}
-              </Text>
-            </TouchableOpacity>
+
             <TextInput
               style={styles.modalInput}
               value={externalFileUrl}
@@ -1636,12 +1537,7 @@ export default function CourseDetailScreen() {
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              {submittingAssignment && assignmentUploadProgress > 0 ? (
-                <Text style={styles.assignmentUploadProgress}>
-                  Uploading file... {Math.round(assignmentUploadProgress * 100)}
-                  %
-                </Text>
-              ) : null}
+
               <TouchableOpacity
                 style={styles.modalSubmitBtn}
                 onPress={submitAssignmentHandler}
