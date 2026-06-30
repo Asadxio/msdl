@@ -1,67 +1,91 @@
 import { ScreenRefreshControl, ScalePressable } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View, Linking } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, Linking, Share, Platform } from 'react-native';
 import { WHATSAPP_HELP_URL } from '@/lib/links';
-
-const CONTACT_INFO = {
-  phone: null,
-  whatsapp: WHATSAPP_HELP_URL,
-  email: null,
-  website: null,
-  location: null,
-};
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 
-import { COLORS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { COLORS, SHADOWS, SPACING, TYPOGRAPHY, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 
-type MoreItem = {
+/* ─────────────────────────────────── Types ──────────────────────────────── */
+
+type MenuItem = {
   label: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  route: string;
+  route?: string;
+  onPress?: () => void;
   colorBg?: string;
   colorIcon?: string;
+  disabled?: boolean;
 };
 
-type Category = {
+type MenuSection = {
   title: string;
+  emoji: string;
   colorBg: string;
   colorIcon: string;
   adminOnly?: boolean;
-  items: MoreItem[];
+  items: MenuItem[];
 };
 
-const CATEGORIES: Category[] = [
+/* ─────────────────────────────── Quick Actions ─────────────────────────── */
+
+type QuickAction = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  route: string;
+  bg: string;
+  fg: string;
+};
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { label: 'Courses', icon: 'school-outline', route: '/(tabs)/courses', bg: '#EEF2FF', fg: '#4F46E5' },
+  { label: 'Library', icon: 'library-outline', route: '/more/library', bg: '#F0FDF4', fg: '#16A34A' },
+  { label: 'Quiz', icon: 'help-circle-outline', route: '/more/quiz', bg: '#FFF7ED', fg: '#EA580C' },
+  { label: 'Prayer', icon: 'time-outline', route: '/prayer-times', bg: '#ECFDF5', fg: '#059669' },
+  { label: 'Qibla', icon: 'compass-outline', route: '/qibla', bg: '#FEF3C7', fg: '#D97706' },
+  { label: 'Calendar', icon: 'calendar-number-outline', route: '/islamic-calendar', bg: '#F5F3FF', fg: '#7C3AED' },
+  { label: 'Alerts', icon: 'notifications-outline', route: '/(tabs)/notifications', bg: '#FEE2E2', fg: '#DC2626' },
+  { label: 'Settings', icon: 'settings-outline', route: '/settings', bg: '#F1F5F9', fg: '#475569' },
+];
+
+/* ─────────────────────────────── Menu Sections ─────────────────────────── */
+
+const MENU_SECTIONS: MenuSection[] = [
   {
     title: 'Learning',
+    emoji: '📚',
     colorBg: '#EEF2FF',
     colorIcon: '#4F46E5',
     items: [
       { label: 'Applications', subtitle: 'Islamic tools and features', icon: 'apps-outline', route: '/more/applications' },
-      { label: 'Library', subtitle: 'Course materials and books', icon: 'library-outline', route: '/more/library' },
-      { label: 'Quiz', subtitle: 'Tests and assessments', icon: 'help-circle-outline', route: '/more/quiz' },
+      { label: 'Attendance', subtitle: 'Track your attendance', icon: 'calendar-outline', route: '/more/attendance', colorBg: '#ECFDF5', colorIcon: '#10B981' },
       { label: 'Recordings', subtitle: 'Watch lesson recordings', icon: 'play-circle-outline', route: '/recordings' },
+      { label: 'Announcements', subtitle: 'Live status and announcements', icon: 'radio-outline', route: '/status', colorBg: '#FFF7ED', colorIcon: '#EA580C' },
       { label: 'Teachers', subtitle: 'Meet your teachers', icon: 'people-outline', route: '/more/teachers' },
+      { label: 'Payment History', subtitle: 'View your payment records', icon: 'receipt-outline', route: '/payment-history', colorBg: '#ECFDF5', colorIcon: '#10B981' },
     ]
   },
   {
     title: 'Student Services',
+    emoji: '💳',
     colorBg: '#ECFDF5',
     colorIcon: '#10B981',
     items: [
-      { label: 'Attendance', subtitle: 'Track your attendance', icon: 'calendar-outline', route: '/more/attendance' },
-      { label: 'Payment History', subtitle: 'View your payment records', icon: 'receipt-outline', route: '/payment-history' },
-      { label: 'Announcements', subtitle: 'Live status and announcements', icon: 'radio-outline', route: '/status' },
+      { label: 'About & Donations', subtitle: 'App info and support', icon: 'heart-outline', route: '/payment', colorBg: '#FEF3C7', colorIcon: '#D97706' },
+      { label: 'Certificates', subtitle: 'View your certificates', icon: 'ribbon-outline', route: '/(tabs)/certificate', colorBg: '#F5F3FF', colorIcon: '#7C3AED' },
+      { label: 'Quiz Analytics', subtitle: 'Track your quiz performance', icon: 'stats-chart-outline', route: '/(tabs)/progress', colorBg: '#EEF2FF', colorIcon: '#4F46E5' },
     ]
   },
   {
-    title: 'App & Settings',
+    title: 'App & Legal',
+    emoji: '⚙️',
     colorBg: '#F8FAFC',
     colorIcon: '#64748B',
     items: [
@@ -73,15 +97,8 @@ const CATEGORIES: Category[] = [
     ]
   },
   {
-    title: 'Support',
-    colorBg: '#FEF3C7',
-    colorIcon: '#D97706',
-    items: [
-      { label: 'About & Donations', subtitle: 'App info and support', icon: 'heart-outline', route: '/payment' },
-    ]
-  },
-  {
     title: 'Admin Controls',
+    emoji: '🛡️',
     colorBg: '#FFF1F2',
     colorIcon: '#E11D48',
     adminOnly: true,
@@ -92,10 +109,30 @@ const CATEGORIES: Category[] = [
       { label: 'Analytics Dashboard', subtitle: 'Platform-wide metrics and reports', icon: 'bar-chart-outline', route: '/admin/analytics' },
       { label: 'Moderation Queue', subtitle: 'Review flagged content and reports', icon: 'flag-outline', route: '/admin/moderation' },
       { label: 'Security Dashboard', subtitle: 'Monitor security events and access', icon: 'shield-outline', route: '/admin/security' },
+      { label: 'Privacy Requests', subtitle: 'Review user data requests', icon: 'document-lock-outline', route: '/admin/privacy-requests' },
       { label: 'Send Push Notifications', subtitle: 'Broadcast messages to users', icon: 'notifications-outline', route: '/admin/send-push' },
     ]
   }
 ];
+
+/* ─────────────────────────────── Social Links ──────────────────────────── */
+
+type SocialLink = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  url: string | null;
+  bg: string;
+  fg: string;
+};
+
+const SOCIAL_LINKS: SocialLink[] = [
+  { label: 'WhatsApp', icon: 'logo-whatsapp', url: WHATSAPP_HELP_URL, bg: '#DCFCE7', fg: '#16A34A' },
+  { label: 'YouTube', icon: 'logo-youtube', url: null, bg: '#FEE2E2', fg: '#DC2626' },
+  { label: 'Instagram', icon: 'logo-instagram', url: null, bg: '#FCE7F3', fg: '#DB2777' },
+  { label: 'Telegram', icon: 'paper-plane-outline', url: null, bg: '#DBEAFE', fg: '#2563EB' },
+];
+
+/* ────────────────────────────── Main Component ─────────────────────────── */
 
 export default function MoreLandingScreen() {
   const router = useRouter();
@@ -127,6 +164,26 @@ export default function MoreLandingScreen() {
   
   const appVersion = Constants.expoConfig?.version || '1.0.0';
 
+  const handleShareApp = async () => {
+    try {
+      await Share.share({
+        message: 'Check out Madrasa Tus Salikat Lil Banat — an Islamic learning platform for students. Download now!',
+      });
+    } catch (_e) {
+      // User cancelled share
+    }
+  };
+
+  const handleRateApp = () => {
+    // On Android, link to Play Store listing
+    const storeUrl = Platform.select({
+      android: 'https://play.google.com/store/apps/details?id=com.mslb.frontend',
+      ios: 'https://apps.apple.com/app/idXXXXXXXXXX',
+      default: '',
+    });
+    if (storeUrl) Linking.openURL(storeUrl).catch(() => {});
+  };
+
   return (
     <ScrollView 
       style={styles.container} 
@@ -134,11 +191,13 @@ export default function MoreLandingScreen() {
       showsVerticalScrollIndicator={false} 
       refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
+      {/* ─── Header ─── */}
       <View style={styles.header}>
         <Text style={styles.title}>Student Services</Text>
         <Text style={styles.subtitle}>Everything you need for learning, student services, and account management.</Text>
       </View>
 
+      {/* ─── 👤 Profile Card ─── */}
       <ScalePressable style={styles.profileCard} onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="View Profile">
         <View style={styles.profileAvatar}>
           <Text style={styles.profileInitials}>{initials}</Text>
@@ -156,6 +215,7 @@ export default function MoreLandingScreen() {
         <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
       </ScalePressable>
 
+      {/* ─── Stats Card ─── */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
           <View style={[styles.statIconContainer, { backgroundColor: '#EEF2FF' }]}>
@@ -166,101 +226,140 @@ export default function MoreLandingScreen() {
         </View>
       </View>
 
-      {CATEGORIES.filter(c => c.adminOnly ? isAdmin : true).map((category, index, arr) => {
-        return (
-          <View key={category.title} style={styles.categorySection}>
-            <Text style={styles.categoryTitle}>{category.title}</Text>
-            <View style={styles.categoryList}>
-              {category.items.map((item) => (
-                <ScalePressable
-                  key={item.route}
-                  style={styles.rowCard}
-                  onPress={() => router.push(item.route as any)}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.label}
-                >
-                  <View style={[styles.rowIconContainer, { backgroundColor: item.colorBg || category.colorBg }]}>
-                    <Ionicons name={item.icon} size={22} color={item.colorIcon || category.colorIcon} />
-                  </View>
-                  <View style={styles.rowContent}>
-                    <Text style={styles.rowLabel}>{item.label}</Text>
-                    <Text style={styles.rowSubtitle}>{item.subtitle}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-                </ScalePressable>
-              ))}
-            </View>
-            {index < arr.length - 1 && <View style={styles.divider} />}
-          </View>
-        );
-      })}
-
-      <View style={styles.supportCard}>
-        <Text style={styles.supportTitle}>Need Help?</Text>
-        <Text style={styles.supportSubtitle}>We're here to help you. Contact the Madrasa anytime.</Text>
-        <View style={styles.supportList}>
-          {CONTACT_INFO.phone && (
-            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(`tel:${CONTACT_INFO.phone}`)}>
-              <View style={[styles.supportIcon, { backgroundColor: '#E0F2FE' }]}>
-                <Ionicons name="call" size={20} color="#0284C7" />
+      {/* ─── ⚡ Quick Actions Grid ─── */}
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>⚡  Quick Actions</Text>
+        <View style={styles.quickGrid}>
+          {QUICK_ACTIONS.map((action) => (
+            <ScalePressable
+              key={action.label}
+              style={styles.quickItem}
+              onPress={() => router.push(action.route as any)}
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
+            >
+              <View style={[styles.quickIconContainer, { backgroundColor: action.bg }]}>
+                <Ionicons name={action.icon} size={22} color={action.fg} />
               </View>
-              <View style={styles.supportRowContent}>
-                <Text style={styles.supportLabel}>Call Madrasa</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              <Text style={styles.quickLabel} numberOfLines={1}>{action.label}</Text>
             </ScalePressable>
-          )}
-          
-          {CONTACT_INFO.whatsapp && (
-            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(CONTACT_INFO.whatsapp!)}>
-              <View style={[styles.supportIcon, { backgroundColor: '#DCFCE7' }]}>
-                <Ionicons name="logo-whatsapp" size={20} color="#16A34A" />
-              </View>
-              <View style={styles.supportRowContent}>
-                <Text style={styles.supportLabel}>WhatsApp Support</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-            </ScalePressable>
-          )}
-
-          {CONTACT_INFO.email && (
-            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(`mailto:${CONTACT_INFO.email}`)}>
-              <View style={[styles.supportIcon, { backgroundColor: '#F3E8FF' }]}>
-                <Ionicons name="mail" size={20} color="#9333EA" />
-              </View>
-              <View style={styles.supportRowContent}>
-                <Text style={styles.supportLabel}>Email Support</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-            </ScalePressable>
-          )}
-
-          {CONTACT_INFO.website && (
-            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(CONTACT_INFO.website!)}>
-              <View style={[styles.supportIcon, { backgroundColor: '#FEF9C3' }]}>
-                <Ionicons name="globe-outline" size={20} color="#CA8A04" />
-              </View>
-              <View style={styles.supportRowContent}>
-                <Text style={styles.supportLabel}>Official Website</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-            </ScalePressable>
-          )}
-
-          {CONTACT_INFO.location && (
-            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(CONTACT_INFO.location!)}>
-              <View style={[styles.supportIcon, { backgroundColor: '#FEE2E2' }]}>
-                <Ionicons name="location" size={20} color="#DC2626" />
-              </View>
-              <View style={styles.supportRowContent}>
-                <Text style={styles.supportLabel}>Madrasa Location</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-            </ScalePressable>
-          )}
+          ))}
         </View>
       </View>
 
+      {/* ─── Menu Sections ─── */}
+      {MENU_SECTIONS.filter(s => s.adminOnly ? isAdmin : true).map((section) => (
+        <View key={section.title} style={styles.sectionBlock}>
+          <Text style={styles.sectionTitle}>{section.emoji}  {section.title}</Text>
+          <View style={styles.sectionList}>
+            {section.items.map((item) => (
+              <ScalePressable
+                key={item.label}
+                style={styles.rowCard}
+                onPress={() => {
+                  if (item.onPress) item.onPress();
+                  else if (item.route) router.push(item.route as any);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+                disabled={item.disabled}
+              >
+                <View style={[styles.rowIconContainer, { backgroundColor: item.colorBg || section.colorBg }]}>
+                  <Ionicons name={item.icon} size={22} color={item.colorIcon || section.colorIcon} />
+                </View>
+                <View style={styles.rowContent}>
+                  <Text style={styles.rowLabel}>{item.label}</Text>
+                  <Text style={styles.rowSubtitle}>{item.subtitle}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </ScalePressable>
+            ))}
+          </View>
+        </View>
+      ))}
+
+      {/* ─── 🕌 About Madrasa ─── */}
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>🕌  About Madrasa</Text>
+        <View style={styles.aboutCard}>
+          <Text style={styles.aboutName}>Madrasa Tus Salikat Lil Banat</Text>
+          <Text style={styles.aboutDesc}>
+            An Islamic educational institution dedicated to providing quality Deeni education for girls. 
+            Our mission is to nurture knowledgeable, practicing Muslimas who can contribute positively to society.
+          </Text>
+          <View style={styles.aboutMeta}>
+            <View style={styles.aboutMetaRow}>
+              <Ionicons name="location-outline" size={16} color={COLORS.textMuted} />
+              <Text style={styles.aboutMetaText}>Madrasa Tus Salikat Lil Banat</Text>
+            </View>
+            <View style={styles.aboutMetaRow}>
+              <Ionicons name="school-outline" size={16} color={COLORS.textMuted} />
+              <Text style={styles.aboutMetaText}>Islamic Education for Girls</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* ─── ❤️ Support & Social ─── */}
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>❤️  Support</Text>
+        <View style={styles.supportCard}>
+          <Text style={styles.supportTitle}>Need Help?</Text>
+          <Text style={styles.supportSubtitle}>We're here to help you. Contact the Madrasa anytime.</Text>
+          
+          {/* Social Links */}
+          <View style={styles.socialRow}>
+            {SOCIAL_LINKS.filter(s => s.url).map((link) => (
+              <ScalePressable
+                key={link.label}
+                style={[styles.socialButton, { backgroundColor: link.bg }]}
+                onPress={() => link.url && Linking.openURL(link.url)}
+                accessibilityRole="button"
+                accessibilityLabel={link.label}
+              >
+                <Ionicons name={link.icon} size={22} color={link.fg} />
+              </ScalePressable>
+            ))}
+          </View>
+
+          {/* Action rows */}
+          <View style={styles.supportList}>
+            <ScalePressable style={styles.supportRow} onPress={handleShareApp} accessibilityRole="button" accessibilityLabel="Share App">
+              <View style={[styles.supportIcon, { backgroundColor: '#DBEAFE' }]}>
+                <Ionicons name="share-social-outline" size={20} color="#2563EB" />
+              </View>
+              <View style={styles.supportRowContent}>
+                <Text style={styles.supportLabel}>Share App</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </ScalePressable>
+
+            <ScalePressable style={styles.supportRow} onPress={handleRateApp} accessibilityRole="button" accessibilityLabel="Rate App">
+              <View style={[styles.supportIcon, { backgroundColor: '#FEF9C3' }]}>
+                <Ionicons name="star-outline" size={20} color="#CA8A04" />
+              </View>
+              <View style={styles.supportRowContent}>
+                <Text style={styles.supportLabel}>Rate App</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </ScalePressable>
+
+            {WHATSAPP_HELP_URL ? (
+              <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(WHATSAPP_HELP_URL)} accessibilityRole="button" accessibilityLabel="Contact Us">
+                <View style={[styles.supportIcon, { backgroundColor: '#DCFCE7' }]}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={20} color="#16A34A" />
+                </View>
+                <View style={styles.supportRowContent}>
+                  <Text style={styles.supportLabel}>Contact Us</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </ScalePressable>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
+      {/* ─── Footer ─── */}
       <View style={styles.footer}>
         <Text style={styles.footerHeart}>Made with ❤️ for Islamic Education</Text>
         <Text style={styles.footerTitle}>Madrasa Tus Salikat Lil Banat</Text>
@@ -270,13 +369,22 @@ export default function MoreLandingScreen() {
   );
 }
 
+/* ────────────────────────────────── Styles ──────────────────────────────── */
+
+const CARD_RADIUS = 20;
+const CARD_BORDER = 'rgba(0,0,0,0.03)';
+const CARD_SHADOW_OPACITY = 0.04;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  content: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl + 40 },
+  content: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl + 60 },
+
+  /* Header */
   header: { marginBottom: SPACING.xl },
   title: { ...TYPOGRAPHY.title, color: '#0F172A', letterSpacing: -0.5, fontWeight: '800' },
   subtitle: { ...TYPOGRAPHY.body, color: '#64748B', marginTop: 8, lineHeight: 22 },
   
+  /* Profile Card */
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -287,7 +395,7 @@ const styles = StyleSheet.create({
     ...SHADOWS.card,
     shadowOpacity: 0.05,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
+    borderColor: CARD_BORDER,
   },
   profileAvatar: {
     width: 64,
@@ -336,6 +444,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
 
+  /* Stats Grid */
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -345,12 +454,12 @@ const styles = StyleSheet.create({
   statCard: {
     width: '48%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: CARD_RADIUS,
     padding: SPACING.md,
     ...SHADOWS.card,
-    shadowOpacity: 0.04,
+    shadowOpacity: CARD_SHADOW_OPACITY,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
+    borderColor: CARD_BORDER,
   },
   statIconContainer: {
     width: 40,
@@ -372,44 +481,66 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  categorySection: {
+  /* Quick Actions Grid */
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  quickItem: {
+    width: '23%',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm + 4,
+  },
+  quickIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  quickLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#334155',
+    textAlign: 'center',
+  },
+
+  /* Section Blocks */
+  sectionBlock: {
     marginBottom: SPACING.xl,
   },
-  categoryTitle: {
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#334155',
     marginBottom: SPACING.md,
     marginLeft: 4,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
-  categoryList: {
+  sectionList: {
     gap: SPACING.sm,
   },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    marginTop: SPACING.xl,
-    marginHorizontal: SPACING.md,
-  },
-  
+
+  /* Row Cards */
   rowCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.md,
     padding: SPACING.md,
-    borderRadius: 20,
+    borderRadius: CARD_RADIUS,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
+    borderColor: CARD_BORDER,
     ...SHADOWS.card,
-    shadowOpacity: 0.04,
-    minHeight: 76,
+    shadowOpacity: CARD_SHADOW_OPACITY,
+    minHeight: 72,
   },
   rowIconContainer: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -419,29 +550,66 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowLabel: { 
-    fontSize: 16, 
+    fontSize: 15, 
     fontWeight: '700', 
     color: '#0F172A',
     marginBottom: 2,
   },
   rowSubtitle: { 
-    fontSize: 13, 
+    fontSize: 12, 
     color: '#64748B',
     fontWeight: '400',
   },
 
+  /* About Card */
+  aboutCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: SPACING.lg,
+    ...SHADOWS.card,
+    shadowOpacity: CARD_SHADOW_OPACITY,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+  },
+  aboutName: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  aboutDesc: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 20,
+    marginBottom: SPACING.md,
+  },
+  aboutMeta: {
+    gap: 8,
+  },
+  aboutMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  aboutMetaText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+
+  /* Support Card */
   supportCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: CARD_RADIUS,
     padding: SPACING.lg,
-    marginBottom: SPACING.xl,
     ...SHADOWS.card,
-    shadowOpacity: 0.05,
+    shadowOpacity: CARD_SHADOW_OPACITY,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
+    borderColor: CARD_BORDER,
   },
   supportTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0F172A',
     marginBottom: 4,
@@ -449,8 +617,20 @@ const styles = StyleSheet.create({
   supportSubtitle: {
     fontSize: 13,
     color: '#64748B',
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
     lineHeight: 20,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  socialButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   supportList: {
     gap: SPACING.sm,
@@ -478,6 +658,7 @@ const styles = StyleSheet.create({
     color: '#1E293B',
   },
 
+  /* Footer */
   footer: {
     alignItems: 'center',
     marginTop: SPACING.xl,
