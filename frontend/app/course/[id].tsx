@@ -22,7 +22,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { goBackOrReplace } from "@/lib/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { Audio } from "expo-av";
@@ -89,10 +88,7 @@ function formatAudioUploadDate(value?: { toDate?: () => Date } | null): string {
   }
 }
 
-function getPickerAsset(result: DocumentPicker.DocumentPickerResult): DocumentPicker.DocumentPickerAsset | null {
-  if (result.canceled) return null;
-  return result.assets?.[0] || null;
-}
+
 
 function getAssignmentUploadError(error: any): string {
   const message = String(error?.message || "").toLowerCase();
@@ -168,16 +164,9 @@ export default function CourseDetailScreen() {
   const [editingAudioLesson, setEditingAudioLesson] = useState<AudioLesson | null>(null);
   const [audioTitle, setAudioTitle] = useState("");
   const [audioDescription, setAudioDescription] = useState("");
-  const [selectedAudioUpload, setSelectedAudioUpload] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
-  const [selectedAudioDuration, setSelectedAudioDuration] = useState(0);
-  const [audioUploadProgress, setAudioUploadProgress] = useState(0);
   const [audioUploading, setAudioUploading] = useState(false);
   const [audioUploadError, setAudioUploadError] = useState("");
-  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused" | "stopped">("idle");
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const [recordedAudioUri, setRecordedAudioUri] = useState("");
-  const [recordedAudioSize, setRecordedAudioSize] = useState(0);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const [audioUrlInput, setAudioUrlInput] = useState("");
   const [activeAudioLesson, setActiveAudioLesson] = useState<AudioLesson | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioPosition, setAudioPosition] = useState(0);
@@ -253,19 +242,7 @@ export default function CourseDetailScreen() {
   useEffect(() => () => {
     audioSoundRef.current?.unloadAsync().catch(() => {});
     audioSoundRef.current = null;
-    recordingRef.current?.stopAndUnloadAsync().catch(() => {});
-    recordingRef.current = null;
   }, []);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState !== "active" && recordingState === "recording") {
-        void pauseInAppRecording();
-        setAudioUploadError("Recording paused because the app went to the background. Resume when ready.");
-      }
-    });
-    return () => sub.remove();
-  }, [recordingState]);
 
   const showJoinNow = useMemo(() => {
     if (!classTimeLabel) return true;
@@ -316,27 +293,14 @@ export default function CourseDetailScreen() {
   };
 
   const resetAudioLessonForm = () => {
-    recordingRef.current?.stopAndUnloadAsync().catch(() => {});
-    recordingRef.current = null;
     setEditingAudioLesson(null);
     setAudioTitle("");
     setAudioDescription("");
-    setSelectedAudioUpload(null);
-    setSelectedAudioDuration(0);
-    setAudioUploadProgress(0);
+    setAudioUrlInput("");
     setAudioUploadError("");
-    setRecordingState("idle");
-    setRecordingDuration(0);
-    setRecordedAudioUri("");
-    setRecordedAudioSize(0);
   };
 
   const openAudioUploadModal = () => {
-    resetAudioLessonForm();
-    setAudioLessonModalVisible(true);
-  };
-
-  const openAudioRecordingModal = () => {
     resetAudioLessonForm();
     setAudioLessonModalVisible(true);
   };
@@ -345,131 +309,9 @@ export default function CourseDetailScreen() {
     setEditingAudioLesson(lesson);
     setAudioTitle(lesson.title);
     setAudioDescription(lesson.description || "");
-    setSelectedAudioUpload(null);
-    setSelectedAudioDuration(lesson.duration || 0);
-    setAudioUploadProgress(0);
+    setAudioUrlInput(lesson.audio_url || "");
     setAudioUploadError("");
     setAudioLessonModalVisible(true);
-  };
-
-  const setPlaybackAudioMode = async () => {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-    });
-  };
-
-  const startInAppRecording = async () => {
-    try {
-      if (recordingRef.current) await recordingRef.current.stopAndUnloadAsync().catch(() => {});
-      const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert("Microphone permission required", "Please allow microphone access to record audio lessons.");
-        return;
-      }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: false,
-        playThroughEarpieceAndroid: false,
-      });
-      const recording = new Audio.Recording();
-      recording.setProgressUpdateInterval(500);
-      recording.setOnRecordingStatusUpdate((status) => {
-        setRecordingDuration(Math.round((status.durationMillis || 0) / 1000));
-        if (status.isRecording) setRecordingState("recording");
-      });
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
-      recordingRef.current = recording;
-      setSelectedAudioUpload(null);
-      setRecordedAudioUri("");
-      setRecordedAudioSize(0);
-      setRecordingState("recording");
-      setAudioUploadError("");
-    } catch (e: any) {
-      setAudioUploadError(e?.message || "Could not start recording. Please check microphone access and retry.");
-      await setPlaybackAudioMode().catch(() => {});
-    }
-  };
-
-  const pauseInAppRecording = async () => {
-    try {
-      await recordingRef.current?.pauseAsync();
-      setRecordingState("paused");
-    } catch (e: any) {
-      setAudioUploadError(e?.message || "Pause is not supported on this device. Stop the recording to save it.");
-    }
-  };
-
-  const resumeInAppRecording = async () => {
-    try {
-      await recordingRef.current?.startAsync();
-      setRecordingState("recording");
-    } catch (e: any) {
-      setAudioUploadError(e?.message || "Could not resume recording.");
-    }
-  };
-
-  const stopInAppRecording = async () => {
-    try {
-      const recording = recordingRef.current;
-      if (!recording) return;
-      const status = await recording.stopAndUnloadAsync();
-      const uri = recording.getURI() || "";
-      recordingRef.current = null;
-      await setPlaybackAudioMode().catch(() => {});
-      if (!uri) throw new Error("Recording file was not created.");
-      const info = await FileSystem.getInfoAsync(uri);
-      const durationSeconds = Math.max(recordingDuration, Math.round((status.durationMillis || 0) / 1000));
-      setRecordedAudioUri(uri);
-      setRecordedAudioSize(info.exists && typeof info.size === "number" ? info.size : 0);
-      setSelectedAudioDuration(durationSeconds);
-      setRecordingDuration(durationSeconds);
-      setRecordingState("stopped");
-      setSelectedAudioUpload(null);
-      if (!audioTitle.trim()) setAudioTitle(`Audio Lesson ${new Date().toLocaleDateString()}`);
-    } catch (e: any) {
-      setAudioUploadError(e?.message || "Could not stop and save recording.");
-      await setPlaybackAudioMode().catch(() => {});
-    }
-  };
-
-  const pickAudioFile = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["audio/mpeg", "audio/mp4", "audio/aac", "audio/x-m4a"],
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-      const asset = getPickerAsset(result);
-      if (!asset) return;
-      validateAudioLessonFile(asset.name, asset.mimeType, asset.size);
-      let durationSeconds = 0;
-      try {
-        const sound = new Audio.Sound();
-        await sound.loadAsync({ uri: asset.uri }, {}, false);
-        const status = await sound.getStatusAsync();
-        if (status.isLoaded && status.durationMillis) durationSeconds = Math.round(status.durationMillis / 1000);
-        await sound.unloadAsync();
-      } catch {}
-      recordingRef.current?.stopAndUnloadAsync().catch(() => {});
-      recordingRef.current = null;
-      setRecordingState("idle");
-      setRecordingDuration(0);
-      setRecordedAudioUri("");
-      setRecordedAudioSize(0);
-      setSelectedAudioUpload(asset);
-      setSelectedAudioDuration(durationSeconds);
-      if (!audioTitle.trim()) setAudioTitle(asset.name.replace(/\.[^.]+$/, ""));
-      setAudioUploadError("");
-    } catch (e: any) {
-      Alert.alert("Audio file rejected", e?.message || "Please choose an MP3, M4A, or AAC file.");
-    }
   };
 
   const saveAudioLesson = async () => {
@@ -478,12 +320,8 @@ export default function CourseDetailScreen() {
       Alert.alert("Title required", "Please enter an audio lesson title.");
       return;
     }
-    if (!editingAudioLesson && !selectedAudioUpload && !recordedAudioUri) {
-      Alert.alert("Audio required", "Please record audio in the app or choose an MP3, M4A, or AAC file to upload.");
-      return;
-    }
-    if (!editingAudioLesson && recordingState === "recording") {
-      Alert.alert("Stop recording first", "Please stop the recording before uploading it.");
+    if (!editingAudioLesson && !audioUrlInput.trim()) {
+      Alert.alert("URL required", "Please provide a valid audio link (SoundCloud, Drive, etc.).");
       return;
     }
     setAudioUploading(true);
@@ -492,32 +330,15 @@ export default function CourseDetailScreen() {
       if (editingAudioLesson) {
         await updateAudioLesson(editingAudioLesson.id, { title: audioTitle, description: audioDescription });
       } else {
-        const source = selectedAudioUpload
-          ? {
-            uri: selectedAudioUpload.uri,
-            name: selectedAudioUpload.name,
-            mimeType: selectedAudioUpload.mimeType,
-            size: selectedAudioUpload.size,
-            duration: selectedAudioDuration,
-          }
-          : {
-            uri: recordedAudioUri,
-            name: `${audioTitle.trim().replace(/[^A-Za-z0-9._-]/g, "_") || "recorded_lesson"}.m4a`,
-            mimeType: "audio/mp4",
-            size: recordedAudioSize,
-            duration: recordingDuration,
-          };
         await uploadAudioLesson({
           courseId,
           teacherId: user.uid,
           title: audioTitle,
           description: audioDescription,
-          duration: source.duration,
-          uri: source.uri,
-          fileName: source.name,
-          mimeType: source.mimeType,
-          fileSize: source.size,
-        }, setAudioUploadProgress);
+          duration: 0,
+          uri: audioUrlInput.trim(),
+          fileName: "External Link",
+        });
       }
       setAudioLessonModalVisible(false);
       resetAudioLessonForm();
@@ -1002,13 +823,9 @@ export default function CourseDetailScreen() {
               </View>
               {isReviewer ? (
                 <View style={styles.audioHeaderActions}>
-                  <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioRecordingModal}>
-                    <Ionicons name="mic-outline" size={16} color={COLORS.goldText} />
-                    <Text style={styles.audioUploadBtnText}>Record</Text>
-                  </TouchableOpacity>
                   <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioUploadModal}>
-                    <Ionicons name="cloud-upload-outline" size={16} color={COLORS.goldText} />
-                    <Text style={styles.audioUploadBtnText}>Upload</Text>
+                    <Ionicons name="link-outline" size={16} color={COLORS.goldText} />
+                    <Text style={styles.audioUploadBtnText}>Add Link</Text>
                   </TouchableOpacity>
                 </View>
               ) : null}
@@ -1048,7 +865,7 @@ export default function CourseDetailScreen() {
             {loadingAudioLessons && audioLessons.length === 0 ? (
               <ActivityIndicator size="small" color={COLORS.primary} />
             ) : audioLessons.length === 0 ? (
-              <Text style={styles.infoCardSubValue}>No audio lessons yet. Teachers can upload MP3, M4A, or AAC lectures after class.</Text>
+              <Text style={styles.infoCardSubValue}>No audio lessons yet. Teachers can share links to podcasts or lectures.</Text>
             ) : (
               audioLessons.map((lesson) => (
                 <View key={lesson.id} style={styles.audioLessonRow}>
@@ -1624,63 +1441,20 @@ export default function CourseDetailScreen() {
               multiline
             />
             {!editingAudioLesson ? (
-              <View style={styles.recorderPanel}>
-                <Text style={styles.recorderTitle}>Record directly in the app (M4A)</Text>
-                <Text style={styles.recorderTimer}>{formatAudioDuration(recordingDuration)}</Text>
-                <View style={styles.recorderButtonRow}>
-                  {recordingState === "idle" || recordingState === "stopped" ? (
-                    <TouchableOpacity style={styles.recorderPrimaryBtn} onPress={startInAppRecording} disabled={audioUploading}>
-                      <Ionicons name="mic" size={16} color="#fff" />
-                      <Text style={styles.recorderPrimaryText}>Start Recording</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {recordingState === "recording" ? (
-                    <TouchableOpacity style={styles.recorderSecondaryBtn} onPress={pauseInAppRecording} disabled={audioUploading}>
-                      <Ionicons name="pause" size={16} color={COLORS.primary} />
-                      <Text style={styles.recorderSecondaryText}>Pause</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {recordingState === "paused" ? (
-                    <TouchableOpacity style={styles.recorderSecondaryBtn} onPress={resumeInAppRecording} disabled={audioUploading}>
-                      <Ionicons name="play" size={16} color={COLORS.primary} />
-                      <Text style={styles.recorderSecondaryText}>Resume</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {recordingState === "recording" || recordingState === "paused" ? (
-                    <TouchableOpacity style={styles.recorderStopBtn} onPress={stopInAppRecording} disabled={audioUploading}>
-                      <Ionicons name="stop" size={16} color="#fff" />
-                      <Text style={styles.recorderStopText}>Stop</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-                {recordedAudioUri ? (
-                  <Text style={styles.infoCardSubValue}>Recorded M4A ready • {formatAudioDuration(recordingDuration)} • {formatFileSize(recordedAudioSize)}</Text>
-                ) : (
-                  <Text style={styles.infoCardSubValue}>If the app goes to background, recording pauses automatically to protect the file.</Text>
-                )}
-              </View>
-            ) : null}
-            {!editingAudioLesson ? (
               <>
-                <TouchableOpacity style={styles.secondaryModalBtn} onPress={pickAudioFile} disabled={audioUploading || recordingState === "recording"}>
-                  <Text style={styles.secondaryModalBtnText}>
-                    {selectedAudioUpload ? selectedAudioUpload.name : "Choose MP3, M4A, or AAC file"}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.infoCardSubValue}>Recommended max size: {Math.round(AUDIO_LESSON_MAX_BYTES / (1024 * 1024))} MB. Detected duration: {formatAudioDuration(selectedAudioDuration)}</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={audioUrlInput}
+                  onChangeText={setAudioUrlInput}
+                  placeholder="Paste external audio URL..."
+                  placeholderTextColor={COLORS.textMuted}
+                  autoCapitalize="none"
+                />
               </>
-            ) : null}
-            {audioUploading ? (
-              <Text style={styles.assignmentUploadProgress}>Uploading audio... {Math.round(audioUploadProgress * 100)}%</Text>
             ) : null}
             {audioUploadError ? (
               <View style={styles.retryBox}>
                 <Text style={styles.errorTextSmall}>{audioUploadError}</Text>
-                {!editingAudioLesson && selectedAudioUpload ? (
-                  <TouchableOpacity style={styles.secondaryModalBtn} onPress={saveAudioLesson} disabled={audioUploading}>
-                    <Text style={styles.secondaryModalBtnText}>Retry Upload</Text>
-                  </TouchableOpacity>
-                ) : null}
               </View>
             ) : null}
             <View style={styles.modalActionRow}>
