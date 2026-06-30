@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   },
   topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },
   lastRefreshed: { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
-  refreshBtn: { padding: 8 },
+  refreshBtn: { padding: SPACING.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   loadingText: { color: COLORS.textMuted, fontSize: 14 },
   errorBanner: {

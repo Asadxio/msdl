@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ScreenRefreshControl } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { hasPermission } from '@/lib/rbac';
+import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 
 export default function SecurityDashboard() {
   const { profile } = useAuth();
@@ -50,4 +51,13 @@ export default function SecurityDashboard() {
   </View>;
 }
 
-const styles = StyleSheet.create({ container: { flex: 1, padding: 12 }, title: { fontSize: 20, fontWeight: '700' }, subtitle: { marginVertical: 6 }, row: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 }, input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 8 }, card: { borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 8, marginBottom: 8 }, center: { flex: 1, justifyContent: 'center', alignItems: 'center' } });
+const styles = StyleSheet.create({ container: { flex: 1, padding: SPACING.md }, title: { fontSize: 20, fontWeight: '700' }, subtitle: { marginVertical: 6 }, row: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 }, input: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    color: COLORS.textMain,
+    fontSize: 14,
+  }, card: { borderWidth: 1, borderColor: '#eee', borderRadius: RADIUS.md, padding: SPACING.sm, marginBottom: 8 }, center: { flex: 1, justifyContent: 'center', alignItems: 'center' } });

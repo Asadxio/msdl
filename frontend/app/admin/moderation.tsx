@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { db } from '@/lib/firebase';
+import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 import { applyModerationDecision } from '@/lib/moderationOps';
 import { normalizeModerationState, type ModerationSeverity } from '@/lib/moderationDomain';
 import { ScreenRefreshControl } from '@/components/ui';
@@ -85,4 +86,13 @@ export default function ModerationDashboard() {
   </View>;
 }
 
-const styles = StyleSheet.create({ container: { flex: 1, padding: 12 }, title: { fontSize: 20, fontWeight: '700' }, input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 8, marginVertical: 8 }, row: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 }, card: { padding: 10, borderWidth: 1, borderColor: '#eee', borderRadius: 8, marginBottom: 8 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' } });
+const styles = StyleSheet.create({ container: { flex: 1, padding: SPACING.md }, title: { fontSize: 20, fontWeight: '700' }, input: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    color: COLORS.textMain,
+    fontSize: 14,
+  }, row: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 }, card: { padding: 10, borderWidth: 1, borderColor: '#eee', borderRadius: RADIUS.md, marginBottom: 8 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' } });

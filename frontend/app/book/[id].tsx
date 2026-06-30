@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 12, borderRadius: RADIUS.xxl, borderWidth: 2, borderColor: COLORS.primary,
+    paddingVertical: SPACING.md, borderRadius: RADIUS.xxl, borderWidth: 2, borderColor: COLORS.primary,
   },
   actionBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
   downloadBtn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },

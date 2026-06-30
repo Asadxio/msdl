@@ -68,13 +68,13 @@ const styles = StyleSheet.create({
   title: { ...TYPOGRAPHY.heading, color: COLORS.textMain, fontWeight: '800' },
   body: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
   input: {
-    minHeight: 110,
-    textAlignVertical: 'top',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    padding: 10,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
     color: COLORS.textMain,
-    backgroundColor: COLORS.surfaceAlt,
+    fontSize: 14,
   },
 });

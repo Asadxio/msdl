@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.full,
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
     marginTop: SPACING.md,
   },
   joinBtnText: {
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   upcomingBtn: {
     backgroundColor: COLORS.surfaceAlt,
     borderRadius: RADIUS.full,
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
     alignItems: 'center',
     marginTop: SPACING.md,
   },

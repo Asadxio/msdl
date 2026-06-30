@@ -105,7 +105,16 @@ const styles = StyleSheet.create({
   errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1 },
   successBox: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.xs, backgroundColor: '#E6F7EE', padding: SPACING.sm, borderRadius: RADIUS.md },
   successText: { ...TYPOGRAPHY.body, color: COLORS.text, flex: 1 },
-  primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, minHeight: 54, width: '100%', justifyContent: 'center', alignItems: 'center', marginTop: SPACING.md },
+  primaryBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 14,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   btnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });

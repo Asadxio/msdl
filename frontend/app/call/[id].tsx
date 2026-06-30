@@ -90,7 +90,16 @@ const styles = StyleSheet.create({
   subtitle: { color: COLORS.textMuted, fontSize: 16, marginBottom: SPACING.xl },
   card: { backgroundColor: COLORS.surface, width: '100%', maxWidth: 400, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: 'center' },
   icon: { marginBottom: SPACING.xl },
-  primaryBtn: { backgroundColor: COLORS.primary, width: '100%', padding: SPACING.md, borderRadius: RADIUS.md, alignItems: 'center', marginBottom: SPACING.md },
+  primaryBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 14,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   dangerBtn: { backgroundColor: 'transparent', width: '100%', padding: SPACING.md, borderRadius: RADIUS.md, alignItems: 'center', borderWidth: 1, borderColor: COLORS.error },
   dangerBtnText: { color: COLORS.error, fontSize: 16, fontWeight: 'bold' }

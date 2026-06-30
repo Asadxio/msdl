@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',

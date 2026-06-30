@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   },
   titleBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: COLORS.goldBg, paddingHorizontal: 16, paddingVertical: 7, borderRadius: RADIUS.full, marginBottom: SPACING.sm,
+    backgroundColor: COLORS.goldBg, paddingHorizontal: SPACING.lg, paddingVertical: 7, borderRadius: RADIUS.full, marginBottom: SPACING.sm,
   },
   titleBadgeText: { fontSize: 13, fontWeight: '700', color: COLORS.goldText, letterSpacing: 0.5 },
   teacherName: { fontSize: 22, fontWeight: '800', color: COLORS.textMain, textAlign: 'center', paddingHorizontal: SPACING.lg },

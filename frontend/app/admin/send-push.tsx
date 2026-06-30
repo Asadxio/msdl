@@ -5,7 +5,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, ScrollView
 import { dispatchNotification } from '@/lib/notificationCenter';
 import { collection, getDocs, query, where, orderBy, limit as limitQ } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { RADIUS } from '@/constants/theme';
+import { RADIUS, SPACING, COLORS, SHADOWS } from '@/constants/theme';
 
 export default function AdminSendPush() {
   const [title, setTitle] = useState('');
@@ -162,11 +162,29 @@ export default function AdminSendPush() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: '#fff', flexGrow: 1 },
+  container: { padding: SPACING.lg, backgroundColor: '#fff', flexGrow: 1 },
   h: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   label: { marginTop: 12, marginBottom: 6, color: '#333' },
-  input: { borderWidth: 1, borderColor: '#eee', padding: 10, borderRadius: 8, backgroundColor: '#fafafa' },
-  btn: { backgroundColor: '#0FA958', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 16 },
+  input: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    color: COLORS.textMain,
+    fontSize: 14,
+  },
+  btn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 14,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   btnText: { color: '#fff', fontWeight: '600' },
   rowSpace: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   searchRow: { padding: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -181,7 +199,7 @@ const styles = StyleSheet.create({
   searchSelectText: { color: '#666' },
   searchSelectedText: { color: '#0FA958', fontWeight: '600' },
   selectedChips: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
-  chip: { backgroundColor: '#eef8f2', borderRadius: RADIUS.xxl, paddingHorizontal: 12, paddingVertical: 6, marginRight: 8, marginTop: 8 },
+  chip: { backgroundColor: '#eef8f2', borderRadius: RADIUS.xxl, paddingHorizontal: SPACING.md, paddingVertical: 6, marginRight: 8, marginTop: 8 },
   chipText: { fontSize: 12, color: '#0A6D42' },
   result: { marginTop: 12, color: '#444' },
 });

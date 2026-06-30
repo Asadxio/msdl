@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   backBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt },
   topBarTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
   topBarSub: { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
-  refreshIconBtn: { padding: 8 },
+  refreshIconBtn: { padding: SPACING.sm },
   summaryBar: {
     flexDirection: 'row', backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
@@ -376,7 +376,13 @@ const styles = StyleSheet.create({
   cardType: { fontSize: 15, fontWeight: '700', color: COLORS.textMain },
   cardDate: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   cardAmount: { fontSize: 16, fontWeight: '800', color: COLORS.primary, textAlign: 'right' },
-  statusBadge: { alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.full, marginTop: 4 },
+  statusBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   statusText: { fontSize: 11, fontWeight: '700' },
   txRef: { fontSize: 12, color: COLORS.textMuted, fontFamily: 'monospace' },
   txId: { fontSize: 10, color: COLORS.border, fontFamily: 'monospace' },

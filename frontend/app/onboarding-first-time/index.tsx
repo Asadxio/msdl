@@ -138,10 +138,10 @@ const styles = StyleSheet.create({
   desc: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', paddingHorizontal: SPACING.md },
   footer: { paddingBottom: SPACING.xl },
   progressRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: SPACING.md },
-  dot: { width: 8, height: 8, borderRadius: 8, backgroundColor: 'rgba(6,78,59,0.12)', marginHorizontal: 4 },
+  dot: { width: 8, height: 8, borderRadius: RADIUS.md, backgroundColor: 'rgba(6,78,59,0.12)', marginHorizontal: 4 },
   dotActive: { backgroundColor: COLORS.primary, width: 24 },
   controlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  controlLeft: { padding: 8 },
-  nextBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: RADIUS.full },
+  controlLeft: { padding: SPACING.sm },
+  nextBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 20, paddingVertical: SPACING.md, borderRadius: RADIUS.full },
   nextText: { color: '#fff', fontWeight: '700' },
 });

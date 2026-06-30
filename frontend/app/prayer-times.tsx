@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
   countdownBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: COLORS.goldBg, borderRadius: RADIUS.full,
-    paddingHorizontal: 16, paddingVertical: 8, marginTop: 12,
+    paddingHorizontal: SPACING.lg, paddingVertical: 8, marginTop: 12,
   },
   countdownText: { fontSize: 16, fontWeight: '800', color: COLORS.goldText },
   
