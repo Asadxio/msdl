@@ -45,9 +45,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xl },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.md },
   backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48, height: 48, borderRadius: 24,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',

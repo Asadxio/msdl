@@ -425,7 +425,7 @@ export default function StatusScreen() {
             disabled={posting}
           >
             {posting ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={COLORS.primary} />
             ) : (
               <Text style={styles.primaryBtnText}>Post Status</Text>
             )}

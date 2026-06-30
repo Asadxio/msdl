@@ -1290,7 +1290,7 @@ export default function CourseDetailScreen() {
                   onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : openStartClassModal}
                 >
                   {startingLiveClass ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <ActivityIndicator size="small" color={COLORS.primary} />
                   ) : (
                     <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
                   )}
@@ -1361,7 +1361,7 @@ export default function CourseDetailScreen() {
                 disabled={submittingAssignment}
               >
                 {submittingAssignment ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={COLORS.primary} />
                 ) : (
                   <Text style={styles.modalSubmitText}>Submit</Text>
                 )}
@@ -1406,7 +1406,7 @@ export default function CourseDetailScreen() {
                 disabled={reviewing}
               >
                 {reviewing ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={COLORS.primary} />
                 ) : (
                   <Text style={styles.modalSubmitText}>Save Review</Text>
                 )}
@@ -1466,7 +1466,7 @@ export default function CourseDetailScreen() {
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSubmitBtn} onPress={saveAudioLesson} disabled={audioUploading}>
-                {audioUploading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalSubmitText}>{editingAudioLesson ? "Save" : "Upload"}</Text>}
+                {audioUploading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.modalSubmitText}>{editingAudioLesson ? "Save" : "Upload"}</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -1557,7 +1557,7 @@ export default function CourseDetailScreen() {
               disabled={startingLiveClass}
             >
               {startingLiveClass ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={COLORS.primary} />
               ) : (
                 <Text style={styles.startClassPrimaryModalBtnText}>Start Class</Text>
               )}
@@ -1608,9 +1608,7 @@ const styles = StyleSheet.create({
   backBtn: {
     position: "absolute",
     left: 16,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48, height: 48, borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.25)",
@@ -1874,9 +1872,7 @@ const styles = StyleSheet.create({
   },
   audioControlText: { color: COLORS.primary, fontWeight: "800", fontSize: 12 },
   audioMainControlBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48, height: 48, borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.primary,

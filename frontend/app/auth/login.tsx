@@ -137,7 +137,7 @@ export default function LoginScreen() {
                 disabled={loading}
                 testID="login-submit-btn"
               >
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryBtnText}>Sign In</Text>}
+                {loading ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Sign In</Text>}
               </ScalePressable>
             </AppCard>
           </FadeInView>

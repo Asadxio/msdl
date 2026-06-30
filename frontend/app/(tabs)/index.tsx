@@ -789,7 +789,7 @@ export default function HomeScreen() {
                     disabled={savingNotice}
                   >
                     {savingNotice ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <ActivityIndicator size="small" color={COLORS.primary} />
                     ) : (
                       <Text style={styles.modalBtnPrimaryText}>Save</Text>
                     )}
@@ -1425,9 +1425,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.24)",
   },
   qiblaShortcutIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48, height: 48, borderRadius: 24,
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",

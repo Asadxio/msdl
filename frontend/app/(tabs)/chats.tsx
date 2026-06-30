@@ -538,7 +538,7 @@ export default function ChatsScreen() {
           </View>
           <ScalePressable style={[styles.createBtn, creatingGroup && { opacity: 0.7 }]} onPress={createGroup} disabled={creatingGroup}>
             {creatingGroup ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={COLORS.primary} />
             ) : (
               <Text style={styles.createBtnText}>Create Group ({selected.length + 1})</Text>
             )}
@@ -693,5 +693,10 @@ const styles = StyleSheet.create({
   actionBtn: { padding: 4 },
   chatCardSelected: { borderWidth: 1, borderColor: COLORS.primary },
   center: { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl },
-  emptyText: { color: COLORS.textMuted, fontSize: 14, textAlign: 'left' },
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: SPACING.md,
+  },
 });

@@ -207,7 +207,7 @@ export default function AdminPaymentsScreen() {
               {(['submitted', 'pending', 'verified', 'processing'] as PaymentStatus[]).includes(paymentState(item)) && (
                 <View style={styles.actions}>
                   <TouchableOpacity style={[styles.verifyBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'succeeded')} disabled={updatingId === item.id}>
-                    {updatingId === item.id ? <ActivityIndicator size="small" color="#166534" /> : <Text style={styles.verifyText}>Succeed</Text>}
+                    {updatingId === item.id ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.verifyText}>Succeed</Text>}
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'rejected')} disabled={updatingId === item.id}>
                     {updatingId === item.id ? <ActivityIndicator size="small" color={COLORS.error} /> : <Text style={styles.rejectText}>Reject</Text>}
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm, backgroundColor: COLORS.surface,
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  backBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },
   errorText: { color: COLORS.error, fontSize: 12, paddingHorizontal: SPACING.md, paddingTop: 8 },
   list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 24 },

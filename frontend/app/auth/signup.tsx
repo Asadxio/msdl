@@ -154,7 +154,7 @@ export default function SignupScreen() {
               <AppInput label="Referral Code (optional)" leftIcon="gift-outline" placeholder="Enter referral code" value={referralCode} onChangeText={handleReferralCodeChange} autoCapitalize="characters" />
 
               <ScalePressable style={[styles.primaryBtn, loading && styles.btnDisabled]} onPress={handleSignup} disabled={loading} testID="signup-submit-btn">
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryBtnText}>Create Account</Text>}
+                {loading ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Create Account</Text>}
               </ScalePressable>
             </AppCard>
           </FadeInView>

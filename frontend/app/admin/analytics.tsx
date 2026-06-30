@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20,
+    width: 48, height: 48, borderRadius: 24,
     alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt,
   },
   topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },

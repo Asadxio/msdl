@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.surfaceAlt,
+    width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt,
     alignItems: 'center', justifyContent: 'center',
   },
   topBarTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: COLORS.textMain, textAlign: 'center', marginHorizontal: 8 },

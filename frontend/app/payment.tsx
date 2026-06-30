@@ -305,7 +305,7 @@ export default function PaymentFlowScreen() {
             {paymentType === 'fees' ? <Text style={styles.bodyText}>Course: {selectedCourse?.name || selectedCourseId}</Text> : null}
             <Text style={styles.bodyText}>Amount: ₹{parsedAmount.toFixed(2)}</Text>
             <TouchableOpacity style={[styles.primaryBtn, openingPayment && styles.primaryBtnDisabled]} onPress={onPayNow} disabled={openingPayment}>
-              {openingPayment ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Open Razorpay</Text>}
+              {openingPayment ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Open Razorpay</Text>}
             </TouchableOpacity>
           </View>
         ) : null}
@@ -322,7 +322,7 @@ export default function PaymentFlowScreen() {
               placeholderTextColor={COLORS.textMuted}
             />
             <TouchableOpacity style={[styles.primaryBtn, submittingPayment && styles.primaryBtnDisabled]} onPress={onConfirmPayment} disabled={submittingPayment}>
-              {submittingPayment ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Submit Confirmation</Text>}
+              {submittingPayment ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Submit Confirmation</Text>}
             </TouchableOpacity>
           </View>
         ) : null}

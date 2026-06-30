@@ -166,7 +166,7 @@ export default function ChangeEmailScreen() {
               <Text style={styles.helpText}>We will update your account email and send a new verification email to the new address.</Text>
 
               <ScalePressable style={[styles.primaryBtn, loading && styles.btnDisabled]} onPress={handleSubmit} disabled={loading} testID="change-email-submit-btn">
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryBtnText}>Update Email & Send Verification</Text>}
+                {loading ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Update Email & Send Verification</Text>}
               </ScalePressable>
             </AppCard>
           </FadeInView>

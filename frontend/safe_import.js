@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-const f = 'app/admin/security.tsx';
+const f = process.argv[2];
 let content = fs.readFileSync(f, 'utf8');
 
 if (!content.includes('@/constants/theme')) {

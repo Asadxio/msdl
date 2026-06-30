@@ -6,6 +6,7 @@ import { goBackOrReplace } from '@/lib/navigation';
 import { Video, ResizeMode } from 'expo-av';
 import { clearAsyncOp, clearMediaRef, clearTimerTrack, getLifecycleMetrics, trackAsyncOp, trackMediaRef, trackTimer } from '@/lib/lifecycleDiagnostics';
 import { trackPerformanceMetric } from '@/lib/performanceEngine';
+import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 
 const DURATION_MS = 5000;
 
@@ -99,7 +100,7 @@ export default function StatusPlayer() {
           ) : current.media_url ? (
             <Image source={{ uri: current.media_url }} style={styles.media} onLoadEnd={() => setLoading(false)} />
           ) : <View style={styles.center}><Text style={{ color: '#fff' }}>{current.text || ''}</Text></View>}
-          {loading ? <ActivityIndicator color="#fff" style={styles.loader} /> : null}
+          {loading ? <ActivityIndicator color={COLORS.primary} style={styles.loader} /> : null}
         </View>
       </TouchableWithoutFeedback>
       <View style={styles.reply}><Text style={{ color: '#fff' }}>Reply…</Text></View>

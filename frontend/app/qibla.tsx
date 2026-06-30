@@ -438,7 +438,7 @@ export default function QiblaScreen() {
               </View>
             </View>
             <TouchableOpacity style={styles.primaryButton} onPress={() => refreshLocation().catch(() => {})}>
-              {location.permission === 'requesting' ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Refresh location</Text>}
+              {location.permission === 'requesting' ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryButtonText}>Refresh location</Text>}
             </TouchableOpacity>
           </View>
 
@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.background },
   content: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl, gap: SPACING.md },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  backButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  backButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   eyebrow: { color: COLORS.secondary, fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
   title: { ...TYPOGRAPHY.title, color: COLORS.text },
   modeButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.full, paddingHorizontal: 14, paddingVertical: 9 },
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
   guidanceCard: { backgroundColor: COLORS.goldBg, borderRadius: RADIUS.xl, padding: SPACING.md, gap: 4, marginBottom: Platform.OS === 'ios' ? SPACING.md : 0 },
   cameraFullScreen: { flex: 1, backgroundColor: '#020617' },
   cameraTopBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingBottom: 10, backgroundColor: 'rgba(2,6,23,0.35)' },
-  roundButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.42)' },
+  roundButton: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.42)' },
   cameraTitle: { color: '#fff', fontWeight: '900', fontSize: 16 },
   arOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(2,6,23,0.10)' },
   arArrow: { width: 142, height: 142, borderRadius: 71, borderWidth: 3, borderColor: COLORS.secondary, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,78,59,0.45)' },

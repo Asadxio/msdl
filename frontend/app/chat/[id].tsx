@@ -819,7 +819,7 @@ useEffect(() => {
             multiline
           />
           <ScalePressable style={[styles.sendBtn, (!text.trim() || sending || !canSendMessages) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending || !canSendMessages}>
-            {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={18} color="#fff" />}
+            {sending ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="send" size={18} color="#fff" />}
           </ScalePressable>
         </View>
       </KeyboardAvoidingView>
@@ -840,7 +840,12 @@ const styles = StyleSheet.create({
   typingText: { fontSize: 12, color: COLORS.secondary, marginTop: 1 },
   list: { padding: SPACING.md, gap: 8 },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.xl, gap: 8 },
-  emptyText: { color: COLORS.textMuted, fontSize: 13, textAlign: 'center' },
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: SPACING.md,
+  },
   bubbleWrap: { width: '100%' },
   mineWrap: { alignItems: 'flex-end' },
   otherWrap: { alignItems: 'flex-start' },
@@ -873,7 +878,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   inputDisabled: { opacity: 0.7 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primary },
+  sendBtn: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primary },
   mediaBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt },
   msgImage: { width: 180, height: 180, borderRadius: 10, marginTop: 6 },
   attachmentText: { marginTop: 4, fontSize: 12, color: COLORS.textMuted },

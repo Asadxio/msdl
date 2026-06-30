@@ -192,5 +192,10 @@ const styles = StyleSheet.create({
   statusBtnText: { color: COLORS.textMuted, fontSize: 11, fontWeight: '800', textTransform: 'capitalize' },
   statusBtnTextActive: { color: '#fff' },
   errorText: { color: COLORS.error, padding: SPACING.md, fontSize: 13, fontWeight: '700' },
-  emptyText: { textAlign: 'center', color: COLORS.textMuted, paddingVertical: SPACING.xl },
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: SPACING.md,
+  },
 });

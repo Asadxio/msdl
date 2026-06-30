@@ -363,7 +363,7 @@ export default function NotificationsScreen() {
               onPress={sendNotification}
               disabled={sending || !title.trim() || !message.trim()}
             >
-              {sending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Send</Text>}
+              {sending ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.sendBtnText}>Send</Text>}
             </ScalePressable>
 
         </View>
@@ -479,7 +479,7 @@ export default function NotificationsScreen() {
                 onPress={saveNotificationEdit}
                 disabled={updating || !editingTitle.trim() || !editingMessage.trim()}
               >
-                {updating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Update</Text>}
+                {updating ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.sendBtnText}>Update</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -603,5 +603,10 @@ const styles = StyleSheet.create({
   editActionText: { color: COLORS.primary, fontWeight: '700' },
   deleteActionText: { color: COLORS.error, fontWeight: '700' },
   center: { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, gap: 8 },
-  emptyText: { fontSize: 14, color: COLORS.textMuted },
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: SPACING.md,
+  },
 });

@@ -482,7 +482,7 @@ export default function QuizScreen() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={[styles.btn, submitting && { opacity: 0.7 }]} onPress={submitQuiz} disabled={submitting}>
-                {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnText}>Submit Quiz</Text>}
+                {submitting ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.btnText}>Submit Quiz</Text>}
               </TouchableOpacity>
             )}
           </View>

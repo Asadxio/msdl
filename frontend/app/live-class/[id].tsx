@@ -123,7 +123,7 @@ export default function LiveClassroomScreen() {
           </Text>
 
           <TouchableOpacity style={[styles.primaryBtn, joining && { opacity: 0.7 }]} onPress={handleJoinClass} disabled={joining}>
-            {joining ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Join Google Meet</Text>}
+            {joining ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Join Google Meet</Text>}
           </TouchableOpacity>
 
           {isTeacher && (

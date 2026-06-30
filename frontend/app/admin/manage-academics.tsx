@@ -532,7 +532,7 @@ export default function ManageAcademicsScreen() {
           <TextInput style={[styles.input, styles.textArea]} placeholder="Description" placeholderTextColor={COLORS.textMuted} value={courseForm.description} onChangeText={(v) => setCourseForm((p) => ({ ...p, description: v }))} multiline />
 
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={saveCourse} disabled={actionLoading}>
-            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>{editingCourseId ? 'Update Course' : 'Add Course'}</Text>}
+            {actionLoading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>{editingCourseId ? 'Update Course' : 'Add Course'}</Text>}
           </TouchableOpacity>
           {editingCourseId && (
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => { setEditingCourseId(null); setCourseForm(INITIAL_COURSE); }}>
@@ -558,7 +558,7 @@ export default function ManageAcademicsScreen() {
           <TextInput style={styles.input} placeholder="Title (e.g. Alima Fazila)" placeholderTextColor={COLORS.textMuted} value={teacherTitle} onChangeText={setTeacherTitle} />
           <TextInput style={styles.input} placeholder="Photo URL (optional)" placeholderTextColor={COLORS.textMuted} value={teacherPhoto} onChangeText={setTeacherPhoto} autoCapitalize="none" />
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={addTeacher} disabled={actionLoading}>
-            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Add Teacher</Text>}
+            {actionLoading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Add Teacher</Text>}
           </TouchableOpacity>
           {selectedTeacherId ? (
             <TouchableOpacity style={styles.secondaryBtn} onPress={saveTeacherProfile}>
@@ -605,7 +605,7 @@ export default function ManageAcademicsScreen() {
           })}
 
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={assignCourses} disabled={actionLoading}>
-            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Save Assignment</Text>}
+            {actionLoading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Save Assignment</Text>}
           </TouchableOpacity>
         </View>
 
@@ -629,7 +629,7 @@ export default function ManageAcademicsScreen() {
             </TouchableOpacity>
           ))}
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={addRecording} disabled={actionLoading}>
-            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>{editingRecordingId ? 'Update Recording' : 'Add Recording'}</Text>}
+            {actionLoading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>{editingRecordingId ? 'Update Recording' : 'Add Recording'}</Text>}
           </TouchableOpacity>
           {editingRecordingId ? (
             <TouchableOpacity style={styles.secondaryBtn} onPress={clearRecordingForm}>
@@ -664,7 +664,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
     backgroundColor: COLORS.surfaceAlt,
   },
   topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },

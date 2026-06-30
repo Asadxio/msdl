@@ -366,7 +366,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, gap: 8 },
   loadingText: { color: COLORS.textMuted, fontSize: 14 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
-  emptyText: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: SPACING.md,
+  },
   list: { padding: SPACING.md, gap: 10, paddingBottom: 24 },
   card: {
     backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl,

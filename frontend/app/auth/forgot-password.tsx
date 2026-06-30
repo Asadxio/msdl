@@ -72,7 +72,7 @@ export default function ForgotPasswordScreen() {
               />
 
               <ScalePressable style={[styles.primaryBtn, loading && styles.btnDisabled]} onPress={handleReset} disabled={loading} testID="forgot-submit-btn">
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryBtnText}>Send Reset Link</Text>}
+                {loading ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Send Reset Link</Text>}
               </ScalePressable>
             </AppCard>
           </FadeInView>
