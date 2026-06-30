@@ -188,7 +188,7 @@ export default function HomeScreen() {
       where("status", "==", "live"),
       limit(1)
     );
-    const unsub = onSnapshot(q, (snapshot) => {
+    const unsub = subscribeDeduped(stableQueryKey(["active_live_class_home"]), q as any, (snapshot) => {
       if (snapshot.empty) {
         setActiveLiveClass(null);
       } else {
