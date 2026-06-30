@@ -1,0 +1,2135 @@
+[
+    {
+        "question": "Amanat ka kya matlab hai?",
+        "option1": "Jo cheez hifazat ke liye di jaye",
+        "option2": "Hadiya",
+        "option3": "Karz",
+        "option4": "Sadqah",
+        "correctAnswer": "Jo cheez hifazat ke liye di jaye",
+        "category": "Amanat"
+    },
+    {
+        "question": "Amanat ada karna kaisa hai?",
+        "option1": "Farz aur Zaroori",
+        "option2": "Mustahab",
+        "option3": "Makruh",
+        "option4": "Ikhtiyari",
+        "correctAnswer": "Farz aur Zaroori",
+        "category": "Amanat"
+    },
+    {
+        "question": "Amanat mein khayanat karna kaisa hai?",
+        "option1": "Haram",
+        "option2": "Jaiz",
+        "option3": "Mustahab",
+        "option4": "Mubah",
+        "correctAnswer": "Haram",
+        "category": "Amanat"
+    },
+    {
+        "question": "Amanat kis ilm ka hissa hai?",
+        "option1": "Akhlaq-e-Islamiyyah",
+        "option2": "Nahw",
+        "option3": "Hisab",
+        "option4": "Balaghat",
+        "correctAnswer": "Akhlaq-e-Islamiyyah",
+        "category": "Amanat"
+    },
+    {
+        "question": "Qur'an hame kis cheez ka hukm deta hai?",
+        "option1": "Amanat uske haqdar ko wapas karne ka",
+        "option2": "Amanat rok lene ka",
+        "option3": "Amanat chhupa dene ka",
+        "option4": "Amanat bech dene ka",
+        "correctAnswer": "Amanat uske haqdar ko wapas karne ka",
+        "category": "Amanat"
+    },
+    {
+        "question": "Amanat ki hifazat kis ki nishani hai?",
+        "option1": "Momin ki",
+        "option2": "Munafiq ki",
+        "option3": "Takabbur karne wale ki",
+        "option4": "Hasad karne wale ki",
+        "correctAnswer": "Momin ki",
+        "category": "Amanat"
+    },
+    {
+        "question": "Amanat ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Amanat"
+    },
+    {
+        "question": "Amanat ada karne ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Raza aur Logon ka Bharosa",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Raza aur Logon ka Bharosa",
+        "category": "Amanat"
+    },
+    {
+        "question": "Har achhe kaam ki shuruaat kis kalime se karni chahiye?",
+        "option1": "Bismillahir Rahmanir Rahim",
+        "option2": "Alhamdulillah",
+        "option3": "Subhanallah",
+        "option4": "Astaghfirullah",
+        "correctAnswer": "Bismillahir Rahmanir Rahim",
+        "category": "Masnoon Duayein"
+    },
+    {
+        "question": "Khana khatam hone ke baad kya kehna Sunnat hai?",
+        "option1": "Alhamdulillah",
+        "option2": "Bismillah",
+        "option3": "Allahu Akbar",
+        "option4": "La ilaha illallah",
+        "correctAnswer": "Alhamdulillah",
+        "category": "Masnoon Duayein"
+    },
+    {
+        "question": "Ghar se nikalte waqt kaunsi Dua padhna Sunnat hai?",
+        "option1": "Bismillahi tawakkaltu 'alallah...",
+        "option2": "Rabbighfir li",
+        "option3": "Subhanallah",
+        "option4": "Koi Dua nahi",
+        "correctAnswer": "Bismillahi tawakkaltu 'alallah...",
+        "category": "Masnoon Duayein"
+    },
+    {
+        "question": "Ghar mein dakhil hote waqt kya karna Sunnat hai?",
+        "option1": "Salam karna aur Allah ko yaad karna",
+        "option2": "Chup rehna",
+        "option3": "Buland Aawaz se bolna",
+        "option4": "Mobile dekhna",
+        "correctAnswer": "Salam karna aur Allah ko yaad karna",
+        "category": "Masnoon Duayein"
+    },
+    {
+        "question": "Sone se pehle kaunsi Aayat padhna Sunnat hai?",
+        "option1": "Aayat-ul-Kursi",
+        "option2": "Surah Kawthar",
+        "option3": "Surah Asr",
+        "option4": "Surah Humazah",
+        "correctAnswer": "Aayat-ul-Kursi",
+        "category": "Masnoon Duayein"
+    },
+    {
+        "question": "Subah uthkar sabse pehle kya kehna Sunnat hai?",
+        "option1": "Alhamdulillahil-lazi ahyana...",
+        "option2": "Good Morning",
+        "option3": "Hello",
+        "option4": "Kuch bhi nahi",
+        "correctAnswer": "Alhamdulillahil-lazi ahyana...",
+        "category": "Masnoon Duayein"
+    },
+    {
+        "question": "Masnoon Duayein seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Masnoon Duayein"
+    },
+    {
+        "question": "Masnoon Duayon par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Hifazat aur Sunnat par Amal",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Hifazat aur Sunnat par Amal",
+        "category": "Masnoon Duayein"
+    },
+    {
+        "question": "Miswak karna kis ki Sunnat hai?",
+        "option1": "Hazrat Muhammad \ufdfa ki",
+        "option2": "Sirf Sahaba ki",
+        "option3": "Sirf Ulema ki",
+        "option4": "Sirf Buzurgon ki",
+        "correctAnswer": "Hazrat Muhammad \ufdfa ki",
+        "category": "Miswak"
+    },
+    {
+        "question": "Miswak karne ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Raza aur Munh ki Paakizgi",
+        "option2": "Sirf Daant Safed hona",
+        "option3": "Sirf Khushboo",
+        "option4": "Sirf Zebaish",
+        "correctAnswer": "Allah Ta'ala ki Raza aur Munh ki Paakizgi",
+        "category": "Miswak"
+    },
+    {
+        "question": "Namaz se pehle Miswak karna kaisa hai?",
+        "option1": "Sunnat",
+        "option2": "Farz",
+        "option3": "Makruh",
+        "option4": "Na-Jaiz",
+        "correctAnswer": "Sunnat",
+        "category": "Miswak"
+    },
+    {
+        "question": "Miswak kis ilm ka hissa hai?",
+        "option1": "Taharat aur Sunnat",
+        "option2": "Nahw",
+        "option3": "Hisab",
+        "option4": "Balaghat",
+        "correctAnswer": "Taharat aur Sunnat",
+        "category": "Miswak"
+    },
+    {
+        "question": "Miswak karne se munh mein kya paida hota hai?",
+        "option1": "Paakizgi aur Khushboo",
+        "option2": "Bimari",
+        "option3": "Kamzori",
+        "option4": "Nuqsan",
+        "correctAnswer": "Paakizgi aur Khushboo",
+        "category": "Miswak"
+    },
+    {
+        "question": "Miswak kab karna Mustahab hai?",
+        "option1": "Wudu se pehle",
+        "option2": "Sirf Raat ko",
+        "option3": "Sirf Eid ke din",
+        "option4": "Sirf Safar mein",
+        "correctAnswer": "Wudu se pehle",
+        "category": "Miswak"
+    },
+    {
+        "question": "Miswak ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Ghair Zaroori",
+        "option3": "Makruh",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Miswak"
+    },
+    {
+        "question": "Miswak par amal karna kis ki pairwi hai?",
+        "option1": "Rasulullah \ufdfa ki Sunnat",
+        "option2": "Sirf Arab Riwayat",
+        "option3": "Sirf Purani Aadat",
+        "option4": "Koi bhi nahi",
+        "correctAnswer": "Rasulullah \ufdfa ki Sunnat",
+        "category": "Miswak"
+    },
+    {
+        "question": "Musalman aapas mein milte waqt kya kehna Sunnat hai?",
+        "option1": "Assalamu Alaikum wa Rahmatullahi wa Barakatuh",
+        "option2": "Hello",
+        "option3": "Good Morning",
+        "option4": "Namaste",
+        "correctAnswer": "Assalamu Alaikum wa Rahmatullahi wa Barakatuh",
+        "category": "Salam"
+    },
+    {
+        "question": "Salam ka jawab dena kaisa hai?",
+        "option1": "Wajib",
+        "option2": "Mustahab",
+        "option3": "Makruh",
+        "option4": "Na-Jaiz",
+        "correctAnswer": "Wajib",
+        "category": "Salam"
+    },
+    {
+        "question": "Salam kis ilm ka hissa hai?",
+        "option1": "Akhlaq-e-Islamiyyah",
+        "option2": "Nahw",
+        "option3": "Hisab",
+        "option4": "Balaghat",
+        "correctAnswer": "Akhlaq-e-Islamiyyah",
+        "category": "Salam"
+    },
+    {
+        "question": "Salam phailane ka kya faidah hai?",
+        "option1": "Muhabbat aur Ukhuwwat badhti hai",
+        "option2": "Jhagda badhta hai",
+        "option3": "Hasad badhta hai",
+        "option4": "Takabbur badhta hai",
+        "correctAnswer": "Muhabbat aur Ukhuwwat badhti hai",
+        "category": "Salam"
+    },
+    {
+        "question": "Jab kisi majlis mein dakhil hon to kya karna chahiye?",
+        "option1": "Salam karna",
+        "option2": "Seedha baith jana",
+        "option3": "Mobile dekhna",
+        "option4": "Chup rehna",
+        "correctAnswer": "Salam karna",
+        "category": "Salam"
+    },
+    {
+        "question": "Majlis se rukhsat hote waqt kya karna Sunnat hai?",
+        "option1": "Salam karna",
+        "option2": "Bina bataye chale jana",
+        "option3": "Sirf Haath hila dena",
+        "option4": "Kuch bhi na kehna",
+        "correctAnswer": "Salam karna",
+        "category": "Salam"
+    },
+    {
+        "question": "Salam mein pehal karna kaisa hai?",
+        "option1": "Sunnat aur Sawab ka Kaam",
+        "option2": "Makruh",
+        "option3": "Na-Jaiz",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Sunnat aur Sawab ka Kaam",
+        "category": "Salam"
+    },
+    {
+        "question": "Salam ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Ghair Zaroori",
+        "option3": "Makruh",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Salam"
+    },
+    {
+        "question": "Salam ka sabse bada maqsad kya hai?",
+        "option1": "Allah Ta'ala ki Raza aur Musalmanon mein Muhabbat paida karna",
+        "option2": "Sirf Rasmi Riwayat nibhana",
+        "option3": "Sirf Pehchan banana",
+        "option4": "Sirf Baat shuru karna",
+        "correctAnswer": "Allah Ta'ala ki Raza aur Musalmanon mein Muhabbat paida karna",
+        "category": "Salam"
+    },
+    {
+        "question": "Astaghfar ka kya matlab hai?",
+        "option1": "Allah Ta'ala se apne gunahon ki maafi maangna",
+        "option2": "Logon se madad maangna",
+        "option3": "Sirf Dua padhna",
+        "option4": "Sadqah dena",
+        "correctAnswer": "Allah Ta'ala se apne gunahon ki maafi maangna",
+        "category": "Astaghfar"
+    },
+    {
+        "question": "Astaghfar kis ilm ka hissa hai?",
+        "option1": "Akhlaq aur Tazkiyah",
+        "option2": "Nahw",
+        "option3": "Hisab",
+        "option4": "Balaghat",
+        "correctAnswer": "Akhlaq aur Tazkiyah",
+        "category": "Astaghfar"
+    },
+    {
+        "question": "Astaghfar kis se karna chahiye?",
+        "option1": "Sirf Allah Ta'ala se",
+        "option2": "Farishton se",
+        "option3": "Logon se",
+        "option4": "Kisi bhi Insaan se",
+        "correctAnswer": "Sirf Allah Ta'ala se",
+        "category": "Astaghfar"
+    },
+    {
+        "question": "Gunah ke baad Musalman ko kya karna chahiye?",
+        "option1": "Sachi Taubah aur Astaghfar",
+        "option2": "Gunah ko chhupa kar dobara karna",
+        "option3": "Na-Umeed ho jana",
+        "option4": "Gunah par Fakhr karna",
+        "correctAnswer": "Sachi Taubah aur Astaghfar",
+        "category": "Astaghfar"
+    },
+    {
+        "question": "Kasrat se Astaghfar karne ka kya faidah hai?",
+        "option1": "Allah Ta'ala ki Maghfirat aur Rahmat",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Izzat",
+        "correctAnswer": "Allah Ta'ala ki Maghfirat aur Rahmat",
+        "category": "Astaghfar"
+    },
+    {
+        "question": "Astaghfar karne wale ko Allah Ta'ala kya ata farmata hai?",
+        "option1": "Maghfirat aur Rahmat",
+        "option2": "Saza",
+        "option3": "Ruswai",
+        "option4": "Tangdasti",
+        "correctAnswer": "Maghfirat aur Rahmat",
+        "category": "Astaghfar"
+    },
+    {
+        "question": "Astaghfar ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Astaghfar"
+    },
+    {
+        "question": "Astaghfar ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Maghfirat aur Dil ki Paakizgi",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Maghfirat aur Dil ki Paakizgi",
+        "category": "Astaghfar"
+    },
+    {
+        "question": "Zikrullah ka kya matlab hai?",
+        "option1": "Allah Ta'ala ko yaad karna",
+        "option2": "Sirf Kitab padhna",
+        "option3": "Logon ki Tareef karna",
+        "option4": "Khamosh rehna",
+        "correctAnswer": "Allah Ta'ala ko yaad karna",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Allah Ta'ala ko yaad karne se Dil ko kya hasil hota hai?",
+        "option1": "Sukoon",
+        "option2": "Bechaini",
+        "option3": "Takabbur",
+        "option4": "Hasad",
+        "correctAnswer": "Sukoon",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Zikrullah kis ilm ka hissa hai?",
+        "option1": "Akhlaq aur Tazkiyah",
+        "option2": "Nahw",
+        "option3": "Hisab",
+        "option4": "Balaghat",
+        "correctAnswer": "Akhlaq aur Tazkiyah",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Sabse afzal Zikr kya hai?",
+        "option1": "La ilaha illallah",
+        "option2": "Good Morning",
+        "option3": "Koi bhi Shayari",
+        "option4": "Geet",
+        "correctAnswer": "La ilaha illallah",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Tasbeeh padhna kaisa amal hai?",
+        "option1": "Sawab ka Amal",
+        "option2": "Makruh",
+        "option3": "Na-Jaiz",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Sawab ka Amal",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Subhanallah ka kya matlab hai?",
+        "option1": "Allah Ta'ala har nuqs se Paak hai",
+        "option2": "Allah Ta'ala se Maafi",
+        "option3": "Allah sabse Bada hai",
+        "option4": "Allah ka Shukr",
+        "correctAnswer": "Allah Ta'ala har nuqs se Paak hai",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Alhamdulillah kab kehna chahiye?",
+        "option1": "Ne'mat milne par aur har haal mein",
+        "option2": "Sirf Eid ke din",
+        "option3": "Sirf Jummah ke din",
+        "option4": "Sirf Safar mein",
+        "correctAnswer": "Ne'mat milne par aur har haal mein",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Allahu Akbar ka kya matlab hai?",
+        "option1": "Allah sabse Bada hai",
+        "option2": "Allah Maaf karne wala hai",
+        "option3": "Allah Rizq dene wala hai",
+        "option4": "Allah Rahmat wala hai",
+        "correctAnswer": "Allah sabse Bada hai",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Zikrullah ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Zikrullah ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Qurbat aur Dil ka Sukoon",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Qurbat aur Dil ka Sukoon",
+        "category": "Zikrullah"
+    },
+    {
+        "question": "Tahajjud ki Namaz kab padhi jati hai?",
+        "option1": "Raat mein Isha ke baad aur Subah Sadiq se pehle",
+        "option2": "Zohar ke baad",
+        "option3": "Asr ke baad",
+        "option4": "Maghrib se pehle",
+        "correctAnswer": "Raat mein Isha ke baad aur Subah Sadiq se pehle",
+        "category": "Tahajjud"
+    },
+    {
+        "question": "Tahajjud padhne ke liye kya karna behtar hai?",
+        "option1": "Neend se uthna",
+        "option2": "Bina soye padhna",
+        "option3": "Sirf Din mein padhna",
+        "option4": "Koi bhi waqt",
+        "correctAnswer": "Neend se uthna",
+        "category": "Tahajjud"
+    },
+    {
+        "question": "Tahajjud ka kya hukm hai?",
+        "option1": "Sunnat-e-Muakkadah (Nafl Ibadat)",
+        "option2": "Farz",
+        "option3": "Wajib",
+        "option4": "Haram",
+        "correctAnswer": "Sunnat-e-Muakkadah (Nafl Ibadat)",
+        "category": "Tahajjud"
+    },
+    {
+        "question": "Tahajjud kis ilm ka hissa hai?",
+        "option1": "Fazail-e-A'maal",
+        "option2": "Nahw",
+        "option3": "Hisab",
+        "option4": "Balaghat",
+        "correctAnswer": "Fazail-e-A'maal",
+        "category": "Tahajjud"
+    },
+    {
+        "question": "Tahajjud ke waqt Dua ka kya maqam hai?",
+        "option1": "Qubooliyat ki umeed zyada hoti hai",
+        "option2": "Dua qabool nahi hoti",
+        "option3": "Sirf Jummah ko qabool hoti hai",
+        "option4": "Sirf Ramadan mein qabool hoti hai",
+        "correctAnswer": "Qubooliyat ki umeed zyada hoti hai",
+        "category": "Tahajjud"
+    },
+    {
+        "question": "Tahajjud ki aadat kis ki pehchan hai?",
+        "option1": "Nek Bandon ki",
+        "option2": "Munafiq ki",
+        "option3": "Takabbur karne wale ki",
+        "option4": "Fasiq ki",
+        "correctAnswer": "Nek Bandon ki",
+        "category": "Tahajjud"
+    },
+    {
+        "question": "Tahajjud ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Tahajjud"
+    },
+    {
+        "question": "Tahajjud ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Qurbat aur Ruhani Taraqqi",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Qurbat aur Ruhani Taraqqi",
+        "category": "Tahajjud"
+    },
+    {
+        "question": "Istikharah ka kya matlab hai?",
+        "option1": "Allah Ta'ala se behtari ka mashwara aur rehnumai talab karna",
+        "option2": "Logon se mashwara lena",
+        "option3": "Qur'ah dalna",
+        "option4": "Khwab ka intezar karna",
+        "correctAnswer": "Allah Ta'ala se behtari ka mashwara aur rehnumai talab karna",
+        "category": "Istikharah"
+    },
+    {
+        "question": "Istikharah kis kaam ke liye ki jati hai?",
+        "option1": "Jaiz aur Mubarah kaamon mein",
+        "option2": "Farz Namazon ke liye",
+        "option3": "Haram kaam ke liye",
+        "option4": "Gunah ke liye",
+        "correctAnswer": "Jaiz aur Mubarah kaamon mein",
+        "category": "Istikharah"
+    },
+    {
+        "question": "Istikharah ka tareeqah kya hai?",
+        "option1": "Do Rakat Nafl Namaz aur Masnoon Dua",
+        "option2": "Sirf Dua",
+        "option3": "Sirf Tasbeeh",
+        "option4": "Sirf Qur'an ki Tilawat",
+        "correctAnswer": "Do Rakat Nafl Namaz aur Masnoon Dua",
+        "category": "Istikharah"
+    },
+    {
+        "question": "Istikharah kis ilm ka hissa hai?",
+        "option1": "Masnoon Ibadat",
+        "option2": "Nahw",
+        "option3": "Hisab",
+        "option4": "Balaghat",
+        "correctAnswer": "Masnoon Ibadat",
+        "category": "Istikharah"
+    },
+    {
+        "question": "Istikharah ke baad kya karna chahiye?",
+        "option1": "Allah Ta'ala par Tawakkul karke jaiz faisla karna",
+        "option2": "Har haal mein Khwab ka intezar karna",
+        "option3": "Kaam chhod dena",
+        "option4": "Logon ki baat maanna",
+        "correctAnswer": "Allah Ta'ala par Tawakkul karke jaiz faisla karna",
+        "category": "Istikharah"
+    },
+    {
+        "question": "Kya Istikharah ke baad khwab dekhna zaroori hai?",
+        "option1": "Nahi",
+        "option2": "Haan, hamesha",
+        "option3": "Sirf Ramadan mein",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Nahi",
+        "category": "Istikharah"
+    },
+    {
+        "question": "Istikharah ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Istikharah"
+    },
+    {
+        "question": "Istikharah ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Rehnumai aur Dil ka Itminan",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Rehnumai aur Dil ka Itminan",
+        "category": "Istikharah"
+    },
+    {
+        "question": "Qur'an-e-Kareem padhne se pehle kya karna behtar hai?",
+        "option1": "Wudu karna",
+        "option2": "Khana khana",
+        "option3": "Sona",
+        "option4": "Safar karna",
+        "correctAnswer": "Wudu karna",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Qur'an ki Tilawat shuru karte waqt kya padhna chahiye?",
+        "option1": "A'uzu Billahi Minash Shaitanir Rajim aur Bismillah",
+        "option2": "Sirf Alhamdulillah",
+        "option3": "Sirf Subhanallah",
+        "option4": "Kuch bhi nahi",
+        "correctAnswer": "A'uzu Billahi Minash Shaitanir Rajim aur Bismillah",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Qur'an ki Tilawat kis tarah karni chahiye?",
+        "option1": "Tajweed aur Adab ke saath",
+        "option2": "Bahut Tezi se",
+        "option3": "Hans kar",
+        "option4": "Be-Dhiyani se",
+        "correctAnswer": "Tajweed aur Adab ke saath",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Qur'an-e-Kareem kis ki Kalam hai?",
+        "option1": "Allah Ta'ala ki",
+        "option2": "Farishton ki",
+        "option3": "Sahaba ki",
+        "option4": "Ulema ki",
+        "correctAnswer": "Allah Ta'ala ki",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Qur'an ki Tilawat ke dauran kis cheez se bachna chahiye?",
+        "option1": "Baat-cheet aur Be-Adabi se",
+        "option2": "Khamoshi se",
+        "option3": "Tawajjuh se",
+        "option4": "Tajweed se",
+        "correctAnswer": "Baat-cheet aur Be-Adabi se",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Qur'an ko kis jagah rakhna chahiye?",
+        "option1": "Buland aur Paak Jagah par",
+        "option2": "Zameen par",
+        "option3": "Kahin bhi",
+        "option4": "Jooton ke paas",
+        "correctAnswer": "Buland aur Paak Jagah par",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Qur'an ke Ahkam par Amal karna kaisa hai?",
+        "option1": "Zaroori",
+        "option2": "Ikhtiyari",
+        "option3": "Makruh",
+        "option4": "Na-Jaiz",
+        "correctAnswer": "Zaroori",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Adab-e-Qur'an ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Ghair Zaroori",
+        "option3": "Makruh",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Qur'an ki Tilawat ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Raza aur Hidayat",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Raza aur Hidayat",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Qur'an-e-Kareem ko kis niyyat se padhna chahiye?",
+        "option1": "Allah Ta'ala ki Raza aur Hidayat hasil karne ke liye",
+        "option2": "Sirf Imtihan pass karne ke liye",
+        "option3": "Sirf Logon ko sunane ke liye",
+        "option4": "Sirf Sawab ginne ke liye",
+        "correctAnswer": "Allah Ta'ala ki Raza aur Hidayat hasil karne ke liye",
+        "category": "Adab-e-Qur'an"
+    },
+    {
+        "question": "Ilm hasil karna kis par Farz hai?",
+        "option1": "Har Musalman par",
+        "option2": "Sirf Ulema par",
+        "option3": "Sirf Mardon par",
+        "option4": "Sirf Buzurgon par",
+        "correctAnswer": "Har Musalman par",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Dars shuru hone se pehle Talib-e-Ilm ki niyyat kya honi chahiye?",
+        "option1": "Allah Ta'ala ki Raza hasil karna",
+        "option2": "Sirf Imtihan pass karna",
+        "option3": "Shohrat hasil karna",
+        "option4": "Dusron se Muqabla karna",
+        "correctAnswer": "Allah Ta'ala ki Raza hasil karna",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Dars ke waqt kaisa bartao karna chahiye?",
+        "option1": "Khamoshi aur Tawajjuh ke saath",
+        "option2": "Baat-cheet karni chahiye",
+        "option3": "Hansna chahiye",
+        "option4": "Mobile chalana chahiye",
+        "correctAnswer": "Khamoshi aur Tawajjuh ke saath",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Dars ke dauran Ustad ki baat ko kya karna chahiye?",
+        "option1": "Ghaur se sunna chahiye",
+        "option2": "Nazarandaz karna chahiye",
+        "option3": "Beech mein tokna chahiye",
+        "option4": "Mazaaq karna chahiye",
+        "correctAnswer": "Ghaur se sunna chahiye",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Dars ke dauran sawal kab karna chahiye?",
+        "option1": "Adab ke saath aur munasib waqt par",
+        "option2": "Jab chahe beech mein",
+        "option3": "Buland aawaz se",
+        "option4": "Kabhi nahi",
+        "correctAnswer": "Adab ke saath aur munasib waqt par",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Dars ke dauran Mobile ka istemal kaisa hona chahiye?",
+        "option1": "Sirf Zarurat ke liye",
+        "option2": "Har waqt chalana chahiye",
+        "option3": "Game khelni chahiye",
+        "option4": "Video dekhni chahiye",
+        "correctAnswer": "Sirf Zarurat ke liye",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Ilm par Amal karna kaisa hai?",
+        "option1": "Zaroori",
+        "option2": "Ikhtiyari",
+        "option3": "Makruh",
+        "option4": "Na-Jaiz",
+        "correctAnswer": "Zaroori",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Adab-e-Dars ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Ghair Zaroori",
+        "option3": "Makruh",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Ilm hasil karne wale ke liye sabse badi zeenat kya hai?",
+        "option1": "Adab",
+        "option2": "Daulat",
+        "option3": "Kapde",
+        "option4": "Shohrat",
+        "correctAnswer": "Adab",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Adab-e-Dars ka sabse bada faidah kya hai?",
+        "option1": "Ilm mein Barkat aur Allah Ta'ala ki Raza",
+        "option2": "Sirf Imtihan mein Number",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Ilm mein Barkat aur Allah Ta'ala ki Raza",
+        "category": "Adab-e-Dars"
+    },
+    {
+        "question": "Deeni Kitabon ka ehteram karna kaisa hai?",
+        "option1": "Zaroori Adab",
+        "option2": "Ghair Zaroori",
+        "option3": "Makruh",
+        "option4": "Na-Jaiz",
+        "correctAnswer": "Zaroori Adab",
+        "category": "Adab-e-Kitab"
+    },
+    {
+        "question": "Qur'an aur Deeni Kitaben kahan rakhni chahiye?",
+        "option1": "Paak aur Buland Jagah par",
+        "option2": "Zameen par",
+        "option3": "Jooton ke paas",
+        "option4": "Kahin bhi",
+        "correctAnswer": "Paak aur Buland Jagah par",
+        "category": "Adab-e-Kitab"
+    },
+    {
+        "question": "Kitab ko pair se chhoona kaisa hai?",
+        "option1": "Be-Adabi",
+        "option2": "Jaiz",
+        "option3": "Mustahab",
+        "option4": "Sunnat",
+        "correctAnswer": "Be-Adabi",
+        "category": "Adab-e-Kitab"
+    },
+    {
+        "question": "Kitab lene aur dene ka behtareen tareeqah kya hai?",
+        "option1": "Adab aur Izzat ke saath",
+        "option2": "Phenk kar",
+        "option3": "Be-Parwahi se",
+        "option4": "Pair se",
+        "correctAnswer": "Adab aur Izzat ke saath",
+        "category": "Adab-e-Kitab"
+    },
+    {
+        "question": "Dars ke baad Kitab ka kya khayal rakhna chahiye?",
+        "option1": "Use saaf aur mehfooz jagah par rakhna chahiye",
+        "option2": "Kahin bhi chhod dena chahiye",
+        "option3": "Zameen par rakh dena chahiye",
+        "option4": "Dusron par phenk dena chahiye",
+        "correctAnswer": "Use saaf aur mehfooz jagah par rakhna chahiye",
+        "category": "Adab-e-Kitab"
+    },
+    {
+        "question": "Kitab par likhna ya nuksan pahunchana kaisa hai?",
+        "option1": "Be-Adabi",
+        "option2": "Mustahab",
+        "option3": "Sunnat",
+        "option4": "Sawab",
+        "correctAnswer": "Be-Adabi",
+        "category": "Adab-e-Kitab"
+    },
+    {
+        "question": "Adab-e-Kitab ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Kitab"
+    },
+    {
+        "question": "Adab-e-Kitab par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Ilm mein Barkat aur Deeni Adab ki Hifazat",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Ilm mein Barkat aur Deeni Adab ki Hifazat",
+        "category": "Adab-e-Kitab"
+    },
+    {
+        "question": "Madrasah mein dakhil hote waqt kya karna chahiye?",
+        "option1": "Salam karke Adab ke saath dakhil hona",
+        "option2": "Buland Aawaz se baat karna",
+        "option3": "Daudte hue andar jana",
+        "option4": "Mobile dekhte hue jana",
+        "correctAnswer": "Salam karke Adab ke saath dakhil hona",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Madrasah mein waqt ki pabandi kaisi hai?",
+        "option1": "Zaroori",
+        "option2": "Ghair Zaroori",
+        "option3": "Sirf Imtihan ke din",
+        "option4": "Ikhtiyari",
+        "correctAnswer": "Zaroori",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Madrasah ki safai ka khayal rakhna kaisa hai?",
+        "option1": "Har Talibah ki Zimmedari",
+        "option2": "Sirf Ustad ki",
+        "option3": "Sirf Khadim ki",
+        "option4": "Kisi ki nahi",
+        "correctAnswer": "Har Talibah ki Zimmedari",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Dars ke dauran be-wajah baat karna kaisa hai?",
+        "option1": "Be-Adabi",
+        "option2": "Mustahab",
+        "option3": "Sunnat",
+        "option4": "Sawab",
+        "correctAnswer": "Be-Adabi",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Madrasah ki cheezon ka istemal kaise karna chahiye?",
+        "option1": "Amanat samajh kar",
+        "option2": "Be-Parwahi se",
+        "option3": "Nuksan pahunchakar",
+        "option4": "Apni Milkiyat samajh kar",
+        "correctAnswer": "Amanat samajh kar",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Madrasah mein doston ke saath kaisa bartao karna chahiye?",
+        "option1": "Muhabbat aur Akhlaq ke saath",
+        "option2": "Jhagda karna",
+        "option3": "Mazaaq udaana",
+        "option4": "Hasad karna",
+        "correctAnswer": "Muhabbat aur Akhlaq ke saath",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Madrasah ke usoolon ki pabandi karna kaisa hai?",
+        "option1": "Zaroori",
+        "option2": "Makruh",
+        "option3": "Na-Jaiz",
+        "option4": "Ikhtiyari",
+        "correctAnswer": "Zaroori",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Adab-e-Madrasah ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Madrasah mein Ilm hasil karte waqt sabse aham sifat kya hai?",
+        "option1": "Ikhlas aur Adab",
+        "option2": "Takabbur",
+        "option3": "Shohrat",
+        "option4": "Muqabla",
+        "correctAnswer": "Ikhlas aur Adab",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Adab-e-Madrasah par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Ilm mein Barkat aur Allah Ta'ala ki Raza",
+        "option2": "Sirf Imtihan mein Number",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Ilm mein Barkat aur Allah Ta'ala ki Raza",
+        "category": "Adab-e-Madrasah"
+    },
+    {
+        "question": "Imtihan ki tayari kis niyyat se karni chahiye?",
+        "option1": "Allah Ta'ala ki Raza aur Ilm hasil karne ke liye",
+        "option2": "Sirf Number hasil karne ke liye",
+        "option3": "Dusron ko harane ke liye",
+        "option4": "Shohrat hasil karne ke liye",
+        "correctAnswer": "Allah Ta'ala ki Raza aur Ilm hasil karne ke liye",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Imtihan mein Nakal (Cheating) karna kaisa hai?",
+        "option1": "Na-Jaiz",
+        "option2": "Jaiz",
+        "option3": "Mustahab",
+        "option4": "Sunnat",
+        "correctAnswer": "Na-Jaiz",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Imtihan se pehle kis par bharosa rakhna chahiye?",
+        "option1": "Allah Ta'ala par Tawakkul aur Apni Mehnat par",
+        "option2": "Sirf Doston par",
+        "option3": "Sirf Qismat par",
+        "option4": "Sirf Nakal par",
+        "correctAnswer": "Allah Ta'ala par Tawakkul aur Apni Mehnat par",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Imtihan ke waqt sachchai ikhtiyar karna kaisa hai?",
+        "option1": "Zaroori",
+        "option2": "Ghair Zaroori",
+        "option3": "Makruh",
+        "option4": "Na-Jaiz",
+        "correctAnswer": "Zaroori",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Imtihan mein dusron ko pareshan karna kaisa hai?",
+        "option1": "Be-Adabi",
+        "option2": "Achha Akhlaq",
+        "option3": "Mustahab",
+        "option4": "Sunnat",
+        "correctAnswer": "Be-Adabi",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Kamyabi milne par kya karna chahiye?",
+        "option1": "Allah Ta'ala ka Shukr ada karna",
+        "option2": "Takabbur karna",
+        "option3": "Dusron ka Mazaaq udana",
+        "option4": "Fakhr karna",
+        "correctAnswer": "Allah Ta'ala ka Shukr ada karna",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Agar natija umeed ke mutabiq na aaye to kya karna chahiye?",
+        "option1": "Sabr karke dobara Mehnat karni chahiye",
+        "option2": "Na-Umeed ho jana chahiye",
+        "option3": "Ilm chhod dena chahiye",
+        "option4": "Dusron ko dosh dena chahiye",
+        "correctAnswer": "Sabr karke dobara Mehnat karni chahiye",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Adab-e-Imtihan ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Imtihan ke dauran waqt ka sahi istemal karna kaisa hai?",
+        "option1": "Achhi Aadat",
+        "option2": "Ghair Zaroori",
+        "option3": "Makruh",
+        "option4": "Na-Jaiz",
+        "correctAnswer": "Achhi Aadat",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Adab-e-Imtihan par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Ilm mein Barkat aur Allah Ta'ala ki Raza",
+        "option2": "Sirf Zyada Number",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Ilm mein Barkat aur Allah Ta'ala ki Raza",
+        "category": "Adab-e-Imtihan"
+    },
+    {
+        "question": "Waqt Allah Ta'ala ki kaisi Ne'mat hai?",
+        "option1": "Bahut Qeemti Ne'mat",
+        "option2": "Mamooli Cheez",
+        "option3": "Be-Faida Cheez",
+        "option4": "Sirf Buzurgon ke liye",
+        "correctAnswer": "Bahut Qeemti Ne'mat",
+        "category": "Adab-e-Waqt"
+    },
+    {
+        "question": "Musalman ko apna waqt kis kaam mein guzarna chahiye?",
+        "option1": "Nek aur Faidemand Kaamon mein",
+        "option2": "Fuzool Mashghooliyat mein",
+        "option3": "Gunahon mein",
+        "option4": "Be-Maqsad Ghoomne mein",
+        "correctAnswer": "Nek aur Faidemand Kaamon mein",
+        "category": "Adab-e-Waqt"
+    },
+    {
+        "question": "Namaz ko waqt par ada karna kaisa hai?",
+        "option1": "Allah Ta'ala ko Pasand hai",
+        "option2": "Ghair Zaroori hai",
+        "option3": "Sirf Jummah ko",
+        "option4": "Sirf Ramadan mein",
+        "correctAnswer": "Allah Ta'ala ko Pasand hai",
+        "category": "Adab-e-Waqt"
+    },
+    {
+        "question": "Talibah ko rozana kis cheez ke liye waqt nikalna chahiye?",
+        "option1": "Ilm aur Qur'an ki Tilawat",
+        "option2": "Sirf Mobile ke liye",
+        "option3": "Sirf Khel ke liye",
+        "option4": "Sirf Sone ke liye",
+        "correctAnswer": "Ilm aur Qur'an ki Tilawat",
+        "category": "Adab-e-Waqt"
+    },
+    {
+        "question": "Waqt zaya karna kaisa hai?",
+        "option1": "Na-Pasandeedah",
+        "option2": "Mustahab",
+        "option3": "Sunnat",
+        "option4": "Sawab",
+        "correctAnswer": "Na-Pasandeedah",
+        "category": "Adab-e-Waqt"
+    },
+    {
+        "question": "Subah jaldi uthne ka kya faidah hai?",
+        "option1": "Barkat aur Din ka Behtar Aaghaz",
+        "option2": "Nuqsan",
+        "option3": "Kamzori",
+        "option4": "Koi Faidah nahi",
+        "correctAnswer": "Barkat aur Din ka Behtar Aaghaz",
+        "category": "Adab-e-Waqt"
+    },
+    {
+        "question": "Adab-e-Waqt ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Waqt"
+    },
+    {
+        "question": "Adab-e-Waqt par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Raza, Barkat aur Kamyabi",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Raza, Barkat aur Kamyabi",
+        "category": "Adab-e-Waqt"
+    },
+    {
+        "question": "Safar par nikalne se pehle kya karna Sunnat hai?",
+        "option1": "Safar ki Dua padhna aur Allah Ta'ala par Tawakkul karna",
+        "option2": "Bina Dua ke nikal jana",
+        "option3": "Sirf Kisi ko phone karna",
+        "option4": "Kuch bhi na karna",
+        "correctAnswer": "Safar ki Dua padhna aur Allah Ta'ala par Tawakkul karna",
+        "category": "Adab-e-Safar"
+    },
+    {
+        "question": "Safar ke dauran Namaz ka kya hukm hai?",
+        "option1": "Namaz ko uske Ahkam ke mutabiq ada karna zaroori hai",
+        "option2": "Namaz chhod sakte hain",
+        "option3": "Sirf Ghar pahunch kar padhna hai",
+        "option4": "Sirf Jummah ki Namaz padhna hai",
+        "correctAnswer": "Namaz ko uske Ahkam ke mutabiq ada karna zaroori hai",
+        "category": "Adab-e-Safar"
+    },
+    {
+        "question": "Safar mein Akhlaq kaisa hona chahiye?",
+        "option1": "Sabr aur Narmi ke saath",
+        "option2": "Gusse ke saath",
+        "option3": "Takabbur ke saath",
+        "option4": "Jhagda karna",
+        "correctAnswer": "Sabr aur Narmi ke saath",
+        "category": "Adab-e-Safar"
+    },
+    {
+        "question": "Safar ke dauran saathiyon ke saath kaisa bartao karna chahiye?",
+        "option1": "Muhabbat aur Madad ke saath",
+        "option2": "Unhe Pareshan karna",
+        "option3": "Mazaaq udaana",
+        "option4": "Unse Jhagda karna",
+        "correctAnswer": "Muhabbat aur Madad ke saath",
+        "category": "Adab-e-Safar"
+    },
+    {
+        "question": "Safar se wapas aakar kya karna Mustahab hai?",
+        "option1": "Do Rakat Nafl Namaz ada karna",
+        "option2": "Seedha so jana",
+        "option3": "Kisi se baat na karna",
+        "option4": "Khana na khana",
+        "correctAnswer": "Do Rakat Nafl Namaz ada karna",
+        "category": "Adab-e-Safar"
+    },
+    {
+        "question": "Safar ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Safar"
+    },
+    {
+        "question": "Adab-e-Safar par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Hifazat, Barkat aur Sukoon",
+        "option2": "Sirf Dunyawi Kamyabi",
+        "option3": "Sirf Daulat",
+        "option4": "Sirf Shohrat",
+        "correctAnswer": "Allah Ta'ala ki Hifazat, Barkat aur Sukoon",
+        "category": "Adab-e-Safar"
+    },
+    {
+        "question": "Mehman ka ikram karna kaisa amal hai?",
+        "option1": "Sunnat aur Nek Amal",
+        "option2": "Makruh",
+        "option3": "Na-Jaiz",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Sunnat aur Nek Amal",
+        "category": "Adab-e-Mehman"
+    },
+    {
+        "question": "Mehman ke saath kaisa bartao karna chahiye?",
+        "option1": "Khush Akhlaqi aur Izzat ke saath",
+        "option2": "Sakhti se",
+        "option3": "Be-Rukhi se",
+        "option4": "Takabbur se",
+        "correctAnswer": "Khush Akhlaqi aur Izzat ke saath",
+        "category": "Adab-e-Mehman"
+    },
+    {
+        "question": "Mehman ke aane par sabse pehle kya karna chahiye?",
+        "option1": "Salam aur Khair Maqdam karna",
+        "option2": "Unhe nazarandaz karna",
+        "option3": "Sawal jawab shuru kar dena",
+        "option4": "Apna kaam karte rehna",
+        "correctAnswer": "Salam aur Khair Maqdam karna",
+        "category": "Adab-e-Mehman"
+    },
+    {
+        "question": "Mehman ko takleef dena kaisa hai?",
+        "option1": "Na-Pasandeedah",
+        "option2": "Mustahab",
+        "option3": "Jaiz",
+        "option4": "Sunnat",
+        "correctAnswer": "Na-Pasandeedah",
+        "category": "Adab-e-Mehman"
+    },
+    {
+        "question": "Agar ghar mein kam cheezein hon to Mehman ke saath kya bartao karna chahiye?",
+        "option1": "Jo mumkin ho khushi se pesh karna",
+        "option2": "Unhe daantna",
+        "option3": "Darwaza band kar dena",
+        "option4": "Shikayat karna",
+        "correctAnswer": "Jo mumkin ho khushi se pesh karna",
+        "category": "Adab-e-Mehman"
+    },
+    {
+        "question": "Mehman Nawazi kis ki sifat hai?",
+        "option1": "Momin ki",
+        "option2": "Munafiq ki",
+        "option3": "Takabbur karne wale ki",
+        "option4": "Zalim ki",
+        "correctAnswer": "Momin ki",
+        "category": "Adab-e-Mehman"
+    },
+    {
+        "question": "Adab-e-Mehman ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Mehman"
+    },
+    {
+        "question": "Adab-e-Mehman par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Raza aur Muhabbat mein Izafah",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Raza aur Muhabbat mein Izafah",
+        "category": "Adab-e-Mehman"
+    },
+    {
+        "question": "Bimar hone par sabse pehle kis par bharosa rakhna chahiye?",
+        "option1": "Allah Ta'ala par",
+        "option2": "Sirf Dawa par",
+        "option3": "Sirf Logon par",
+        "option4": "Kisi par nahi",
+        "correctAnswer": "Allah Ta'ala par",
+        "category": "Adab-e-Bimari"
+    },
+    {
+        "question": "Bimar hone par ilaaj karwana kaisa hai?",
+        "option1": "Jaiz aur Mashroo'",
+        "option2": "Haram",
+        "option3": "Makruh",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Jaiz aur Mashroo'",
+        "category": "Adab-e-Bimari"
+    },
+    {
+        "question": "Bimar shakhs ki iyadat (mulaqat) karna kaisa amal hai?",
+        "option1": "Sunnat aur Sawab ka Kaam",
+        "option2": "Makruh",
+        "option3": "Na-Jaiz",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Sunnat aur Sawab ka Kaam",
+        "category": "Adab-e-Bimari"
+    },
+    {
+        "question": "Bimar shakhs ke paas jaakar kaisa bartao karna chahiye?",
+        "option1": "Narmi aur Tasalli ke saath",
+        "option2": "Buland Aawaz se",
+        "option3": "Mazaaq karna",
+        "option4": "Daantna",
+        "correctAnswer": "Narmi aur Tasalli ke saath",
+        "category": "Adab-e-Bimari"
+    },
+    {
+        "question": "Bimari ke waqt Musalman ko kya karna chahiye?",
+        "option1": "Sabr, Dua aur Astaghfar",
+        "option2": "Na-Umeed ho jana",
+        "option3": "Shikayat hi karte rehna",
+        "option4": "Namaz chhod dena",
+        "correctAnswer": "Sabr, Dua aur Astaghfar",
+        "category": "Adab-e-Bimari"
+    },
+    {
+        "question": "Bimar ke liye Dua karna kaisa hai?",
+        "option1": "Masnoon aur Sawab ka Amal",
+        "option2": "Makruh",
+        "option3": "Na-Jaiz",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Masnoon aur Sawab ka Amal",
+        "category": "Adab-e-Bimari"
+    },
+    {
+        "question": "Adab-e-Bimari ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Bimari"
+    },
+    {
+        "question": "Adab-e-Bimari par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Raza, Rahmat aur Sabr hasil hota hai",
+        "option2": "Sirf Daulat milti hai",
+        "option3": "Sirf Shohrat milti hai",
+        "option4": "Sirf Dunyawi Kamyabi milti hai",
+        "correctAnswer": "Allah Ta'ala ki Raza, Rahmat aur Sabr hasil hota hai",
+        "category": "Adab-e-Bimari"
+    },
+    {
+        "question": "Dua kis se maangni chahiye?",
+        "option1": "Sirf Allah Ta'ala se",
+        "option2": "Farishton se",
+        "option3": "Logon se",
+        "option4": "Kisi bhi Makhluq se",
+        "correctAnswer": "Sirf Allah Ta'ala se",
+        "category": "Adab-e-Dua"
+    },
+    {
+        "question": "Dua se pehle kya karna Mustahab hai?",
+        "option1": "Allah Ta'ala ki Hamd aur Nabi \ufdfa par Durood padhna",
+        "option2": "Seedha Dua shuru kar dena",
+        "option3": "Khamosh rehna",
+        "option4": "Kuch bhi nahi",
+        "correctAnswer": "Allah Ta'ala ki Hamd aur Nabi \ufdfa par Durood padhna",
+        "category": "Adab-e-Dua"
+    },
+    {
+        "question": "Dua maangte waqt kis taraf rukh karna behtar hai?",
+        "option1": "Qiblah ki taraf",
+        "option2": "Kisi bhi taraf",
+        "option3": "Peechhe ki taraf",
+        "option4": "Aasman ki taraf dekhna zaroori hai",
+        "correctAnswer": "Qiblah ki taraf",
+        "category": "Adab-e-Dua"
+    },
+    {
+        "question": "Dua maangte waqt kis sifat ke saath Dua karni chahiye?",
+        "option1": "Ikhlas, Aajizi aur Yaqeen ke saath",
+        "option2": "Takabbur ke saath",
+        "option3": "Gusse ke saath",
+        "option4": "Mazaaq ke saath",
+        "correctAnswer": "Ikhlas, Aajizi aur Yaqeen ke saath",
+        "category": "Adab-e-Dua"
+    },
+    {
+        "question": "Dua ke baad kya karna Mustahab hai?",
+        "option1": "Aameen kehna aur Allah par bharosa rakhna",
+        "option2": "Foran Na-Umeed ho jana",
+        "option3": "Shikayat karna",
+        "option4": "Dua dobara kabhi na karna",
+        "correctAnswer": "Aameen kehna aur Allah par bharosa rakhna",
+        "category": "Adab-e-Dua"
+    },
+    {
+        "question": "Dua ki qubooliyat ke liye halal Rizq ki kya ahmiyat hai?",
+        "option1": "Bohot Ahmiyat rakhta hai",
+        "option2": "Koi Ahmiyat nahi",
+        "option3": "Sirf Ramadan mein Ahmiyat hai",
+        "option4": "Sirf Ulema ke liye Ahmiyat hai",
+        "correctAnswer": "Bohot Ahmiyat rakhta hai",
+        "category": "Adab-e-Dua"
+    },
+    {
+        "question": "Adab-e-Dua ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Dua"
+    },
+    {
+        "question": "Adab-e-Dua par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Allah Ta'ala ki Qurbat aur Dua ki Qubooliyat ki Umeed",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Allah Ta'ala ki Qurbat aur Dua ki Qubooliyat ki Umeed",
+        "category": "Adab-e-Dua"
+    },
+    {
+        "question": "Majlis mein dakhil hote waqt sabse pehle kya karna chahiye?",
+        "option1": "Salam karna",
+        "option2": "Seedha baith jana",
+        "option3": "Buland aawaz mein baat karna",
+        "option4": "Mobile chalana",
+        "correctAnswer": "Salam karna",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Majlis mein kahan baithna chahiye?",
+        "option1": "Jahan jagah mile aur kisi ko takleef na ho",
+        "option2": "Dusron ko utha kar",
+        "option3": "Sabse aage zabardasti",
+        "option4": "Darwaze mein",
+        "correctAnswer": "Jahan jagah mile aur kisi ko takleef na ho",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Majlis mein dusron ki baat kaise sunni chahiye?",
+        "option1": "Ghaur aur Adab ke saath",
+        "option2": "Beech mein tok kar",
+        "option3": "Mazaaq uda kar",
+        "option4": "Buland aawaz se",
+        "correctAnswer": "Ghaur aur Adab ke saath",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Majlis mein kisi ka mazaaq udaana kaisa hai?",
+        "option1": "Na-Jaiz",
+        "option2": "Jaiz",
+        "option3": "Mustahab",
+        "option4": "Sunnat",
+        "correctAnswer": "Na-Jaiz",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Majlis mein agar koi baat samajh na aaye to kya karna chahiye?",
+        "option1": "Adab ke saath sawal karna",
+        "option2": "Jhagda karna",
+        "option3": "Hansna",
+        "option4": "Chup chap chale jana",
+        "correctAnswer": "Adab ke saath sawal karna",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Majlis ke raaz ko dusron tak pahunchana kaisa hai?",
+        "option1": "Ghalat aur Khayanat",
+        "option2": "Jaiz",
+        "option3": "Mustahab",
+        "option4": "Sawab",
+        "correctAnswer": "Ghalat aur Khayanat",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Majlis se uthte waqt kaunsi Dua padhna Sunnat hai?",
+        "option1": "Kaffarat-ul-Majlis ki Dua",
+        "option2": "Sirf Bismillah",
+        "option3": "Koi Dua nahi",
+        "option4": "Sirf Takbeer",
+        "correctAnswer": "Kaffarat-ul-Majlis ki Dua",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Adab-e-Majlis ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Achhi Majlis ka sabse bada faidah kya hai?",
+        "option1": "Ilm, Akhlaq aur Allah Ta'ala ki Raza hasil hoti hai",
+        "option2": "Sirf Dunyawi Faidah",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Maal",
+        "correctAnswer": "Ilm, Akhlaq aur Allah Ta'ala ki Raza hasil hoti hai",
+        "category": "Adab-e-Majlis"
+    },
+    {
+        "question": "Libas pehnte waqt sabse pehle kis cheez ka khayal rakhna chahiye?",
+        "option1": "Satr ko chhupana",
+        "option2": "Sirf Fashion",
+        "option3": "Sirf Mehnga hona",
+        "option4": "Logon ko Mutassir karna",
+        "correctAnswer": "Satr ko chhupana",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Kapde pehnte waqt kis niyyat se pehna chahiye?",
+        "option1": "Allah Ta'ala ki Ne'mat ka Shukr aur Satr Poshi",
+        "option2": "Takabbur dikhane ke liye",
+        "option3": "Shohrat hasil karne ke liye",
+        "option4": "Logon se Muqabla karne ke liye",
+        "correctAnswer": "Allah Ta'ala ki Ne'mat ka Shukr aur Satr Poshi",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Naye kapde pehnte waqt kya karna Sunnat hai?",
+        "option1": "Masnoon Dua padhna",
+        "option2": "Takabbur karna",
+        "option3": "Tasveer khinchwana",
+        "option4": "Kuch bhi nahi",
+        "correctAnswer": "Masnoon Dua padhna",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Kapde pehnte waqt pehle kis taraf se shuru karna Sunnat hai?",
+        "option1": "Dahini (Right) taraf se",
+        "option2": "Baayi (Left) taraf se",
+        "option3": "Koi Farq nahi",
+        "option4": "Peechhe se",
+        "correctAnswer": "Dahini (Right) taraf se",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Kapde utarte waqt kis taraf se shuru karna Sunnat hai?",
+        "option1": "Baayi (Left) taraf se",
+        "option2": "Dahini (Right) taraf se",
+        "option3": "Beech se",
+        "option4": "Koi Sunnat nahi",
+        "correctAnswer": "Baayi (Left) taraf se",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Kapdon ke baare mein Takabbur karna kaisa hai?",
+        "option1": "Na-Jaiz aur Na-Pasandeedah",
+        "option2": "Jaiz",
+        "option3": "Mustahab",
+        "option4": "Sunnat",
+        "correctAnswer": "Na-Jaiz aur Na-Pasandeedah",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Saaf aur Paak Libas pehna Islam mein kaisa hai?",
+        "option1": "Pasandeedah aur Sunnat",
+        "option2": "Ghair Zaroori",
+        "option3": "Makruh",
+        "option4": "Na-Jaiz",
+        "correctAnswer": "Pasandeedah aur Sunnat",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Adab-e-Libas ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Islami Libas ka sabse bada maqsad kya hai?",
+        "option1": "Haya, Satr Poshi aur Allah Ta'ala ki Ita'at",
+        "option2": "Fashion dikhana",
+        "option3": "Shohrat hasil karna",
+        "option4": "Sirf Mehnga Libas pehna",
+        "correctAnswer": "Haya, Satr Poshi aur Allah Ta'ala ki Ita'at",
+        "category": "Adab-e-Libas"
+    },
+    {
+        "question": "Khana shuru karne se pehle kya padhna Sunnat hai?",
+        "option1": "Bismillahir Rahmanir Rahim",
+        "option2": "Alhamdulillah",
+        "option3": "Subhanallah",
+        "option4": "Astaghfirullah",
+        "correctAnswer": "Bismillahir Rahmanir Rahim",
+        "category": "Adab-e-Khana"
+    },
+    {
+        "question": "Khana kis haath se khana Sunnat hai?",
+        "option1": "Dahine (Right) haath se",
+        "option2": "Baaye (Left) haath se",
+        "option3": "Dono haathon se",
+        "option4": "Kisi bhi haath se",
+        "correctAnswer": "Dahine (Right) haath se",
+        "category": "Adab-e-Khana"
+    },
+    {
+        "question": "Khana kis jagah se khana chahiye?",
+        "option1": "Apne saamne se",
+        "option2": "Dusron ke saamne se",
+        "option3": "Beech se",
+        "option4": "Kahin se bhi",
+        "correctAnswer": "Apne saamne se",
+        "category": "Adab-e-Khana"
+    },
+    {
+        "question": "Khana khate waqt kaisa bartao karna chahiye?",
+        "option1": "Aaram aur Adab ke saath",
+        "option2": "Jaldi-jaldi aur Shor machakar",
+        "option3": "Hans kar aur Mazaaq karte hue",
+        "option4": "Khade hokar",
+        "correctAnswer": "Aaram aur Adab ke saath",
+        "category": "Adab-e-Khana"
+    },
+    {
+        "question": "Khana khatam hone ke baad kya kehna Sunnat hai?",
+        "option1": "Alhamdulillah",
+        "option2": "Bismillah",
+        "option3": "Subhanallah",
+        "option4": "Allahu Akbar",
+        "correctAnswer": "Alhamdulillah",
+        "category": "Adab-e-Khana"
+    },
+    {
+        "question": "Khana zaya karna kaisa hai?",
+        "option1": "Na-Pasandeedah",
+        "option2": "Sunnat",
+        "option3": "Mustahab",
+        "option4": "Sawab",
+        "correctAnswer": "Na-Pasandeedah",
+        "category": "Adab-e-Khana"
+    },
+    {
+        "question": "Adab-e-Khana ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Adab-e-Khana"
+    },
+    {
+        "question": "Khana khane ka sabse bada maqsad kya hona chahiye?",
+        "option1": "Allah Ta'ala ki Ibadat ke liye Quwwat hasil karna",
+        "option2": "Sirf Pet bharna",
+        "option3": "Sirf Maze lena",
+        "option4": "Sirf Dikhawa karna",
+        "correctAnswer": "Allah Ta'ala ki Ibadat ke liye Quwwat hasil karna",
+        "category": "Adab-e-Khana"
+    },
+    {
+        "question": "Adab-e-Khana par amal karne ka sabse bada faidah kya hai?",
+        "option1": "Sunnat par Amal, Barkat aur Allah Ta'ala ki Raza",
+        "option2": "Sirf Daulat",
+        "option3": "Sirf Shohrat",
+        "option4": "Sirf Dunyawi Kamyabi",
+        "correctAnswer": "Sunnat par Amal, Barkat aur Allah Ta'ala ki Raza",
+        "category": "Adab-e-Khana\n\n\n\nCategory: Interesting Masail"
+    },
+    {
+        "question": "Agar Wudu ke baad zor se hansne se Wudu toot jata hai?",
+        "option1": "Nahi",
+        "option2": "Haan",
+        "option3": "Sirf Namaz mein",
+        "option4": "Har waqt",
+        "correctAnswer": "Sirf Namaz mein",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar kisi ko neend mein sapna na aaye lekin Ghusl wajib ho jaye to Ghusl karna hoga?",
+        "option1": "Haan, agar mani nikli ho",
+        "option2": "Nahi",
+        "option3": "Sirf Wudu kaafi hai",
+        "option4": "Sirf Tayammum",
+        "correctAnswer": "Haan, agar mani nikli ho",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar Namaz mein mobile bajne lage to kya karna chahiye?",
+        "option1": "Agar mumkin ho to kam harkat se band kar dena",
+        "option2": "Call receive kar lena",
+        "option3": "Namaz tod dena",
+        "option4": "Baat karna",
+        "correctAnswer": "Agar mumkin ho to kam harkat se band kar dena",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar Wudu ke baad nail polish laga li to Wudu baqi rahega?",
+        "option1": "Haan, lekin agle Wudu ya Ghusl mein nail polish hatani hogi",
+        "option2": "Wudu foran toot jata hai",
+        "option3": "Namaz nahi hogi",
+        "option4": "Tayammum karna hoga",
+        "correctAnswer": "Haan, lekin agle Wudu ya Ghusl mein nail polish hatani hogi",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar Namaz ka waqt khatam hone mein sirf ek Rakat ka waqt bacha ho to kya Namaz shuru kar sakte hain?",
+        "option1": "Haan",
+        "option2": "Nahi",
+        "option3": "Sirf Jummah mein",
+        "option4": "Sirf Ramadan mein",
+        "correctAnswer": "Haan",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar kapde par bahut chhota najasat ka daag ho to kya har surat mein Namaz nahi hogi?",
+        "option1": "Nahi, najasat ke ahkam tafseel se hain",
+        "option2": "Hamesha Namaz nahi hogi",
+        "option3": "Sirf Wudu karna hoga",
+        "option4": "Sirf Tayammum karna hoga",
+        "correctAnswer": "Nahi, najasat ke ahkam tafseel se hain",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar Qur'an ki tilawat karte waqt Sajdah-e-Tilawat ki Ayat padhi jaye to kya karna chahiye?",
+        "option1": "Sajdah-e-Tilawat ada karna chahiye",
+        "option2": "Kuch bhi nahi",
+        "option3": "Sirf Dua padhni chahiye",
+        "option4": "Sirf Astaghfar karna chahiye",
+        "correctAnswer": "Sajdah-e-Tilawat ada karna chahiye",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar kisi ko Qiblah ki simt ka yaqeen na ho to kya karna chahiye?",
+        "option1": "Apni poori koshish se Qiblah ka andaza laga kar Namaz padhe",
+        "option2": "Namaz chhod de",
+        "option3": "Bas kisi bhi taraf Namaz padhe bina soch ke",
+        "option4": "Agli Namaz ka intezar kare",
+        "correctAnswer": "Apni poori koshish se Qiblah ka andaza laga kar Namaz padhe",
+        "category": "Interesting Masail\n\n\nCategory: Interesting Masail"
+    },
+    {
+        "question": "Agar Wudu ke baad zor se hansne se Wudu toot jata hai?",
+        "option1": "Nahi",
+        "option2": "Haan",
+        "option3": "Sirf Namaz mein",
+        "option4": "Har waqt",
+        "correctAnswer": "Sirf Namaz mein",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar kisi ko neend mein sapna na aaye lekin Ghusl wajib ho jaye to Ghusl karna hoga?",
+        "option1": "Haan, agar mani nikli ho",
+        "option2": "Nahi",
+        "option3": "Sirf Wudu kaafi hai",
+        "option4": "Sirf Tayammum",
+        "correctAnswer": "Haan, agar mani nikli ho",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar Namaz mein mobile bajne lage to kya karna chahiye?",
+        "option1": "Agar mumkin ho to kam harkat se band kar dena",
+        "option2": "Call receive kar lena",
+        "option3": "Namaz tod dena",
+        "option4": "Baat karna",
+        "correctAnswer": "Agar mumkin ho to kam harkat se band kar dena",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar Wudu ke baad nail polish laga li to Wudu baqi rahega?",
+        "option1": "Haan, lekin agle Wudu ya Ghusl mein nail polish hatani hogi",
+        "option2": "Wudu foran toot jata hai",
+        "option3": "Namaz nahi hogi",
+        "option4": "Tayammum karna hoga",
+        "correctAnswer": "Haan, lekin agle Wudu ya Ghusl mein nail polish hatani hogi",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar Namaz ka waqt khatam hone mein sirf ek Rakat ka waqt bacha ho to kya Namaz shuru kar sakte hain?",
+        "option1": "Haan",
+        "option2": "Nahi",
+        "option3": "Sirf Jummah mein",
+        "option4": "Sirf Ramadan mein",
+        "correctAnswer": "Haan",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar kapde par bahut chhota najasat ka daag ho to kya har surat mein Namaz nahi hogi?",
+        "option1": "Nahi, najasat ke ahkam tafseel se hain",
+        "option2": "Hamesha Namaz nahi hogi",
+        "option3": "Sirf Wudu karna hoga",
+        "option4": "Sirf Tayammum karna hoga",
+        "correctAnswer": "Nahi, najasat ke ahkam tafseel se hain",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar Qur'an ki tilawat karte waqt Sajdah-e-Tilawat ki Ayat padhi jaye to kya karna chahiye?",
+        "option1": "Sajdah-e-Tilawat ada karna chahiye",
+        "option2": "Kuch bhi nahi",
+        "option3": "Sirf Dua padhni chahiye",
+        "option4": "Sirf Astaghfar karna chahiye",
+        "correctAnswer": "Sajdah-e-Tilawat ada karna chahiye",
+        "category": "Interesting Masail"
+    },
+    {
+        "question": "Agar kisi ko Qiblah ki simt ka yaqeen na ho to kya karna chahiye?",
+        "option1": "Apni poori koshish se Qiblah ka andaza laga kar Namaz padhe",
+        "option2": "Namaz chhod de",
+        "option3": "Bas kisi bhi taraf Namaz padhe bina soch ke",
+        "option4": "Agli Namaz ka intezar kare",
+        "correctAnswer": "Apni poori koshish se Qiblah ka andaza laga kar Namaz padhe",
+        "category": "Interesting Masail\n\nPerfect. Ab se main batch-wise dunga. Har batch production quality hoga aur duplicate nahi hoga.\n\n\n\n# BATCH 1\n\n#\n\n#"
+    },
+    {
+        "question": "Hayz kise kehte hain?",
+        "option1": "Baligha aurat ko har mahine aane wala fitri khoon",
+        "option2": "Zakhm ka khoon",
+        "option3": "Naak ka khoon",
+        "option4": "Bimari ka khoon",
+        "correctAnswer": "Baligha aurat ko har mahine aane wala fitri khoon",
+        "category": "Hayz\n\n\n\n#"
+    },
+    {
+        "question": "Hayz ki halat mein Namaz ka kya hukm hai?",
+        "option1": "Namaz maaf hai",
+        "option2": "Namaz padhna Farz hai",
+        "option3": "Sirf Nafl Namaz padhni hai",
+        "option4": "Sirf Jummah padhna hai",
+        "correctAnswer": "Namaz maaf hai",
+        "category": "Hayz\n\n\n\n#"
+    },
+    {
+        "question": "Hayz ki halat mein Roza ka kya hukm hai?",
+        "option1": "Roza baad mein Qaza karna hoga",
+        "option2": "Roza jari rakhna hoga",
+        "option3": "Roza tootega nahi",
+        "option4": "Koi hukm nahi",
+        "correctAnswer": "Roza baad mein Qaza karna hoga",
+        "category": "Hayz\n\n\n\n#"
+    },
+    {
+        "question": "Hayz khatam hone ke baad kya karna zaroori hai?",
+        "option1": "Ghusl",
+        "option2": "Sirf Wudu",
+        "option3": "Tayammum",
+        "option4": "Kuch nahi",
+        "correctAnswer": "Ghusl",
+        "category": "Hayz\n\n\n\n#"
+    },
+    {
+        "question": "Hayz ke masail seekhna kaisa hai?",
+        "option1": "Har Baligha Muslimah ke liye Zaroori",
+        "option2": "Sirf Ulema ke liye",
+        "option3": "Ghair Zaroori",
+        "option4": "Makruh",
+        "correctAnswer": "Har Baligha Muslimah ke liye Zaroori",
+        "category": "Hayz\n\n\n\n#"
+    },
+    {
+        "question": "Hayz ke dauran Qur'an ko chhoona kaisa hai?",
+        "option1": "Jaiz nahi",
+        "option2": "Har haal mein Jaiz hai",
+        "option3": "Mustahab hai",
+        "option4": "Farz hai",
+        "correctAnswer": "Jaiz nahi",
+        "category": "Hayz\n\n\n\n#"
+    },
+    {
+        "question": "Hayz ke dauran Masjid mein baithna kaisa hai?",
+        "option1": "Jaiz nahi",
+        "option2": "Jaiz hai",
+        "option3": "Mustahab hai",
+        "option4": "Farz hai",
+        "correctAnswer": "Jaiz nahi",
+        "category": "Hayz\n\n\n\n#"
+    },
+    {
+        "question": "Hayz Allah Ta'ala ka kya hai?",
+        "option1": "Fitri Nizam",
+        "option2": "Saza",
+        "option3": "Gunah",
+        "option4": "Bimari hi hai",
+        "correctAnswer": "Fitri Nizam",
+        "category": "Hayz\n\n\n\n\n\n#"
+    },
+    {
+        "question": "Nifas kise kehte hain?",
+        "option1": "Bachcha paida hone ke baad aane wale khoon ko",
+        "option2": "Hayz ke khoon ko",
+        "option3": "Zakhm ke khoon ko",
+        "option4": "Naak ke khoon ko",
+        "correctAnswer": "Bachcha paida hone ke baad aane wale khoon ko",
+        "category": "Nifas\n\n\n\n#"
+    },
+    {
+        "question": "Nifas ki halat mein Namaz ka kya hukm hai?",
+        "option1": "Namaz maaf hai",
+        "option2": "Namaz Farz hai",
+        "option3": "Sirf Nafl Namaz",
+        "option4": "Sirf Jummah",
+        "correctAnswer": "Namaz maaf hai",
+        "category": "Nifas\n\n\n\n#"
+    },
+    {
+        "question": "Nifas ki halat mein Roza ka kya hukm hai?",
+        "option1": "Baad mein Qaza karna hoga",
+        "option2": "Roza jari rakhe",
+        "option3": "Roza nahi tootega",
+        "option4": "Koi hukm nahi",
+        "correctAnswer": "Baad mein Qaza karna hoga",
+        "category": "Nifas\n\n\n\n#"
+    },
+    {
+        "question": "Nifas khatam hone ke baad kya zaroori hai?",
+        "option1": "Ghusl",
+        "option2": "Sirf Wudu",
+        "option3": "Tayammum",
+        "option4": "Kuch nahi",
+        "correctAnswer": "Ghusl",
+        "category": "Nifas\n\n\n\n#"
+    },
+    {
+        "question": "Nifas ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Nifas\n\n\n\n#"
+    },
+    {
+        "question": "Nifas ke dauran Qur'an ko chhoona kaisa hai?",
+        "option1": "Jaiz nahi",
+        "option2": "Jaiz hai",
+        "option3": "Farz hai",
+        "option4": "Mustahab hai",
+        "correctAnswer": "Jaiz nahi",
+        "category": "Nifas\n\n\n\n#"
+    },
+    {
+        "question": "Nifas ke dauran Masjid mein baithna kaisa hai?",
+        "option1": "Jaiz nahi",
+        "option2": "Jaiz hai",
+        "option3": "Farz hai",
+        "option4": "Mustahab hai",
+        "correctAnswer": "Jaiz nahi",
+        "category": "Nifas\n\n\n\n\n\n#"
+    },
+    {
+        "question": "Istihaza kise kehte hain?",
+        "option1": "Hayz aur Nifas ke ilawa aane wale khoon ko",
+        "option2": "Hayz ko",
+        "option3": "Nifas ko",
+        "option4": "Zakhm ke khoon ko",
+        "correctAnswer": "Hayz aur Nifas ke ilawa aane wale khoon ko",
+        "category": "Istihaza\n\n\n\n#"
+    },
+    {
+        "question": "Istihaza wali aurat Namaz padhegi?",
+        "option1": "Haan",
+        "option2": "Nahi",
+        "option3": "Sirf Jummah",
+        "option4": "Sirf Eid",
+        "correctAnswer": "Haan",
+        "category": "Istihaza\n\n\n\n#"
+    },
+    {
+        "question": "Istihaza wali aurat Roza rakhegi?",
+        "option1": "Haan",
+        "option2": "Nahi",
+        "option3": "Sirf Ramadan ke baad",
+        "option4": "Sirf Nafl",
+        "correctAnswer": "Haan",
+        "category": "Istihaza\n\n\n\n#"
+    },
+    {
+        "question": "Istihaza kis hukm mein hoti hai?",
+        "option1": "Ma'zoor ke Ahkam",
+        "option2": "Hayz",
+        "option3": "Nifas",
+        "option4": "Janabat",
+        "correctAnswer": "Ma'zoor ke Ahkam",
+        "category": "Istihaza\n\n\n\n#"
+    },
+    {
+        "question": "Istihaza ke masail seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Istihaza\n\n\n\nYe Batch 1 tha.\n\nTotal Questions: 20\n# BATCH 3\n\n#\n\n#"
+    },
+    {
+        "question": "Agar Wudu karte waqt kisi Farz ko chhod diya to Wudu ka kya hukm hai?",
+        "option1": "Wudu nahi hoga",
+        "option2": "Wudu ho jayega",
+        "option3": "Sirf Makruh hoga",
+        "option4": "Sirf Sunnat chhutegi",
+        "correctAnswer": "Wudu nahi hoga",
+        "category": "Wudu ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Agar Wudu ke baad shak ho ke Wudu toota ya nahi to kya hukm hai?",
+        "option1": "Jab tak yaqeen na ho Wudu baqi samjha jayega",
+        "option2": "Dobara Wudu Farz hai",
+        "option3": "Namaz nahi hogi",
+        "option4": "Tayammum karna hoga",
+        "correctAnswer": "Jab tak yaqeen na ho Wudu baqi samjha jayega",
+        "category": "Wudu ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Agar Wudu ke kisi hissa par paani na pahuncha to kya Wudu hoga?",
+        "option1": "Nahi",
+        "option2": "Haan",
+        "option3": "Sirf Makruh",
+        "option4": "Sirf Nafl mein",
+        "correctAnswer": "Nahi",
+        "category": "Wudu ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Wudu ke baad Nail Polish lagane se pehle wala Wudu baqi rehta hai?",
+        "option1": "Haan",
+        "option2": "Nahi",
+        "option3": "Foran toot jata hai",
+        "option4": "Sirf Nafl Namaz mein",
+        "correctAnswer": "Haan",
+        "category": "Wudu ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Agle Wudu ke liye Nail Polish ka kya hukm hai?",
+        "option1": "Use hata kar Wudu karna hoga",
+        "option2": "Hatana zaroori nahi",
+        "option3": "Sirf Tayammum kare",
+        "option4": "Sirf Miswak kare",
+        "correctAnswer": "Use hata kar Wudu karna hoga",
+        "category": "Wudu ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Wudu ke masail seekhna kaisa hai?",
+        "option1": "Har Musalman ke liye Zaroori",
+        "option2": "Sirf Imam ke liye",
+        "option3": "Makruh",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Har Musalman ke liye Zaroori",
+        "category": "Wudu ke Aham Masail\n\n\n\n#\n\n#"
+    },
+    {
+        "question": "Agar Namaz ke dauran Qiblah ki simt ghalat maloom ho jaye to kya karna chahiye?",
+        "option1": "Foran Qiblah ki taraf rukh kar lena",
+        "option2": "Namaz tod dena",
+        "option3": "Kuch nahi",
+        "option4": "Baad mein dobara padhna",
+        "correctAnswer": "Foran Qiblah ki taraf rukh kar lena",
+        "category": "Namaz ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Agar Namaz mein ek Rukn jaan boojh kar chhod diya jaye to kya hukm hai?",
+        "option1": "Namaz toot jati hai",
+        "option2": "Namaz ho jati hai",
+        "option3": "Sirf Sajdah Sahw",
+        "option4": "Kuch bhi nahi",
+        "correctAnswer": "Namaz toot jati hai",
+        "category": "Namaz ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Namaz mein duniya ki baat karna kaisa hai?",
+        "option1": "Namaz toot jati hai",
+        "option2": "Jaiz hai",
+        "option3": "Makruh hai",
+        "option4": "Mustahab hai",
+        "correctAnswer": "Namaz toot jati hai",
+        "category": "Namaz ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Agar Imam se ek Rakat chhoot jaye to Namaz ke baad kya karna chahiye?",
+        "option1": "Baqi Rakat poori karni chahiye",
+        "option2": "Namaz khatam",
+        "option3": "Dobara Jamaat",
+        "option4": "Sirf Dua",
+        "correctAnswer": "Baqi Rakat poori karni chahiye",
+        "category": "Namaz ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Namaz mein Khushu' kis cheez ka naam hai?",
+        "option1": "Dil aur Jism ke saath Allah ki taraf Tawajjuh",
+        "option2": "Sirf Khamosh rehna",
+        "option3": "Tez Tilawat",
+        "option4": "Lambi Namaz",
+        "correctAnswer": "Dil aur Jism ke saath Allah ki taraf Tawajjuh",
+        "category": "Namaz ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Namaz ke Aham Masail seekhna kaisa hai?",
+        "option1": "Har Musalman ke liye Zaroori",
+        "option2": "Sirf Imam ke liye",
+        "option3": "Makruh",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Har Musalman ke liye Zaroori",
+        "category": "Namaz ke Aham Masail\n\n\n\n#\n\n#"
+    },
+    {
+        "question": "Roza kis niyyat se rakhna chahiye?",
+        "option1": "Allah Ta'ala ki Raza ke liye",
+        "option2": "Weight kam karne ke liye",
+        "option3": "Logon ko dikhane ke liye",
+        "option4": "Riwayat ke liye",
+        "correctAnswer": "Allah Ta'ala ki Raza ke liye",
+        "category": "Roza ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Agar koi bhool kar kha ya pee le to Roza ka kya hukm hai?",
+        "option1": "Roza baqi rehta hai",
+        "option2": "Roza toot jata hai",
+        "option3": "Kaffarah wajib hota hai",
+        "option4": "Dobara Roza shuru kare",
+        "correctAnswer": "Roza baqi rehta hai",
+        "category": "Roza ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Roza jaan boojh kar todne par kya hota hai?",
+        "option1": "Gunah hota hai aur Shar'i Ahkam laagu hote hain",
+        "option2": "Kuch nahi hota",
+        "option3": "Sirf Makruh hota hai",
+        "option4": "Sawab milta hai",
+        "correctAnswer": "Gunah hota hai aur Shar'i Ahkam laagu hote hain",
+        "category": "Roza ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Roza ke dauran jhoot bolna kaisa hai?",
+        "option1": "Gunah hai",
+        "option2": "Jaiz hai",
+        "option3": "Mustahab hai",
+        "option4": "Roza mein koi farq nahi",
+        "correctAnswer": "Gunah hai",
+        "category": "Roza ke Aham Masail\n\n\n\n#"
+    },
+    {
+        "question": "Roza ke Aham Masail seekhna kaisa hai?",
+        "option1": "Har Musalman ke liye Aham",
+        "option2": "Sirf Ulema ke liye",
+        "option3": "Makruh",
+        "option4": "Ghair Zaroori",
+        "correctAnswer": "Har Musalman ke liye Aham",
+        "category": "Roza ke Aham Masail\n\n\n\n#\n\n#"
+    },
+    {
+        "question": "Taharat mein sabse aam ghalti kya hai?",
+        "option1": "Paani ko poore aaza tak na pahunchana",
+        "option2": "Zyada paani istemal karna",
+        "option3": "Miswak karna",
+        "option4": "Dua padhna",
+        "correctAnswer": "Paani ko poore aaza tak na pahunchana",
+        "category": "Taharat ke Common Mistakes\n\n\n\n#"
+    },
+    {
+        "question": "Wudu ya Ghusl mein aisi cheez jo paani ko jild tak pahunchne se roke uska kya hukm hai?",
+        "option1": "Use pehle hatana zaroori hai",
+        "option2": "Us par paani daal dena kaafi hai",
+        "option3": "Koi farq nahi padta",
+        "option4": "Sirf Tayammum karna chahiye",
+        "correctAnswer": "Use pehle hatana zaroori hai",
+        "category": "Taharat ke Common Mistakes\n\n\n\n#"
+    },
+    {
+        "question": "Taharat ke Common Mistakes seekhna kaisa hai?",
+        "option1": "Aham",
+        "option2": "Makruh",
+        "option3": "Ghair Zaroori",
+        "option4": "Sirf Ulema ke liye",
+        "correctAnswer": "Aham",
+        "category": "Taharat ke Common Mistakes\n\n\n\n## \u2705 Batch 3 Summary\n\n* Wudu ke Aham Masail \u2014 6 Questions\n* Namaz ke Aham Masail \u2014 6 Questions\n* Roza ke Aham Masail \u2014 5 Questions\n* Taharat ke Common Mistakes \u2014 3 Questions\n\nTotal: 20 MCQs"
+    }
+]
