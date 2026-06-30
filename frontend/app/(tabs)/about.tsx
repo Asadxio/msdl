@@ -94,7 +94,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   about_madrasa: DEFAULT_ABOUT_CONTENT,
 };
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
-const AVATAR_OPTIONS = ['person', 'flower', 'star', 'sparkles'] as const;
 
 function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -236,7 +235,6 @@ export default function AboutScreen() {
   const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null);
   const [editingFeedbackMsg, setEditingFeedbackMsg] = useState('');
   const [exportingCollection, setExportingCollection] = useState<string | null>(null);
-  const [updatingAvatar, setUpdatingAvatar] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [donationError, setDonationError] = useState('');
   const [feedbackError, setFeedbackError] = useState('');
@@ -616,20 +614,10 @@ export default function AboutScreen() {
     await saveSettings();
   };
 
-  const updateProfileMedia = async (updates: { avatar?: string }) => {
-    if (!user) return;
-    setUpdatingAvatar(true);
-    try {
-      await updateDoc(doc(db, 'users', user.uid), updates);
-      await refreshProfile();
-      Alert.alert('Saved', 'Avatar updated successfully.');
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update avatar.');
-    } finally {
-      setUpdatingAvatar(false);
-    }
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollToAbout = () => {
+    scrollRef.current?.scrollToEnd({ animated: true });
   };
-
 
   const safePush = (path: string) => {
     try {
@@ -651,68 +639,142 @@ export default function AboutScreen() {
           </View>
         </View>
       </View>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
         {profile && (
-          <View style={styles.profileCard} testID="user-profile-card">
-            <View style={styles.profileAvatarSection}>
-              <View style={styles.profileIconCircle}>
-                <Text style={styles.profileInitialText}>
+          <>
+            <View style={styles.premiumProfileCard} testID="user-profile-card">
+              <View style={styles.premiumAvatarContainer}>
+                <Text style={styles.premiumAvatarText}>
                   {(profile.name || 'U').charAt(0).toUpperCase()}
                 </Text>
               </View>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.profileName}>{profile.name}</Text>
-              <Text style={styles.profileEmail}>{profile.email}</Text>
-              <View style={styles.profileBadgesRow}>
-                <View style={styles.profileRoleBadge}>
+              
+              <Text style={styles.premiumName}>{profile.name}</Text>
+              
+              <View style={styles.premiumBadgesContainer}>
+                <View style={styles.premiumRoleBadge}>
                   <Ionicons
                     name={profile.role === 'admin' ? 'shield-checkmark' : profile.role === 'teacher' ? 'school' : 'person'}
-                    size={11}
+                    size={12}
                     color={COLORS.goldText}
                   />
-                  <Text style={styles.profileRoleBadgeText}>
+                  <Text style={styles.premiumRoleBadgeText}>
                     {(profile.role || 'student').charAt(0).toUpperCase() + (profile.role || 'student').slice(1)}
                   </Text>
                 </View>
+
                 <View style={[
-                  styles.profileStatusBadge,
-                  profile.status === 'pending' && styles.profileStatusPending,
-                  (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.profileStatusInactive,
+                  styles.premiumStatusBadge,
+                  profile.status === 'pending' && styles.premiumStatusPending,
+                  (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.premiumStatusInactive,
                 ]}>
                   <View style={[
-                    styles.profileStatusDot,
-                    profile.status === 'pending' && styles.profileStatusDotPending,
-                    (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.profileStatusDotInactive,
+                    styles.premiumStatusDot,
+                    profile.status === 'pending' && styles.premiumStatusDotPending,
+                    (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.premiumStatusDotInactive,
                   ]} />
                   <Text style={[
-                    styles.profileStatusText,
-                    profile.status === 'pending' && styles.profileStatusTextPending,
-                    (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.profileStatusTextInactive,
+                    styles.premiumStatusText,
+                    profile.status === 'pending' && styles.premiumStatusTextPending,
+                    (profile.status === 'deactivated' || profile.status === 'rejected' || profile.status === 'suspended') && styles.premiumStatusTextInactive,
                   ]}>
                     {profile.status === 'approved' ? 'Active' : profile.status === 'pending' ? 'Pending' : profile.status === 'deactivated' ? 'Deactivated' : profile.status === 'rejected' ? 'Rejected' : profile.status === 'suspended' ? 'Suspended' : 'Active'}
                   </Text>
                 </View>
               </View>
-              {!!profile.referral_code && <Text style={styles.profileDetail}>Referral: {profile.referral_code} • {profile.referral_count || 0} referrals</Text>}
 
-              <View style={styles.avatarPickerRow}>
-                {AVATAR_OPTIONS.map((avatarName) => (
-                  <TouchableOpacity
-                    key={avatarName}
-                    style={[styles.avatarBtn, profile.avatar === avatarName && styles.avatarBtnActive]}
-                    onPress={() => updateProfileMedia({ avatar: avatarName })}
-                    disabled={updatingAvatar}
-                  >
-                    <Ionicons name={avatarName as any} size={15} color={profile.avatar === avatarName ? '#fff' : COLORS.primary} />
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.premiumDivider} />
+
+              <View style={styles.premiumInfoGrid}>
+                <View style={styles.premiumInfoRow}>
+                  <Ionicons name="mail-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
+                  <Text style={styles.premiumInfoText}>{profile.email}</Text>
+                </View>
+                <View style={styles.premiumInfoRow}>
+                  <Ionicons name="call-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
+                  <Text style={styles.premiumInfoText}>{user?.phoneNumber || 'Not Provided'}</Text>
+                </View>
+                <View style={styles.premiumInfoRow}>
+                  <Ionicons name="calendar-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
+                  <Text style={styles.premiumInfoText}>
+                    Member Since {user?.metadata?.creationTime ? new Date(user.metadata.creationTime).toLocaleDateString() : 'Unknown'}
+                  </Text>
+                </View>
+                {!!profile.referral_code && (
+                  <View style={styles.premiumInfoRow}>
+                    <Ionicons name="share-social-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
+                    <Text style={styles.premiumInfoText}>Referral: {profile.referral_code} • {profile.referral_count || 0} used</Text>
+                  </View>
+                )}
               </View>
             </View>
-            <TouchableOpacity style={styles.signOutBtn} onPress={signOut} testID="signout-btn">
-              <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
-            </TouchableOpacity>
-          </View>
+
+            <View style={styles.quickActionsContainer}>
+              <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+              <View style={styles.quickActionsGrid}>
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/courses')}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="book-outline" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>My Courses</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/library')}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="library-outline" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>Library</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/quiz')}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="help-circle-outline" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>Quiz History</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/prayer-times')}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="time-outline" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>Prayer Times</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/qibla')}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="compass-outline" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>Qibla</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/notifications')}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="notifications-outline" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>Notifications</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/settings')}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="settings-outline" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>Settings</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionCard} onPress={openHelp}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="logo-whatsapp" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>Help</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionCard} onPress={scrollToAbout}>
+                  <View style={styles.quickActionIconWrapper}>
+                    <Ionicons name="information-circle-outline" size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.quickActionText}>About</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.quickActionCard, { borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' }]} onPress={signOut}>
+                  <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FEE2E2' }]}>
+                    <Ionicons name="log-out-outline" size={24} color={COLORS.error} />
+                  </View>
+                  <Text style={[styles.quickActionText, { color: COLORS.error }]}>Logout</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
         )}
 
         {isAdmin && (
@@ -1097,43 +1159,38 @@ const styles = StyleSheet.create({
   bismillah: { fontSize: 28, color: COLORS.primary, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
   bismillahDua: { fontSize: 20, color: COLORS.primary, fontWeight: '700', textAlign: 'center', marginTop: 12, marginBottom: 6 },
   bismillahTranslation: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', fontStyle: 'italic' },
-  profileCard: {
-    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 12, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border,
-  },
-  profileAvatarSection: { alignItems: 'center' },
-  profileIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.goldBg, borderWidth: 2.5, borderColor: COLORS.secondary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  profilePhoto: { width: 56, height: 56, borderRadius: 28 },
-  profileInitialText: { fontSize: 24, fontWeight: '900', color: COLORS.primary },
-  profileName: { fontSize: 17, fontWeight: '800', color: COLORS.textMain },
-  profileEmail: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
-  profileBadgesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
-  profileRoleBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: COLORS.goldBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full,
-  },
-  profileRoleBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.goldText, textTransform: 'uppercase', letterSpacing: 0.5 },
-  profileStatusBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#ECFDF5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full,
-  },
-  profileStatusPending: { backgroundColor: '#FFFBEB' },
-  profileStatusInactive: { backgroundColor: '#FEF2F2' },
-  profileStatusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
-  profileStatusDotPending: { backgroundColor: '#F59E0B' },
-  profileStatusDotInactive: { backgroundColor: '#EF4444' },
-  profileStatusText: { fontSize: 11, fontWeight: '700', color: '#10B981' },
-  profileStatusTextPending: { color: '#D97706' },
-  profileStatusTextInactive: { color: '#EF4444' },
-  profileDetail: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
-  profileActionRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  profileMiniBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
-  profileMiniBtnText: { color: COLORS.textMain, fontSize: 11, fontWeight: '600' },
-  profileUploadText: { color: COLORS.textMuted, fontSize: 11, fontWeight: '600', marginTop: 6 },
-  disabledBtn: { opacity: 0.55 },
-  avatarPickerRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  avatarBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt },
-  avatarBtnActive: { backgroundColor: COLORS.goldBg, borderColor: COLORS.goldText },
-  signOutBtn: { padding: 10 },
+  
+  // Premium Profile Card
+  premiumProfileCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.xl, alignItems: 'center', ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
+  premiumAvatarContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.goldBg, borderWidth: 3, borderColor: COLORS.secondary, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.md, ...SHADOWS.card },
+  premiumAvatarText: { fontSize: 32, fontWeight: '900', color: COLORS.primary },
+  premiumName: { fontSize: 24, fontWeight: '800', color: COLORS.textMain, marginBottom: SPACING.xs, textAlign: 'center' },
+  premiumBadgesContainer: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.lg },
+  premiumRoleBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.goldBg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full },
+  premiumRoleBadgeText: { fontSize: 12, fontWeight: '700', color: COLORS.goldText, textTransform: 'uppercase', letterSpacing: 0.5 },
+  premiumStatusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECFDF5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full },
+  premiumStatusPending: { backgroundColor: '#FFFBEB' },
+  premiumStatusInactive: { backgroundColor: '#FEF2F2' },
+  premiumStatusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
+  premiumStatusDotPending: { backgroundColor: '#F59E0B' },
+  premiumStatusDotInactive: { backgroundColor: '#EF4444' },
+  premiumStatusText: { fontSize: 12, fontWeight: '700', color: '#10B981' },
+  premiumStatusTextPending: { color: '#D97706' },
+  premiumStatusTextInactive: { color: '#EF4444' },
+  premiumDivider: { width: '100%', height: 1, backgroundColor: COLORS.border, marginBottom: SPACING.lg },
+  premiumInfoGrid: { width: '100%', gap: SPACING.sm },
+  premiumInfoRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  premiumInfoIcon: { width: 24, textAlign: 'center' },
+  premiumInfoText: { fontSize: 14, color: COLORS.textMuted, flex: 1, fontWeight: '500' },
+  
+  // Quick Actions
+  quickActionsContainer: { gap: SPACING.md },
+  quickActionsTitle: { fontSize: 20, fontWeight: '700', color: COLORS.textMain, marginLeft: 4 },
+  quickActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, justifyContent: 'space-between' },
+  quickActionCard: { width: '48%', backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card, gap: 8 },
+  quickActionIconWrapper: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  quickActionText: { fontSize: 13, fontWeight: '600', color: COLORS.textMain, textAlign: 'center' },
+
   adminCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, ...SHADOWS.card, gap: 8 },
   adminTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 },
   adminItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
