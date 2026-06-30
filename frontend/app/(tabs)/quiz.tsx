@@ -424,7 +424,27 @@ export default function QuizScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.resultCard}>
             <Text style={styles.resultTitle}>Your Score</Text>
-            <Text style={styles.resultScore}>{result.score}/{result.total}</Text>
+            <Text style={styles.resultScore}>{result.score} / {result.total}</Text>
+            {(() => {
+              const pct = result.total > 0 ? Math.round((result.score / result.total) * 100) : 0;
+              const passed = pct >= 60;
+              return (
+                <>
+                  <View style={[styles.resultBadge, passed ? styles.resultBadgePass : styles.resultBadgeFail]}>
+                    <Text style={[styles.resultBadgeText, passed ? styles.resultBadgeTextPass : styles.resultBadgeTextFail]}>
+                      {passed ? 'Passed' : 'Needs Practice'}
+                    </Text>
+                  </View>
+                  <Text style={styles.resultPct}>{pct}% Correct</Text>
+                  <Text style={styles.resultSummary}>
+                    You got {result.score} correct and {result.total - result.score} wrong.
+                  </Text>
+                  <Text style={styles.resultMessage}>
+                    {passed ? 'Great job! You have a solid understanding of this topic.' : 'Keep learning and try again. You can do this!'}
+                  </Text>
+                </>
+              );
+            })()}
           </View>
           {scoreBreakdown.map((item, i) => (
             <View key={item.id} style={styles.answerCard}>
@@ -462,7 +482,11 @@ export default function QuizScreen() {
                 key={opt}
                 style={[styles.optionBtn, picked === opt && styles.optionBtnActive]}
                 onPress={() => setAnswers((p) => ({ ...p, [current.id]: opt }))}
+                activeOpacity={0.7}
               >
+                <View style={[styles.radioCircle, picked === opt && styles.radioCircleActive]}>
+                  {picked === opt && <View style={styles.radioInner} />}
+                </View>
                 <Text style={[styles.optionText, picked === opt && styles.optionTextActive]}>{opt}</Text>
               </TouchableOpacity>
             ))}
@@ -493,6 +517,20 @@ export default function QuizScreen() {
 }
 
 const styles = StyleSheet.create({
+  resultBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, marginBottom: 8 },
+  resultBadgePass: { backgroundColor: '#E8F5EE' },
+  resultBadgeFail: { backgroundColor: '#FDECEC' },
+  resultBadgeText: { fontSize: 13, fontWeight: '800' },
+  resultBadgeTextPass: { color: COLORS.primary },
+  resultBadgeTextFail: { color: COLORS.error },
+  resultPct: { fontSize: 16, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 },
+  resultSummary: { fontSize: 14, color: COLORS.textMuted, marginBottom: 12 },
+  resultMessage: { fontSize: 14, fontWeight: '600', color: COLORS.primary, textAlign: 'center', marginTop: 8 },
+
+  radioCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  radioCircleActive: { borderColor: COLORS.primary },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.primary },
+
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
     backgroundColor: COLORS.surface,
@@ -506,7 +544,7 @@ const styles = StyleSheet.create({
   refreshBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: 8, backgroundColor: COLORS.surfaceAlt },
   refreshText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
-  subtitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
+  subtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 4 },
   body: { padding: SPACING.md, gap: 10 },
   
   // Category Grid UI
@@ -514,16 +552,17 @@ const styles = StyleSheet.create({
   categoryCard: { 
     backgroundColor: COLORS.surface, 
     borderRadius: RADIUS.xxl, 
-    padding: SPACING.lg, 
+    padding: SPACING.xl, 
     ...SHADOWS.card, 
     borderWidth: 1, 
     borderColor: COLORS.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginBottom: 4
   },
   categoryTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textMain, flex: 1 },
-  categoryCount: { fontSize: 13, fontWeight: '600', color: COLORS.primary, backgroundColor: COLORS.surfaceAlt, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full },
+  categoryCount: { fontSize: 13, fontWeight: '700', color: COLORS.primary, backgroundColor: '#E8F5EE', paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, overflow: 'hidden' },
 
   adminCard: { margin: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 8, ...SHADOWS.card },
   adminTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
@@ -544,46 +583,48 @@ const styles = StyleSheet.create({
     color: COLORS.textMain,
     fontSize: 14,
   },
-  progress: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
-  questionCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, ...SHADOWS.card, gap: 10 },
-  question: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
-  optionBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.xxl, paddingVertical: 10, paddingHorizontal: 10, backgroundColor: COLORS.surfaceAlt },
-  optionBtnActive: { borderColor: COLORS.primary, backgroundColor: '#EEF6F2' },
-  optionText: { color: COLORS.textMain, fontSize: 14 },
-  optionTextActive: { color: COLORS.primary, fontWeight: '700' },
+  progress: { fontSize: 14, color: COLORS.primary, fontWeight: '800', marginBottom: 4 },
+  questionCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.xl, ...SHADOWS.card, gap: 12, borderWidth: 1, borderColor: COLORS.border },
+  question: { fontSize: 18, fontWeight: '800', color: COLORS.textMain, marginBottom: 8, lineHeight: 26 },
+  optionBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.xxl, paddingVertical: 14, paddingHorizontal: 16, backgroundColor: COLORS.surface },
+  optionBtnActive: { borderColor: COLORS.primary, backgroundColor: '#F4FAF6', borderWidth: 2 },
+  optionText: { color: COLORS.textMain, fontSize: 15, flex: 1 },
+  optionTextActive: { color: COLORS.primary, fontWeight: '800' },
   row: { flexDirection: 'row', gap: 8 },
   btn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.goldBg,
+    borderRadius: RADIUS.full,
     paddingVertical: 14,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
+    flex: 1,
   },
-  btnText: { color: '#fff', fontWeight: '700' },
+  btnText: { color: COLORS.goldText, fontWeight: '800', fontSize: 15 },
   secondaryBtn: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.full,
     paddingVertical: 14,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
+    flex: 1,
   },
-  secondaryBtnText: { color: COLORS.textMain, fontWeight: '700' },
+  secondaryBtnText: { color: COLORS.textMain, fontWeight: '700', fontSize: 15 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, gap: 10 },
   feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   errorText: { color: COLORS.error, fontSize: 12, textAlign: 'center' },
   resultCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, alignItems: 'center', ...SHADOWS.card },
   resultTitle: { color: COLORS.textMuted, fontWeight: '600' },
-  resultScore: { fontSize: 28, color: COLORS.primary, fontWeight: '800' },
-  answerCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.sm, gap: 4 },
-  answerQ: { color: COLORS.textMain, fontWeight: '700' },
-  answerLine: { color: COLORS.textMuted, fontSize: 12 },
+  resultScore: { fontSize: 42, color: COLORS.primary, fontWeight: '900', marginVertical: 8 },
+  answerCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, gap: 8, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card },
+  answerQ: { color: COLORS.textMain, fontWeight: '800', fontSize: 15, marginBottom: 4 },
+  answerLine: { color: COLORS.textMuted, fontSize: 13, fontWeight: '600' },
   scrollContent: { padding: SPACING.md, gap: 10, paddingBottom: 24 },
 });
