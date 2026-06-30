@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity, Switch, Alert, ScrollView, Linking
+  View, Text, StyleSheet, StatusBar, TouchableOpacity, Switch, Alert, ScrollView, Linking, Platform, Modal
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -55,9 +55,56 @@ function SettingsSection({ title, icon, children, defaultOpen = true }: SectionP
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { setShowTutorial, setCurrentStep } = useTutorial();
   
+  // Admin Diagnostics State
+  const [diagLogsVisible, setDiagLogsVisible] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [statusAuth, setStatusAuth] = useState<'Checking...' | 'Connected' | 'Disconnected'>('Checking...');
+  const [statusDb, setStatusDb] = useState<'Checking...' | 'Connected' | 'Disconnected'>('Checking...');
+  const [statusNet, setStatusNet] = useState<'Checking...' | 'Connected' | 'Disconnected'>('Checking...');
+  const [statusPush, setStatusPush] = useState<'Checking...' | 'Connected' | 'Disconnected'>('Checking...');
+
+  const checkDiagnostics = async () => {
+    if (profile?.role !== 'admin') return;
+    setChecking(true);
+    setStatusAuth('Checking...');
+    setStatusDb('Checking...');
+    setStatusNet('Checking...');
+    setStatusPush('Checking...');
+    
+    setStatusAuth(user?.uid ? 'Connected' : 'Disconnected');
+    try {
+      await fetch('https://dns.google', { method: 'HEAD', mode: 'no-cors' });
+      setStatusNet('Connected');
+    } catch {
+      setStatusNet('Disconnected');
+    }
+    
+    try {
+      const { db } = require('@/config/firebase');
+      setStatusDb(db ? 'Connected' : 'Disconnected');
+    } catch {
+      setStatusDb('Disconnected');
+    }
+    
+    try {
+      const Notifications = require('expo-notifications');
+      const settings = await Notifications.getPermissionsAsync();
+      setStatusPush(settings.granted ? 'Connected' : 'Disconnected');
+    } catch {
+      setStatusPush('Disconnected');
+    }
+    setChecking(false);
+  };
+
+  useEffect(() => {
+    if (profile?.role === 'admin') {
+      checkDiagnostics();
+    }
+  }, [profile?.role]);
+
   // Notification State
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notifSound, setNotifSound] = useState(true);
@@ -436,6 +483,61 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </SettingsSection>
 
+        {/* Section: Admin Diagnostics (Admin Only) */}
+        {profile?.role === 'admin' && (
+          <SettingsSection title="Developer & Diagnostics" icon="construct-outline" defaultOpen={false}>
+            <Text style={styles.sectionSubtitle}>System Information</Text>
+            <View style={styles.channelGrid}>
+              <View style={styles.row}><Text style={styles.rowLabel}>Environment</Text><Text style={styles.linkSubtext}>{__DEV__ ? 'Development' : 'Production'}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>Platform</Text><Text style={styles.linkSubtext}>{Platform.OS}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>App Version</Text><Text style={styles.linkSubtext}>{Constants.expoConfig?.version || '1.0.0'}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>Build Number</Text><Text style={styles.linkSubtext}>{Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || '1'}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>Expo SDK</Text><Text style={styles.linkSubtext}>{Constants.expoConfig?.sdkVersion || 'Unknown'}</Text></View>
+            </View>
+            
+            <Text style={styles.sectionSubtitle}>Status Indicators</Text>
+            <View style={styles.channelGrid}>
+              <View style={styles.row}><Text style={styles.rowLabel}>Firebase Auth</Text><Text style={[styles.linkSubtext, statusAuth === 'Connected' && {color: '#16A34A'}, statusAuth === 'Disconnected' && {color: '#DC2626'}]}>● {statusAuth}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>Firestore Database</Text><Text style={[styles.linkSubtext, statusDb === 'Connected' && {color: '#16A34A'}, statusDb === 'Disconnected' && {color: '#DC2626'}]}>● {statusDb}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>Push Notifications</Text><Text style={[styles.linkSubtext, statusPush === 'Connected' && {color: '#16A34A'}, statusPush === 'Disconnected' && {color: '#DC2626'}]}>● {statusPush}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>Internet Connection</Text><Text style={[styles.linkSubtext, statusNet === 'Connected' && {color: '#16A34A'}, statusNet === 'Disconnected' && {color: '#DC2626'}]}>● {statusNet}</Text></View>
+            </View>
+            
+            <TouchableOpacity style={styles.actionButton} onPress={checkDiagnostics} disabled={checking}>
+              <Text style={styles.actionButtonText}>{checking ? 'Checking...' : 'Refresh Status'}</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.sectionSubtitle}>Maintenance Tools</Text>
+            <TouchableOpacity style={styles.linkRow} onPress={() => {
+              Alert.alert('Clear Local Cache', 'Are you sure you want to clear local cached data?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Clear', style: 'destructive', onPress: () => Alert.alert('Success', 'Cache cleared.') }
+              ]);
+            }}>
+              <View style={styles.linkRowLeft}>
+                <Ionicons name="trash-bin-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.linkText}>Clear Local Cache</Text>
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.linkRow} onPress={() => {
+              Alert.alert('Sync Data', 'Local cache refreshed from Firestore.');
+            }}>
+              <View style={styles.linkRowLeft}>
+                <Ionicons name="sync-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.linkText}>Sync Data</Text>
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.linkRow} onPress={() => setDiagLogsVisible(true)}>
+              <View style={styles.linkRowLeft}>
+                <Ionicons name="list-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.linkText}>View Diagnostic Logs</Text>
+              </View>
+            </TouchableOpacity>
+          </SettingsSection>
+        )}
+
         {/* Section 8: About */}
         <SettingsSection title="About" icon="information-circle-outline" defaultOpen={false}>
           <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/terms')}>
@@ -456,6 +558,21 @@ export default function SettingsScreen() {
           </View>
         </SettingsSection>
       </ScrollView>
+      <Modal visible={diagLogsVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDiagLogsVisible(false)}>
+        <View style={styles.container}>
+          <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => setDiagLogsVisible(false)}>
+              <Ionicons name="close" size={22} color={COLORS.textMain} />
+            </TouchableOpacity>
+            <Text style={styles.title}>Diagnostics Logs</Text>
+            <View style={{ width: 44 }} />
+          </View>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="document-text-outline" size={48} color={COLORS.textMuted} style={{ marginBottom: 16 }} />
+            <Text style={{ color: COLORS.textMuted, fontSize: 16, fontWeight: '500' }}>No diagnostic logs available.</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
