@@ -196,6 +196,7 @@ export default function QuizScreen() {
         user_id: user.uid,
         score,
         total_questions: questions.length,
+        category: selectedCategory,
         created_at: Timestamp.now(),
       };
 
