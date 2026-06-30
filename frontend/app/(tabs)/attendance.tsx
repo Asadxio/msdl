@@ -236,7 +236,9 @@ export default function AttendanceScreen() {
           renderItem={({ item }) => (
             <View style={styles.historyCard}>
               <Text style={styles.name}>{item.date}</Text>
-              <Text style={[styles.meta, item.status === 'present' ? { color: '#166534' } : { color: COLORS.error }]}>{item.status}</Text>
+              <View style={item.status === 'present' ? styles.badgePresent : styles.badgeAbsent}>
+                <Text style={item.status === 'present' ? styles.badgeTextPresent : styles.badgeTextAbsent}>{item.status}</Text>
+              </View>
               <Text style={styles.timeText}>Marked: {formatMarkedAt(item.marked_at || item.created_at)}</Text>
             </View>
           )}
@@ -248,6 +250,11 @@ export default function AttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
+  badgePresent: { backgroundColor: '#E8F5EE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.sm, alignSelf: 'flex-start', marginTop: 4 },
+  badgeAbsent: { backgroundColor: '#FDECEC', paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.sm, alignSelf: 'flex-start', marginTop: 4 },
+  badgeTextPresent: { color: COLORS.primary, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+  badgeTextAbsent: { color: COLORS.error, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
     backgroundColor: COLORS.surface,
@@ -258,7 +265,7 @@ const styles = StyleSheet.create({
     ...SHADOWS.header,
   },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
-  subtitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
+  subtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   refreshBtn: { borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: COLORS.surfaceAlt },
   refreshText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
@@ -275,8 +282,8 @@ const styles = StyleSheet.create({
     color: COLORS.textMain,
     fontSize: 14,
   },
-  rowCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.sm, flexDirection: 'row', alignItems: 'center', gap: 8, ...SHADOWS.card },
-  historyCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.sm, ...SHADOWS.card },
+  rowCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, flexDirection: 'row', alignItems: 'center', gap: 12, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
+  historyCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
   name: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
   meta: { fontSize: 12, color: COLORS.textMuted, marginTop: 2, textTransform: 'capitalize' },
   summaryText: { fontSize: 12, color: COLORS.primary, marginTop: 4, fontWeight: '600' },
