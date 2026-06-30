@@ -150,7 +150,7 @@ export default function HomeScreen() {
                <Text style={[styles.sectionEyebrow, { color: COLORS.secondary }]}>Daily Wisdom</Text>
              </View>
              <Text style={styles.arabicTextLarge}>{randomWisdom.arabic}</Text>
-             <Text style={styles.translationText}>"{randomWisdom.translation}"</Text>
+             <Text style={styles.translationText}>&quot;{randomWisdom.translation}&quot;</Text>
              <Text style={styles.referenceText}>— {randomWisdom.reference}</Text>
           </View>
         </View>
@@ -160,19 +160,19 @@ export default function HomeScreen() {
           <View style={[styles.gridCard, { flex: 1 }]}>
              <View style={styles.sectionHeaderRow}>
                <Ionicons name="moon-outline" size={16} color={COLORS.secondary} />
-               <Text style={[styles.sectionEyebrow, { color: COLORS.textMuted }]}>Today's Dua</Text>
+               <Text style={[styles.sectionEyebrow, { color: COLORS.textMuted }]}>Today&apos;s Dua</Text>
              </View>
              <Text style={styles.arabicTextMedium}>{randomDua.arabic}</Text>
-             <Text style={styles.translationTextSmall}>"{randomDua.translation}"</Text>
+             <Text style={styles.translationTextSmall}>&quot;{randomDua.translation}&quot;</Text>
              <Text style={styles.referenceTextSmall}>{randomDua.reference}</Text>
           </View>
           <View style={[styles.gridCard, { flex: 1 }]}>
              <View style={styles.sectionHeaderRow}>
                <Ionicons name="book-outline" size={16} color={COLORS.secondary} />
-               <Text style={[styles.sectionEyebrow, { color: COLORS.textMuted }]}>Today's Hadith</Text>
+               <Text style={[styles.sectionEyebrow, { color: COLORS.textMuted }]}>Today&apos;s Hadith</Text>
              </View>
              <Text style={styles.arabicTextMedium}>{randomHadith.arabic}</Text>
-             <Text style={styles.translationTextSmall}>"{randomHadith.translation}"</Text>
+             <Text style={styles.translationTextSmall}>&quot;{randomHadith.translation}&quot;</Text>
              <Text style={styles.referenceTextSmall}>{randomHadith.reference}</Text>
           </View>
         </View>
@@ -248,7 +248,7 @@ export default function HomeScreen() {
 
         {/* Section 8: Today's Goal */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Today's Goal</Text>
+          <Text style={styles.sectionTitle}>Today&apos;s Goal</Text>
           <View style={styles.goalCard}>
              <Ionicons name="flag" size={24} color={COLORS.secondary} />
              <View style={styles.goalTextCol}>
@@ -314,7 +314,7 @@ export default function HomeScreen() {
         {/* Section 12: Motivational Footer */}
         <View style={styles.footerContainer}>
            <Ionicons name="leaf" size={24} color={COLORS.primary} style={{ opacity: 0.2, marginBottom: 8 }} />
-           <Text style={styles.footerQuote}>"{randomQuote.text}"</Text>
+           <Text style={styles.footerQuote}>&quot;{randomQuote.text}&quot;</Text>
         </View>
 
       </ScrollView>
