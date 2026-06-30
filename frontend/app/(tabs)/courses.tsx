@@ -158,9 +158,12 @@ export default function CoursesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    ...SHADOWS.header,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   searchInput: {
@@ -168,7 +171,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xxl,
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: COLORS.textMain,
@@ -181,12 +184,12 @@ const styles = StyleSheet.create({
   teacherChipTextSelected: { color: COLORS.primary },
   refreshBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingVertical: 6 },
   refreshText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
-  headerTitle: { ...TYPOGRAPHY.title, color: COLORS.text },
-  headerSubtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
+  headerSubtitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg, gap: SPACING.md },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 18,
+    borderRadius: RADIUS.xxl,
     overflow: 'hidden',
     ...SHADOWS.card,
   },

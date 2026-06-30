@@ -366,17 +366,21 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    ...SHADOWS.header,
   },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
-  headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
+  headerSubtitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   searchWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, gap: 8 },
   searchInput: {
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
-    borderRadius: RADIUS.lg, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.textMain,
+    borderRadius: RADIUS.xxl, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.textMain,
   },
   filterRow: { gap: 8, paddingVertical: 2 },
   filterChip: {
@@ -387,7 +391,7 @@ const styles = StyleSheet.create({
   filterChipText: { color: COLORS.textMuted, fontSize: 12, fontWeight: '600' },
   filterChipTextActive: { color: COLORS.primary },
   errorBanner: {
-    marginHorizontal: SPACING.md, marginTop: SPACING.sm, borderRadius: RADIUS.lg,
+    marginHorizontal: SPACING.md, marginTop: SPACING.sm, borderRadius: RADIUS.xxl,
     borderWidth: 1, borderColor: '#F2B8B5', backgroundColor: '#FDECEC',
     paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
@@ -406,13 +410,13 @@ const styles = StyleSheet.create({
   centerText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500', textAlign: 'center' },
   addFirstBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.primary,
-    paddingHorizontal: 20, paddingVertical: 12, borderRadius: RADIUS.lg, marginTop: SPACING.md,
+    paddingHorizontal: 20, paddingVertical: 12, borderRadius: RADIUS.xxl, marginTop: SPACING.md,
   },
   addFirstBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   listContent: { padding: SPACING.md, paddingBottom: 30 },
   columnWrapper: { gap: SPACING.md, marginBottom: SPACING.md },
   card: {
-    flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.xl,
+    flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl,
     overflow: 'hidden', ...SHADOWS.card,
   },
   coverArea: {

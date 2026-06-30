@@ -95,12 +95,19 @@ export default function TeachersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md },
+  header: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    ...SHADOWS.header,
+  },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  headerTitle: { ...TYPOGRAPHY.title, color: COLORS.text },
-  headerSubtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
+  headerSubtitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   refreshBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 36, height: 36, borderRadius: RADIUS.xxl,
     borderWidth: 1, borderColor: COLORS.border,
     backgroundColor: COLORS.surfaceAlt,
     alignItems: 'center', justifyContent: 'center',
@@ -109,7 +116,7 @@ const styles = StyleSheet.create({
   listCentered: { flexGrow: 1, justifyContent: 'center' },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.xxl,
     overflow: 'hidden',
     ...SHADOWS.card,
     borderWidth: 1,
