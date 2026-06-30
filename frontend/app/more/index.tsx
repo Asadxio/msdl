@@ -1,7 +1,16 @@
 import { ScreenRefreshControl, ScalePressable } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, Linking } from 'react-native';
+import { WHATSAPP_HELP_URL } from '@/lib/links';
+
+const CONTACT_INFO = {
+  phone: null,
+  whatsapp: WHATSAPP_HELP_URL,
+  email: null,
+  website: null,
+  location: null,
+};
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -186,10 +195,76 @@ export default function MoreLandingScreen() {
         );
       })}
 
+      <View style={styles.supportCard}>
+        <Text style={styles.supportTitle}>Need Help?</Text>
+        <Text style={styles.supportSubtitle}>We're here to help you. Contact the Madrasa anytime.</Text>
+        <View style={styles.supportList}>
+          {CONTACT_INFO.phone && (
+            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(`tel:${CONTACT_INFO.phone}`)}>
+              <View style={[styles.supportIcon, { backgroundColor: '#E0F2FE' }]}>
+                <Ionicons name="call" size={20} color="#0284C7" />
+              </View>
+              <View style={styles.supportRowContent}>
+                <Text style={styles.supportLabel}>Call Madrasa</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </ScalePressable>
+          )}
+          
+          {CONTACT_INFO.whatsapp && (
+            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(CONTACT_INFO.whatsapp!)}>
+              <View style={[styles.supportIcon, { backgroundColor: '#DCFCE7' }]}>
+                <Ionicons name="logo-whatsapp" size={20} color="#16A34A" />
+              </View>
+              <View style={styles.supportRowContent}>
+                <Text style={styles.supportLabel}>WhatsApp Support</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </ScalePressable>
+          )}
+
+          {CONTACT_INFO.email && (
+            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(`mailto:${CONTACT_INFO.email}`)}>
+              <View style={[styles.supportIcon, { backgroundColor: '#F3E8FF' }]}>
+                <Ionicons name="mail" size={20} color="#9333EA" />
+              </View>
+              <View style={styles.supportRowContent}>
+                <Text style={styles.supportLabel}>Email Support</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </ScalePressable>
+          )}
+
+          {CONTACT_INFO.website && (
+            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(CONTACT_INFO.website!)}>
+              <View style={[styles.supportIcon, { backgroundColor: '#FEF9C3' }]}>
+                <Ionicons name="globe-outline" size={20} color="#CA8A04" />
+              </View>
+              <View style={styles.supportRowContent}>
+                <Text style={styles.supportLabel}>Official Website</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </ScalePressable>
+          )}
+
+          {CONTACT_INFO.location && (
+            <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(CONTACT_INFO.location!)}>
+              <View style={[styles.supportIcon, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="location" size={20} color="#DC2626" />
+              </View>
+              <View style={styles.supportRowContent}>
+                <Text style={styles.supportLabel}>Madrasa Location</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </ScalePressable>
+          )}
+        </View>
+      </View>
+
       <View style={styles.footer}>
+        <Text style={styles.footerHeart}>Made with ❤️ for Islamic Education</Text>
         <Text style={styles.footerTitle}>Madrasa Tus Salikat Lil Banat</Text>
-        <Text style={styles.footerVersion}>Version {appVersion}</Text>
-        <Text style={styles.footerCopyright}>© All Rights Reserved</Text>
+        {appVersion && <Text style={styles.footerVersion}>Version {appVersion}</Text>}
       </View>
     </ScrollView>
   );
@@ -355,12 +430,66 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
 
+  supportCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: SPACING.lg,
+    marginBottom: SPACING.xl,
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+  },
+  supportTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  supportSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    marginBottom: SPACING.lg,
+    lineHeight: 20,
+  },
+  supportList: {
+    gap: SPACING.sm,
+  },
+  supportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+  },
+  supportIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  supportRowContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  supportLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+
   footer: {
     alignItems: 'center',
     marginTop: SPACING.xl,
     paddingVertical: SPACING.lg,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  footerHeart: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: SPACING.md,
   },
   footerTitle: {
     fontSize: 14,
@@ -369,11 +498,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   footerVersion: {
-    fontSize: 12,
-    color: '#CBD5E1',
-    marginBottom: 2,
-  },
-  footerCopyright: {
     fontSize: 12,
     color: '#CBD5E1',
   },
