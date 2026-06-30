@@ -58,14 +58,6 @@
     "plugins": [
       "expo-router",
       [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow access to your gallery",
-          "cameraPermission": "Allow camera access to capture profile photos and status media.",
-          "microphonePermission": "Allow microphone access when recording video."
-        }
-      ],
-      [
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
