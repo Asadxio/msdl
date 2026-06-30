@@ -17,7 +17,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import {
   addDoc,
   collection,
@@ -38,7 +37,7 @@ import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 import { WHATSAPP_HELP_URL, isValidHttpsUrl, normalizeWhatsAppUrl, prepareExternalUrl } from '@/lib/links';
-import { isHttpsUrl, uploadUriFile } from '@/lib/storage';
+
 
 type AppSettings = {
   fees_amount: number;
@@ -237,8 +236,7 @@ export default function AboutScreen() {
   const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null);
   const [editingFeedbackMsg, setEditingFeedbackMsg] = useState('');
   const [exportingCollection, setExportingCollection] = useState<string | null>(null);
-  const [savingProfileMedia, setSavingProfileMedia] = useState(false);
-  const [profileUploadProgress, setProfileUploadProgress] = useState(0);
+  const [updatingAvatar, setUpdatingAvatar] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [donationError, setDonationError] = useState('');
   const [feedbackError, setFeedbackError] = useState('');
@@ -618,121 +616,20 @@ export default function AboutScreen() {
     await saveSettings();
   };
 
-  const updateProfileMedia = async (updates: { photo_url?: string; avatar?: string }) => {
+  const updateProfileMedia = async (updates: { avatar?: string }) => {
     if (!user) return;
-    setSavingProfileMedia(true);
+    setUpdatingAvatar(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), updates);
       await refreshProfile();
-      Alert.alert('Saved', 'Profile updated successfully.');
+      Alert.alert('Saved', 'Avatar updated successfully.');
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update profile.');
+      Alert.alert('Error', err?.message || 'Failed to update avatar.');
     } finally {
-      setSavingProfileMedia(false);
+      setUpdatingAvatar(false);
     }
   };
 
-  const validatePickedAsset = (asset: any): string | null => {
-    const uri = String(asset?.uri || '');
-    if (!uri) return 'Image file is missing URI.';
-    if (!(uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('http'))) return 'Unsupported image path.';
-    const mime = asset.mimeType || '';
-    if (mime && !mime.startsWith('image/')) return 'Only image files are allowed.';
-    if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) return 'Image size must be below 5MB.';
-    return null;
-  };
-
-  const ensureImagePickerPermission = async (ImagePicker: any, source: 'camera' | 'gallery'): Promise<boolean> => {
-    try {
-      const existing = source === 'camera'
-        ? await ImagePicker.getCameraPermissionsAsync()
-        : await ImagePicker.getMediaLibraryPermissionsAsync();
-      console.log('[About] Existing image picker permission', {
-        source,
-        granted: existing?.granted,
-        canAskAgain: existing?.canAskAgain,
-        status: existing?.status,
-      });
-      if (existing?.granted) return true;
-      if (!existing?.canAskAgain) {
-        Alert.alert(
-          'Permission blocked',
-          `Please enable ${source} permission from app settings to continue.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } },
-          ],
-        );
-        return false;
-      }
-      const requested = source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log('[About] Requested image picker permission', {
-        source,
-        granted: requested?.granted,
-        canAskAgain: requested?.canAskAgain,
-        status: requested?.status,
-      });
-      if (requested?.granted) return true;
-      Alert.alert('Permission needed', `Please allow ${source} access to upload profile image.`);
-      return false;
-    } catch (error) {
-      console.log('[About] ensureImagePickerPermission ERROR', error);
-      Alert.alert('Error', `Unable to request ${source} permission right now.`);
-      return false;
-    }
-  };
-
-  const pickProfileImage = async (source: 'camera' | 'gallery') => {
-    if (!user?.uid) return;
-    try {
-      console.log('[About] pickProfileImage button pressed', { source });
-      const hasPermission = await ensureImagePickerPermission(ImagePicker, source);
-      if (!hasPermission) return;
-      let result: any;
-      try {
-        result = source === 'camera'
-          ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
-          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
-      } catch (pickerError: any) {
-        console.log('[About] Native image picker launch ERROR', pickerError);
-        Alert.alert('Error', pickerError?.message || 'Unable to open image picker right now.');
-        return;
-      }
-      console.log('[About] Image picker result', { source, canceled: result?.canceled, assetsCount: result?.assets?.length || 0 });
-      const asset = result?.assets?.[0];
-      if (result?.canceled || !asset?.uri) return;
-      const errorMessage = validatePickedAsset(asset);
-      if (errorMessage) {
-        Alert.alert('Invalid Image', errorMessage);
-        return;
-      }
-      const rawExtension = String(asset?.fileName || '').split('.').pop()?.toLowerCase() || '';
-      const extension = ['jpg', 'jpeg', 'png', 'webp'].includes(rawExtension) ? rawExtension : 'jpg';
-      const mimeType = asset?.mimeType || (extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg');
-      const storagePath = `users/${user.uid}/profile/profile_${Date.now()}.${extension}`;
-      setSavingProfileMedia(true);
-      setProfileUploadProgress(0);
-      const photoUrl = await uploadUriFile({
-        uri: asset.uri,
-        path: storagePath,
-        contentType: mimeType,
-        maxBytes: 5 * 1024 * 1024,
-        onProgress: setProfileUploadProgress,
-      });
-      if (!isHttpsUrl(photoUrl)) {
-        throw new Error('Profile upload did not return a valid HTTPS URL.');
-      }
-      await updateProfileMedia({ photo_url: photoUrl, avatar: profile?.avatar || 'person' });
-      setProfileUploadProgress(0);
-    } catch (err: any) {
-      console.log('[About] profile image upload ERROR', err);
-      Alert.alert('Upload failed', err?.message || 'Failed to upload profile image. Please retry.');
-    } finally {
-      setSavingProfileMedia(false);
-    }
-  };
 
   const safePush = (path: string) => {
     try {
@@ -759,13 +656,9 @@ export default function AboutScreen() {
           <View style={styles.profileCard} testID="user-profile-card">
             <View style={styles.profileAvatarSection}>
               <View style={styles.profileIconCircle}>
-                {profile.photo_url ? (
-                  <Image source={{ uri: profile.photo_url }} style={styles.profilePhoto} />
-                ) : (
-                  <Text style={styles.profileInitialText}>
-                    {(profile.name || 'U').charAt(0).toUpperCase()}
-                  </Text>
-                )}
+                <Text style={styles.profileInitialText}>
+                  {(profile.name || 'U').charAt(0).toUpperCase()}
+                </Text>
               </View>
             </View>
             <View style={{ flex: 1 }}>
@@ -802,26 +695,14 @@ export default function AboutScreen() {
                 </View>
               </View>
               {!!profile.referral_code && <Text style={styles.profileDetail}>Referral: {profile.referral_code} • {profile.referral_count || 0} referrals</Text>}
-              <View style={styles.profileActionRow}>
-                <TouchableOpacity style={[styles.profileMiniBtn, savingProfileMedia && styles.disabledBtn]} onPress={() => pickProfileImage('gallery')} disabled={savingProfileMedia}>
-                  <Ionicons name="image-outline" size={14} color={COLORS.primary} />
-                  <Text style={styles.profileMiniBtnText}>Gallery</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.profileMiniBtn, savingProfileMedia && styles.disabledBtn]} onPress={() => pickProfileImage('camera')} disabled={savingProfileMedia}>
-                  <Ionicons name="camera-outline" size={14} color={COLORS.primary} />
-                  <Text style={styles.profileMiniBtnText}>Camera</Text>
-                </TouchableOpacity>
-              </View>
-              {savingProfileMedia && profileUploadProgress > 0 ? (
-                <Text style={styles.profileUploadText}>Uploading profile photo... {Math.round(profileUploadProgress * 100)}%</Text>
-              ) : null}
+
               <View style={styles.avatarPickerRow}>
                 {AVATAR_OPTIONS.map((avatarName) => (
                   <TouchableOpacity
                     key={avatarName}
                     style={[styles.avatarBtn, profile.avatar === avatarName && styles.avatarBtnActive]}
                     onPress={() => updateProfileMedia({ avatar: avatarName })}
-                    disabled={savingProfileMedia}
+                    disabled={updatingAvatar}
                   >
                     <Ionicons name={avatarName as any} size={15} color={profile.avatar === avatarName ? '#fff' : COLORS.primary} />
                   </TouchableOpacity>
