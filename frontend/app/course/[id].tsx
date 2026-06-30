@@ -701,7 +701,7 @@ export default function CourseDetailScreen() {
             source={{ uri: getCourseImage(courseIndex) }}
             style={styles.heroImage}
           />
-          <View style={styles.heroGradient} />
+          <View style={styles.heroGradient} /><View style={styles.heroGradientBottom} />
           <TouchableOpacity
             style={[styles.backBtn, { top: insets.top + 10 }]}
             onPress={() => goBackOrReplace(router, "/(tabs)/courses")}
@@ -715,7 +715,40 @@ export default function CourseDetailScreen() {
           </View>
         </View>
 
+        
         <View style={styles.body}>
+          {safeProgress && (
+            <View style={styles.progressSummaryCard}>
+              <View style={styles.progressSummaryHeader}>
+                <Text style={styles.progressSummaryTitle}>Your Progress</Text>
+                {(() => {
+                  const total = safeModules.reduce((acc, m) => acc + (Array.isArray(getLessonsForModule(m.id)) ? getLessonsForModule(m.id).length : 0), 0);
+                  const completed = Object.values(safeProgress).filter(p => p?.completed).length;
+                  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  return (
+                    <View style={{ width: '100%' }}>
+                      {pct === 100 && (
+                        <View style={styles.completedBadgeLarge}>
+                          <Ionicons name="trophy" size={14} color="#FFFFFF" />
+                          <Text style={styles.completedBadgeLargeText}>Completed</Text>
+                        </View>
+                      )}
+                      <View style={{ width: '100%', marginTop: SPACING.sm }}>
+                        <View style={styles.progressSummaryTrack}>
+                          <View style={[styles.progressSummaryFill, { width: `${Math.min(100, pct)}%` }]} />
+                        </View>
+                        <View style={styles.progressSummaryStats}>
+                          <Text style={styles.progressSummaryStatText}>{completed} completed</Text>
+                          <Text style={styles.progressSummaryStatText}>{pct}%</Text>
+                          <Text style={styles.progressSummaryStatText}>{Math.max(0, total - completed)} remaining</Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })()}
+              </View>
+            </View>
+          )}
           <TouchableOpacity
             style={styles.teacherCard}
             testID="course-detail-teacher-link"
@@ -1570,6 +1603,20 @@ export default function CourseDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  heroGradientBottom: {
+    position: "absolute",
+    left: 0, right: 0, bottom: 0, height: "60%",
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  progressSummaryCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card, marginBottom: SPACING.md },
+  progressSummaryHeader: { alignItems: 'flex-start', width: '100%' },
+  progressSummaryTitle: { fontSize: 16, fontWeight: '800', color: COLORS.textMain, marginBottom: 4 },
+  completedBadgeLarge: { position: 'absolute', top: -30, right: 0, backgroundColor: COLORS.goldText, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, gap: 4 },
+  completedBadgeLargeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  progressSummaryTrack: { height: 8, borderRadius: 4, backgroundColor: COLORS.surfaceAlt, overflow: 'hidden', width: '100%' },
+  progressSummaryFill: { height: '100%', borderRadius: 4, backgroundColor: COLORS.primary },
+  progressSummaryStats: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  progressSummaryStatText: { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
   startClassModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
   startClassModalContent: { width: "90%", maxWidth: 400, backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.xl },
   startClassModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.md },
@@ -1599,11 +1646,11 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
 
-  heroWrapper: { position: "relative", height: 270 },
+  heroWrapper: { position: "relative", height: 300 },
   heroImage: { width: "100%", height: "100%" },
   heroGradient: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(6,78,59,0.68)",
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   backBtn: {
     position: "absolute",
@@ -1614,7 +1661,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.25)",
   },
   heroContent: { position: "absolute", left: 20, right: 20, bottom: 24 },
-  heroTitle: { color: "#fff", fontSize: 26, fontWeight: "800" },
+  heroTitle: { color: "#fff", fontSize: 28, fontWeight: "900", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: {width: 0, height: 2}, textShadowRadius: 4 },
 
   body: { padding: SPACING.lg, gap: SPACING.md },
 
@@ -1660,16 +1707,17 @@ const styles = StyleSheet.create({
   lessonRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.xxl,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 10,
-    backgroundColor: COLORS.surfaceAlt,
+    paddingVertical: 14,
+    backgroundColor: COLORS.surface,
     marginTop: 8,
+    ...SHADOWS.card,
   },
-  lessonRowDone: { borderColor: "#CFE9DB", backgroundColor: "#F7FBF9" },
+  lessonRowDone: { borderColor: COLORS.primary, backgroundColor: "#F4FAF6" },
   lessonTitle: { fontSize: 14, fontWeight: "700", color: COLORS.textMain },
   lessonMeta: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   lessonDetailCard: {
