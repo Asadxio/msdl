@@ -669,8 +669,8 @@ const styles = StyleSheet.create({
   },
   topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },
   body: { padding: SPACING.md, gap: SPACING.md, paddingBottom: 40 },
-  section: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 8, ...SHADOWS.card },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: COLORS.primary, marginBottom: 2 },
+  section: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, gap: 12, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: COLORS.primary, marginBottom: 4 },
   input: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,

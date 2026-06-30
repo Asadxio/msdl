@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },
   errorText: { color: COLORS.error, fontSize: 12, paddingHorizontal: SPACING.md, paddingTop: 8 },
   list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 24 },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, ...SHADOWS.card },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
   name: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
   meta: { fontSize: 13, color: COLORS.textMuted, marginTop: 3, textTransform: 'capitalize' },
   time: { fontSize: 11, color: COLORS.textMuted, marginTop: 6 },
