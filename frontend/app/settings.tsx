@@ -13,6 +13,7 @@ import { useTutorial } from '@/context/TutorialContext';
 import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
 import Constants from 'expo-constants';
 import { WHATSAPP_HELP_URL } from '@/lib/links';
+import AdminHealthDashboard from '@/components/AdminHealthDashboard';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
 const LARGE_TEXT_PREF_KEY = 'settings_large_text';
@@ -486,55 +487,17 @@ export default function SettingsScreen() {
         {/* Section: Admin Diagnostics (Admin Only) */}
         {profile?.role === 'admin' && (
           <SettingsSection title="Developer & Diagnostics" icon="construct-outline" defaultOpen={false}>
-            <Text style={styles.sectionSubtitle}>System Information</Text>
-            <View style={styles.channelGrid}>
-              <View style={styles.row}><Text style={styles.rowLabel}>Environment</Text><Text style={styles.linkSubtext}>{__DEV__ ? 'Development' : 'Production'}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>Platform</Text><Text style={styles.linkSubtext}>{Platform.OS}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>App Version</Text><Text style={styles.linkSubtext}>{Constants.expoConfig?.version || '1.0.0'}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>Build Number</Text><Text style={styles.linkSubtext}>{Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || '1'}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>Expo SDK</Text><Text style={styles.linkSubtext}>{Constants.expoConfig?.sdkVersion || 'Unknown'}</Text></View>
-            </View>
-            
-            <Text style={styles.sectionSubtitle}>Status Indicators</Text>
-            <View style={styles.channelGrid}>
-              <View style={styles.row}><Text style={styles.rowLabel}>Firebase Auth</Text><Text style={[styles.linkSubtext, statusAuth === 'Connected' && {color: '#16A34A'}, statusAuth === 'Disconnected' && {color: '#DC2626'}]}>● {statusAuth}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>Firestore Database</Text><Text style={[styles.linkSubtext, statusDb === 'Connected' && {color: '#16A34A'}, statusDb === 'Disconnected' && {color: '#DC2626'}]}>● {statusDb}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>Push Notifications</Text><Text style={[styles.linkSubtext, statusPush === 'Connected' && {color: '#16A34A'}, statusPush === 'Disconnected' && {color: '#DC2626'}]}>● {statusPush}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>Internet Connection</Text><Text style={[styles.linkSubtext, statusNet === 'Connected' && {color: '#16A34A'}, statusNet === 'Disconnected' && {color: '#DC2626'}]}>● {statusNet}</Text></View>
-            </View>
-            
-            <TouchableOpacity style={styles.actionButton} onPress={checkDiagnostics} disabled={checking}>
-              <Text style={styles.actionButtonText}>{checking ? 'Checking...' : 'Refresh Status'}</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.sectionSubtitle}>Maintenance Tools</Text>
-            <TouchableOpacity style={styles.linkRow} onPress={() => {
-              Alert.alert('Clear Local Cache', 'Are you sure you want to clear local cached data?', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Clear', style: 'destructive', onPress: () => Alert.alert('Success', 'Cache cleared.') }
-              ]);
-            }}>
-              <View style={styles.linkRowLeft}>
-                <Ionicons name="trash-bin-outline" size={20} color={COLORS.primary} />
-                <Text style={styles.linkText}>Clear Local Cache</Text>
-              </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.linkRow} onPress={() => {
-              Alert.alert('Sync Data', 'Local cache refreshed from Firestore.');
-            }}>
-              <View style={styles.linkRowLeft}>
-                <Ionicons name="sync-outline" size={20} color={COLORS.primary} />
-                <Text style={styles.linkText}>Sync Data</Text>
-              </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.linkRow} onPress={() => setDiagLogsVisible(true)}>
-              <View style={styles.linkRowLeft}>
-                <Ionicons name="list-outline" size={20} color={COLORS.primary} />
-                <Text style={styles.linkText}>View Diagnostic Logs</Text>
-              </View>
-            </TouchableOpacity>
+            <AdminHealthDashboard 
+              onClearCache={() => {
+                Alert.alert('Clear Local Cache', 'Are you sure you want to clear local cached data?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Clear', style: 'destructive', onPress: () => Alert.alert('Success', 'Cache cleared.') }
+                ]);
+              }}
+              onSyncData={() => Alert.alert('Sync Data', 'Local cache refreshed from Firestore.')}
+              onOpenLogs={() => setDiagLogsVisible(true)}
+              checkDiagnosticsParent={checkDiagnostics}
+            />
           </SettingsSection>
         )}
 
