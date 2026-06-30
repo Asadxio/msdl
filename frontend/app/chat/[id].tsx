@@ -18,10 +18,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { dispatchNotification } from '@/lib/dispatchNotification';
 import { EmptyState, ScalePressable, SkeletonCard, ScreenRefreshControl } from '@/components/ui';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import * as Network from 'expo-network';
-import { uploadUriFile } from '@/lib/storage';
 import { completeItem, enqueue, lockReadyItems, nextBackoffMs, patchItem, type QueueItem } from '@/lib/chatReliability';
 import { dedupeMessages, mergeServerAndLocal } from '@/lib/chatReconciliation';
 import { logChatMetric } from '@/lib/chatTelemetry';
@@ -495,62 +492,6 @@ useEffect(() => {
   }, [canSendMessages, chatParticipants, id, profile?.name, sending, setTyping, text, user?.email, user?.uid]);
 
 
-  const sendMedia = useCallback(async (kind: 'image' | 'video' | 'audio') => {
-    if (!id || !user?.uid || sending) return;
-    try {
-      let fileUri = '';
-      let fileName = '';
-      let fileSize = 0;
-      let contentType = 'application/octet-stream';
-      if (kind === 'image' || kind === 'video') {
-        const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kind === 'image' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos, quality: 0.7 });
-        if (pick.canceled || !pick.assets?.[0]?.uri) return;
-        const a = pick.assets[0];
-        fileUri = a.uri; fileName = a.fileName || `${kind}_${Date.now()}`; fileSize = Number(a.fileSize || 0);
-        contentType = kind === 'image' ? 'image/jpeg' : 'video/mp4';
-      } else {
-        const pick = await DocumentPicker.getDocumentAsync({ type: ['audio/*'], copyToCacheDirectory: true, multiple: false });
-        if (pick.canceled || !pick.assets?.[0]?.uri) return;
-        const a = pick.assets[0];
-        fileUri = a.uri; fileName = a.name || `audio_${Date.now()}`; fileSize = Number(a.size || 0);
-        contentType = a.mimeType || 'audio/mpeg';
-      }
-      const maxBytes = kind === 'video' ? 30 * 1024 * 1024 : 10 * 1024 * 1024;
-      if (fileSize > maxBytes) { setSendError(`Selected ${kind} is too large.`); return; }
-      const ext = kind === 'image' ? 'jpg' : kind === 'video' ? 'mp4' : 'mp3';
-      const clientId = `${user.uid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      await enqueue(id, {
-        id: `${id}_${clientId}`,
-        chat_id: id,
-        created_at_ms: Date.now(),
-        status: 'pending',
-        retry_count: 0,
-        next_retry_at_ms: Date.now(),
-        message_type: kind,
-        text: kind === 'audio' ? 'Audio message' : '',
-        sender_id: user.uid,
-        sender_name: profile?.name || user.email || 'User',
-        read_by: [user.uid],
-        media_local_uri: fileUri,
-        media_name: fileName,
-        media_size: fileSize,
-        content_type: contentType,
-        ext,
-        push_dedupe_id: `chat:${id}:${clientId}`,
-      });
-      const mediaUrl = await uploadUriFile({ uri: fileUri, path: `chat_media/${id}/${user.uid}/${Date.now()}.${ext}`, contentType });
-      await patchItem(id, `${id}_${clientId}`, { status: 'uploading', media_url: mediaUrl });
-      await setDoc(doc(db, 'messages', `${id}_${clientId}`), {
-        chat_id: id, text: kind === 'audio' ? 'Audio message' : '', sender_id: user.uid, sender_name: profile?.name || user.email || 'User',
-        created_at: serverTimestamp(), read_by: [user.uid], client_id: clientId, deleted_for: [], deleted_for_everyone: false,
-        message_type: kind, media_url: mediaUrl, media_name: fileName, media_size: fileSize,
-      });
-      await updateDoc(doc(db, 'chats', id), { last_message: kind.toUpperCase(), updated_at: serverTimestamp() });
-    } catch (error: any) {
-      logFirestoreFailure({ collection: 'messages', operation: 'set', query: `doc messages/${id}_<clientId> send ${kind}` }, error);
-      setSendError(error?.message || 'Media send failed.');
-    }
-  }, [id, profile?.name, sending, user?.email, user?.uid]);
 
   const flushOutbox = useCallback(async () => {
     if (!id || !user?.uid || flushingRef.current || !onlineRef.current) return;
@@ -565,12 +506,6 @@ useEffect(() => {
       logChatMetric({ name: 'flush_started', chat_id: id, value: ready.length, ts: Date.now() });
       for (const item of ready) {
         try {
-          if (item.message_type !== 'text' && !item.media_url && item.media_local_uri) {
-            await patchItem(id, item.id, { status: 'uploading' });
-            const mediaUrl = await uploadUriFile({ uri: item.media_local_uri, path: `chat_media/${id}/${user.uid}/${Date.now()}.${item.ext || 'bin'}`, contentType: item.content_type || 'application/octet-stream' });
-            await patchItem(id, item.id, { media_url: mediaUrl });
-            item.media_url = mediaUrl;
-          }
           await setDoc(doc(db, 'messages', item.id), {
             chat_id: id, text: item.text, sender_id: item.sender_id, sender_name: item.sender_name, created_at: serverTimestamp(),
             read_by: item.read_by, client_id: item.id.replace(`${id}_`, ''), deleted_for: [], deleted_for_everyone: false,
@@ -883,9 +818,6 @@ useEffect(() => {
             editable={canSendMessages}
             multiline
           />
-          <ScalePressable style={styles.mediaBtn} onPress={() => { void sendMedia('image'); }}><Ionicons name="image-outline" size={18} color={COLORS.primary} /></ScalePressable>
-          <ScalePressable style={styles.mediaBtn} onPress={() => { void sendMedia('video'); }}><Ionicons name="videocam-outline" size={18} color={COLORS.primary} /></ScalePressable>
-          <ScalePressable style={styles.mediaBtn} onPress={() => { void sendMedia('audio'); }}><Ionicons name="mic-outline" size={18} color={COLORS.primary} /></ScalePressable>
           <ScalePressable style={[styles.sendBtn, (!text.trim() || sending || !canSendMessages) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending || !canSendMessages}>
             {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={18} color="#fff" />}
           </ScalePressable>
