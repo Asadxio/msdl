@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { goBackOrReplace } from "@/lib/navigation";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import {
   addDoc,
   arrayRemove,
@@ -35,7 +34,6 @@ import {
 import { COLORS, RADIUS, SHADOWS, SPACING } from "@/constants/theme";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { isHttpsUrl, uploadUriFile } from "@/lib/storage";
 import { ReportReasonModal } from "@/components/ReportReasonModal";
 import { submitUgcReport, type ReportReason } from "@/lib/ugcReports";
 import { getListenerMetrics, stableQueryKey, subscribeDeduped } from "@/lib/queryPerformance";
@@ -95,12 +93,7 @@ export default function StatusScreen() {
     {},
   );
   const [updatingId, setUpdatingId] = useState("");
-  const [statusMedia, setStatusMedia] = useState<{
-    uri: string;
-    type: "image" | "video";
-  } | null>(null);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [statusMediaUrl, setStatusMediaUrl] = useState("");
   const [audience, setAudience] = useState<"everyone" | "teachers" | "students">("students");
   const [seenTracker, setSeenTracker] = useState<Record<string, boolean>>({});
   const [commentsByStatus, setCommentsByStatus] = useState<Record<string, StatusComment[]>>({});
@@ -177,38 +170,26 @@ export default function StatusScreen() {
   const postStatus = async () => {
     console.log("[Status] Post button clicked");
     if (!canPostStatus || !user?.uid || !profile) return;
-    if (!statusText.trim() && !statusMedia?.uri) {
-      Alert.alert("Missing content", "Please add text, image, or video.");
+    if (!statusText.trim() && !statusMediaUrl.trim()) {
+      Alert.alert("Missing content", "Please add text or a media URL.");
       return;
     }
     setPosting(true);
     try {
-      let mediaUrl = "";
       let mediaType: "" | "image" | "video" = "";
-      if (statusMedia?.uri) {
-        setUploadingMedia(true);
-        setUploadProgress(0);
-        const extension = statusMedia.type === "video" ? "mp4" : "jpg";
-        const contentType =
-          statusMedia.type === "video" ? "video/mp4" : "image/jpeg";
-        const storagePath = `status_updates/${user.uid}/${Date.now()}.${extension}`;
-        mediaUrl = await uploadUriFile({
-          uri: statusMedia.uri,
-          path: storagePath,
-          contentType,
-          onProgress: setUploadProgress,
-        });
-        if (!isHttpsUrl(mediaUrl)) {
-          throw new Error("Media upload did not return a valid HTTPS URL.");
+      const url = statusMediaUrl.trim();
+      if (url) {
+        if (!url.startsWith("https://")) {
+          throw new Error("Media URL must be a valid HTTPS link.");
         }
-        mediaType = statusMedia.type;
+        mediaType = url.match(/\.(mp4|mov|webm)$/i) ? "video" : "image";
       }
       await addDoc(collection(db, "status_updates"), {
         user_id: user.uid,
         user_name: profile.name || "Teacher",
         role: profile.role === "admin" ? "admin" : "teacher",
         text: statusText.trim(),
-        media_url: mediaUrl,
+        media_url: url,
         media_type: mediaType,
         likes: [],
         comments: [],
@@ -221,13 +202,11 @@ export default function StatusScreen() {
         created_at: serverTimestamp(),
       });
       setStatusText("");
-      setStatusMedia(null);
-      setUploadProgress(0);
-    } catch (error) {
+      setStatusMediaUrl("");
+    } catch (error: any) {
       console.log("[Status] postStatus ERROR", error);
-      Alert.alert("Post failed", "Could not post status right now.");
+      Alert.alert("Post failed", error?.message || "Could not post status right now.");
     } finally {
-      setUploadingMedia(false);
       setPosting(false);
     }
   };
@@ -301,80 +280,6 @@ export default function StatusScreen() {
     }).catch(() => {});
   };
 
-  const pickStatusMedia = async () => {
-    try {
-      console.log("[Status] Pick media button clicked");
-      const existing = await ImagePicker.getMediaLibraryPermissionsAsync();
-      console.log(
-        "[Status] Existing media permission",
-        existing?.status,
-        existing?.granted,
-      );
-      if (!existing.granted && !existing.canAskAgain) {
-        Alert.alert(
-          "Permission blocked",
-          "Enable gallery permission from settings to upload status media.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Open Settings",
-              onPress: () => {
-                Linking.openSettings().catch(() => {});
-              },
-            },
-          ],
-        );
-        return;
-      }
-      const permission = existing.granted
-        ? existing
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log(
-        "[Status] Requested media permission",
-        permission?.status,
-        permission?.granted,
-      );
-      if (!permission.granted) {
-        Alert.alert(
-          "Permission required",
-          "Gallery permission is required to upload status media.",
-        );
-        return;
-      }
-      let result: ImagePicker.ImagePickerResult;
-      try {
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.All,
-          quality: 0.7,
-        });
-      } catch (pickerError: any) {
-        console.log("[Status] Native picker launch ERROR", pickerError);
-        Alert.alert(
-          "Error",
-          pickerError?.message || "Unable to open gallery right now.",
-        );
-        return;
-      }
-      console.log("[Status] Picker result", {
-        canceled: result.canceled,
-        assetsCount: result?.assets?.length || 0,
-      });
-      if (result.canceled) return;
-      const asset = result?.assets?.[0];
-      if (!asset?.uri || (typeof asset.uri === "string" && !asset.uri.trim())) {
-        Alert.alert(
-          "Invalid media",
-          "Selected media is missing a valid file path.",
-        );
-        return;
-      }
-      const mediaType = asset.type === "video" ? "video" : "image";
-      setStatusMedia({ uri: asset.uri, type: mediaType });
-    } catch (error) {
-      console.log("[Status] pickStatusMedia ERROR", error);
-      Alert.alert("Error", "Unable to open gallery right now.");
-    }
-  };
 
   const toggleLike = async (item: StatusItem) => {
     if (!isStudent || !user?.uid) return;
@@ -499,27 +404,14 @@ export default function StatusScreen() {
             placeholderTextColor={COLORS.textMuted}
             multiline
           />
-          {statusMedia?.uri ? (
-            <View style={styles.previewRow}>
-              {statusMedia.type === "image" ? (
-                <Image
-                  source={{ uri: statusMedia.uri }}
-                  style={styles.previewImage}
-                />
-              ) : (
-                <View style={styles.previewVideo}>
-                  <Ionicons name="videocam" size={18} color={COLORS.primary} />
-                  <Text style={styles.previewVideoText}>Video selected</Text>
-                </View>
-              )}
-              <TouchableOpacity onPress={() => setStatusMedia(null)}>
-                <Text style={styles.clearMediaText}>Remove</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-          <TouchableOpacity style={styles.ghostBtn} onPress={pickStatusMedia}>
-            <Text style={styles.ghostBtnText}>Add Image / Video</Text>
-          </TouchableOpacity>
+          <TextInput
+            style={styles.input}
+            value={statusMediaUrl}
+            onChangeText={setStatusMediaUrl}
+            placeholder="Optional external media URL (https://...)"
+            placeholderTextColor={COLORS.textMuted}
+            autoCapitalize="none"
+          />
           <View style={styles.row}>
             {(["everyone", "students", "teachers"] as const).map((a) => (
               <TouchableOpacity key={a} style={styles.ghostBtn} onPress={() => setAudience(a)}>
@@ -530,19 +422,14 @@ export default function StatusScreen() {
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={postStatus}
-            disabled={posting || uploadingMedia}
+            disabled={posting}
           >
-            {posting || uploadingMedia ? (
+            {posting ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Text style={styles.primaryBtnText}>Post Status</Text>
             )}
           </TouchableOpacity>
-          {uploadingMedia ? (
-            <Text style={styles.uploadingText}>
-              Uploading media... {Math.round(uploadProgress * 100)}%
-            </Text>
-          ) : null}
         </View>
       ) : null}
 

@@ -39,7 +39,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScalePressable, ScreenRefreshControl } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
-import { uploadUriFile } from "@/lib/storage";
+
 import { normalizeMeetUrl, prepareExternalUrl } from "@/lib/links";
 import { startLiveClass, subscribeActiveLiveClass, type LiveClass } from "@/lib/liveClasses";
 import { loadAssignmentDraft, saveAssignmentDraft } from "@/lib/lmsHardening";

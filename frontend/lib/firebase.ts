@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+
 import * as FirebaseAuth from 'firebase/auth';
 import type { Auth, Persistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -43,4 +43,3 @@ try {
 }
 
 export { db, auth };
-export const storage = getStorage(app, `gs://${firebaseConfig.storageBucket}`);
