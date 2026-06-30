@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, P
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
@@ -43,6 +44,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [prayerSettings, setPrayerSettings] = useState<PrayerSettings | null>(null);
   const [now, setNow] = useState(new Date());
+  const [badgeCount, setBadgeCount] = useState(0);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -58,6 +60,9 @@ export default function HomeScreen() {
     loadPrayerSettings().then(setPrayerSettings);
     const unsub = subscribeToPrayerSettings(setPrayerSettings);
     const interval = setInterval(() => setNow(new Date()), 60000);
+    
+    Notifications.getBadgeCountAsync().then(count => setBadgeCount(count)).catch(() => {});
+
     return () => {
       unsub();
       clearInterval(interval);
@@ -112,7 +117,21 @@ export default function HomeScreen() {
         }
       >
         {/* Section 1: Premium Hero Branding */}
-        <View style={[styles.heroSection, { paddingTop: insets.top + 20 }]}>
+        <View style={[styles.heroSection, { paddingTop: insets.top + SPACING.sm }]}>
+          <View style={styles.headerActionsRow}>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={() => router.push('/(tabs)/notifications')} style={styles.headerActionBtn}>
+              <Ionicons name="notifications-outline" size={24} color={COLORS.surface} />
+              {badgeCount > 0 && (
+                <View style={styles.badgeDot}>
+                  <Text style={styles.badgeDotText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.headerActionBtn}>
+              <Ionicons name="settings-outline" size={24} color={COLORS.surface} />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
           <Text style={styles.welcomeTo}>WELCOME TO</Text>
           <Text style={styles.madrasaName}>Madrasa Tus Salikat Lil Banat</Text>
@@ -273,8 +292,6 @@ export default function HomeScreen() {
                { name: 'Prayer', icon: 'time', route: '/prayer-times' },
                { name: 'Qibla', icon: 'compass', route: '/qibla' },
                { name: 'Live Classes', icon: 'videocam', route: '/live-class' },
-               { name: 'Notifications', icon: 'notifications', route: '/(tabs)/notifications' },
-               { name: 'Settings', icon: 'settings', route: '/settings' },
              ].map((item, idx) => (
                <TouchableOpacity 
                  key={idx} 
@@ -329,12 +346,48 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.lg,
     paddingBottom: 40,
     alignItems: 'center',
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
     ...SHADOWS.card,
+  },
+  headerActionsRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  headerActionBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.card,
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    backgroundColor: COLORS.error,
+    borderRadius: 8,
+    minWidth: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  badgeDotText: {
+    color: COLORS.surface,
+    fontSize: 8,
+    fontWeight: '800',
   },
   bismillah: {
     fontSize: 24,
