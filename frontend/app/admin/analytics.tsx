@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceAlt,
   },
-  topBarTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
+  topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },
   lastRefreshed: { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
   refreshBtn: { padding: 8 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10 },
   halfCard: { flex: 1, gap: 4 },
   metricCard: {
-    backgroundColor: COLORS.surface, borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl,
     padding: SPACING.md, ...SHADOWS.card, gap: 6,
   },
   metricIcon: {

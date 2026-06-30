@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   subtitle: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
   list: { padding: SPACING.md, paddingBottom: SPACING.xl, gap: SPACING.md },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, gap: 8, ...SHADOWS.card },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.md, gap: 8, ...SHADOWS.card },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   typeText: { flex: 1, color: COLORS.textMain, fontSize: 16, fontWeight: '800' },
   statusPill: { overflow: 'hidden', borderRadius: RADIUS.full, backgroundColor: '#EEF6F2', color: COLORS.primary, paddingHorizontal: 10, paddingVertical: 4, fontSize: 12, fontWeight: '800', textTransform: 'capitalize' },

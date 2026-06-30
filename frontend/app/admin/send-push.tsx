@@ -5,6 +5,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, ScrollView
 import { dispatchNotification } from '@/lib/notificationCenter';
 import { collection, getDocs, query, where, orderBy, limit as limitQ } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { RADIUS } from '@/constants/theme';
 
 export default function AdminSendPush() {
   const [title, setTitle] = useState('');
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
   searchSelectText: { color: '#666' },
   searchSelectedText: { color: '#0FA958', fontWeight: '600' },
   selectedChips: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
-  chip: { backgroundColor: '#eef8f2', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, marginRight: 8, marginTop: 8 },
+  chip: { backgroundColor: '#eef8f2', borderRadius: RADIUS.xxl, paddingHorizontal: 12, paddingVertical: 6, marginRight: 8, marginTop: 8 },
   chipText: { fontSize: 12, color: '#0A6D42' },
   result: { marginTop: 12, color: '#444' },
 });
