@@ -196,13 +196,13 @@ export default function QuizScreen() {
         user_id: user.uid,
         score,
         total_questions: questions.length,
-        category: selectedCategory,
+        category: selectedCategory || 'General',
         created_at: Timestamp.now(),
       };
 
       await Promise.race([
         addDoc(collection(db, 'quiz_results'), payload),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Network timeout. Please check your connection.')), 8000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Network timeout. Please check your connection.')), 20000))
       ]);
 
       setResult({ score, total: questions.length });
