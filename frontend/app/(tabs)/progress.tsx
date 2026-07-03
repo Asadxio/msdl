@@ -56,7 +56,7 @@ export default function ProgressScreen() {
   const categoryStats = useMemo(() => {
     const stats: Record<string, { attempts: number; correct: number; total: number }> = {};
     quizResults.forEach(r => {
-      const cat = r.category || 'Uncategorized';
+      const cat = (r.category && typeof r.category === 'string' && r.category.trim().length > 0) ? r.category.trim() : 'Uncategorized';
       if (!stats[cat]) stats[cat] = { attempts: 0, correct: 0, total: 0 };
       stats[cat].attempts += 1;
       stats[cat].correct += (r.score || 0);
@@ -294,7 +294,7 @@ export default function ProgressScreen() {
             return (
               <View key={i} style={styles.attemptCard}>
                 <View style={styles.attemptTop}>
-                  <Text style={styles.attemptCategory}>{r.category || 'Uncategorized'}</Text>
+                  <Text style={styles.attemptCategory}>{(r.category && typeof r.category === 'string' && r.category.trim().length > 0) ? r.category.trim() : 'Uncategorized'}</Text>
                   <View style={[styles.attemptStatusBadge, passed ? styles.badgeSuccess : styles.badgeWarning]}>
                     <Text style={[styles.attemptStatusText, passed ? styles.textSuccess : styles.textWarning]}>
                       {passed ? 'Passed' : 'Needs Improvement'}

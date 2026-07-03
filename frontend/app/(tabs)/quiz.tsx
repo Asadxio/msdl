@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput,
+  View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addDoc, collection, deleteDoc, doc, getDocs, getCountFromServer, query, serverTimestamp, updateDoc, where, Timestamp } from 'firebase/firestore';
@@ -178,7 +178,7 @@ export default function QuizScreen() {
   })), [questions, answers]);
 
   const submitQuiz = async () => {
-    if (!user?.uid) return;
+    if (!user?.uid || submitting) return;
     if (sessionExpired) {
       setError('Quiz session expired. Please restart attempt.');
       trackSecurity('quiz_session_expired_submit', { uid: user.uid });
@@ -188,21 +188,26 @@ export default function QuizScreen() {
       setError('Please answer all questions before submitting.');
       return;
     }
+    setError('');
     setSubmitting(true);
     try {
       const score = questions.reduce((sum, q) => (answers[q.id] === q.correct_answer ? sum + 1 : sum), 0);
       
+      const cleanCat = selectedCategory && typeof selectedCategory === 'string' && selectedCategory.trim().length > 0
+        ? selectedCategory.trim().slice(0, 100)
+        : 'Uncategorized';
+
       const payload = {
         user_id: user.uid,
         score,
         total_questions: questions.length,
-        category: selectedCategory || 'General',
+        category: cleanCat,
         created_at: Timestamp.now(),
       };
 
       await Promise.race([
         addDoc(collection(db, 'quiz_results'), payload),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Network timeout. Please check your connection.')), 20000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_ERROR')), 20000))
       ]);
 
       setResult({ score, total: questions.length });
@@ -210,7 +215,36 @@ export default function QuizScreen() {
       await clearQuizSession(user.uid, quizKey).catch(() => {});
     } catch (e: any) {
       logFirestoreFailure({ collection: 'quiz_results/notifications', operation: 'add', query: 'create quiz result', role: profile?.role, status: profile?.status }, e);
-      setError(e?.message || 'Failed to submit quiz.');
+      const code = String(e?.code || '');
+      const msg = String(e?.message || '');
+      
+      let displayMsg = 'An unknown error occurred while saving quiz results. Please try again.';
+      let isNetworkError = false;
+
+      if (msg === 'TIMEOUT_ERROR' || msg.toLowerCase().includes('timeout')) {
+        displayMsg = 'Request timed out while saving quiz results. Please try again.';
+        isNetworkError = true;
+      } else if (code.includes('permission-denied') || msg.toLowerCase().includes('permission')) {
+        displayMsg = 'Permission denied. You do not have permission to submit quiz results.';
+      } else if (code.includes('unavailable') || code.includes('network') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('offline') || msg.toLowerCase().includes('connection') || msg.toLowerCase().includes('failed to fetch')) {
+        displayMsg = 'Network unavailable. Please check your internet connection.';
+        isNetworkError = true;
+      } else if (msg && msg !== 'TIMEOUT_ERROR') {
+        displayMsg = msg;
+      }
+
+      setError(displayMsg);
+
+      if (isNetworkError) {
+        Alert.alert(
+          'Submission Failed',
+          displayMsg,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Retry', onPress: () => { void submitQuiz(); } }
+          ]
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -492,7 +526,19 @@ export default function QuizScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
+          {!!error && (
+            <View style={{ marginBottom: 12 }}>
+              <Text style={styles.errorText}>{error}</Text>
+              {(error.includes('try again') || error.includes('timed out') || error.includes('Network') || error.includes('connection')) && !submitting && (
+                <TouchableOpacity
+                  style={[styles.btn, { marginTop: 8, backgroundColor: COLORS.primary }]}
+                  onPress={() => { void submitQuiz(); }}
+                >
+                  <Text style={styles.btnText}>Retry Submission</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
           <View style={styles.row}>
             <TouchableOpacity
               style={[styles.secondaryBtn, index === 0 && { opacity: 0.4 }]}
@@ -507,7 +553,14 @@ export default function QuizScreen() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={[styles.btn, submitting && { opacity: 0.7 }]} onPress={submitQuiz} disabled={submitting}>
-                {submitting ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.btnText}>Submit Quiz</Text>}
+                {submitting ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text style={styles.btnText}>Submitting your quiz...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.btnText}>Submit Quiz</Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
