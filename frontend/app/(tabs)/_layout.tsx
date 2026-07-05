@@ -3,6 +3,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { useEffect, useState } from 'react';
 import { collection, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -48,6 +49,7 @@ function TabIcon({ name, color, focused }: { name: TabIconName; color: string; f
 
 export default function TabLayout() {
   const { user, profile } = useAuth();
+  const { t } = useLanguage();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadChats, setUnreadChats] = useState(0);
 
@@ -143,12 +145,12 @@ export default function TabLayout() {
         freezeOnBlur: true,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'home' : 'home-outline'} color={color} focused={focused} /> }} />
-      <Tabs.Screen name="courses" options={{ title: 'Courses', tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'book' : 'book-outline'} color={color} focused={focused} /> }} />
+      <Tabs.Screen name="index" options={{ title: t('tabs.home', 'Home'), tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'home' : 'home-outline'} color={color} focused={focused} /> }} />
+      <Tabs.Screen name="courses" options={{ title: t('tabs.courses', 'Courses'), tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'book' : 'book-outline'} color={color} focused={focused} /> }} />
       <Tabs.Screen
         name="chats"
         options={{
-          title: 'Chat',
+          title: t('tabs.chat', 'Chat'),
           tabBarBadge: unreadChats > 0 ? (unreadChats > 99 ? '99+' : unreadChats) : undefined,
           tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} color={color} focused={focused} />,
         }}
@@ -156,12 +158,12 @@ export default function TabLayout() {
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Notifications',
+          title: t('tabs.notifications', 'Notifications'),
           tabBarBadge: unreadNotifications > 0 ? (unreadNotifications > 99 ? '99+' : unreadNotifications) : undefined,
           tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'notifications' : 'notifications-outline'} color={color} focused={focused} />,
         }}
       />
-      <Tabs.Screen name="about" options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'person' : 'person-outline'} color={color} focused={focused} /> }} />
+      <Tabs.Screen name="about" options={{ title: t('tabs.profile', 'Profile'), tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'person' : 'person-outline'} color={color} focused={focused} /> }} />
       <Tabs.Screen name="teachers" options={{ href: null }} />
       <Tabs.Screen name="library" options={{ href: null }} />
       <Tabs.Screen name="quiz" options={{ href: null }} />

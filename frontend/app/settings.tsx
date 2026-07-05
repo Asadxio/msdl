@@ -10,13 +10,26 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';
+import { useTheme } from '@/context/ThemeContext';
 import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
 import Constants from 'expo-constants';
 import { WHATSAPP_HELP_URL } from '@/lib/links';
 import AdminHealthDashboard from '@/components/AdminHealthDashboard';
+import { useLanguage, type Language } from '@/context/LanguageContext';
+import { BugReportModal, FeatureSuggestModal, FaqModal } from '@/components/SupportModals';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
 const LARGE_TEXT_PREF_KEY = 'settings_large_text';
+const THEME_PREF_KEY = 'settings_theme';
+const FONT_SIZE_PREF_KEY = 'settings_font_size';
+const REDUCE_MOTION_PREF_KEY = 'settings_reduce_motion';
+const APP_LOCK_KEY = 'settings_app_lock_enabled';
+const APP_PIN_KEY = 'settings_app_pin';
+const HIDE_SENSITIVE_KEY = 'settings_hide_sensitive';
+const AUTO_RESUME_KEY = 'settings_auto_resume';
+const AUTO_PLAY_KEY = 'settings_auto_play';
+const WIFI_ONLY_KEY = 'settings_wifi_only';
+const REMEMBER_PDF_KEY = 'settings_remember_pdf';
 const PRAYER_METHOD_KEY = 'settings_prayer_method';
 const PRAYER_MADHAB_KEY = 'settings_prayer_madhab';
 const PRAYER_NOTIF_KEY = 'settings_prayer_notifications';
@@ -58,6 +71,12 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const { setShowTutorial, setCurrentStep } = useTutorial();
+  const { language, setLanguage, languageName } = useLanguage();
+  const { setThemeMode, setFontSizeScale } = useTheme();
+  const [langModalVisible, setLangModalVisible] = useState(false);
+  const [bugModalVisible, setBugModalVisible] = useState(false);
+  const [featureModalVisible, setFeatureModalVisible] = useState(false);
+  const [faqModalVisible, setFaqModalVisible] = useState(false);
   
   // Admin Diagnostics State
   const [diagLogsVisible, setDiagLogsVisible] = useState(false);
@@ -117,6 +136,26 @@ export default function SettingsScreen() {
 
   // Appearance State
   const [largeText, setLargeText] = useState(false);
+  const [theme, setTheme] = useState<'System Default' | 'Light Mode' | 'Dark Mode'>('System Default');
+  const [fontSize, setFontSize] = useState<'Small' | 'Medium' | 'Large' | 'Extra Large'>('Medium');
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
+  const [fontSizeModalVisible, setFontSizeModalVisible] = useState(false);
+
+  // Privacy & Security State
+  const [appLockEnabled, setAppLockEnabled] = useState(false);
+  const [appPin, setAppPin] = useState('1234');
+  const [hideSensitive, setHideSensitive] = useState(false);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [inputPin, setInputPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinStep, setPinStep] = useState<'enter' | 'create' | 'confirm'>('enter');
+
+  // Learning Preferences State
+  const [autoResume, setAutoResume] = useState(true);
+  const [autoPlay, setAutoPlay] = useState(true);
+  const [wifiOnly, setWifiOnly] = useState(false);
+  const [rememberPdf, setRememberPdf] = useState(true);
 
   // Islamic Features State
   const [prayerMethod, setPrayerMethod] = useState('umm_al_qura');
@@ -143,6 +182,16 @@ export default function SettingsScreen() {
           AsyncStorage.getItem(AZAN_SOUND_KEY),
           AsyncStorage.getItem(FRIDAY_REMINDER_KEY),
           AsyncStorage.getItem(ISLAMIC_REMINDER_TIME_KEY),
+          AsyncStorage.getItem(THEME_PREF_KEY),
+          AsyncStorage.getItem(FONT_SIZE_PREF_KEY),
+          AsyncStorage.getItem(REDUCE_MOTION_PREF_KEY),
+          AsyncStorage.getItem(APP_LOCK_KEY),
+          AsyncStorage.getItem(APP_PIN_KEY),
+          AsyncStorage.getItem(HIDE_SENSITIVE_KEY),
+          AsyncStorage.getItem(AUTO_RESUME_KEY),
+          AsyncStorage.getItem(AUTO_PLAY_KEY),
+          AsyncStorage.getItem(WIFI_ONLY_KEY),
+          AsyncStorage.getItem(REMEMBER_PDF_KEY),
         ]);
         
         setNotificationsEnabled(vals[0] !== 'false');
@@ -157,6 +206,16 @@ export default function SettingsScreen() {
         setAzanSound(vals[9] !== 'false');
         setFridayReminder(vals[10] !== 'false');
         if (vals[11]) setReminderTime(vals[11]);
+        if (vals[12] && (vals[12] === 'System Default' || vals[12] === 'Light Mode' || vals[12] === 'Dark Mode')) setTheme(vals[12] as any);
+        if (vals[13] && (vals[13] === 'Small' || vals[13] === 'Medium' || vals[13] === 'Large' || vals[13] === 'Extra Large')) setFontSize(vals[13] as any);
+        setReduceMotion(vals[14] === 'true');
+        setAppLockEnabled(vals[15] === 'true');
+        if (vals[16]) setAppPin(vals[16]);
+        setHideSensitive(vals[17] === 'true');
+        setAutoResume(vals[18] !== 'false');
+        setAutoPlay(vals[19] !== 'false');
+        setWifiOnly(vals[20] === 'true');
+        setRememberPdf(vals[21] !== 'false');
       } catch {}
     };
     loadPrefs().catch(() => {});
@@ -254,26 +313,26 @@ export default function SettingsScreen() {
 
         {/* Section 2: Appearance */}
         <SettingsSection title="Appearance" icon="color-palette-outline" defaultOpen={false}>
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setThemeModalVisible(true)}>
             <View style={styles.linkRowLeft}>
-              <Ionicons name="moon-outline" size={20} color={COLORS.textMuted} />
+              <Ionicons name="moon-outline" size={20} color={COLORS.primary} />
               <View>
-                <Text style={[styles.linkText, { color: COLORS.textMuted }]}>Theme</Text>
-                <Text style={styles.linkSubtext}>System Default</Text>
+                <Text style={styles.linkText}>Theme</Text>
+                <Text style={styles.linkSubtext}>{theme}</Text>
               </View>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setFontSizeModalVisible(true)}>
             <View style={styles.linkRowLeft}>
-              <Ionicons name="text-outline" size={20} color={COLORS.textMuted} />
+              <Ionicons name="text-outline" size={20} color={COLORS.primary} />
               <View>
-                <Text style={[styles.linkText, { color: COLORS.textMuted }]}>Font Size</Text>
-                <Text style={styles.linkSubtext}>Medium</Text>
+                <Text style={styles.linkText}>Font Size</Text>
+                <Text style={styles.linkSubtext}>{fontSize}</Text>
               </View>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
 
           <View style={styles.row}>
@@ -281,13 +340,10 @@ export default function SettingsScreen() {
             <Switch value={largeText} onValueChange={(v) => toggleBooleanPref(LARGE_TEXT_PREF_KEY, v, setLargeText)} trackColor={{ true: COLORS.primary }} />
           </View>
           
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="flash-off-outline" size={20} color={COLORS.textMuted} />
-              <Text style={[styles.linkText, { color: COLORS.textMuted }]}>Reduce Motion</Text>
-            </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
-          </TouchableOpacity>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Reduce Motion</Text>
+            <Switch value={reduceMotion} onValueChange={(v) => toggleBooleanPref(REDUCE_MOTION_PREF_KEY, v, setReduceMotion)} trackColor={{ true: COLORS.primary }} />
+          </View>
 
           <TouchableOpacity style={styles.linkRow} onPress={() => {
             setCurrentStep('dashboard');
@@ -380,39 +436,73 @@ export default function SettingsScreen() {
 
         {/* Section 4: Learning Preferences */}
         <SettingsSection title="Learning Preferences" icon="book-outline" defaultOpen={false}>
-          {[
-            { label: 'Auto Resume Last Lesson', icon: 'play-forward-outline' as const },
-            { label: 'Auto Play Lesson Recordings', icon: 'play-circle-outline' as const },
-            { label: 'Download on Wi-Fi Only', icon: 'wifi-outline' as const },
-            { label: 'Remember PDF Reading Position', icon: 'bookmark-outline' as const },
-          ].map((item, i) => (
-            <TouchableOpacity key={i} style={[styles.linkRow, styles.disabledRow]} disabled>
-              <View style={styles.linkRowLeft}>
-                <Ionicons name={item.icon} size={20} color={COLORS.textMuted} />
-                <Text style={[styles.linkText, { color: COLORS.textMuted }]}>{item.label}</Text>
-              </View>
-              <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
-            </TouchableOpacity>
-          ))}
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Auto Resume Last Lesson</Text>
+              <Text style={styles.rowSubtext}>Continue where you left off</Text>
+            </View>
+            <Switch value={autoResume} onValueChange={(v) => toggleBooleanPref(AUTO_RESUME_KEY, v, setAutoResume)} trackColor={{ true: COLORS.primary }} />
+          </View>
+
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Auto Play Lesson Recordings</Text>
+              <Text style={styles.rowSubtext}>Play next audio/video automatically</Text>
+            </View>
+            <Switch value={autoPlay} onValueChange={(v) => toggleBooleanPref(AUTO_PLAY_KEY, v, setAutoPlay)} trackColor={{ true: COLORS.primary }} />
+          </View>
+
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Download on Wi-Fi Only</Text>
+              <Text style={styles.rowSubtext}>Save mobile data bandwidth</Text>
+            </View>
+            <Switch value={wifiOnly} onValueChange={(v) => toggleBooleanPref(WIFI_ONLY_KEY, v, setWifiOnly)} trackColor={{ true: COLORS.primary }} />
+          </View>
+
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Remember PDF Reading Position</Text>
+              <Text style={styles.rowSubtext}>Open course books at exact page</Text>
+            </View>
+            <Switch value={rememberPdf} onValueChange={(v) => toggleBooleanPref(REMEMBER_PDF_KEY, v, setRememberPdf)} trackColor={{ true: COLORS.primary }} />
+          </View>
         </SettingsSection>
 
         {/* Section 5: Privacy & Security */}
         <SettingsSection title="Privacy & Security" icon="shield-checkmark-outline" defaultOpen={false}>
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
+          <TouchableOpacity style={styles.linkRow} onPress={() => {
+            if (appLockEnabled) {
+              setPinStep('enter');
+              setInputPin('');
+              setPinModalVisible(true);
+            } else {
+              setPinStep('create');
+              setInputPin('');
+              setConfirmPin('');
+              setPinModalVisible(true);
+            }
+          }}>
             <View style={styles.linkRowLeft}>
-              <Ionicons name="lock-closed-outline" size={20} color={COLORS.textMuted} />
-              <Text style={[styles.linkText, { color: COLORS.textMuted }]}>App Lock (PIN/Biometrics)</Text>
+              <Ionicons name="lock-closed-outline" size={20} color={COLORS.primary} />
+              <View>
+                <Text style={styles.linkText}>App Lock (PIN/Biometrics)</Text>
+                <Text style={styles.linkSubtext}>{appLockEnabled ? 'Enabled (Security PIN Active)' : 'Disabled'}</Text>
+              </View>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {appLockEnabled && <Ionicons name="checkmark-circle" size={18} color="#16A34A" />}
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </View>
           </TouchableOpacity>
           
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="eye-off-outline" size={20} color={COLORS.textMuted} />
-              <Text style={[styles.linkText, { color: COLORS.textMuted }]}>Hide Sensitive Information</Text>
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Hide Sensitive Information</Text>
+              <Text style={styles.rowSubtext}>Mask emails and phone numbers on screen</Text>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
-          </TouchableOpacity>
+            <Switch value={hideSensitive} onValueChange={(v) => toggleBooleanPref(HIDE_SENSITIVE_KEY, v, setHideSensitive)} trackColor={{ true: COLORS.primary }} />
+          </View>
 
           <TouchableOpacity style={styles.linkRow} onPress={handleClearCache}>
             <View style={styles.linkRowLeft}>
@@ -432,16 +522,21 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         {/* Section 6: Language */}
-        <SettingsSection title="Language" icon="language-outline" defaultOpen={false}>
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
+        <SettingsSection title="Language / زبان / اللغة" icon="language-outline" defaultOpen={false}>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setLangModalVisible(true)}>
             <View style={styles.linkRowLeft}>
-              <Ionicons name="earth-outline" size={20} color={COLORS.textMuted} />
+              <Ionicons name="earth-outline" size={20} color={COLORS.primary} />
               <View>
-                <Text style={[styles.linkText, { color: COLORS.textMuted }]}>App Language</Text>
-                <Text style={styles.linkSubtext}>English / Urdu / Arabic</Text>
+                <Text style={styles.linkText}>App Language (ایپ کی زبان)</Text>
+                <Text style={styles.linkSubtext}>{languageName}</Text>
               </View>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={[styles.badge, { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD' }]}>
+                <Text style={[styles.badgeText, { color: '#0369A1' }]}>{language.toUpperCase()}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </View>
           </TouchableOpacity>
         </SettingsSection>
 
@@ -454,33 +549,33 @@ export default function SettingsScreen() {
             </View>
             <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
+          <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL('mailto:madrastussalikatlilbanat@gmail.com?subject=MSDL%20App%20Support')}>
             <View style={styles.linkRowLeft}>
-              <Ionicons name="mail-outline" size={20} color={COLORS.textMuted} />
-              <Text style={[styles.linkText, { color: COLORS.textMuted }]}>Email Support</Text>
+              <Ionicons name="mail-outline" size={20} color="#0369A1" />
+              <Text style={styles.linkText}>Email Support</Text>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Unavailable</Text></View>
+            <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setBugModalVisible(true)}>
             <View style={styles.linkRowLeft}>
-              <Ionicons name="bug-outline" size={20} color={COLORS.textMuted} />
-              <Text style={[styles.linkText, { color: COLORS.textMuted }]}>Report a Bug</Text>
+              <Ionicons name="bug-outline" size={20} color="#EF4444" />
+              <Text style={styles.linkText}>Report a Bug (तकनीकी समस्या)</Text>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setFeatureModalVisible(true)}>
             <View style={styles.linkRowLeft}>
-              <Ionicons name="bulb-outline" size={20} color={COLORS.textMuted} />
-              <Text style={[styles.linkText, { color: COLORS.textMuted }]}>Suggest a Feature</Text>
+              <Ionicons name="bulb-outline" size={20} color="#F59E0B" />
+              <Text style={styles.linkText}>Suggest a Feature (सुझाव भेजें)</Text>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.linkRow, styles.disabledRow]} disabled>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setFaqModalVisible(true)}>
             <View style={styles.linkRowLeft}>
-              <Ionicons name="chatbubbles-outline" size={20} color={COLORS.textMuted} />
-              <Text style={[styles.linkText, { color: COLORS.textMuted }]}>FAQ</Text>
+              <Ionicons name="chatbubbles-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.linkText}>FAQ (अक्सर पूछे जाने वाले सवाल)</Text>
             </View>
-            <View style={styles.badge}><Text style={styles.badgeText}>Coming Soon</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
         </SettingsSection>
 
@@ -536,6 +631,224 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={langModalVisible} animationType="fade" transparent onRequestClose={() => setLangModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.langModalContent}>
+            <View style={styles.langModalHeader}>
+              <Text style={styles.langModalTitle}>Select App Language</Text>
+              <TouchableOpacity onPress={() => setLangModalVisible(false)} style={styles.iconBtn}>
+                <Ionicons name="close" size={22} color={COLORS.textMain} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.langModalSub}>Choose your preferred language for navigating the application / اپنی پسندیدہ زبان منتخب کریں:</Text>
+            
+            {(['en', 'ur', 'ar'] as Language[]).map((langCode) => {
+              const isSelected = language === langCode;
+              const names: Record<Language, { main: string; native: string; desc: string }> = {
+                en: { main: 'English', native: 'English', desc: 'Default interface language' },
+                ur: { main: 'Urdu', native: 'اردو', desc: 'اسلامی نصاب اور ہدایات کے لیے' },
+                ar: { main: 'Arabic', native: 'العربية', desc: 'لغة القرآن الكريم والأحاديث' },
+              };
+              const item = names[langCode];
+              return (
+                <TouchableOpacity
+                  key={langCode}
+                  style={[styles.langOptionCard, isSelected && styles.langOptionCardSelected]}
+                  onPress={async () => {
+                    await setLanguage(langCode);
+                    setLangModalVisible(false);
+                    Alert.alert('Language Updated / زبان تبدیل ہوگئی', `App language changed to ${item.native} (${item.main}).`);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.langOptionLeft}>
+                    <View style={[styles.langRadio, isSelected && styles.langRadioSelected]}>
+                      {isSelected && <View style={styles.langRadioInner} />}
+                    </View>
+                    <View>
+                      <Text style={[styles.langOptionTitle, isSelected && { color: COLORS.primary, fontWeight: '700' }]}>
+                        {item.main} — <Text style={{ fontWeight: '800' }}>{item.native}</Text>
+                      </Text>
+                      <Text style={styles.langOptionDesc}>{item.desc}</Text>
+                    </View>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={themeModalVisible} animationType="fade" transparent onRequestClose={() => setThemeModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.langModalContent}>
+            <View style={styles.langModalHeader}>
+              <Text style={styles.langModalTitle}>Select App Theme</Text>
+              <TouchableOpacity onPress={() => setThemeModalVisible(false)} style={styles.iconBtn}>
+                <Ionicons name="close" size={22} color={COLORS.textMain} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.langModalSub}>Choose your preferred appearance mode:</Text>
+            {(['System Default', 'Light Mode', 'Dark Mode'] as const).map((tOpt) => {
+              const isSelected = theme === tOpt;
+              return (
+                <TouchableOpacity
+                  key={tOpt}
+                  style={[styles.langOptionCard, isSelected && styles.langOptionCardSelected]}
+                  onPress={async () => {
+                    setTheme(tOpt);
+                    void setThemeMode(tOpt);
+                    await AsyncStorage.setItem(THEME_PREF_KEY, tOpt);
+                    setThemeModalVisible(false);
+                    Alert.alert('Theme Updated', `App theme set to ${tOpt}.`);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.langOptionLeft}>
+                    <View style={[styles.langRadio, isSelected && styles.langRadioSelected]}>
+                      {isSelected && <View style={styles.langRadioInner} />}
+                    </View>
+                    <Text style={[styles.langOptionTitle, isSelected && { color: COLORS.primary, fontWeight: '700' }]}>{tOpt}</Text>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={fontSizeModalVisible} animationType="fade" transparent onRequestClose={() => setFontSizeModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.langModalContent}>
+            <View style={styles.langModalHeader}>
+              <Text style={styles.langModalTitle}>Select Font Size</Text>
+              <TouchableOpacity onPress={() => setFontSizeModalVisible(false)} style={styles.iconBtn}>
+                <Ionicons name="close" size={22} color={COLORS.textMain} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.langModalSub}>Adjust reading text size across the application:</Text>
+            {(['Small', 'Medium', 'Large', 'Extra Large'] as const).map((fsOpt) => {
+              const isSelected = fontSize === fsOpt;
+              return (
+                <TouchableOpacity
+                  key={fsOpt}
+                  style={[styles.langOptionCard, isSelected && styles.langOptionCardSelected]}
+                  onPress={async () => {
+                    setFontSize(fsOpt);
+                    void setFontSizeScale(fsOpt);
+                    await AsyncStorage.setItem(FONT_SIZE_PREF_KEY, fsOpt);
+                    setFontSizeModalVisible(false);
+                    Alert.alert('Font Size Updated', `Reading font size set to ${fsOpt}.`);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.langOptionLeft}>
+                    <View style={[styles.langRadio, isSelected && styles.langRadioSelected]}>
+                      {isSelected && <View style={styles.langRadioInner} />}
+                    </View>
+                    <Text style={[styles.langOptionTitle, isSelected && { color: COLORS.primary, fontWeight: '700' }]}>{fsOpt}</Text>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={pinModalVisible} animationType="fade" transparent onRequestClose={() => setPinModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.langModalContent, { alignItems: 'center', paddingVertical: SPACING.xl }]}>
+            <View style={styles.sectionIconCircle}>
+              <Ionicons name="lock-closed" size={24} color={COLORS.primary} />
+            </View>
+            <Text style={[styles.langModalTitle, { marginTop: SPACING.md, textAlign: 'center' }]}>
+              {pinStep === 'enter' ? 'Enter Security PIN to Disable' : pinStep === 'create' ? 'Create a 4-Digit PIN' : 'Confirm 4-Digit PIN'}
+            </Text>
+            <Text style={[styles.langModalSub, { textAlign: 'center', marginBottom: SPACING.lg }]}>
+              {pinStep === 'enter' ? 'Enter your existing security PIN to disable App Lock.' : pinStep === 'create' ? 'Set up a 4-digit PIN to secure your Madrasa app.' : 'Re-enter your PIN to confirm setup.'}
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: SPACING.xl }}>
+              {[0, 1, 2, 3].map((idx) => {
+                const char = inputPin[idx] || '';
+                return (
+                  <View key={idx} style={[styles.langOptionCard, { width: 56, height: 64, justifyContent: 'center', alignItems: 'center', padding: 0 }]}>
+                    <Text style={{ fontSize: 28, fontWeight: '800', color: COLORS.primary }}>{char ? '•' : ''}</Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Numeric Keypad */}
+            <View style={{ width: '100%', maxWidth: 280, gap: 12 }}>
+              {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['Cancel', '0', '⌫']].map((row, rIdx) => (
+                <View key={rIdx} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+                  {row.map((btn, bIdx) => (
+                    <TouchableOpacity
+                      key={bIdx}
+                      style={[styles.langOptionCard, { flex: 1, height: 52, justifyContent: 'center', alignItems: 'center', padding: 0, backgroundColor: btn === 'Cancel' || btn === '⌫' ? '#F1F5F9' : '#FFFFFF' }]}
+                      onPress={async () => {
+                        if (btn === 'Cancel') {
+                          setPinModalVisible(false);
+                          setInputPin('');
+                        } else if (btn === '⌫') {
+                          setInputPin((prev) => prev.slice(0, -1));
+                        } else {
+                          const nextPin = inputPin + btn;
+                          if (nextPin.length <= 4) {
+                            setInputPin(nextPin);
+                            if (nextPin.length === 4) {
+                              if (pinStep === 'enter') {
+                                if (nextPin === appPin) {
+                                  setAppLockEnabled(false);
+                                  await AsyncStorage.setItem(APP_LOCK_KEY, 'false');
+                                  setPinModalVisible(false);
+                                  Alert.alert('App Lock Disabled', 'Security PIN has been removed.');
+                                } else {
+                                  Alert.alert('Incorrect PIN', 'Please try again.');
+                                  setInputPin('');
+                                }
+                              } else if (pinStep === 'create') {
+                                setConfirmPin(nextPin);
+                                setPinStep('confirm');
+                                setInputPin('');
+                              } else if (pinStep === 'confirm') {
+                                if (nextPin === confirmPin) {
+                                  setAppPin(nextPin);
+                                  setAppLockEnabled(true);
+                                  await AsyncStorage.setItem(APP_PIN_KEY, nextPin);
+                                  await AsyncStorage.setItem(APP_LOCK_KEY, 'true');
+                                  setPinModalVisible(false);
+                                  Alert.alert('App Lock Enabled', 'Your 4-digit PIN is set! App is now secured.');
+                                } else {
+                                  Alert.alert('PIN Mismatch', 'The PINs did not match. Let\'s try again.');
+                                  setPinStep('create');
+                                  setInputPin('');
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: btn === 'Cancel' || btn === '⌫' ? 15 : 22, fontWeight: '700', color: btn === 'Cancel' ? '#EF4444' : COLORS.textMain }}>{btn}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <BugReportModal visible={bugModalVisible} onClose={() => setBugModalVisible(false)} />
+      <FeatureSuggestModal visible={featureModalVisible} onClose={() => setFeatureModalVisible(false)} />
+      <FaqModal visible={faqModalVisible} onClose={() => setFaqModalVisible(false)} />
     </View>
   );
 }
@@ -687,5 +1000,86 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94A3B8',
     marginBottom: 2,
-  }
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  langModalContent: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    ...SHADOWS.card,
+  },
+  langModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  langModalTitle: {
+    ...TYPOGRAPHY.heading,
+    fontSize: 18,
+    color: COLORS.textMain,
+  },
+  langModalSub: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.md,
+    lineHeight: 18,
+  },
+  langOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    marginBottom: SPACING.sm,
+    backgroundColor: '#F8FAFC',
+  },
+  langOptionCardSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: '#F0FDF4',
+  },
+  langOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    flex: 1,
+  },
+  langRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  langRadioSelected: {
+    borderColor: COLORS.primary,
+  },
+  langRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.primary,
+  },
+  langOptionTitle: {
+    fontSize: 15,
+    color: COLORS.textMain,
+    fontWeight: '600',
+  },
+  langOptionDesc: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
 });

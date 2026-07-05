@@ -221,10 +221,7 @@ export default function OnboardingEntryScreen() {
           <Animated.View style={[styles.noorGlowCore, noorStyle]} />
           
           <View style={styles.logoRing}>
-            <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="cover" />
-            <View style={styles.logoMonogramOverlay}>
-              <Text style={styles.logoArabic}>م</Text>
-            </View>
+            <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
           </View>
         </Animated.View>
 
@@ -337,20 +334,21 @@ const styles = StyleSheet.create({
     shadowRadius: 30,
   },
   logoRing: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.4)',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    borderWidth: 2,
+    borderColor: 'rgba(212,175,55,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.98)',
+    backgroundColor: '#FFFFFF',
+    padding: 10,
   },
   logoImage: {
-    width: 160,
-    height: 160,
-    opacity: 0.12,
+    width: '100%',
+    height: '100%',
+    opacity: 1.0,
   },
   logoMonogramOverlay: {
     ...StyleSheet.absoluteFillObject,

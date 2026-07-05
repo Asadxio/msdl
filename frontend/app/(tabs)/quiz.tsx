@@ -70,7 +70,6 @@ export default function QuizScreen() {
       setLoadingCounts(true);
       const counts: Record<string, number> = {};
       
-      // Batch promises in chunks of 10 to avoid any potential connection saturation, although JS SDK handles it.
       const batchSize = 10;
       for (let i = 0; i < QUIZ_CATEGORIES.length; i += batchSize) {
         const chunk = QUIZ_CATEGORIES.slice(i, i + batchSize);
@@ -253,32 +252,49 @@ export default function QuizScreen() {
   const saveQuestion = async () => {
     if (!isAdmin) return;
     const normalized = optionInputs.map((o) => o.trim()).filter(Boolean);
-    if (!questionInput.trim() || normalized.length < 2 || !correctAnswer.trim() || !categoryInput.trim()) {
+    const trimmedCategory = categoryInput.trim();
+
+    // Validate required fields
+    if (!questionInput.trim() || normalized.length < 2 || !correctAnswer.trim() || !trimmedCategory) {
       setError('Question, at least 2 options, correct answer, and category are required.');
       return;
     }
+
+    // Ensure correct answer matches one of the options
     if (!normalized.includes(correctAnswer.trim())) {
       setError('Correct answer must exactly match one of the answer options.');
       return;
     }
+
+    // Enforce max length 100 characters for category
+    const cleanCategory = trimmedCategory.slice(0, 100);
+    if (cleanCategory.length === 0) {
+      setError('Category cannot be empty after trimming.');
+      return;
+    }
+
+    const payload = {
+      question: questionInput.trim(),
+      options: normalized,
+      correct_answer: correctAnswer.trim(),
+      category: cleanCategory,
+      created_at: serverTimestamp(),
+    };
+
     setSavingQuestion(true);
     try {
-      const payload = {
-        question: questionInput.trim(),
-        options: optionInputs.map((o) => o.trim()).filter(Boolean),
-        correct_answer: correctAnswer.trim(),
-        category: categoryInput.trim(),
-        updated_at: serverTimestamp(),
-      };
       if (editingId) {
         await updateDoc(doc(db, 'quizzes', editingId), payload);
       } else {
-        await addDoc(collection(db, 'quizzes'), { ...payload, created_at: serverTimestamp() });
+        await addDoc(collection(db, 'quizzes'), payload);
       }
+      // Reset form state
       setEditingId('');
       setQuestionInput('');
       setOptionInputs(['', '', '', '']);
       setCorrectAnswer('');
+      setCategoryInput('');
+      // Refresh current category view
       if (selectedCategory) {
         await loadQuiz(selectedCategory);
       }

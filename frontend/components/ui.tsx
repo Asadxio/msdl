@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { COLORS, RADIUS, SPACING, SHADOWS, TYPOGRAPHY } from '@/constants/theme';
+import { SkeletonShimmer } from './ui/SkeletonShimmer';
 
 export function FadeInView({ children, style, delay = 0 }: PropsWithChildren<{ style?: StyleProp<ViewStyle>; delay?: number }>) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -91,9 +92,9 @@ export function EmptyState({ icon, title, message }: { icon: keyof typeof Ionico
 export function SkeletonCard({ lines = 2 }: { lines?: number }) {
   return (
     <View style={styles.skeletonCard}>
-      <View style={styles.skeletonHeader} />
+      <SkeletonShimmer height={18} width="45%" borderRadius={8} style={{ marginBottom: 4 }} />
       {Array.from({ length: lines }).map((_, i) => (
-        <View key={String(i)} style={[styles.skeletonLine, i === lines - 1 && { width: '60%' }]} />
+        <SkeletonShimmer key={String(i)} height={12} width={i === lines - 1 ? '60%' : '100%'} borderRadius={6} style={{ marginTop: 6 }} />
       ))}
     </View>
   );
@@ -180,6 +181,7 @@ export { UIButton } from './ui/Button';
 export { FullScreenLoader, InlineError, RetryState } from './ui/ScreenState';
 export { LegalDocScreen } from './ui/LegalDocScreen';
 export { SectionCard } from './ui/SectionCard';
+export { SkeletonShimmer, CourseCardSkeleton, NoticeSkeleton } from './ui/SkeletonShimmer';
 
 const styles = StyleSheet.create({
   card: {

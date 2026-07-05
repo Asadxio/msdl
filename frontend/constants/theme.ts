@@ -17,6 +17,29 @@ export const COLORS = {
   goldText: '#9A7A1A',
 };
 
+export const DARK_COLORS = {
+  primary: '#0FA958', // Brighter green for dark mode readability
+  background: '#0B132B',
+  surface: '#1C2541',
+  text: '#F8FAFC',
+  textMain: '#F8FAFC',
+  textMuted: '#94A3B8',
+  border: '#2E3D5C',
+  error: '#EF4444',
+  success: '#10B981',
+  primaryLight: '#1B3B36',
+  secondary: '#F59E0B',
+  secondaryLight: '#3B2F17',
+  surfaceAlt: '#161F38',
+  goldBg: '#3B2F17',
+  goldText: '#FBBF24',
+};
+
+export function getThemeColors(isDark?: boolean) {
+  return isDark ? DARK_COLORS : COLORS;
+}
+
+
 export const SPACING = {
   xs: 8,
   sm: 8,

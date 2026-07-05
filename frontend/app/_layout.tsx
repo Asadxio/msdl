@@ -3,6 +3,8 @@ import type { Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { I18nManager, Platform } from 'react-native';
 import { COLORS } from '@/constants/theme';
+import { ThemeProvider } from '@/context/ThemeContext';
+import { LanguageProvider } from '@/context/LanguageContext';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
@@ -424,6 +426,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   return (
+    <ThemeProvider>
+    <LanguageProvider>
     <AuthProvider>
       <DataProvider>
         <AuthGate>
@@ -478,6 +482,8 @@ export default function RootLayout() {
         </AuthGate>
       </DataProvider>
     </AuthProvider>
+    </LanguageProvider>
+    </ThemeProvider>
   );
 }
 
