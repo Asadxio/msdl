@@ -471,6 +471,7 @@ export default function RootLayout() {
             <Stack.Screen name="admin/privacy-requests" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/moderation" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/security" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="admin/send-push" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="onboarding-entry" options={{ animation: 'fade' }} />
             <Stack.Screen name="onboarding-first-time" options={{ animation: 'fade' }} />
             <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />

@@ -810,6 +810,21 @@ export default function AboutScreen() {
               <Text style={styles.adminItemText}>Analytics Dashboard</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/send-push')} testID="send-push-btn">
+              <Ionicons name="notifications-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Send Push Notifications</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/moderation')} testID="moderation-btn">
+              <Ionicons name="flag-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Moderation Queue</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.adminItem} onPress={() => safePush('/admin/security')} testID="security-btn">
+              <Ionicons name="shield-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.adminItemText}>Security Dashboard</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
 
             <View style={styles.exportBlock}>
               <Text style={styles.subTitle}>Data Safety</Text>
