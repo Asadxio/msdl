@@ -518,6 +518,8 @@ const styles = StyleSheet.create({
     width: '23%',
     alignItems: 'center',
     paddingVertical: SPACING.sm + 4,
+    minHeight: 64,
+    minWidth: 70,
   },
   quickIconContainer: {
     width: 48,

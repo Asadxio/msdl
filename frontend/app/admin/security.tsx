@@ -47,7 +47,7 @@ export default function SecurityDashboard() {
     <View style={styles.row}><TouchableOpacity onPress={() => setSeverity(severity === 'all' ? 'high' : 'all')}><Text>Severity: {severity}</Text></TouchableOpacity><TouchableOpacity onPress={exportReport}><Text>Export CSV</Text></TouchableOpacity></View>
     <Text style={styles.subtitle}>Anomalies: {anomalies.length}</Text>
     <Text style={styles.subtitle}>Heatmap proxy (events loaded): {events.length}</Text>
-    <FlatList refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />} data={events} keyExtractor={(i) => i.id} renderItem={({ item }) => <View style={styles.card}><Text>{item.event}</Text><Text>{item.severity || 'n/a'} • {item.created_at_ms || ''}</Text></View>} />
+    <FlatList contentContainerStyle={{ paddingBottom: 40 }} refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />} data={events} keyExtractor={(i) => i.id} renderItem={({ item }) => <View style={styles.card}><Text>{item.event}</Text><Text>{item.severity || 'n/a'} • {item.created_at_ms || ''}</Text></View>} />
   </View>;
 }
 

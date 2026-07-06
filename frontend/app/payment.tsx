@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -230,6 +230,7 @@ export default function PaymentFlowScreen() {
         <Text style={styles.subtitle}>Select → Pay → Confirm → Status</Text>
       </View>
 
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.stepRow}>
           {[1, 2, 3, 4].map((item) => (
@@ -341,6 +342,7 @@ export default function PaymentFlowScreen() {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
+    </KeyboardAvoidingView>
     </View>
   );
 }
