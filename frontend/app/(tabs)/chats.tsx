@@ -91,6 +91,8 @@ function fmtChatTime(value: unknown): string {
   }
 }
 
+type FilterTab = 'all' | 'unread' | 'teachers' | 'students' | 'broadcasts' | 'support' | 'pinned';
+
 export default function ChatsScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await refreshChats();
@@ -105,6 +107,7 @@ export default function ChatsScreen() {
   const [error, setError] = useState('');
   const [users, setUsers] = useState<AppUser[]>([]);
   const [chats, setChats] = useState<ChatItem[]>([]);
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [showUsers, setShowUsers] = useState(false);
   const [showGroupCreator, setShowGroupCreator] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -433,19 +436,37 @@ export default function ChatsScreen() {
     )
   ));
 
+  const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
+
   const filteredChats = safeChats
     .filter((c) => !(Array.isArray(c.hidden_by) ? c.hidden_by : []).includes(user?.uid || ''))
     .filter((c) => (
     !debouncedSearch || chatTitle(c, usersMap, user?.uid || '').toLowerCase().includes(debouncedSearch)
     ))
+    .filter((c) => {
+      if (activeTab === 'all') return true;
+      if (activeTab === 'unread') return (c.unread_counts?.[user?.uid || ''] || 0) > 0;
+      if (activeTab === 'pinned') return (Array.isArray(c.pinned_by) ? c.pinned_by : []).includes(user?.uid || '');
+      if (activeTab === 'broadcasts') return c.type === 'broadcast';
+      if (activeTab === 'teachers') {
+        const otherIds = c.participants.filter((p) => p !== user?.uid);
+        return otherIds.some((id) => userById[id]?.role === 'teacher');
+      }
+      if (activeTab === 'students') {
+        const otherIds = c.participants.filter((p) => p !== user?.uid);
+        return otherIds.some((id) => userById[id]?.role === 'student' || !userById[id]?.role);
+      }
+      if (activeTab === 'support') {
+        return c.name?.toLowerCase().includes('support') || c.last_message?.toLowerCase().includes('support');
+      }
+      return true;
+    })
     .sort((a, b) => {
       const aPinned = (Array.isArray(a.pinned_by) ? a.pinned_by : []).includes(user?.uid || '');
       const bPinned = (Array.isArray(b.pinned_by) ? b.pinned_by : []).includes(user?.uid || '');
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
       return (b.updated_at?.seconds || 0) - (a.updated_at?.seconds || 0);
     });
-
-  const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 
   return (
     <View style={styles.container}>
@@ -499,6 +520,37 @@ export default function ChatsScreen() {
           placeholderTextColor={COLORS.textMuted}
         />
       </View>
+
+      {(isAdmin || isTeacher) && (
+        <View style={styles.filterTabsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabsScroll}>
+            {(['all', 'unread', 'teachers', 'students', 'broadcasts', 'support', 'pinned'] as FilterTab[]).map((tab) => {
+              const isActive = activeTab === tab;
+              const labels: Record<FilterTab, string> = {
+                all: 'All',
+                unread: 'Unread',
+                teachers: 'Teachers',
+                students: 'Student Requests',
+                broadcasts: 'Broadcasts',
+                support: 'Support',
+                pinned: 'Pinned',
+              };
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.filterTabChip, isActive && styles.filterTabChipActive]}
+                  onPress={() => setActiveTab(tab)}
+                >
+                  <Text style={[styles.filterTabText, isActive && styles.filterTabTextActive]}>
+                    {labels[tab]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {showUsers && (
@@ -651,6 +703,12 @@ const styles = StyleSheet.create({
   },
   toolBtnText: { color: COLORS.primary, fontWeight: '600', fontSize: 12 },
   searchWrap: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm },
+  filterTabsContainer: { paddingBottom: SPACING.sm },
+  filterTabsScroll: { paddingHorizontal: SPACING.md, gap: 8 },
+  filterTabChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  filterTabChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterTabText: { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
+  filterTabTextActive: { color: '#FFF' },
   errorText: { color: '#B3261E', fontSize: 12, paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm },
   panel: { marginHorizontal: SPACING.md, marginBottom: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, ...SHADOWS.card },
   panelTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textMain, marginBottom: 8 },
