@@ -1132,7 +1132,7 @@ service cloud.firestore {
       allow read: if isApprovedVerifiedUser();
       allow create: if isValidStatusCreate();
       allow update: if isValidStatusInteractionUpdate();
-      allow delete: if isAdmin() || (isTeacherOrAdmin() && resource.data.user_id == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
     }
 
     match /status_updates/{statusId}/comments/{commentId} {

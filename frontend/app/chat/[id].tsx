@@ -119,12 +119,14 @@ const MessageBubble = React.memo(function MessageBubble({
   showSender,
   seenByOthers,
   onReport,
+  onDelete,
 }: {
   item: MessageItem;
   mine: boolean;
   showSender: boolean;
   seenByOthers: boolean;
   onReport: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <View style={[styles.bubbleWrap, mine ? styles.mineWrap : styles.otherWrap]}>
@@ -140,9 +142,15 @@ const MessageBubble = React.memo(function MessageBubble({
         {item.message_type && item.message_type !== 'text' && item.message_type !== 'image' ? <Text style={[styles.attachmentText, mine && { color: 'rgba(255,255,255,0.88)' }]}>{item.message_type.toUpperCase()} attachment {item.media_name ? `• ${item.media_name}` : ''}</Text> : null}
         <View style={styles.metaRow}>
           <Text style={[styles.time, mine && { color: 'rgba(255,255,255,0.8)' }]}>{fmtTime(item)}</Text>
-          <TouchableOpacity onPress={onReport} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Report message">
-            <Ionicons name="flag-outline" size={13} color={mine ? 'rgba(255,255,255,0.85)' : COLORS.textMuted} />
-          </TouchableOpacity>
+          {mine ? (
+            <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Delete message">
+              <Ionicons name="trash-outline" size={14} color="rgba(255,255,255,0.9)" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={onReport} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Report message">
+              <Ionicons name="flag-outline" size={13} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          )}
           {mine ? (
             <Ionicons
               name={item.failed ? 'alert-circle' : (seenByOthers ? 'checkmark-done' : 'checkmark')}
@@ -640,7 +648,7 @@ useEffect(() => {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Reply', onPress: () => setReplyTarget(item) },
       { text: 'Delete for me', onPress: () => { void deleteForMe(item); } },
-      { text: 'Report message', onPress: () => setReportTarget(item) },
+      ...(item.sender_id !== user?.uid ? [{ text: 'Report message', onPress: () => setReportTarget(item) }] : []),
       ...(canUnsend ? [{ text: 'Unsend for everyone', style: 'destructive' as const, onPress: () => { void unsendForEveryone(item); } }] : []),
     ]);
   }, [deleteForMe, unsendForEveryone, user?.uid]);
@@ -723,6 +731,7 @@ useEffect(() => {
           showSender={!mine && chat?.type !== 'direct'}
           seenByOthers={seenByOthers}
           onReport={() => setReportTarget(item)}
+          onDelete={() => openMessageActions(item)}
         />
       </TouchableOpacity>
     );

@@ -21,6 +21,7 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   increment,
@@ -376,6 +377,25 @@ export default function StatusScreen() {
     }).catch(() => Alert.alert("Delete failed", "Could not delete comment."));
   };
 
+  const deleteStatusUpdate = async (item: StatusItem) => {
+    if (!user?.uid || (item.user_id !== user.uid && profile?.role !== "admin")) return;
+    Alert.alert("Delete Status", "Are you sure you want to delete this status update?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, "status_updates", item.id));
+            setItems((prev) => prev.filter((s) => s.id !== item.id));
+          } catch {
+            Alert.alert("Delete failed", "Could not delete status update.");
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -568,7 +588,11 @@ export default function StatusScreen() {
               <View style={styles.row}>
                 <TouchableOpacity style={styles.ghostBtn} onPress={() => hideStatus(item)}><Text style={styles.ghostBtnText}>Hide</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.ghostBtn} onPress={() => muteStatus(item)}><Text style={styles.ghostBtnText}>{(item.muted_by || []).includes(user?.uid || "") ? "Unmute" : "Mute"}</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.ghostBtn} onPress={() => setReportStatusTarget(item)}><Text style={styles.ghostBtnText}>Report</Text></TouchableOpacity>
+                {item.user_id === user?.uid || profile?.role === "admin" ? (
+                  <TouchableOpacity style={styles.ghostBtn} onPress={() => deleteStatusUpdate(item)}><Text style={[styles.ghostBtnText, { color: "#E53E3E" }]}>Delete</Text></TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.ghostBtn} onPress={() => setReportStatusTarget(item)}><Text style={styles.ghostBtnText}>Report</Text></TouchableOpacity>
+                )}
               </View>
             </View>
           )}
