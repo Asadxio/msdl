@@ -692,22 +692,22 @@ export default function AboutScreen() {
                   <View style={styles.avatarRing} />
                 </View>
                 <View style={styles.profileMainInfo}>
-                  <Text style={styles.premiumName}>{profile.name || user?.displayName || 'Student'}</Text>
+                  <Text style={styles.premiumName}>{profile.name || user?.displayName || (isAdmin ? 'Executive Admin' : 'Student')}</Text>
                   <Text style={styles.studentIdText}>
-                    ID: #MST-{(user?.uid || profile?.uid || '000000').slice(0, 6).toUpperCase()}
+                    {isAdmin ? 'SYS ID' : 'ID'}: #{isAdmin ? 'SYS-ADM-' : 'MST-'}{(user?.uid || profile?.uid || '000000').slice(0, 6).toUpperCase()}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.premiumBadgesContainer}>
-                <View style={styles.premiumRoleBadge}>
+                <View style={[styles.premiumRoleBadge, isAdmin && styles.execAdminRoleBadge]}>
                   <Ionicons
-                    name={profile.role === 'admin' ? 'shield-checkmark' : profile.role === 'teacher' ? 'school' : 'person'}
+                    name={profile.role === 'admin' || profile.role === 'super_admin' ? 'shield-checkmark' : profile.role === 'teacher' ? 'school' : 'person'}
                     size={14}
-                    color={COLORS.goldText}
+                    color={isAdmin ? '#FFFFFF' : COLORS.goldText}
                   />
-                  <Text style={styles.premiumRoleBadgeText}>
-                    {(profile.role || 'student').charAt(0).toUpperCase() + (profile.role || 'student').slice(1)}
+                  <Text style={[styles.premiumRoleBadgeText, isAdmin && styles.execAdminRoleBadgeText]}>
+                    {profile.role === 'super_admin' ? 'SUPER ADMIN / ROOT ACCESS' : profile.role === 'admin' ? 'SYSTEM ADMINISTRATOR' : (profile.role || 'student').charAt(0).toUpperCase() + (profile.role || 'student').slice(1)}
                   </Text>
                 </View>
 
@@ -773,67 +773,131 @@ export default function AboutScreen() {
                     <Text style={styles.premiumInfoText}>Referral: {profile.referral_code} • {profile.referral_count || 0} used</Text>
                   </View>
                 )}
+                {isAdmin && (
+                  <View style={styles.execSummaryBox}>
+                    <Text style={styles.execSummaryTitle}>🔐 Active Executive Permissions</Text>
+                    <Text style={styles.execSummaryText}>
+                      Full Access: User Roster, LMS Coursework, Live Streams, Financial Audits, Moderation Queue & System Security.
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 
-            {/* PHASE 2: Student Statistics */}
-            <View style={styles.statsSectionContainer}>
-              <Text style={styles.sectionSubtitleText}>📊 Academic Performance & Stats</Text>
-              <View style={styles.statsGrid}>
-                <View style={styles.statCardItem}>
-                  <View style={[styles.statIconBox, { backgroundColor: '#EEF2FF' }]}>
-                    <Ionicons name="book" size={22} color="#4F46E5" />
+            {isAdmin ? (
+              /* PHASE 9 (Admin Upgrade): Executive System Overview */
+              <View style={styles.statsSectionContainer}>
+                <Text style={styles.sectionSubtitleText}>🛡️ Executive System Overview</Text>
+                <View style={styles.execPermissionsCard}>
+                  <View style={styles.execPermHeader}>
+                    <Ionicons name="key" size={20} color={COLORS.primary} />
+                    <Text style={styles.execPermTitle}>Active System Permissions</Text>
                   </View>
-                  <Text style={styles.statCardValue}>{totalCoursesCount}</Text>
-                  <Text style={styles.statCardLabel}>Courses Available</Text>
-                </View>
-                <View style={styles.statCardItem}>
-                  <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
-                    <Ionicons name="checkmark-circle" size={22} color="#10B981" />
+                  <Text style={styles.execPermDesc}>
+                    You are authenticated with full executive privileges across the MSDL Enterprise LMS platform.
+                  </Text>
+                  <View style={styles.execPermGrid}>
+                    <View style={styles.execPermChip}><Ionicons name="people" size={14} color="#1565C0" /><Text style={styles.execPermChipText}>User Control</Text></View>
+                    <View style={styles.execPermChip}><Ionicons name="school" size={14} color="#2E7D32" /><Text style={styles.execPermChipText}>Academic Admin</Text></View>
+                    <View style={styles.execPermChip}><Ionicons name="videocam" size={14} color="#E65100" /><Text style={styles.execPermChipText}>Live Stream Host</Text></View>
+                    <View style={styles.execPermChip}><Ionicons name="analytics" size={14} color="#6A1B9A" /><Text style={styles.execPermChipText}>Financial Audit</Text></View>
                   </View>
-                  <Text style={styles.statCardValue}>{lessonsCompletedCount}</Text>
-                  <Text style={styles.statCardLabel}>Lessons Completed</Text>
                 </View>
-                <View style={styles.statCardItem}>
-                  <View style={[styles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
-                    <Ionicons name="help-circle" size={22} color="#D97706" />
-                  </View>
-                  <Text style={styles.statCardValue}>{quizzesCompletedCount}</Text>
-                  <Text style={styles.statCardLabel}>Quiz Attempts</Text>
-                </View>
-                <View style={styles.statCardItem}>
-                  <View style={[styles.statIconBox, { backgroundColor: '#F5F3FF' }]}>
-                    <Ionicons name="library" size={22} color="#7C3AED" />
-                  </View>
-                  <Text style={styles.statCardValue}>{totalBooksCount}</Text>
-                  <Text style={styles.statCardLabel}>Library Books</Text>
-                </View>
-              </View>
-            </View>
 
-            {/* PHASE 9: Earned Achievements */}
-            <View style={styles.statsSectionContainer}>
-              <Text style={styles.sectionSubtitleText}>🏆 Earned Achievements</Text>
-              {earnedBadges.length === 0 ? (
-                <View style={styles.emptyBadgesCard}>
-                  <Ionicons name="trophy-outline" size={32} color={COLORS.textMuted} />
-                  <Text style={styles.emptyBadgesTitle}>Start Learning to Earn Badges!</Text>
-                  <Text style={styles.emptyBadgesDesc}>Complete lessons and quiz assessments to unlock your Islamic student badges.</Text>
-                </View>
-              ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesScroll}>
-                  {earnedBadges.map((b) => (
-                    <View key={b.id} style={styles.badgeCard}>
-                      <View style={[styles.badgeIconBox, { backgroundColor: b.color + '15' }]}>
-                        <Ionicons name={b.icon as any} size={24} color={b.color} />
-                      </View>
-                      <Text style={styles.badgeTitle} numberOfLines={1}>{b.title}</Text>
-                      <Text style={styles.badgeDesc} numberOfLines={2}>{b.desc}</Text>
+                <Text style={[styles.sectionSubtitleText, { marginTop: SPACING.md }]}>⚡ Admin Operations Shortcuts</Text>
+                <View style={styles.statsGrid}>
+                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/users')}>
+                    <View style={[styles.statIconBox, { backgroundColor: '#EEF2FF' }]}>
+                      <Ionicons name="people" size={22} color="#4F46E5" />
                     </View>
-                  ))}
-                </ScrollView>
-              )}
-            </View>
+                    <Text style={styles.statCardValue}>Roster</Text>
+                    <Text style={styles.statCardLabel}>User Control</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/manage-academics')}>
+                    <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
+                      <Ionicons name="school" size={22} color="#10B981" />
+                    </View>
+                    <Text style={styles.statCardValue}>LMS</Text>
+                    <Text style={styles.statCardLabel}>Academics</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/analytics')}>
+                    <View style={[styles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
+                      <Ionicons name="stats-chart" size={22} color="#D97706" />
+                    </View>
+                    <Text style={styles.statCardValue}>Audit</Text>
+                    <Text style={styles.statCardLabel}>Analytics</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/security')}>
+                    <View style={[styles.statIconBox, { backgroundColor: '#F5F3FF' }]}>
+                      <Ionicons name="shield-checkmark" size={22} color="#7C3AED" />
+                    </View>
+                    <Text style={styles.statCardValue}>Security</Text>
+                    <Text style={styles.statCardLabel}>Diagnostics</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <>
+                {/* PHASE 2: Student Statistics */}
+                <View style={styles.statsSectionContainer}>
+                  <Text style={styles.sectionSubtitleText}>📊 Academic Performance & Stats</Text>
+                  <View style={styles.statsGrid}>
+                    <View style={styles.statCardItem}>
+                      <View style={[styles.statIconBox, { backgroundColor: '#EEF2FF' }]}>
+                        <Ionicons name="book" size={22} color="#4F46E5" />
+                      </View>
+                      <Text style={styles.statCardValue}>{totalCoursesCount}</Text>
+                      <Text style={styles.statCardLabel}>Courses Available</Text>
+                    </View>
+                    <View style={styles.statCardItem}>
+                      <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
+                        <Ionicons name="checkmark-circle" size={22} color="#10B981" />
+                      </View>
+                      <Text style={styles.statCardValue}>{lessonsCompletedCount}</Text>
+                      <Text style={styles.statCardLabel}>Lessons Completed</Text>
+                    </View>
+                    <View style={styles.statCardItem}>
+                      <View style={[styles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
+                        <Ionicons name="help-circle" size={22} color="#D97706" />
+                      </View>
+                      <Text style={styles.statCardValue}>{quizzesCompletedCount}</Text>
+                      <Text style={styles.statCardLabel}>Quiz Attempts</Text>
+                    </View>
+                    <View style={styles.statCardItem}>
+                      <View style={[styles.statIconBox, { backgroundColor: '#F5F3FF' }]}>
+                        <Ionicons name="library" size={22} color="#7C3AED" />
+                      </View>
+                      <Text style={styles.statCardValue}>{totalBooksCount}</Text>
+                      <Text style={styles.statCardLabel}>Library Books</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* PHASE 9: Earned Achievements */}
+                <View style={styles.statsSectionContainer}>
+                  <Text style={styles.sectionSubtitleText}>🏆 Earned Achievements</Text>
+                  {earnedBadges.length === 0 ? (
+                    <View style={styles.emptyBadgesCard}>
+                      <Ionicons name="trophy-outline" size={32} color={COLORS.textMuted} />
+                      <Text style={styles.emptyBadgesTitle}>Start Learning to Earn Badges!</Text>
+                      <Text style={styles.emptyBadgesDesc}>Complete lessons and quiz assessments to unlock your Islamic student badges.</Text>
+                    </View>
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesScroll}>
+                      {earnedBadges.map((b) => (
+                        <View key={b.id} style={styles.badgeCard}>
+                          <View style={[styles.badgeIconBox, { backgroundColor: b.color + '15' }]}>
+                            <Ionicons name={b.icon as any} size={24} color={b.color} />
+                          </View>
+                          <Text style={styles.badgeTitle} numberOfLines={1}>{b.title}</Text>
+                          <Text style={styles.badgeDesc} numberOfLines={2}>{b.desc}</Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              </>
+            )}
 
             {/* PHASE 3: Quick Actions */}
             <View style={styles.quickActionsContainer}>
@@ -1426,6 +1490,11 @@ const styles = StyleSheet.create({
   premiumBadgesContainer: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.lg },
   premiumRoleBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.goldBg, paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.full },
   premiumRoleBadgeText: { fontSize: 12, fontWeight: '700', color: COLORS.goldText, textTransform: 'uppercase', letterSpacing: 0.5 },
+  execAdminRoleBadge: { backgroundColor: COLORS.primary },
+  execAdminRoleBadgeText: { color: '#FFFFFF', fontWeight: '900' },
+  execSummaryBox: { backgroundColor: '#EEF2FF', padding: SPACING.sm, borderRadius: RADIUS.md, marginTop: SPACING.sm, borderWidth: 1, borderColor: '#C7D2FE', width: '100%' },
+  execSummaryTitle: { fontSize: 12, fontWeight: '800', color: '#312E81', marginBottom: 4 },
+  execSummaryText: { fontSize: 11, color: '#4338CA', lineHeight: 16 },
   premiumStatusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECFDF5', paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.full },
   premiumStatusPending: { backgroundColor: '#FFFBEB' },
   premiumStatusInactive: { backgroundColor: '#FEF2F2' },
@@ -1673,7 +1742,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#047857',
     lineHeight: 20,
-    fontStyle: 'italic',
+  },
+  execPermissionsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  execPermHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  execPermTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  execPermDesc: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+    marginBottom: SPACING.sm,
+  },
+  execPermGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  execPermChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  execPermChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMain,
   },
   submittedNote: {
     fontSize: 12,
