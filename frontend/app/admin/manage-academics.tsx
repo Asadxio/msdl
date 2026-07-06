@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import {
-  addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc,
+  addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc, getCountFromServer, query, where,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
@@ -89,6 +89,7 @@ export default function ManageAcademicsScreen() {
   const [editingRecordingId, setEditingRecordingId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [studentCount, setStudentCount] = useState<number>(0);
 
   const courseNames = useMemo(() => courses.map((c) => c.name).filter(Boolean), [courses]);
   const lessonOptions = useMemo(
@@ -96,14 +97,20 @@ export default function ManageAcademicsScreen() {
     [lessons, recordingCourseId],
   );
 
+  const avgContentPerCourse = useMemo(() => {
+    if (courses.length === 0) return '0.0';
+    return ((lessons.length + recordings.length) / courses.length).toFixed(1);
+  }, [courses.length, lessons.length, recordings.length]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [courseSnap, teacherSnap, lessonSnap, recordingSnap] = await Promise.all([
+      const [courseSnap, teacherSnap, lessonSnap, recordingSnap, studentsSnap] = await Promise.all([
         getDocs(collection(db, 'courses')),
         getDocs(collection(db, 'teachers')),
         getDocs(collection(db, 'lessons')),
         getDocs(collection(db, 'recordings')),
+        getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => ({ data: () => ({ count: 0 }) })),
       ]);
 
       const nextCourses: CourseItem[] = [];
@@ -160,6 +167,7 @@ export default function ManageAcademicsScreen() {
       setTeachers(nextTeachers);
       setLessons(nextLessons);
       setRecordings(nextRecordings);
+      setStudentCount(studentsSnap.data().count || 0);
       setLoadError('');
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'courses/teachers/lessons/recordings', operation: 'get', query: 'get all courses, teachers, lessons, recordings', role: profile?.role, status: profile?.status }, error);
@@ -522,6 +530,62 @@ export default function ManageAcademicsScreen() {
         ) : null}
         {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
 
+        <View style={styles.lmsBanner}>
+          <View style={styles.lmsBannerHeader}>
+            <Ionicons name="school" size={24} color={COLORS.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lmsBannerTitle}>LMS Executive Metrics</Text>
+              <Text style={styles.lmsBannerSubtitle}>Real-time overview of academic operations</Text>
+            </View>
+          </View>
+          <View style={styles.metricsGrid}>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricValue}>{courses.length}</Text>
+              <Text style={styles.metricLabel}>Total Courses</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={[styles.metricValue, { color: '#1565C0' }]}>{studentCount}</Text>
+              <Text style={styles.metricLabel}>Active Students</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={[styles.metricValue, { color: '#2E7D32' }]}>{teachers.length}</Text>
+              <Text style={styles.metricLabel}>Faculty</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={[styles.metricValue, { color: '#E65100' }]}>{lessons.length}</Text>
+              <Text style={styles.metricLabel}>Materials</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={[styles.metricValue, { color: '#6A1B9A' }]}>{recordings.length}</Text>
+              <Text style={styles.metricLabel}>Recordings</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={[styles.metricValue, { color: COLORS.goldText }]}>{avgContentPerCourse}</Text>
+              <Text style={styles.metricLabel}>Avg Content/Course</Text>
+            </View>
+          </View>
+        </View>
+
+        {courses.length > 0 && (
+          <View style={styles.scheduleCard}>
+            <View style={styles.scheduleHeader}>
+              <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.scheduleTitle}>Upcoming Class Schedule</Text>
+            </View>
+            {courses.slice(0, 4).map((c) => (
+              <View key={c.id} style={styles.scheduleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.scheduleCourseName}>{c.name}</Text>
+                  <Text style={styles.scheduleTeacher}>Faculty: {c.teacher_name || 'Unassigned'}</Text>
+                </View>
+                <View style={styles.scheduleTimeBadge}>
+                  <Text style={styles.scheduleTimeText}>{c.schedule || 'Weekly'} {c.class_time ? `• ${c.class_time}` : ''}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Courses</Text>
           <TextInput style={styles.input} placeholder="Course name" placeholderTextColor={COLORS.textMuted} value={courseForm.name} onChangeText={(v) => setCourseForm((p) => ({ ...p, name: v }))} />
@@ -727,4 +791,104 @@ const styles = StyleSheet.create({
   courseChipSelected: { borderColor: COLORS.primary, backgroundColor: '#EEF6F2' },
   courseChipText: { color: COLORS.textMain, fontSize: 13, fontWeight: '500' },
   courseChipTextSelected: { color: COLORS.primary, fontWeight: '700' },
+  lmsBanner: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    ...SHADOWS.card,
+  },
+  lmsBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingBottom: SPACING.sm,
+  },
+  lmsBannerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  lmsBannerSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  metricCard: {
+    width: '30%',
+    flexGrow: 1,
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  scheduleCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    ...SHADOWS.card,
+  },
+  scheduleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  scheduleTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    gap: 8,
+  },
+  scheduleCourseName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  scheduleTeacher: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  scheduleTimeBadge: {
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  scheduleTimeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
 });
