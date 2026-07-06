@@ -35,6 +35,7 @@ import {
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
 import { db } from '@/lib/firebase';
 import { WHATSAPP_HELP_URL, isValidHttpsUrl, normalizeWhatsAppUrl, prepareExternalUrl } from '@/lib/links';
 
@@ -57,6 +58,7 @@ type FeedbackItem = {
   message: string;
   rating?: number;
   user_id?: string;
+  created_at?: any;
 };
 
 type PaymentItem = {
@@ -95,6 +97,14 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
 
+const ISLAMIC_INSPIRATIONS = [
+  { type: "Quran Verse", arabic: "رَّبِّ زِدْنِي عِلْمًا", translation: "My Lord, increase me in knowledge.", source: "Surah Taha 20:114" },
+  { type: "Hadith", arabic: "خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ", translation: "The best of you are those who learn the Quran and teach it.", source: "Sahih Bukhari" },
+  { type: "Masnoon Dua", arabic: "اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا", translation: "O Allah, I ask You for beneficial knowledge, acceptable provision, and righteous deeds.", source: "Sunan Ibn Majah" },
+  { type: "Islamic Quote", arabic: "الْعِلْمُ نُورٌ يَقْذِفُهُ اللَّهُ فِي قَلْبِ مَنْ يَشَاءُ", translation: "Knowledge is a light that Allah casts into the heart of whom He wills.", source: "Imam Malik (RA)" },
+  { type: "Masnoon Dua", arabic: "رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ", translation: "Our Lord, give us in this world [that which is] good and in the Hereafter [that which is] good and protect us from the punishment of the Fire.", source: "Surah Al-Baqarah 2:201" }
+];
+
 function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -131,6 +141,7 @@ const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadra
   const [savingAbout, setSavingAbout] = useState(false);
   const [focused, setFocused] = useState(false);
   const [serverChangedWhileEditing, setServerChangedWhileEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const editingRef = useRef(false);
   const latestServerAboutRef = useRef(aboutMadrasa);
 
@@ -187,9 +198,15 @@ const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadra
 
   return (
     <SectionCard title="🌿 About Our Madrasa" icon="leaf-outline">
-      <Text style={styles.bodyText}>
-        {aboutMadrasa || DEFAULT_ABOUT_CONTENT}
-      </Text>
+      <View style={{ marginBottom: 8 }}>
+        <Text style={[styles.bodyText, { lineHeight: 24 }]} numberOfLines={expanded ? undefined : 4}>
+          {aboutMadrasa || DEFAULT_ABOUT_CONTENT}
+        </Text>
+        <TouchableOpacity onPress={() => setExpanded(!expanded)} style={styles.readMoreBtn} accessibilityRole="button" accessibilityLabel={expanded ? "Read Less" : "Read More"}>
+          <Text style={styles.readMoreText}>{expanded ? "Read Less ▲" : "Read More ▼"}</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.premiumDivider} />
       {isAdmin ? (
         <>
           <Text style={[styles.inputLabel, { marginTop: SPACING.md }]}>Editable About Content</Text>
@@ -223,8 +240,19 @@ const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadra
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, signOut, refreshProfile } = useAuth();
+  const { lessonProgress, courses, books } = useData();
   const router = useRouter();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+
+  const [inspirationIdx, setInspirationIdx] = useState(0);
+  const lessonsCompletedCount = useMemo(() => Object.values(lessonProgress || {}).filter((p: any) => p?.completed).length, [lessonProgress]);
+  const quizzesCompletedCount = useMemo(() => Object.values(lessonProgress || {}).filter((p: any) => p?.quizCompleted).length, [lessonProgress]);
+  const totalCoursesCount = useMemo(() => Array.isArray(courses) ? courses.length : 0, [courses]);
+  const totalBooksCount = useMemo(() => Array.isArray(books) ? books.length : 0, [books]);
+
+  const rotateInspiration = useCallback(() => {
+    setInspirationIdx((prev) => (prev + 1) % ISLAMIC_INSPIRATIONS.length);
+  }, []);
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
@@ -241,6 +269,18 @@ export default function AboutScreen() {
   const [socialError, setSocialError] = useState('');
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const testimonials = useMemo(() => feedback.slice(0, 6), [feedback]);
+  const mySubmittedFeedback = useMemo(() => feedback.filter(f => f.user_id === user?.uid || (profile?.name && f.user_name === profile.name)), [feedback, user?.uid, profile?.name]);
+
+  const earnedBadges = useMemo(() => {
+    const list = [];
+    if (user?.metadata?.creationTime) list.push({ id: 'active', title: 'Active Member', desc: 'Joined Madrasa Tus Salikat Lil Banat', icon: 'ribbon-outline', color: '#10B981' });
+    if (lessonsCompletedCount >= 1) list.push({ id: 'first_lesson', title: 'First Lesson', desc: 'Completed your first Islamic lesson', icon: 'book-outline', color: '#4F46E5' });
+    if (lessonsCompletedCount >= 5) list.push({ id: 'dedicated', title: 'Dedicated Learner', desc: 'Completed 5+ Islamic lessons', icon: 'flame-outline', color: '#D97706' });
+    if (quizzesCompletedCount >= 1) list.push({ id: 'first_quiz', title: 'First Quiz', desc: 'Attempted your first knowledge assessment', icon: 'help-circle-outline', color: '#8B5CF6' });
+    if (quizzesCompletedCount >= 5) list.push({ id: 'quiz_master', title: 'Quiz Master', desc: 'Completed 5+ quizzes', icon: 'trophy-outline', color: COLORS.goldText });
+    if (myPayments.length > 0) list.push({ id: 'supporter', title: 'Madrasa Supporter', desc: 'Contributed fees or sadqa to the madrasa', icon: 'heart-outline', color: '#E11D48' });
+    return list;
+  }, [user, lessonsCompletedCount, quizzesCompletedCount, myPayments.length]);
   const handleAboutSaved = useCallback((aboutMadrasa: string) => {
     setSettings((prev) => ({ ...prev, about_madrasa: aboutMadrasa }));
   }, []);
@@ -642,26 +682,41 @@ export default function AboutScreen() {
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} testID="about-scroll">
         {profile && (
           <>
+            {/* PHASE 1: Premium Student Identity Card */}
             <View style={styles.premiumProfileCard} testID="user-profile-card">
-              <View style={styles.premiumAvatarContainer}>
-                <Text style={styles.premiumAvatarText}>
-                  {(profile.name || 'U').charAt(0).toUpperCase()}
-                </Text>
+              <View style={styles.profileHeaderRow}>
+                <View style={styles.premiumAvatarContainer}>
+                  <Text style={styles.premiumAvatarText}>
+                    {(profile.name || user?.displayName || 'U').charAt(0).toUpperCase()}
+                  </Text>
+                  <View style={styles.avatarRing} />
+                </View>
+                <View style={styles.profileMainInfo}>
+                  <Text style={styles.premiumName}>{profile.name || user?.displayName || 'Student'}</Text>
+                  <Text style={styles.studentIdText}>
+                    ID: #MST-{(user?.uid || profile?.uid || '000000').slice(0, 6).toUpperCase()}
+                  </Text>
+                </View>
               </View>
-              
-              <Text style={styles.premiumName}>{profile.name}</Text>
-              
+
               <View style={styles.premiumBadgesContainer}>
                 <View style={styles.premiumRoleBadge}>
                   <Ionicons
                     name={profile.role === 'admin' ? 'shield-checkmark' : profile.role === 'teacher' ? 'school' : 'person'}
-                    size={12}
+                    size={14}
                     color={COLORS.goldText}
                   />
                   <Text style={styles.premiumRoleBadgeText}>
                     {(profile.role || 'student').charAt(0).toUpperCase() + (profile.role || 'student').slice(1)}
                   </Text>
                 </View>
+
+                {(profile.status === 'approved' || profile.role === 'admin' || profile.role === 'teacher') && (
+                  <View style={styles.verifiedBadge}>
+                    <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                    <Text style={styles.verifiedBadgeText}>Verified</Text>
+                  </View>
+                )}
 
                 <View style={[
                   styles.premiumStatusBadge,
@@ -688,18 +743,30 @@ export default function AboutScreen() {
               <View style={styles.premiumInfoGrid}>
                 <View style={styles.premiumInfoRow}>
                   <Ionicons name="mail-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
-                  <Text style={styles.premiumInfoText}>{profile.email}</Text>
+                  <Text style={styles.premiumInfoText} numberOfLines={1}>{profile.email || user?.email || 'No Email'}</Text>
                 </View>
-                <View style={styles.premiumInfoRow}>
-                  <Ionicons name="call-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
-                  <Text style={styles.premiumInfoText}>{user?.phoneNumber || 'Not Provided'}</Text>
-                </View>
-                <View style={styles.premiumInfoRow}>
-                  <Ionicons name="calendar-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
-                  <Text style={styles.premiumInfoText}>
-                    Member Since {user?.metadata?.creationTime ? new Date(user.metadata.creationTime).toLocaleDateString() : 'Unknown'}
-                  </Text>
-                </View>
+                {!!user?.phoneNumber && (
+                  <View style={styles.premiumInfoRow}>
+                    <Ionicons name="call-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
+                    <Text style={styles.premiumInfoText}>{user.phoneNumber}</Text>
+                  </View>
+                )}
+                {!!user?.metadata?.creationTime && (
+                  <View style={styles.premiumInfoRow}>
+                    <Ionicons name="calendar-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
+                    <Text style={styles.premiumInfoText}>
+                      Joined {new Date(user.metadata.creationTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  </View>
+                )}
+                {!!user?.metadata?.lastSignInTime && (
+                  <View style={styles.premiumInfoRow}>
+                    <Ionicons name="time-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
+                    <Text style={styles.premiumInfoText}>
+                      Last Active: {new Date(user.metadata.lastSignInTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </Text>
+                  </View>
+                )}
                 {!!profile.referral_code && (
                   <View style={styles.premiumInfoRow}>
                     <Ionicons name="share-social-outline" size={18} color={COLORS.primary} style={styles.premiumInfoIcon} />
@@ -709,68 +776,147 @@ export default function AboutScreen() {
               </View>
             </View>
 
+            {/* PHASE 2: Student Statistics */}
+            <View style={styles.statsSectionContainer}>
+              <Text style={styles.sectionSubtitleText}>📊 Academic Performance & Stats</Text>
+              <View style={styles.statsGrid}>
+                <View style={styles.statCardItem}>
+                  <View style={[styles.statIconBox, { backgroundColor: '#EEF2FF' }]}>
+                    <Ionicons name="book" size={22} color="#4F46E5" />
+                  </View>
+                  <Text style={styles.statCardValue}>{totalCoursesCount}</Text>
+                  <Text style={styles.statCardLabel}>Courses Available</Text>
+                </View>
+                <View style={styles.statCardItem}>
+                  <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
+                    <Ionicons name="checkmark-circle" size={22} color="#10B981" />
+                  </View>
+                  <Text style={styles.statCardValue}>{lessonsCompletedCount}</Text>
+                  <Text style={styles.statCardLabel}>Lessons Completed</Text>
+                </View>
+                <View style={styles.statCardItem}>
+                  <View style={[styles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
+                    <Ionicons name="help-circle" size={22} color="#D97706" />
+                  </View>
+                  <Text style={styles.statCardValue}>{quizzesCompletedCount}</Text>
+                  <Text style={styles.statCardLabel}>Quiz Attempts</Text>
+                </View>
+                <View style={styles.statCardItem}>
+                  <View style={[styles.statIconBox, { backgroundColor: '#F5F3FF' }]}>
+                    <Ionicons name="library" size={22} color="#7C3AED" />
+                  </View>
+                  <Text style={styles.statCardValue}>{totalBooksCount}</Text>
+                  <Text style={styles.statCardLabel}>Library Books</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* PHASE 9: Earned Achievements */}
+            <View style={styles.statsSectionContainer}>
+              <Text style={styles.sectionSubtitleText}>🏆 Earned Achievements</Text>
+              {earnedBadges.length === 0 ? (
+                <View style={styles.emptyBadgesCard}>
+                  <Ionicons name="trophy-outline" size={32} color={COLORS.textMuted} />
+                  <Text style={styles.emptyBadgesTitle}>Start Learning to Earn Badges!</Text>
+                  <Text style={styles.emptyBadgesDesc}>Complete lessons and quiz assessments to unlock your Islamic student badges.</Text>
+                </View>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesScroll}>
+                  {earnedBadges.map((b) => (
+                    <View key={b.id} style={styles.badgeCard}>
+                      <View style={[styles.badgeIconBox, { backgroundColor: b.color + '15' }]}>
+                        <Ionicons name={b.icon as any} size={24} color={b.color} />
+                      </View>
+                      <Text style={styles.badgeTitle} numberOfLines={1}>{b.title}</Text>
+                      <Text style={styles.badgeDesc} numberOfLines={2}>{b.desc}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+
+            {/* PHASE 3: Quick Actions */}
             <View style={styles.quickActionsContainer}>
-              <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+              <Text style={styles.quickActionsTitle}>⚡ Quick Actions</Text>
               <View style={styles.quickActionsGrid}>
-                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/courses')}>
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/courses')} accessibilityRole="button" accessibilityLabel="My Courses, Continue learning">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="book-outline" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>My Courses</Text>
+                  <Text style={styles.quickActionSubText}>Continue learning</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/library')}>
+
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/library')} accessibilityRole="button" accessibilityLabel="Library, Islamic Books">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="library-outline" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>Library</Text>
+                  <Text style={styles.quickActionSubText}>Islamic Books</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/quiz')}>
+
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/quiz')} accessibilityRole="button" accessibilityLabel="Quiz History, View Results">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="help-circle-outline" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>Quiz History</Text>
+                  <Text style={styles.quickActionSubText}>View Results</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/prayer-times')}>
+
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/prayer-times')} accessibilityRole="button" accessibilityLabel="Prayer Times, Today's Salah">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="time-outline" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>Prayer Times</Text>
+                  <Text style={styles.quickActionSubText}>Today's Salah</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/qibla')}>
+
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/qibla')} accessibilityRole="button" accessibilityLabel="Qibla, Kaaba Direction">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="compass-outline" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>Qibla</Text>
+                  <Text style={styles.quickActionSubText}>Kaaba Direction</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/notifications')}>
+
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/(tabs)/notifications')} accessibilityRole="button" accessibilityLabel="Notifications, Recent updates">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="notifications-outline" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>Notifications</Text>
+                  <Text style={styles.quickActionSubText}>Recent updates</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/settings')}>
+
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => safePush('/settings')} accessibilityRole="button" accessibilityLabel="Settings, Manage Account">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="settings-outline" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>Settings</Text>
+                  <Text style={styles.quickActionSubText}>Manage Account</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickActionCard} onPress={openHelp}>
+
+                <TouchableOpacity style={styles.quickActionCard} onPress={openHelp} accessibilityRole="button" accessibilityLabel="Help, Support">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="logo-whatsapp" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>Help</Text>
+                  <Text style={styles.quickActionSubText}>Support</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickActionCard} onPress={scrollToAbout}>
+
+                <TouchableOpacity style={styles.quickActionCard} onPress={scrollToAbout} accessibilityRole="button" accessibilityLabel="About, Madrasa Info">
                   <View style={styles.quickActionIconWrapper}>
                     <Ionicons name="information-circle-outline" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.quickActionText}>About</Text>
+                  <Text style={styles.quickActionSubText}>Madrasa Info</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.quickActionCard, { borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' }]} onPress={signOut}>
+
+                <TouchableOpacity style={[styles.quickActionCard, { borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' }]} onPress={signOut} accessibilityRole="button" accessibilityLabel="Logout, Sign out">
                   <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FEE2E2' }]}>
                     <Ionicons name="log-out-outline" size={24} color={COLORS.error} />
                   </View>
                   <Text style={[styles.quickActionText, { color: COLORS.error }]}>Logout</Text>
+                  <Text style={[styles.quickActionSubText, { color: COLORS.error + '99' }]}>Sign out</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -853,16 +999,26 @@ export default function AboutScreen() {
         )}
 
         {!isAdmin ? (
-          <SectionCard title="Payments" icon="wallet-outline">
+          <SectionCard title="💳 Fee Management & Payments" icon="wallet-outline">
             <Text style={styles.bodyText}>Use a single guided flow for fees and donations.</Text>
-            <Text style={[styles.bodyText, { marginTop: 8 }]}>Current Fees: ₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
-            {myPayments[0] ? (
-              <View style={styles.statusCard}>
-                <Text style={styles.statusLabel}>Latest Payment Status</Text>
-                <Text style={styles.statusValue}>{paymentState(myPayments[0])}</Text>
+            <View style={styles.feeOverviewCard}>
+              <View style={styles.feeOverviewRow}>
+                <Text style={styles.feeLabelText}>Current Fees</Text>
+                <Text style={styles.feeAmountText}>₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
               </View>
-            ) : null}
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/payment')} testID="open-unified-payment-btn">
+              {myPayments[0] ? (
+                <View style={[styles.statusCard, { marginVertical: 8 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name={paymentState(myPayments[0]) === 'Active' || paymentState(myPayments[0]) === 'Paid' ? "checkmark-circle" : "time"} size={16} color={paymentState(myPayments[0]) === 'Active' || paymentState(myPayments[0]) === 'Paid' ? "#10B981" : COLORS.goldText} />
+                    <Text style={styles.statusLabel}>Latest Payment Status</Text>
+                  </View>
+                  <Text style={[styles.statusValue, { color: paymentState(myPayments[0]) === 'Active' || paymentState(myPayments[0]) === 'Paid' ? "#10B981" : COLORS.goldText }]}>
+                    {paymentState(myPayments[0])}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/payment')} testID="open-unified-payment-btn" accessibilityRole="button" accessibilityLabel="Open Payment Flow">
               <Text style={styles.primaryBtnText}>Open Payment Flow</Text>
             </TouchableOpacity>
           </SectionCard>
@@ -963,33 +1119,54 @@ export default function AboutScreen() {
         </>
         )}
 
-        <SectionCard title="Feedback & Testimonials" icon="chatbox-ellipses-outline">
-          <Text style={styles.inputLabel}>Feedback Message</Text>
-          <TextInput
-            style={[styles.input, styles.textArea, focusedInput === 'feedback_message' && styles.inputFocused]}
-            placeholder="Write your feedback"
-            placeholderTextColor={COLORS.textMuted}
-            value={fbMessage}
-            onChangeText={setFbMessage}
-            multiline
-            onFocus={() => setFocusedInput('feedback_message')}
-            onBlur={() => setFocusedInput(null)}
-          />
-          <Text style={styles.inputLabel}>Rating (optional)</Text>
-          <TextInput
-            style={[styles.input, focusedInput === 'feedback_rating' && styles.inputFocused]}
-            placeholder="Rating 1-5 (optional)"
-            placeholderTextColor={COLORS.textMuted}
-            keyboardType="numeric"
-            value={fbRating}
-            onChangeText={setFbRating}
-            onFocus={() => setFocusedInput('feedback_rating')}
-            onBlur={() => setFocusedInput(null)}
-          />
-          {feedbackError ? <Text style={styles.inputError}>{feedbackError}</Text> : null}
-          <TouchableOpacity style={styles.primaryBtn} onPress={submitFeedback} testID="submit-feedback-btn">
-            <Text style={styles.primaryBtnText}>Submit Feedback</Text>
-          </TouchableOpacity>
+        <SectionCard title="💬 Feedback & Testimonials" icon="chatbox-ellipses-outline">
+          {mySubmittedFeedback.length > 0 ? (
+            <View style={styles.mySubmittedFeedbackCard}>
+              <View style={styles.submittedHeader}>
+                <View style={styles.submittedBadge}>
+                  <Ionicons name="checkmark-done" size={16} color="#10B981" />
+                  <Text style={styles.submittedBadgeText}>Submitted</Text>
+                </View>
+                <Text style={styles.submittedDate}>
+                  {mySubmittedFeedback[0].created_at ? new Date(mySubmittedFeedback[0].created_at).toLocaleDateString() : 'Recent'}
+                </Text>
+              </View>
+              <Text style={styles.submittedMsgText}>{mySubmittedFeedback[0].message}</Text>
+              {mySubmittedFeedback[0].rating ? (
+                <Text style={styles.feedbackRating}>Rating: {mySubmittedFeedback[0].rating}/5 ⭐</Text>
+              ) : null}
+              <Text style={styles.submittedNote}>Your feedback has been received and is under review by madrasa administration.</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.inputLabel}>Feedback Message</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, focusedInput === 'feedback_message' && styles.inputFocused]}
+                placeholder="Write your feedback"
+                placeholderTextColor={COLORS.textMuted}
+                value={fbMessage}
+                onChangeText={setFbMessage}
+                multiline
+                onFocus={() => setFocusedInput('feedback_message')}
+                onBlur={() => setFocusedInput(null)}
+              />
+              <Text style={styles.inputLabel}>Rating (optional)</Text>
+              <TextInput
+                style={[styles.input, focusedInput === 'feedback_rating' && styles.inputFocused]}
+                placeholder="Rating 1-5 (optional)"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="numeric"
+                value={fbRating}
+                onChangeText={setFbRating}
+                onFocus={() => setFocusedInput('feedback_rating')}
+                onBlur={() => setFocusedInput(null)}
+              />
+              {feedbackError ? <Text style={styles.inputError}>{feedbackError}</Text> : null}
+              <TouchableOpacity style={styles.primaryBtn} onPress={submitFeedback} testID="submit-feedback-btn">
+                <Text style={styles.primaryBtnText}>Submit Feedback</Text>
+              </TouchableOpacity>
+            </>
+          )}
 
           <Text style={[styles.subTitle, { marginTop: 12 }]}>Testimonials</Text>
           {testimonials.length === 0 ? <Text style={styles.bodyText}>No feedback yet.</Text> : null}
@@ -1035,6 +1212,35 @@ export default function AboutScreen() {
           onSaved={handleAboutSaved}
         />
 
+        {/* PHASE 10: Security & Privacy */}
+        <SectionCard title="🔒 Account Security & Privacy" icon="shield-checkmark-outline">
+          <View style={styles.securityList}>
+            <TouchableOpacity style={styles.securityRow} onPress={() => safePush('/settings')} accessibilityRole="button" accessibilityLabel="Account Settings and Security">
+              <View style={styles.securityIconBox}><Ionicons name="key-outline" size={20} color={COLORS.primary} /></View>
+              <View style={{ flex: 1 }}><Text style={styles.securityRowTitle}>Account Settings & Security</Text><Text style={styles.securityRowSub}>Manage PIN, app lock, and language preferences</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <View style={styles.rowDivider} />
+            <TouchableOpacity style={styles.securityRow} onPress={() => safePush('/privacy')} accessibilityRole="button" accessibilityLabel="Privacy Policy">
+              <View style={styles.securityIconBox}><Ionicons name="document-lock-outline" size={20} color={COLORS.primary} /></View>
+              <View style={{ flex: 1 }}><Text style={styles.securityRowTitle}>Privacy Settings & Policy</Text><Text style={styles.securityRowSub}>Review data collection and privacy rights</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <View style={styles.rowDivider} />
+            <TouchableOpacity style={styles.securityRow} onPress={() => safePush('/data-privacy')} accessibilityRole="button" accessibilityLabel="Data and Privacy Controls">
+              <View style={styles.securityIconBox}><Ionicons name="trash-bin-outline" size={20} color={COLORS.primary} /></View>
+              <View style={{ flex: 1 }}><Text style={styles.securityRowTitle}>Data & Privacy Controls</Text><Text style={styles.securityRowSub}>Manage data export or request account deletion</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            <View style={styles.rowDivider} />
+            <TouchableOpacity style={[styles.securityRow, { paddingVertical: 12 }]} onPress={signOut} accessibilityRole="button" accessibilityLabel="Sign Out of Session">
+              <View style={[styles.securityIconBox, { backgroundColor: '#FEE2E2' }]}><Ionicons name="log-out-outline" size={20} color={COLORS.error} /></View>
+              <View style={{ flex: 1 }}><Text style={[styles.securityRowTitle, { color: COLORS.error }]}>Sign Out of Session</Text><Text style={styles.securityRowSub}>Safely log out of your account on this device</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </SectionCard>
+
         <SectionCard title="🌐 Social & Help" icon="globe-outline">
           {isAdmin ? (
             <>
@@ -1060,6 +1266,7 @@ export default function AboutScreen() {
                   <Ionicons name="logo-whatsapp" size={20} color={COLORS.secondary} />
                 </View>
                 <Text style={styles.premiumSocialBtnText}>WhatsApp Channel</Text>
+                <Ionicons name="open-outline" size={16} color={COLORS.secondary} style={{ marginLeft: "auto" }} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.premiumSocialBtn} onPress={() => { void openSocialLink(settings.instagram, 'Instagram'); }}>
@@ -1067,6 +1274,7 @@ export default function AboutScreen() {
                   <Ionicons name="logo-instagram" size={20} color={COLORS.secondary} />
                 </View>
                 <Text style={styles.premiumSocialBtnText}>Instagram</Text>
+                <Ionicons name="open-outline" size={16} color={COLORS.secondary} style={{ marginLeft: "auto" }} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.premiumSocialBtn} onPress={() => { void openSocialLink(settings.youtube_link, 'YouTube'); }}>
@@ -1074,6 +1282,7 @@ export default function AboutScreen() {
                   <Ionicons name="logo-youtube" size={20} color={COLORS.secondary} />
                 </View>
                 <Text style={styles.premiumSocialBtnText}>YouTube</Text>
+                <Ionicons name="open-outline" size={16} color={COLORS.secondary} style={{ marginLeft: "auto" }} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.premiumSocialBtn} onPress={() => { void openSocialLink(settings.telegram_link, 'Telegram'); }}>
@@ -1081,6 +1290,7 @@ export default function AboutScreen() {
                   <Ionicons name="paper-plane" size={20} color={COLORS.secondary} />
                 </View>
                 <Text style={styles.premiumSocialBtnText}>Telegram</Text>
+                <Ionicons name="open-outline" size={16} color={COLORS.secondary} style={{ marginLeft: "auto" }} />
               </TouchableOpacity>
 
               <TouchableOpacity style={[styles.premiumSocialBtn, { marginTop: 8, borderColor: COLORS.primary, backgroundColor: COLORS.goldBg }]} onPress={openHelp}>
@@ -1105,15 +1315,22 @@ export default function AboutScreen() {
           </Text>
         </SectionCard>
 
-        <View style={styles.bismillahCard} testID="bismillah-section">
+        {/* PHASE 8: Islamic Inspiration */}
+        <View style={styles.inspirationCard} testID="bismillah-section">
+          <View style={styles.inspirationHeaderRow}>
+            <View style={styles.inspirationBadge}>
+              <Ionicons name="sparkles" size={14} color={COLORS.goldText} />
+              <Text style={styles.inspirationBadgeText}>{ISLAMIC_INSPIRATIONS[inspirationIdx].type}</Text>
+            </View>
+            <TouchableOpacity onPress={rotateInspiration} style={styles.inspirationRotateBtn} accessibilityRole="button" accessibilityLabel="Next Islamic Inspiration">
+              <Ionicons name="refresh" size={16} color={COLORS.goldText} />
+              <Text style={styles.inspirationRotateText}>New Quote</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.bismillah}>بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</Text>
-          <Text style={styles.bismillahTranslation}>
-            In the name of Allah, the Most Gracious, the Most Merciful
-          </Text>
-          <Text style={styles.bismillahDua}>اللهم زدني علما</Text>
-          <Text style={styles.bismillahTranslation}>
-            Ya Allah, increase me in knowledge and guide me to the right path.
-          </Text>
+          <Text style={styles.inspirationArabic}>{ISLAMIC_INSPIRATIONS[inspirationIdx].arabic}</Text>
+          <Text style={styles.inspirationTranslation}>"{ISLAMIC_INSPIRATIONS[inspirationIdx].translation}"</Text>
+          <Text style={styles.inspirationSource}>— {ISLAMIC_INSPIRATIONS[inspirationIdx].source}</Text>
         </View>
       </ScrollView>
     </View>
@@ -1239,4 +1456,324 @@ const styles = StyleSheet.create({
   exportBlock: { marginTop: 8, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 12, gap: 8 },
   exportRow: { gap: 8 },
   exportBtn: { paddingHorizontal: 10 },
+  profileHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: SPACING.md,
+    gap: SPACING.md,
+  },
+  profileMainInfo: {
+    flex: 1,
+  },
+  avatarRing: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: COLORS.goldBg,
+    opacity: 0.6,
+  },
+  studentIdText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.goldText,
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  verifiedBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  statsSectionContainer: {
+    marginTop: SPACING.lg,
+    width: '100%',
+  },
+  sectionSubtitleText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginBottom: SPACING.sm,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+  statCardItem: {
+    width: '48%',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  statIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  statCardValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: COLORS.textMain,
+  },
+  statCardLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  quickActionSubText: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  badgesScroll: {
+    paddingVertical: 4,
+    gap: SPACING.md,
+  },
+  badgeCard: {
+    width: 160,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.goldBg,
+    ...SHADOWS.card,
+  },
+  badgeIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  badgeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    textAlign: 'center',
+  },
+  badgeDesc: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  emptyBadgesCard: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
+  },
+  emptyBadgesTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  emptyBadgesDesc: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  securityList: {
+    gap: 0,
+  },
+  securityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 12,
+    minHeight: 48,
+  },
+  securityIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  securityRowTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textMain,
+  },
+  securityRowSub: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 4,
+  },
+  mySubmittedFeedbackCard: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    gap: 8,
+  },
+  submittedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  submittedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  submittedBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  submittedDate: {
+    fontSize: 12,
+    color: '#065F46',
+    fontWeight: '500',
+  },
+  submittedMsgText: {
+    fontSize: 14,
+    color: '#047857',
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  submittedNote: {
+    fontSize: 12,
+    color: '#065F46',
+    fontWeight: '500',
+  },
+  feeOverviewCard: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginVertical: 10,
+  },
+  feeOverviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  feeLabelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textMain,
+  },
+  feeAmountText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  readMoreBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+  },
+  readMoreText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  inspirationCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xxl,
+    padding: SPACING.lg,
+    alignItems: 'center',
+    marginTop: SPACING.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.goldBg,
+    ...SHADOWS.card,
+  },
+  inspirationHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: SPACING.md,
+  },
+  inspirationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.goldBg,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 6,
+  },
+  inspirationBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.goldText,
+    textTransform: 'uppercase',
+  },
+  inspirationRotateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 6,
+  },
+  inspirationRotateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.goldText,
+  },
+  inspirationArabic: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.primary,
+    textAlign: 'center',
+    marginVertical: SPACING.md,
+    lineHeight: 36,
+  },
+  inspirationTranslation: {
+    fontSize: 14,
+    color: COLORS.textMain,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    lineHeight: 22,
+    marginBottom: SPACING.sm,
+  },
+  inspirationSource: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.goldText,
+  },
 });

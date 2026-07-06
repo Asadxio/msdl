@@ -75,7 +75,19 @@ export function AppCard({ children, style }: PropsWithChildren<{ style?: StylePr
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
-export function EmptyState({ icon, title, message }: { icon: keyof typeof Ionicons.glyphMap; title?: string; message: string }) {
+export function EmptyState({
+  icon,
+  title,
+  message,
+  action,
+  children,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title?: string;
+  message: string;
+  action?: { label: string; onPress: () => void };
+  children?: React.ReactNode;
+}) {
   return (
     <View style={styles.emptyStateCard}>
       <View style={styles.emptyIconCircle}>
@@ -83,6 +95,12 @@ export function EmptyState({ icon, title, message }: { icon: keyof typeof Ionico
       </View>
       {title ? <Text style={styles.emptyTitle}>{title}</Text> : null}
       <Text style={styles.emptyText}>{message}</Text>
+      {action ? (
+        <Pressable style={styles.emptyActionBtn} onPress={action.onPress}>
+          <Text style={styles.emptyActionText}>{action.label}</Text>
+        </Pressable>
+      ) : null}
+      {children}
     </View>
   );
 }
@@ -223,6 +241,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
     fontWeight: '500',
+  },
+  emptyActionBtn: {
+    marginTop: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 12,
+    borderRadius: RADIUS.full,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyActionText: {
+    color: COLORS.surface,
+    fontSize: 14,
+    fontWeight: '700',
   },
   field: { gap: SPACING.xs },
   label: {

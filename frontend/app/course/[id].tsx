@@ -37,7 +37,7 @@ import {
 import { useData } from "@/context/DataContext";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { ScalePressable, ScreenRefreshControl } from "@/components/ui";
+import { ScalePressable, ScreenRefreshControl, EmptyState } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 
 import { normalizeMeetUrl, prepareExternalUrl } from "@/lib/links";
@@ -717,6 +717,41 @@ export default function CourseDetailScreen() {
 
         
         <View style={styles.body}>
+          {showJoinNow || activeLiveClass ? (
+            <View style={styles.liveClassBanner}>
+              <View style={styles.liveClassBannerHeader}>
+                <View style={styles.pulseDot} />
+                <Text style={styles.liveClassBannerTitle}>{activeLiveClass ? "Live Session in Progress" : "Class Starting Soon"}</Text>
+              </View>
+              <Text style={styles.liveClassBannerSub}>{activeLiveClass ? "Your instructor is currently live. Tap below to join the classroom." : "The live class session is scheduled to begin shortly."}</Text>
+              <View style={styles.liveClassActions}>
+                {isReviewer ? (
+                  <TouchableOpacity
+                    style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
+                    activeOpacity={0.8}
+                    disabled={startingLiveClass}
+                    onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : openStartClassModal}
+                  >
+                    {startingLiveClass ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
+                    )}
+                    <Text style={styles.joinBtnText}>{activeLiveClass ? "Open Live Class" : "Start Live Class"}</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={[styles.joinBtn, activeLiveClass && styles.liveNowBtn]}
+                  testID="banner-join-class-btn"
+                  activeOpacity={0.8}
+                  onPress={handleJoinClass}
+                >
+                  <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
+                  <Text style={styles.joinBtnText}>{activeLiveClass ? "Join Live Class" : "Join Class"}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
           {safeProgress && (
             <View style={styles.progressSummaryCard}>
               <View style={styles.progressSummaryHeader}>
@@ -819,7 +854,11 @@ export default function CourseDetailScreen() {
               <Text style={styles.infoCardTitle}>Recordings</Text>
             </View>
             {generalRecordings.length === 0 ? (
-              <Text style={styles.infoCardSubValue}>No recordings yet.</Text>
+              <EmptyState
+                icon="videocam-outline"
+                title="No Recordings Available"
+                message="Past live session recordings and lecture archives will be published here once available."
+              />
             ) : (
               generalRecordings.map((rec) => (
                 <TouchableOpacity
@@ -898,7 +937,11 @@ export default function CourseDetailScreen() {
             {loadingAudioLessons && audioLessons.length === 0 ? (
               <ActivityIndicator size="small" color={COLORS.primary} />
             ) : audioLessons.length === 0 ? (
-              <Text style={styles.infoCardSubValue}>No audio lessons yet. Teachers can share links to podcasts or lectures.</Text>
+              <EmptyState
+                icon="headset-outline"
+                title="No Audio Lectures"
+                message="Revision podcasts and audio summaries will be shared here by your instructor."
+              />
             ) : (
               audioLessons.map((lesson) => (
                 <View key={lesson.id} style={styles.audioLessonRow}>
@@ -948,7 +991,11 @@ export default function CourseDetailScreen() {
               <Text style={styles.infoCardTitle}>Learning Path</Text>
             </View>
             {safeModules.length === 0 ? (
-              <Text style={styles.infoCardSubValue}>No modules added yet.</Text>
+              <EmptyState
+                icon="layers-outline"
+                title="Curriculum Under Development"
+                message="The course modules, lessons, and assignments are currently being structured by the instructor."
+              />
             ) : (
               safeModules.map((module) => {
                 const moduleLessonsRaw = getLessonsForModule(module.id);
@@ -2083,4 +2130,40 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   infoBtnText: { color: COLORS.primary, fontWeight: "700", fontSize: 12 },
+  liveClassBanner: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.goldBg,
+    shadowColor: "#D4AF37",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  liveClassBannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  pulseDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.error,
+    marginRight: 8,
+  },
+  liveClassBannerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.textMain,
+  },
+  liveClassBannerSub: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
 });

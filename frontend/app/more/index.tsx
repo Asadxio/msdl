@@ -138,7 +138,13 @@ export default function MoreLandingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, user } = useAuth();
-  const { lessonProgress } = useData();
+  const { lessonProgress, courses, books } = useData();
+  const quizzesCompleted = useMemo(() => {
+    if (!lessonProgress) return 0;
+    return Object.values(lessonProgress).filter(p => p.quizCompleted).length;
+  }, [lessonProgress]);
+  const totalCourses = useMemo(() => Array.isArray(courses) ? courses.length : 0, [courses]);
+  const totalBooks = useMemo(() => Array.isArray(books) ? books.length : 0, [books]);
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
@@ -221,8 +227,29 @@ export default function MoreLandingScreen() {
           <View style={[styles.statIconContainer, { backgroundColor: '#EEF2FF' }]}>
             <Ionicons name="book" size={24} color="#4F46E5" />
           </View>
+          <Text style={styles.statValue}>{totalCourses}</Text>
+          <Text style={styles.statLabel}>Courses Available</Text>
+        </View>
+        <View style={styles.statCard}>
+          <View style={[styles.statIconContainer, { backgroundColor: '#ECFDF5' }]}>
+            <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+          </View>
           <Text style={styles.statValue}>{lessonsCompleted}</Text>
-          <Text style={styles.statLabel}>Lessons Completed</Text>
+          <Text style={styles.statLabel}>Lessons Done</Text>
+        </View>
+        <View style={styles.statCard}>
+          <View style={[styles.statIconContainer, { backgroundColor: '#FEF3C7' }]}>
+            <Ionicons name="help-circle" size={24} color="#D97706" />
+          </View>
+          <Text style={styles.statValue}>{quizzesCompleted}</Text>
+          <Text style={styles.statLabel}>Quizzes Done</Text>
+        </View>
+        <View style={styles.statCard}>
+          <View style={[styles.statIconContainer, { backgroundColor: '#F5F3FF' }]}>
+            <Ionicons name="library" size={24} color="#7C3AED" />
+          </View>
+          <Text style={styles.statValue}>{totalBooks}</Text>
+          <Text style={styles.statLabel}>Library Books</Text>
         </View>
       </View>
 
