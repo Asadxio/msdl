@@ -116,6 +116,21 @@ export default function LiveClassroomScreen() {
 
       <View style={styles.content}>
         <View style={styles.card}>
+          {isTeacher && (
+            <View style={styles.hostBanner}>
+              <View style={styles.hostBannerIcon}>
+                <Ionicons name="shield-checkmark" size={18} color={COLORS.goldText} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.hostBannerTitle}>Enterprise Host Mode</Text>
+                <Text style={styles.hostBannerSub}>Executive override & monitoring enabled</Text>
+              </View>
+              <View style={styles.hostBadge}>
+                <Text style={styles.hostBadgeText}>{profile?.role?.toUpperCase()}</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.statusBadge}>
             <View style={styles.pulseDot} />
             <Text style={styles.statusBadgeText}>LIVE NOW</Text>
@@ -173,23 +188,23 @@ const styles = StyleSheet.create({
   headerTitleContainer: { flex: 1, marginLeft: SPACING.sm },
   title: { color: COLORS.text, fontSize: 18, fontWeight: 'bold' },
   subtitle: { color: COLORS.textMuted, fontSize: 14 },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.lg },
-  card: { backgroundColor: COLORS.surface, width: '100%', maxWidth: 400, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: 'center' },
-  icon: { marginBottom: SPACING.md },
-  cardTitle: { color: COLORS.textMain, fontSize: 26, fontWeight: '900', marginBottom: SPACING.lg, textAlign: 'center', lineHeight: 32 },
-  cardDesc: { color: COLORS.textMuted, fontSize: 16, textAlign: 'center', marginBottom: SPACING.xxl, lineHeight: 24 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FDECEC', paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, marginBottom: SPACING.lg, gap: 6 },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.md },
+  card: { backgroundColor: COLORS.surface, width: '100%', maxWidth: 400, borderRadius: RADIUS.lg, padding: SPACING.lg, alignItems: 'center' },
+  icon: { marginBottom: SPACING.sm },
+  cardTitle: { color: COLORS.textMain, fontSize: 24, fontWeight: '900', marginBottom: SPACING.md, textAlign: 'center', lineHeight: 28 },
+  cardDesc: { color: COLORS.textMuted, fontSize: 14, textAlign: 'center', marginBottom: SPACING.lg, lineHeight: 20 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FDECEC', paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, marginBottom: SPACING.md, gap: 6 },
   statusBadgeText: { color: COLORS.error, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
   pulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.error },
-  instructorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surfaceAlt, padding: SPACING.md, borderRadius: RADIUS.lg, width: '100%', marginBottom: SPACING.xl, gap: 12 },
+  instructorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surfaceAlt, padding: SPACING.md, borderRadius: RADIUS.lg, width: '100%', marginBottom: SPACING.md, gap: 12 },
   instructorAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5EE', alignItems: 'center', justifyContent: 'center' },
   instructorLabel: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
   instructorName: { fontSize: 16, color: COLORS.textMain, fontWeight: '800' },
   primaryBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.full,
-    paddingVertical: 18,
-    paddingHorizontal: SPACING.xxl,
+    paddingVertical: 14,
+    paddingHorizontal: SPACING.xl,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -201,7 +216,47 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  primaryBtnText: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  dangerBtn: { backgroundColor: 'transparent', width: '100%', padding: SPACING.md, borderRadius: RADIUS.md, alignItems: 'center', borderWidth: 1, borderColor: COLORS.error },
-  dangerBtnText: { color: COLORS.error, fontSize: 16, fontWeight: 'bold' }
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  dangerBtn: { backgroundColor: 'transparent', width: '100%', padding: 12, borderRadius: RADIUS.full, alignItems: 'center', borderWidth: 1, borderColor: COLORS.error, marginTop: SPACING.md },
+  dangerBtnText: { color: COLORS.error, fontSize: 14, fontWeight: 'bold' },
+  hostBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    width: '100%',
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+    gap: 10,
+    marginBottom: SPACING.md,
+  },
+  hostBannerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF3E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hostBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#E65100',
+  },
+  hostBannerSub: {
+    fontSize: 10,
+    color: '#EF6C00',
+  },
+  hostBadge: {
+    backgroundColor: '#FFE082',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  hostBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#E65100',
+  },
 });

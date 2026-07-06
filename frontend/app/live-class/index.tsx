@@ -7,12 +7,15 @@ import {
   StatusBar,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { ScreenRefreshControl , EmptyState, ScalePressable } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/context/AuthContext';
+import { endLiveClass } from '@/lib/liveClasses';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -31,6 +34,8 @@ type LiveClassItem = {
 export default function LiveClassesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
+  const isAdminOrTeacher = profile?.role === 'admin' || profile?.role === 'teacher';
   const [classes, setClasses] = useState<LiveClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'live' | 'scheduled'>('live');
@@ -123,6 +128,46 @@ export default function LiveClassesScreen() {
             <Text style={styles.upcomingBtnText}>Scheduled</Text>
           </View>
         )}
+
+        {isAdminOrTeacher && (
+          <View style={styles.adminControlsRow}>
+            {isLive && (
+              <TouchableOpacity
+                style={styles.adminEndBtn}
+                onPress={() => {
+                  Alert.alert(
+                    'End Live Class',
+                    `Are you sure you want to terminate "${item.title}" for all participants?`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'End Session',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            if (profile) await endLiveClass(item.id, profile);
+                          } catch (e: any) {
+                            Alert.alert('Error', e?.message || 'Could not terminate session.');
+                          }
+                        },
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Ionicons name="stop-circle-outline" size={16} color={COLORS.error} />
+                <Text style={styles.adminEndBtnText}>End Session</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.adminMonitorBtn, !isLive && { flex: 1 }]}
+              onPress={() => joinLiveClass(item.id)}
+            >
+              <Ionicons name="eye-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.adminMonitorBtnText}>{isLive ? 'Monitor Feed' : 'Inspect Room'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScalePressable>
     );
   };
@@ -152,6 +197,23 @@ export default function LiveClassesScreen() {
           <Text style={[styles.tabLabel, activeTab === 'scheduled' && styles.tabLabelActive]}>Upcoming</Text>
         </TouchableOpacity>
       </View>
+
+      {isAdminOrTeacher && (
+        <View style={styles.adminBanner}>
+          <View style={styles.adminBannerIcon}>
+            <Ionicons name="shield-checkmark" size={20} color={COLORS.goldText} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.adminBannerTitle}>Enterprise Host Mode</Text>
+            <Text style={styles.adminBannerSub}>
+              Monitoring {classes.filter((c) => c.status === 'live').length} active broadcast session(s)
+            </Text>
+          </View>
+          <View style={styles.adminBadge}>
+            <Text style={styles.adminBadgeText}>{profile?.role?.toUpperCase()}</Text>
+          </View>
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.loader}>
@@ -323,5 +385,90 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     marginTop: 40,
+  },
+  adminBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+    gap: 12,
+    ...SHADOWS.card,
+  },
+  adminBannerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFF3E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#E65100',
+  },
+  adminBannerSub: {
+    fontSize: 11,
+    color: '#EF6C00',
+    marginTop: 2,
+  },
+  adminBadge: {
+    backgroundColor: '#FFE082',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#E65100',
+  },
+  adminControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  adminEndBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#FDECEC',
+    paddingVertical: 10,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#FADBD8',
+  },
+  adminEndBtnText: {
+    color: COLORS.error,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  adminMonitorBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#EEF6F2',
+    paddingVertical: 10,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#D4E6DF',
+  },
+  adminMonitorBtnText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
