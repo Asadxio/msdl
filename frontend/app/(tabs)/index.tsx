@@ -10,6 +10,7 @@ import { useData } from '@/context/DataContext';
 import { calculatePrayerTimes, getPrayerCalculationSettings, getPrayerWindow, PrayerTime } from '@/lib/prayerTimes';
 import { loadPrayerSettings, PrayerSettings, subscribeToPrayerSettings } from '@/lib/prayerStorage';
 import { DAILY_WISDOM, MASNOON_DUAS, HADITHS, MOTIVATIONAL_QUOTES } from '@/constants/wisdomData';
+import { AdminDashboard } from '@/components/admin/AdminDashboard';
 
 const HIJRI_MONTH_NORMALIZATION: Record<string, string> = {
   "Dhuʻl-Qiʻdah": 'Zul Qidah', 'Dhu’l-Qi’dah': 'Zul Qidah',
@@ -33,7 +34,7 @@ function formatTime(date: Date) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { 
     courses,
     getResumeLearning, 
@@ -167,6 +168,22 @@ export default function HomeScreen() {
   }, [resume, lessonProgress, quizAttemptsCount, currentPrayer, nextPrayer]);
 
   const isLocationUnavailable = !prayerSettings || !prayerSettings.city || prayerSettings.city === 'Location unavailable' || prayerSettings.state === 'Permission needed';
+
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.founder;
+  if (isAdmin) {
+    return (
+      <AdminDashboard
+        profile={profile}
+        user={user}
+        hijriDate={hijriDate}
+        currentPrayer={currentPrayer}
+        nextPrayer={nextPrayer}
+        formatTime={formatTime}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
