@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,7 +35,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useAuth();
   const { 
+    courses,
     getResumeLearning, 
+    getCourseProgress,
     lessonProgress,
     refetch,
     refetchLearning,
@@ -45,6 +47,9 @@ export default function HomeScreen() {
   const [prayerSettings, setPrayerSettings] = useState<PrayerSettings | null>(null);
   const [now, setNow] = useState(new Date());
   const [badgeCount, setBadgeCount] = useState(0);
+
+  // Animation ref for subtle footer fade-in
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -63,11 +68,17 @@ export default function HomeScreen() {
     
     Notifications.getBadgeCountAsync().then(count => setBadgeCount(count)).catch(() => {});
 
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start();
+
     return () => {
       unsub();
       clearInterval(interval);
     };
-  }, []);
+  }, [fadeAnim]);
 
   const randomWisdom = useMemo(() => DAILY_WISDOM[Math.floor(Math.random() * DAILY_WISDOM.length)], []);
   const randomDua = useMemo(() => MASNOON_DUAS[Math.floor(Math.random() * MASNOON_DUAS.length)], []);
@@ -92,20 +103,70 @@ export default function HomeScreen() {
   }
 
   const resume = getResumeLearning();
+  const activeCourseProgress = useMemo(() => {
+    if (!resume) return null;
+    return getCourseProgress(resume.courseId);
+  }, [resume, getCourseProgress]);
   
-  let completedLessonsCount = 0;
-  let quizAttemptsCount = 0;
+  // Calculate existing verified statistics (no fake numbers or placeholders)
+  const { completedLessonsCount, quizAttemptsCount, coursesCompletedCount } = useMemo(() => {
+    let lCount = 0;
+    let qCount = 0;
+    if (lessonProgress) {
+      Object.values(lessonProgress).forEach(p => {
+        if (p.completed) lCount += 1;
+        if (p.quizCompleted) qCount += 1;
+      });
+    }
+    let cCount = 0;
+    if (courses && courses.length > 0) {
+      courses.forEach(c => {
+        const prog = getCourseProgress(c.id);
+        if (prog && prog.totalLessons > 0 && prog.completionPercent === 100) {
+          cCount += 1;
+        }
+      });
+    }
+    return { completedLessonsCount: lCount, quizAttemptsCount: qCount, coursesCompletedCount: cCount };
+  }, [lessonProgress, courses, getCourseProgress]);
 
-  if (lessonProgress) {
-    Object.values(lessonProgress).forEach(p => {
-      if (p.completed) {
-        completedLessonsCount += 1;
-      }
-      if (p.quizCompleted) {
-        quizAttemptsCount += 1;
-      }
-    });
-  }
+  // Generate dynamic Today's Goal checklist from existing activity
+  const checklistItems = useMemo(() => {
+    const isLessonDone = resume && lessonProgress[resume.lessonId]?.completed;
+    const isAnyQuizDone = quizAttemptsCount > 0;
+    return [
+      {
+        id: 'continue_course',
+        title: resume ? `Continue "${resume.courseName}"` : 'Enroll in a Course',
+        subtitle: resume ? `Next lesson: ${resume.lessonTitle}` : 'Explore subjects in our catalog',
+        completed: !!isLessonDone,
+        route: resume ? `/course/${resume.courseId}` : '/(tabs)/courses',
+      },
+      {
+        id: 'complete_quiz',
+        title: 'Complete a Lesson Quiz',
+        subtitle: 'Test your understanding and earn progress',
+        completed: !!isAnyQuizDone,
+        route: '/(tabs)/quiz',
+      },
+      {
+        id: 'read_library',
+        title: 'Read Islamic Library Book',
+        subtitle: 'Enhance knowledge from classic texts',
+        completed: false, // Always keep open for daily reading engagement
+        route: '/(tabs)/library',
+      },
+      {
+        id: 'prayer_check',
+        title: 'Check Daily Prayer Times',
+        subtitle: 'Stay punctual with local prayer schedules',
+        completed: !!(currentPrayer && nextPrayer),
+        route: '/prayer-times',
+      },
+    ];
+  }, [resume, lessonProgress, quizAttemptsCount, currentPrayer, nextPrayer]);
+
+  const isLocationUnavailable = !prayerSettings || !prayerSettings.city || prayerSettings.city === 'Location unavailable' || prayerSettings.state === 'Permission needed';
 
   return (
     <View style={styles.container}>
@@ -120,7 +181,13 @@ export default function HomeScreen() {
         <View style={[styles.heroSection, { paddingTop: insets.top + SPACING.sm }]}>
           <View style={styles.headerActionsRow}>
             <View style={{ flex: 1 }} />
-            <TouchableOpacity onPress={() => router.push('/(tabs)/notifications')} style={styles.headerActionBtn}>
+            <TouchableOpacity 
+              onPress={() => router.push('/(tabs)/notifications')} 
+              style={styles.headerActionBtn}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+            >
               <Ionicons name="notifications-outline" size={24} color={COLORS.surface} />
               {badgeCount > 0 && (
                 <View style={styles.badgeDot}>
@@ -128,7 +195,13 @@ export default function HomeScreen() {
                 </View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.headerActionBtn}>
+            <TouchableOpacity 
+              onPress={() => router.push('/settings')} 
+              style={styles.headerActionBtn}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+            >
               <Ionicons name="settings-outline" size={24} color={COLORS.surface} />
             </TouchableOpacity>
           </View>
@@ -143,11 +216,11 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Section 2: Premium Welcome Card */}
+        {/* Section 2: Phase 1 — Welcome Card Enhancement */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeInfo}>
             <Text style={styles.welcomeBackText}>Welcome Back</Text>
-            <Text style={styles.userName}>{profile?.name || 'Student'}</Text>
+            <Text style={styles.userName} numberOfLines={1}>{profile?.name || 'Student'}</Text>
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>
                 {profile?.role === 'super_admin' || profile?.founder ? 'ADMINISTRATOR' : (profile?.role === 'teacher' ? 'TEACHER' : 'STUDENT')}
@@ -196,45 +269,77 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Section 6: Prayer Card */}
-        {prayerSettings && currentPrayer && nextPrayer ? (
-          <View style={styles.sectionContainer}>
-            <View style={styles.prayerCard}>
-              <View style={styles.prayerHeader}>
-                <View>
-                  <Text style={styles.prayerTitle}>Prayer Times</Text>
-                  <Text style={styles.prayerLocation}>{prayerSettings.city}</Text>
-                </View>
-                <TouchableOpacity onPress={() => router.push('/prayer-times')} style={styles.glassBtn}>
-                  <Ionicons name="time-outline" size={16} color={COLORS.secondary} />
-                  <Text style={styles.glassBtnText}>View All</Text>
-                </TouchableOpacity>
+        {/* Section 6: Phase 2 — Prayer Times Card with Location UX Fallback */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.prayerCard}>
+            <View style={styles.prayerHeader}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.prayerTitle}>Prayer Times</Text>
+                {isLocationUnavailable ? (
+                  <TouchableOpacity 
+                    style={styles.locationPromptBadge}
+                    onPress={() => router.push('/prayer-times')}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel="Enable Location or Select City"
+                  >
+                    <Ionicons name="location" size={14} color={COLORS.secondary} />
+                    <Text style={styles.locationPromptText}>📍 Select City • Enable Location</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.prayerLocation}>
+                    {prayerSettings?.city}{prayerSettings?.state && prayerSettings.state !== 'Permission needed' ? `, ${prayerSettings.state}` : ''}
+                  </Text>
+                )}
               </View>
-              <View style={styles.prayerContentRow}>
-                <View style={styles.prayerInfoCol}>
-                   <Text style={styles.prayerLabel}>Current</Text>
-                   <Text style={styles.prayerName}>{currentPrayer.name}</Text>
-                   <Text style={styles.prayerTime}>{formatTime(currentPrayer.time)}</Text>
-                </View>
-                <View style={styles.prayerDivider} />
-                <View style={styles.prayerInfoCol}>
-                   <Text style={styles.prayerLabel}>Next</Text>
-                   <Text style={styles.prayerName}>{nextPrayer.name}</Text>
-                   <Text style={styles.prayerTime}>{formatTime(nextPrayer.time)}</Text>
-                </View>
-              </View>
-              <View style={styles.progressTrack}>
-                 <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
-              </View>
+              <TouchableOpacity 
+                onPress={() => router.push('/prayer-times')} 
+                style={styles.glassBtn}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="View All Prayer Times"
+              >
+                <Ionicons name="time-outline" size={16} color={COLORS.secondary} />
+                <Text style={styles.glassBtnText}>View All</Text>
+              </TouchableOpacity>
             </View>
+            {currentPrayer && nextPrayer ? (
+              <>
+                <View style={styles.prayerContentRow}>
+                  <View style={styles.prayerInfoCol}>
+                     <Text style={styles.prayerLabel}>Current</Text>
+                     <Text style={styles.prayerName}>{currentPrayer.name}</Text>
+                     <Text style={styles.prayerTime}>{formatTime(currentPrayer.time)}</Text>
+                  </View>
+                  <View style={styles.prayerDivider} />
+                  <View style={styles.prayerInfoCol}>
+                     <Text style={styles.prayerLabel}>Next</Text>
+                     <Text style={styles.prayerName}>{nextPrayer.name}</Text>
+                     <Text style={styles.prayerTime}>{formatTime(nextPrayer.time)}</Text>
+                  </View>
+                </View>
+                <View style={styles.progressTrack}>
+                   <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
+                </View>
+              </>
+            ) : (
+              <View style={styles.prayerFallbackBox}>
+                <Text style={styles.prayerFallbackText}>
+                  Setup your location to view accurate daily prayer schedules and real-time countdowns.
+                </Text>
+              </View>
+            )}
           </View>
-        ) : null}
+        </View>
 
-        {/* Section 9: Islamic Calendar */}
+        {/* Section 7: Islamic Calendar */}
         <View style={styles.sectionContainer}>
           <TouchableOpacity 
              style={styles.calendarCard}
              onPress={() => router.push('/islamic-calendar')}
+             accessible={true}
+             accessibilityRole="button"
+             accessibilityLabel={`Islamic Calendar: ${hijriDate}`}
           >
             <Ionicons name="calendar" size={24} color={COLORS.secondary} />
             <View style={styles.calendarTextCol}>
@@ -245,43 +350,95 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Section 7: Continue Learning */}
-        {resume && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Continue Learning</Text>
+        {/* Section 8: Phase 3 — Continue Learning */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Continue Learning</Text>
+          {resume && activeCourseProgress ? (
             <TouchableOpacity 
-               style={styles.resumeCard}
+               style={styles.continueCard}
                onPress={() => router.push(`/course/${resume.courseId}` as any)}
+               accessible={true}
+               accessibilityRole="button"
+               accessibilityLabel={`Continue ${resume.courseName}, lesson ${resume.lessonTitle}`}
             >
-              <View style={styles.resumeIconBox}>
-                <Ionicons name="play" size={20} color={COLORS.surface} />
-              </View>
-              <View style={styles.resumeTextCol}>
-                <Text style={styles.resumeCourseName}>{resume.courseName}</Text>
-                <Text style={styles.resumeLessonName}>{resume.lessonTitle}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+               <View style={styles.continueHeaderRow}>
+                 <View style={styles.resumeIconBox}>
+                   <Ionicons name="play" size={20} color={COLORS.surface} />
+                 </View>
+                 <View style={styles.resumeTextCol}>
+                   <Text style={styles.resumeCourseName}>{resume.courseName}</Text>
+                   <Text style={styles.resumeLessonName}>{resume.lessonTitle}</Text>
+                 </View>
+               </View>
+               <View style={styles.progressBarContainer}>
+                 <View style={styles.progressTrackBar}>
+                   <View style={[styles.progressFillBar, { width: `${activeCourseProgress.completionPercent}%` }]} />
+                 </View>
+                 <Text style={styles.progressPercentText}>{activeCourseProgress.lessonsDone}/{activeCourseProgress.totalLessons} Lessons ({activeCourseProgress.completionPercent}%)</Text>
+               </View>
+               <View style={styles.continueBtnRow}>
+                 <Text style={styles.continueBtnText}>Continue Learning</Text>
+                 <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+               </View>
             </TouchableOpacity>
-          </View>
-        )}
+          ) : (
+            <View style={styles.emptyLearningCard}>
+              <View style={styles.emptyLearningIconBox}>
+                <Ionicons name="book-outline" size={28} color={COLORS.primary} />
+              </View>
+              <View style={styles.emptyLearningTextCol}>
+                <Text style={styles.emptyLearningTitle}>Start Your Journey</Text>
+                <Text style={styles.emptyLearningSubtitle}>
+                  You haven&apos;t started any courses yet. Explore our structured curriculum and enroll today.
+                </Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.exploreBtn} 
+                onPress={() => router.push('/(tabs)/courses')}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Explore Courses"
+              >
+                <Text style={styles.exploreBtnText}>Explore Courses</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
-        {/* Section 8: Today's Goal */}
+        {/* Section 9: Phase 5 — Today's Goal Checklist */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Today&apos;s Goal</Text>
-          <View style={styles.goalCard}>
-             <Ionicons name="flag" size={24} color={COLORS.secondary} />
-             <View style={styles.goalTextCol}>
-                <Text style={styles.goalTitle}>
-                  {resume ? 'Complete Your Next Lesson' : 'Start a New Course'}
-                </Text>
-                <Text style={styles.goalSubtitle}>
-                  {resume ? `Continue with "${resume.courseName}" to maintain your streak.` : 'Explore the library and enroll in a new subject today.'}
-                </Text>
-             </View>
+          <View style={styles.checklistCard}>
+            {checklistItems.map((item, idx) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.checklistItemRow,
+                  idx < checklistItems.length - 1 && styles.checklistItemBorder
+                ]}
+                onPress={() => router.push(item.route as any)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.title}: ${item.completed ? 'Completed' : 'Pending'}`}
+              >
+                <View style={[styles.checkboxCircle, item.completed && styles.checkboxCircleDone]}>
+                  <Ionicons 
+                    name={item.completed ? "checkmark" : "square-outline"} 
+                    size={item.completed ? 16 : 20} 
+                    color={item.completed ? COLORS.surface : COLORS.textMuted} 
+                  />
+                </View>
+                <View style={styles.checklistTextCol}>
+                  <Text style={[styles.checklistTitle, item.completed && styles.checklistTitleDone]}>{item.title}</Text>
+                  <Text style={styles.checklistSubtitle}>{item.subtitle}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
-        {/* Section 10: Quick Access */}
+        {/* Section 10: Phase 6 — Quick Access */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Quick Access</Text>
           <View style={styles.quickAccessGrid}>
@@ -292,47 +449,64 @@ export default function HomeScreen() {
                { name: 'Prayer', icon: 'time', route: '/prayer-times' },
                { name: 'Qibla', icon: 'compass', route: '/qibla' },
                { name: 'Live Classes', icon: 'videocam', route: '/live-class' },
+               { name: 'Progress', icon: 'trending-up', route: '/(tabs)/progress' },
+               { name: 'View All', icon: 'grid', route: '/more' },
              ].map((item, idx) => (
                <TouchableOpacity 
                  key={idx} 
                  style={styles.quickAccessItem}
                  onPress={() => router.push(item.route as any)}
+                 accessible={true}
+                 accessibilityRole="button"
+                 accessibilityLabel={item.name}
+                 activeOpacity={0.7}
                >
                  <View style={styles.quickAccessIcon}>
-                   <Ionicons name={item.icon as any} size={22} color={COLORS.primary} />
+                   <Ionicons name={item.icon as any} size={24} color={COLORS.primary} />
                  </View>
-                 <Text style={styles.quickAccessText}>{item.name}</Text>
+                 <Text style={styles.quickAccessText} numberOfLines={1}>{item.name}</Text>
                </TouchableOpacity>
              ))}
           </View>
         </View>
 
-        {/* Section 11: Dashboard Statistics */}
-        {(completedLessonsCount > 0 || quizAttemptsCount > 0) ? (
+        {/* Section 11: Phase 4 — Dashboard Statistics */}
+        {(completedLessonsCount > 0 || quizAttemptsCount > 0 || coursesCompletedCount > 0) ? (
           <View style={styles.sectionContainer}>
              <Text style={styles.sectionTitle}>Dashboard Statistics</Text>
              <View style={styles.statsGrid}>
                 {completedLessonsCount > 0 && (
                   <View style={styles.statCard}>
+                    <Ionicons name="checkmark-circle-outline" size={24} color={COLORS.primary} style={styles.statIcon} />
                     <Text style={styles.statValue}>{completedLessonsCount}</Text>
-                    <Text style={styles.statLabel}>Completed Lessons</Text>
+                    <Text style={styles.statLabel}>Lessons Done</Text>
                   </View>
                 )}
                 {quizAttemptsCount > 0 && (
                   <View style={styles.statCard}>
+                    <Ionicons name="ribbon-outline" size={24} color={COLORS.primary} style={styles.statIcon} />
                     <Text style={styles.statValue}>{quizAttemptsCount}</Text>
                     <Text style={styles.statLabel}>Quiz Attempts</Text>
+                  </View>
+                )}
+                {coursesCompletedCount > 0 && (
+                  <View style={styles.statCard}>
+                    <Ionicons name="trophy-outline" size={24} color="#C59B27" style={styles.statIcon} />
+                    <Text style={styles.statValue}>{coursesCompletedCount}</Text>
+                    <Text style={styles.statLabel}>Courses Done</Text>
                   </View>
                 )}
              </View>
           </View>
         ) : null}
 
-        {/* Section 12: Motivational Footer */}
-        <View style={styles.footerContainer}>
-           <Ionicons name="leaf" size={24} color={COLORS.primary} style={{ opacity: 0.2, marginBottom: 8 }} />
-           <Text style={styles.footerQuote}>&quot;{randomQuote.text}&quot;</Text>
-        </View>
+        {/* Section 12: Phase 7 — Footer Polish */}
+        <Animated.View style={[styles.footerContainer, { opacity: fadeAnim }]}>
+          <View style={styles.footerDivider} />
+          <Text style={styles.ornamentText}>❁ ❖ ❁</Text>
+          <Text style={styles.footerQuote}>&quot;{randomQuote.text}&quot;</Text>
+          <Text style={styles.footerInstitutionText}>Madrasa Tus Salikat Lil Banat • Nurturing Faith & Excellence</Text>
+        </Animated.View>
 
       </ScrollView>
     </View>
@@ -346,7 +520,7 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     backgroundColor: COLORS.primary,
-    paddingBottom: 40,
+    paddingBottom: 45,
     alignItems: 'center',
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
@@ -358,7 +532,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
     gap: SPACING.sm,
   },
   headerActionBtn: {
@@ -376,17 +550,17 @@ const styles = StyleSheet.create({
     right: 12,
     backgroundColor: COLORS.error,
     borderRadius: 8,
-    minWidth: 14,
-    height: 14,
+    minWidth: 16,
+    height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 2,
-    borderWidth: 1,
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
     borderColor: COLORS.primary,
   },
   badgeDotText: {
     color: COLORS.surface,
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
   },
   bismillah: {
@@ -404,17 +578,20 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   madrasaName: {
-    fontSize: 24,
+    fontSize: 26,
     color: COLORS.surface,
     fontWeight: '900',
     marginTop: 4,
     textAlign: 'center',
+    letterSpacing: -0.5,
   },
   madrasaArabic: {
-    fontSize: 20,
+    fontSize: 22,
     color: COLORS.secondary,
     marginTop: 6,
     fontWeight: '600',
+    lineHeight: 34,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   taglineRow: {
     flexDirection: 'row',
@@ -423,70 +600,76 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   goldLine: {
-    height: 1,
-    width: 30,
+    height: 1.5,
+    width: 36,
     backgroundColor: COLORS.secondary,
   },
   tagline: {
     color: COLORS.secondary,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     letterSpacing: 1,
   },
   welcomeCard: {
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.lg,
-    marginTop: -24,
+    marginTop: -28,
     borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
+    padding: SPACING.xl,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.15)',
+    borderColor: 'rgba(212,175,55,0.25)',
   },
   welcomeInfo: {
     flex: 1,
     alignItems: 'flex-start',
+    paddingRight: SPACING.md,
   },
   welcomeBackText: {
-    fontSize: 13,
+    fontSize: 11,
     color: COLORS.textMuted,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1.5,
   },
   userName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900',
     color: COLORS.textMain,
-    marginTop: 2,
+    marginTop: 4,
+    letterSpacing: -0.5,
   },
   roleBadge: {
     backgroundColor: 'rgba(212,175,55,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: RADIUS.full,
-    marginTop: 6,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.4)',
   },
   roleBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
-    color: COLORS.goldText,
+    color: '#C59B27',
+    letterSpacing: 1,
   },
   avatarCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: COLORS.secondary,
+    ...SHADOWS.card,
   },
   avatarText: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '900',
     color: COLORS.surface,
   },
@@ -510,7 +693,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: COLORS.textMain,
-    marginBottom: 12,
+    marginBottom: 14,
+    letterSpacing: -0.3,
   },
   wisdomCard: {
     backgroundColor: COLORS.primary,
@@ -522,17 +706,18 @@ const styles = StyleSheet.create({
   arabicTextLarge: {
     fontSize: 24,
     color: COLORS.surface,
-    fontWeight: '500',
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 12,
-    lineHeight: 36,
+    lineHeight: 38,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   translationText: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.9)',
     fontStyle: 'italic',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
     lineHeight: 22,
   },
   referenceText: {
@@ -559,7 +744,8 @@ const styles = StyleSheet.create({
     color: COLORS.textMain,
     textAlign: 'right',
     marginBottom: 8,
-    lineHeight: 28,
+    lineHeight: 30,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   translationTextSmall: {
     fontSize: 12,
@@ -590,19 +776,38 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
   },
   prayerLocation: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.75)',
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: 4,
+  },
+  locationPromptBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(212,175,55,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.4)',
+  },
+  locationPromptText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.secondary,
   },
   glassBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: RADIUS.full,
+    minHeight: 36,
   },
   glassBtnText: {
     fontSize: 12,
@@ -625,20 +830,20 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   prayerName: {
-    fontSize: 20,
+    fontSize: 22,
     color: COLORS.surface,
     fontWeight: '900',
     marginTop: 2,
   },
   prayerTime: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
     fontWeight: '700',
     marginTop: 2,
   },
   prayerDivider: {
     width: 1,
-    height: 40,
+    height: 44,
     backgroundColor: 'rgba(255,255,255,0.2)',
     marginHorizontal: SPACING.lg,
   },
@@ -646,7 +851,7 @@ const styles = StyleSheet.create({
     height: 6,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 3,
-    marginTop: 16,
+    marginTop: 18,
     overflow: 'hidden',
   },
   progressFill: {
@@ -654,12 +859,24 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.secondary,
     borderRadius: 3,
   },
+  prayerFallbackBox: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    marginTop: 8,
+  },
+  prayerFallbackText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
   calendarCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xl,
-    padding: SPACING.md,
+    padding: SPACING.lg,
     gap: SPACING.md,
     borderWidth: 1,
     borderColor: 'rgba(212,175,55,0.2)',
@@ -669,7 +886,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   hijriTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: COLORS.textMain,
   },
@@ -677,63 +894,174 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textMuted,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: 3,
   },
-  resumeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  continueCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xl,
-    padding: SPACING.md,
-    gap: SPACING.md,
+    padding: SPACING.lg,
     ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: 'rgba(6,78,59,0.1)',
+  },
+  continueHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
   },
   resumeIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    ...SHADOWS.card,
   },
   resumeTextCol: {
     flex: 1,
   },
   resumeCourseName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: COLORS.textMain,
   },
   resumeLessonName: {
     fontSize: 13,
     color: COLORS.textMuted,
-    marginTop: 2,
+    marginTop: 3,
   },
-  goalCard: {
+  progressBarContainer: {
+    marginBottom: SPACING.md,
+  },
+  progressTrackBar: {
+    height: 8,
+    backgroundColor: 'rgba(6,78,59,0.08)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFillBar: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+  },
+  progressPercentText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginTop: 6,
+    textAlign: 'right',
+  },
+  continueBtnRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(212,175,55,0.1)',
+    justifyContent: 'space-between',
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.04)',
+  },
+  continueBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  emptyLearningCard: {
+    backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xl,
-    padding: SPACING.md,
-    gap: SPACING.md,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.3)',
+    borderColor: 'rgba(0,0,0,0.04)',
   },
-  goalTextCol: {
-    flex: 1,
+  emptyLearningIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(6,78,59,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
   },
-  goalTitle: {
-    fontSize: 15,
+  emptyLearningTextCol: {
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  emptyLearningTitle: {
+    fontSize: 18,
     fontWeight: '800',
     color: COLORS.textMain,
   },
-  goalSubtitle: {
+  emptyLearningSubtitle: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 20,
+    paddingHorizontal: SPACING.md,
+  },
+  exploreBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: 14,
+    borderRadius: RADIUS.full,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.card,
+  },
+  exploreBtnText: {
+    color: COLORS.surface,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  checklistCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    paddingHorizontal: SPACING.lg,
+    ...SHADOWS.card,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+  },
+  checklistItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    minHeight: 64,
+    gap: SPACING.md,
+  },
+  checklistItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
+  },
+  checkboxCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxCircleDone: {
+    backgroundColor: COLORS.primary,
+  },
+  checklistTextCol: {
+    flex: 1,
+  },
+  checklistTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  checklistTitleDone: {
+    textDecorationLine: 'line-through',
+    color: COLORS.textMuted,
+  },
+  checklistSubtitle: {
     fontSize: 12,
     color: COLORS.textMuted,
     marginTop: 2,
-    lineHeight: 18,
   },
   quickAccessGrid: {
     flexDirection: 'row',
@@ -742,12 +1070,14 @@ const styles = StyleSheet.create({
   },
   quickAccessItem: {
     width: '48%',
+    minHeight: 64,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    flexDirection: 'row',
+    gap: 12,
     ...SHADOWS.card,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.03)',
@@ -761,6 +1091,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   quickAccessText: {
+    flex: 1,
     fontSize: 13,
     fontWeight: '700',
     color: COLORS.textMain,
@@ -771,38 +1102,64 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
+    minHeight: 110,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
+    padding: SPACING.md,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: 'rgba(0,0,0,0.05)',
     ...SHADOWS.card,
   },
+  statIcon: {
+    marginBottom: 6,
+  },
   statValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
     color: COLORS.primary,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: COLORS.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 4,
+    textAlign: 'center',
   },
   footerContainer: {
-    marginTop: 40,
-    marginBottom: 20,
+    marginTop: 48,
+    marginBottom: 24,
     paddingHorizontal: SPACING.xl,
     alignItems: 'center',
+  },
+  footerDivider: {
+    width: 60,
+    height: 1.5,
+    backgroundColor: 'rgba(212,175,55,0.4)',
+    marginBottom: 16,
+  },
+  ornamentText: {
+    fontSize: 14,
+    color: COLORS.secondary,
+    marginBottom: 12,
+    letterSpacing: 4,
   },
   footerQuote: {
     fontSize: 13,
     color: COLORS.textMuted,
     textAlign: 'center',
     fontStyle: 'italic',
-    lineHeight: 20,
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  footerInstitutionText: {
+    fontSize: 11,
+    color: 'rgba(0,0,0,0.4)',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
 });
