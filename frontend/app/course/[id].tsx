@@ -518,7 +518,7 @@ export default function CourseDetailScreen() {
       if (meetLink && meetLink.trim().length > 0) {
         Alert.alert(
           "Live class not active",
-          "No built-in live class is active right now. Open the temporary Google Meet fallback?",
+          "No live class is currently active. Would you like to join via Google Meet?",
           [
             { text: "Cancel", style: "cancel" },
             { text: "Open Meet", onPress: () => { void openExternalLink(meetLink); } },
@@ -839,7 +839,7 @@ export default function CourseDetailScreen() {
                   color={COLORS.primary}
                 />
               </View>
-              <Text style={styles.infoCardTitle}>Temporary Google Meet Fallback</Text>
+              <Text style={styles.infoCardTitle}>Google Meet Live Class</Text>
             </View>
             <Text style={styles.infoCardValue} numberOfLines={2}>
               {meetLink || "Meet link will be shared by teacher"}
@@ -1388,7 +1388,7 @@ export default function CourseDetailScreen() {
               </TouchableOpacity>
               {meetLink ? (
                 <TouchableOpacity style={styles.meetFallbackBtn} onPress={() => { void openExternalLink(meetLink); }}>
-                  <Text style={styles.meetFallbackText}>Temporary Google Meet fallback</Text>
+                  <Text style={styles.meetFallbackText}>Join via Google Meet</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
