@@ -48,7 +48,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.madrasatussalikat.lilbanat",
-      "versionCode": 14,
+      "versionCode": 15,
       "googleServicesFile": "./google-services.json",
       "splash": {
         "image": "./assets/images/splash-image.png",
