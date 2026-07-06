@@ -21,6 +21,8 @@ import { db } from '@/lib/firebase';
 import { RADIUS, SPACING, COLORS, SHADOWS } from '@/constants/theme';
 import { dispatchNotification } from '@/lib/notificationCenter';
 import { useData } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
+import { hasPermission } from '@/lib/rbac';
 
 type TargetMode = 'all' | 'class' | 'teachers' | 'custom';
 
@@ -42,7 +44,17 @@ type SentNotificationItem = {
 export default function AdminSendPushScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { profile } = useAuth();
+  const isAdmin = hasPermission(profile, 'admin.notifications.send');
   const { courses, teachers } = useData();
+
+  useEffect(() => {
+    if (profile && !isAdmin) {
+      router.replace('/unauthorized?required=admin');
+    }
+  }, [profile, isAdmin, router]);
+
+  if (profile && !isAdmin) return null;
 
   // Form state
   const [title, setTitle] = useState('');

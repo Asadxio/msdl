@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { hasPermission } from '@/lib/rbac';
 import { isValidHttpsUrl, normalizeGoogleDriveFileUrl } from '@/lib/links';
 
 const INITIAL_BOOKS = [
@@ -53,7 +54,7 @@ export default function AddBookScreen() {
   const insets = useSafeAreaInsets();
   const { books, addBook, refetchBooks } = useData();
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = hasPermission(profile, 'admin.academics.manage');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [pdfUrl, setPdfUrl] = useState('');

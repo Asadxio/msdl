@@ -14,6 +14,7 @@ import {
 import { db } from '@/lib/firebase';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { hasPermission } from '@/lib/rbac';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
 type AnalyticsMetrics = {
@@ -78,7 +79,7 @@ export default function AdminAnalyticsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const isAdmin = hasPermission(profile, 'admin.analytics.read');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [metrics, setMetrics] = useState<AnalyticsMetrics>(EMPTY_METRICS);
