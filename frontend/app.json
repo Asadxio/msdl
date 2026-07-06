@@ -43,8 +43,8 @@
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#F7F2E9"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#F8F4EA"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.madrasatussalikat.lilbanat",
@@ -62,7 +62,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#0FA958"
+          "color": "#0B5D4B"
         }
       ],
       [
@@ -70,7 +70,7 @@
         {
           "image": "./assets/images/splash.png",
           "resizeMode": "contain",
-          "backgroundColor": "#F8F2E8"
+          "backgroundColor": "#F8F4EA"
         }
       ],
       "expo-font"
