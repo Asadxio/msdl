@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Madars tus salikat Lilbanat - مدرسۃ السالکات للبنات",
+    "name": "Madars tus salikat Lilbanat - \u0645\u062f\u0631\u0633\u06c3 \u0627\u0644\u0633\u0627\u0644\u06a9\u0627\u062a \u0644\u0644\u0628\u0646\u0627\u062a",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,7 +8,8 @@
     "scheme": "madars-tus-salikat-lilbanat",
     "userInterfaceStyle": "automatic",
     "androidStatusBar": {
-      "backgroundColor": "#000000"
+      "backgroundColor": "#F7F2E9",
+      "barStyle": "dark-content"
     },
     "newArchEnabled": true,
     "ios": {
@@ -43,12 +44,17 @@
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#F7F2E9"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.madrasatussalikat.lilbanat",
       "versionCode": 14,
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "splash": {
+        "image": "./assets/images/splash-image.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#F7F2E9"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -68,8 +74,8 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-image.png",
-          "resizeMode": "cover",
-          "backgroundColor": "#000"
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F2E9"
         }
       ],
       "expo-font"
@@ -83,6 +89,11 @@
         "projectId": "a6f42044-1978-448f-bc63-8c97ae6fe651"
       }
     },
-    "owner": "mslb"
+    "owner": "mslb",
+    "splash": {
+      "image": "./assets/images/splash-image.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7F2E9"
+    }
   }
 }
