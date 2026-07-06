@@ -304,7 +304,7 @@ export default function PaymentHistoryScreen() {
           <Text style={styles.loadingText}>Loading history...</Text>
         </View>
       ) : (
-        <FlatList
+        <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
           data={filtered}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}

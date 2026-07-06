@@ -132,7 +132,7 @@ export default function AdminPrivacyRequestsScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={COLORS.primary} size="large" /></View>
       ) : (
-        <FlatList
+        <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
           data={requests}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}

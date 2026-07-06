@@ -145,11 +145,11 @@ export default function SecurityDashboard() {
         </View>
       </View>
 
-      <FlatList
+      <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
         contentContainerStyle={styles.listContent}
         refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         data={events}
-        keyExtractor={(i) => i.id || Math.random().toString()}
+        keyExtractor={(i, idx) => i.id || String(idx)}
         ListEmptyComponent={
           loading ? null : (
             <View style={styles.emptyBox}>

@@ -215,7 +215,7 @@ export default function RecordingsScreen() {
             )}
           </View>
 
-        <FlatList
+        <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
           data={sortedItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}

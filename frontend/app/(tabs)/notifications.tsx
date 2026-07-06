@@ -415,7 +415,7 @@ export default function NotificationsScreen() {
         </View>
 
         <View style={styles.categoriesRow}>
-          <FlatList
+          <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
             horizontal
             showsHorizontalScrollIndicator={false}
             data={['All', 'Announcements', 'Courses', 'Quiz', 'Payments', 'Live Classes', 'Library', 'General']}

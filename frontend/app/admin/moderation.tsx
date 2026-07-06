@@ -170,7 +170,7 @@ export default function ModerationDashboard() {
         contentContainerStyle={styles.listContent}
         refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         data={filtered}
-        keyExtractor={(i) => i.id || Math.random().toString()}
+        keyExtractor={(i, idx) => i.id || String(idx)}
         removeClippedSubviews
         windowSize={8}
         maxToRenderPerBatch={10}

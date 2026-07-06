@@ -220,7 +220,7 @@ export default function LiveClassesScreen() {
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       ) : (
-        <FlatList
+        <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
           data={filteredClasses}
           keyExtractor={(item) => item.id}
           renderItem={renderClassItem}

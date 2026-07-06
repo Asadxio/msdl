@@ -325,7 +325,7 @@ export default function AdminUsersScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
-        <FlatList
+        <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
           ListHeaderComponent={(
             <View style={{ gap: 8, marginBottom: 10 }}>
               <TextInput

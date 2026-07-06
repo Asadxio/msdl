@@ -229,7 +229,7 @@ export default function AttendanceScreen() {
       ) : loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
-        <FlatList
+        <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
           data={history}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: SPACING.md, gap: 8, paddingBottom: 20 }}
