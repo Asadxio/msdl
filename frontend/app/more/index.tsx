@@ -84,7 +84,7 @@ const MENU_SECTIONS: MenuSection[] = [
     ]
   },
   {
-    title: 'App & Legal',
+    title: 'App Features',
     emoji: '⚙️',
     colorBg: '#F8FAFC',
     colorIcon: '#64748B',
@@ -193,7 +193,7 @@ export default function MoreLandingScreen() {
   return (
     <ScrollView 
       style={styles.container} 
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.lg }]} 
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }]} 
       showsVerticalScrollIndicator={false} 
       refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
@@ -209,53 +209,56 @@ export default function MoreLandingScreen() {
           <Text style={styles.profileInitials}>{initials}</Text>
         </View>
         <View style={styles.profileInfo}>
+          <Text style={styles.profileGreeting}>As-salamu alaykum ✨</Text>
           <Text style={styles.profileName} numberOfLines={1}>{profile?.name || user?.displayName || 'Student'}</Text>
           <View style={styles.profileBadges}>
             <View style={styles.roleBadge}>
               <Text style={styles.roleText}>{profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Student'}</Text>
             </View>
           </View>
-          <Text style={styles.profileMeta} numberOfLines={1}>{user?.email || profile?.email}</Text>
+          <Text style={styles.profileEmail} numberOfLines={1}>{user?.email || profile?.email}</Text>
           <Text style={styles.profileMeta}>Member since {memberSince}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+        <View style={styles.profileChevron}>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+        </View>
       </ScalePressable>
 
       {/* ─── Stats Card ─── */}
       <View style={styles.statsGrid}>
-        <View style={styles.statCard}>
+        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel="Courses Available">
           <View style={[styles.statIconContainer, { backgroundColor: '#EEF2FF' }]}>
             <Ionicons name="book" size={24} color="#4F46E5" />
           </View>
           <Text style={styles.statValue}>{totalCourses}</Text>
           <Text style={styles.statLabel}>Courses Available</Text>
-        </View>
-        <View style={styles.statCard}>
+        </ScalePressable>
+        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel="Lessons Done">
           <View style={[styles.statIconContainer, { backgroundColor: '#ECFDF5' }]}>
             <Ionicons name="checkmark-circle" size={24} color="#10B981" />
           </View>
           <Text style={styles.statValue}>{lessonsCompleted}</Text>
           <Text style={styles.statLabel}>Lessons Done</Text>
-        </View>
-        <View style={styles.statCard}>
+        </ScalePressable>
+        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel="Quizzes Done">
           <View style={[styles.statIconContainer, { backgroundColor: '#FEF3C7' }]}>
             <Ionicons name="help-circle" size={24} color="#D97706" />
           </View>
           <Text style={styles.statValue}>{quizzesCompleted}</Text>
           <Text style={styles.statLabel}>Quizzes Done</Text>
-        </View>
-        <View style={styles.statCard}>
+        </ScalePressable>
+        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel="Library Books">
           <View style={[styles.statIconContainer, { backgroundColor: '#F5F3FF' }]}>
             <Ionicons name="library" size={24} color="#7C3AED" />
           </View>
           <Text style={styles.statValue}>{totalBooks}</Text>
           <Text style={styles.statLabel}>Library Books</Text>
-        </View>
+        </ScalePressable>
       </View>
 
       {/* ─── ⚡ Quick Actions Grid ─── */}
       <View style={styles.sectionBlock}>
-        <Text style={styles.sectionTitle}>⚡  Quick Actions</Text>
+        <Text style={styles.sectionTitle}>⚡  QUICK ACTIONS</Text>
         <View style={styles.quickGrid}>
           {QUICK_ACTIONS.map((action) => (
             <ScalePressable
@@ -266,7 +269,7 @@ export default function MoreLandingScreen() {
               accessibilityLabel={action.label}
             >
               <View style={[styles.quickIconContainer, { backgroundColor: action.bg }]}>
-                <Ionicons name={action.icon} size={22} color={action.fg} />
+                <Ionicons name={action.icon} size={24} color={action.fg} />
               </View>
               <Text style={styles.quickLabel} numberOfLines={1}>{action.label}</Text>
             </ScalePressable>
@@ -277,7 +280,7 @@ export default function MoreLandingScreen() {
       {/* ─── Menu Sections ─── */}
       {MENU_SECTIONS.filter(s => s.adminOnly ? isAdmin : true).map((section) => (
         <View key={section.title} style={styles.sectionBlock}>
-          <Text style={styles.sectionTitle}>{section.emoji}  {section.title}</Text>
+          <Text style={styles.sectionTitle}>{section.emoji}  {section.title.toUpperCase()}</Text>
           <View style={styles.sectionList}>
             {section.items.map((item) => (
               <ScalePressable
@@ -298,7 +301,9 @@ export default function MoreLandingScreen() {
                   <Text style={styles.rowLabel}>{item.label}</Text>
                   <Text style={styles.rowSubtitle}>{item.subtitle}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+                <View style={styles.rowChevronContainer}>
+                  <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+                </View>
               </ScalePressable>
             ))}
           </View>
@@ -307,7 +312,7 @@ export default function MoreLandingScreen() {
 
       {/* ─── 🕌 About Madrasa ─── */}
       <View style={styles.sectionBlock}>
-        <Text style={styles.sectionTitle}>🕌  About Madrasa</Text>
+        <Text style={styles.sectionTitle}>🕌  ABOUT MADRASA</Text>
         <View style={styles.aboutCard}>
           <Text style={styles.aboutName}>Madrasa Tus Salikat Lil Banat</Text>
           <Text style={styles.aboutDesc}>
@@ -316,11 +321,15 @@ export default function MoreLandingScreen() {
           </Text>
           <View style={styles.aboutMeta}>
             <View style={styles.aboutMetaRow}>
-              <Ionicons name="location-outline" size={16} color={COLORS.textMuted} />
+              <View style={[styles.aboutIconBox, { backgroundColor: '#EEF2FF' }]}>
+                <Ionicons name="location-outline" size={16} color="#4F46E5" />
+              </View>
               <Text style={styles.aboutMetaText}>Madrasa Tus Salikat Lil Banat</Text>
             </View>
             <View style={styles.aboutMetaRow}>
-              <Ionicons name="school-outline" size={16} color={COLORS.textMuted} />
+              <View style={[styles.aboutIconBox, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="school-outline" size={16} color="#10B981" />
+              </View>
               <Text style={styles.aboutMetaText}>Islamic Education for Girls</Text>
             </View>
           </View>
@@ -329,7 +338,7 @@ export default function MoreLandingScreen() {
 
       {/* ─── ❤️ Support & Social ─── */}
       <View style={styles.sectionBlock}>
-        <Text style={styles.sectionTitle}>❤️  Support</Text>
+        <Text style={styles.sectionTitle}>❤️  SUPPORT</Text>
         <View style={styles.supportCard}>
           <Text style={styles.supportTitle}>Need Help?</Text>
           <Text style={styles.supportSubtitle}>We're here to help you. Contact the Madrasa anytime.</Text>
@@ -358,7 +367,9 @@ export default function MoreLandingScreen() {
               <View style={styles.supportRowContent}>
                 <Text style={styles.supportLabel}>Share App</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              <View style={styles.rowChevronContainer}>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </View>
             </ScalePressable>
 
             <ScalePressable style={styles.supportRow} onPress={handleRateApp} accessibilityRole="button" accessibilityLabel="Rate App">
@@ -368,7 +379,9 @@ export default function MoreLandingScreen() {
               <View style={styles.supportRowContent}>
                 <Text style={styles.supportLabel}>Rate App</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              <View style={styles.rowChevronContainer}>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </View>
             </ScalePressable>
 
             {WHATSAPP_HELP_URL ? (
@@ -379,7 +392,9 @@ export default function MoreLandingScreen() {
                 <View style={styles.supportRowContent}>
                   <Text style={styles.supportLabel}>Contact Us</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+                <View style={styles.rowChevronContainer}>
+                  <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+                </View>
               </ScalePressable>
             ) : null}
           </View>
@@ -399,30 +414,31 @@ export default function MoreLandingScreen() {
 /* ────────────────────────────────── Styles ──────────────────────────────── */
 
 const CARD_RADIUS = 20;
-const CARD_BORDER = 'rgba(0,0,0,0.03)';
-const CARD_SHADOW_OPACITY = 0.04;
+const CARD_BORDER = 'rgba(15, 23, 42, 0.06)';
+const CARD_SHADOW_OPACITY = 0.05;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  content: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl + 60 },
+  content: { paddingHorizontal: 16 },
 
   /* Header */
-  header: { marginBottom: SPACING.xl },
-  title: { ...TYPOGRAPHY.title, color: '#0F172A', letterSpacing: -0.5, fontWeight: '800' },
-  subtitle: { ...TYPOGRAPHY.body, color: '#64748B', marginTop: 8, lineHeight: 22 },
+  header: { marginBottom: 20 },
+  title: { ...TYPOGRAPHY.title, fontSize: 28, color: '#0F172A', letterSpacing: -0.5, fontWeight: '800', marginBottom: 4 },
+  subtitle: { ...TYPOGRAPHY.body, fontSize: 14, color: '#64748B', lineHeight: 20 },
   
   /* Profile Card */
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: SPACING.lg,
-    marginBottom: SPACING.xl,
+    borderRadius: CARD_RADIUS,
+    padding: 20,
+    marginBottom: 24,
     ...SHADOWS.card,
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     borderWidth: 1,
     borderColor: CARD_BORDER,
+    minHeight: 104,
   },
   profileAvatar: {
     width: 64,
@@ -431,7 +447,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B4332',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: SPACING.md,
+    marginRight: 16,
   },
   profileInitials: {
     color: '#FFFFFF',
@@ -443,50 +459,77 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  profileGreeting: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#10B981',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   profileName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
     marginBottom: 4,
+    letterSpacing: -0.3,
   },
   profileBadges: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   roleBadge: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#ECFDF5',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 8,
   },
   roleText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#475569',
+    color: '#047857',
     textTransform: 'uppercase',
   },
-  profileMeta: {
+  profileEmail: {
     fontSize: 13,
+    fontWeight: '500',
+    color: '#475569',
+    marginBottom: 4,
+  },
+  profileMeta: {
+    fontSize: 12,
     color: '#64748B',
-    marginBottom: 2,
+    fontWeight: '400',
+  },
+  profileChevron: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
 
   /* Stats Grid */
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.md,
-    marginBottom: SPACING.xl,
+    justifyContent: 'space-between',
+    rowGap: 12,
+    marginBottom: 24,
   },
   statCard: {
     width: '48%',
     backgroundColor: '#FFFFFF',
     borderRadius: CARD_RADIUS,
-    padding: SPACING.md,
+    padding: 16,
     ...SHADOWS.card,
     shadowOpacity: CARD_SHADOW_OPACITY,
     borderWidth: 1,
     borderColor: CARD_BORDER,
+    minHeight: 112,
+    justifyContent: 'space-between',
   },
   statIconContainer: {
     width: 40,
@@ -494,32 +537,33 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.sm,
+    marginBottom: 12,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 2,
+    marginBottom: 4,
+    letterSpacing: -0.5,
   },
   statLabel: {
     fontSize: 13,
     color: '#64748B',
-    fontWeight: '500',
+    fontWeight: '600',
   },
 
   /* Quick Actions Grid */
   quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.sm,
+    justifyContent: 'space-between',
+    rowGap: 16,
   },
   quickItem: {
     width: '23%',
     alignItems: 'center',
-    paddingVertical: SPACING.sm + 4,
-    minHeight: 64,
-    minWidth: 70,
+    paddingVertical: 8,
+    minHeight: 80,
   },
   quickIconContainer: {
     width: 48,
@@ -527,10 +571,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   quickLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: '#334155',
     textAlign: 'center',
@@ -538,27 +582,27 @@ const styles = StyleSheet.create({
 
   /* Section Blocks */
   sectionBlock: {
-    marginBottom: SPACING.xl,
+    marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#334155',
-    marginBottom: SPACING.md,
+    color: '#475569',
+    marginBottom: 12,
     marginLeft: 4,
-    letterSpacing: 0.3,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   sectionList: {
-    gap: SPACING.sm,
+    gap: 12,
   },
 
   /* Row Cards */
   rowCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.md,
-    padding: SPACING.md,
+    gap: 12,
+    padding: 16,
     borderRadius: CARD_RADIUS,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -582,26 +626,33 @@ const styles = StyleSheet.create({
     fontSize: 15, 
     fontWeight: '700', 
     color: '#0F172A',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   rowSubtitle: { 
     fontSize: 12, 
     color: '#64748B',
     fontWeight: '400',
   },
+  rowChevronContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   /* About Card */
   aboutCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: CARD_RADIUS,
-    padding: SPACING.lg,
+    padding: 20,
     ...SHADOWS.card,
     shadowOpacity: CARD_SHADOW_OPACITY,
     borderWidth: 1,
     borderColor: CARD_BORDER,
   },
   aboutName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: '#0F172A',
     marginBottom: 8,
@@ -611,34 +662,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748B',
     lineHeight: 20,
-    marginBottom: SPACING.md,
+    marginBottom: 16,
   },
   aboutMeta: {
-    gap: 8,
+    gap: 12,
   },
   aboutMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  aboutIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   aboutMetaText: {
     fontSize: 13,
-    color: '#64748B',
-    fontWeight: '500',
+    color: '#475569',
+    fontWeight: '600',
   },
 
   /* Support Card */
   supportCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: CARD_RADIUS,
-    padding: SPACING.lg,
+    padding: 20,
     ...SHADOWS.card,
     shadowOpacity: CARD_SHADOW_OPACITY,
     borderWidth: 1,
     borderColor: CARD_BORDER,
   },
   supportTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: '#0F172A',
     marginBottom: 4,
@@ -646,13 +704,13 @@ const styles = StyleSheet.create({
   supportSubtitle: {
     fontSize: 13,
     color: '#64748B',
-    marginBottom: SPACING.md,
+    marginBottom: 16,
     lineHeight: 20,
   },
   socialRow: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.lg,
+    gap: 12,
+    marginBottom: 20,
   },
   socialButton: {
     width: 44,
@@ -662,12 +720,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   supportList: {
-    gap: SPACING.sm,
+    gap: 12,
   },
   supportRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.sm,
+    paddingVertical: 8,
+    minHeight: 56,
   },
   supportIcon: {
     width: 40,
@@ -675,7 +734,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: SPACING.md,
+    marginRight: 12,
   },
   supportRowContent: {
     flex: 1,
@@ -683,23 +742,23 @@ const styles = StyleSheet.create({
   },
   supportLabel: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
+    fontWeight: '700',
+    color: '#0F172A',
   },
 
   /* Footer */
   footer: {
     alignItems: 'center',
-    marginTop: SPACING.xl,
-    paddingVertical: SPACING.lg,
+    marginTop: 16,
+    paddingVertical: 20,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    borderTopColor: 'rgba(15, 23, 42, 0.06)',
   },
   footerHeart: {
     fontSize: 13,
     fontWeight: '600',
     color: '#64748B',
-    marginBottom: SPACING.md,
+    marginBottom: 12,
   },
   footerTitle: {
     fontSize: 14,
@@ -712,3 +771,4 @@ const styles = StyleSheet.create({
     color: '#CBD5E1',
   },
 });
+

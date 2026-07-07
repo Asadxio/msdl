@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, Share, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
+import { ScalePressable } from '@/components/ui';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { auth, db } from '@/lib/firebase';
 import { apiUrl } from '@/lib/api';
@@ -16,6 +18,7 @@ export default function CertificateScreen() {
   const { user, profile } = useAuth();
   const { courses } = useData();
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [certs, setCerts] = useState<Certificate[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [quizAttempts, setQuizAttempts] = useState(0);
@@ -77,10 +80,11 @@ export default function CertificateScreen() {
 
   const generateCertificate = async () => {
     if (!user?.uid || !profile?.name || !selectedCourseId) return;
-    if (!eligible) return;
+    if (!eligible || generating) return;
     const course = courses.find((c) => c.id === selectedCourseId);
     if (!course) return;
     try {
+      setGenerating(true);
       const token = await auth.currentUser?.getIdToken();
       const res = await fetch(apiUrl('/certificates/generate'), {
         method: 'POST',
@@ -92,77 +96,570 @@ export default function CertificateScreen() {
       await Share.share({ message: certText });
     } catch {
       Alert.alert('Failed', 'Could not generate certificate right now.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleShareExistingCert = async (cert: Certificate) => {
+    try {
+      const certText = `Certificate of Completion\n\nAwarded to: ${cert.user_name || profile?.name || 'Student'}\nCourse: ${cert.course_name}\nDate: ${cert.completion_date || new Date().toDateString()}`;
+      await Share.share({ message: certText });
+    } catch {
+      // User cancelled share
     }
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>Certificates</Text>
-        <Text style={styles.subtitle}>Generate and share completion certificates</Text>
+      
+      {/* ─── Hero Header ─── */}
+      <View style={[styles.heroHeader, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.heroContent}>
+          <View style={styles.heroIconBadge}>
+            <Ionicons name="ribbon" size={28} color="#D97706" />
+          </View>
+          <View style={styles.heroTextContainer}>
+            <Text style={styles.heroTitle}>Certificates</Text>
+            <Text style={styles.heroSubtitle}>Generate and share official completion certificates for your courses</Text>
+          </View>
+        </View>
       </View>
-      {loading ? <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View> : (
-        <ScrollView contentContainerStyle={styles.body}>
-          <View style={styles.card}>
-            <Text style={styles.meta}>Quiz attempts: {quizAttempts}</Text>
-            <Text style={styles.meta}>Attendance: {attendancePct}%</Text>
-            <Text style={[styles.meta, !eligible && { color: COLORS.error }]}>Eligibility: {eligible ? 'Qualified' : 'Need quiz + 75% attendance'}</Text>
-          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.meta}>Select Course</Text>
-            {courses.map((course) => (
-              <TouchableOpacity key={course.id} style={[styles.chip, selectedCourseId === course.id && styles.chipActive]} onPress={() => setSelectedCourseId(course.id)}>
-                <Text style={[styles.chipText, selectedCourseId === course.id && styles.chipTextActive]}>{course.name}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={[styles.btn, (!eligible || !selectedCourseId) && { opacity: 0.5 }]} disabled={!eligible || !selectedCourseId} onPress={generateCertificate}>
-              <Text style={styles.btnText}>Generate & Share Certificate</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.meta}>My Certificates</Text>
-            {certs.length === 0 ? <Text style={styles.empty}>No certificates yet.</Text> : certs.map((cert) => (
-              <View key={cert.id} style={styles.certRow}>
-                <Text style={styles.certTitle}>{cert.course_name}</Text>
-                <Text style={styles.certSub}>{cert.completion_date}</Text>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading academic status...</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
+          
+          {/* ─── Statistics Dashboard ─── */}
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionTitle}>📊  ACADEMIC ELIGIBILITY</Text>
+            <View style={styles.statsGrid}>
+              
+              {/* Quiz Attempts Stat Box */}
+              <View style={styles.statBox}>
+                <View style={styles.statHeaderRow}>
+                  <View style={[styles.statIconBadge, { backgroundColor: '#EEF2FF' }]}>
+                    <Ionicons name="help-circle" size={22} color="#4F46E5" />
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: quizAttempts > 0 ? '#ECFDF5' : '#FEF3C7' }]}>
+                    <Text style={[styles.statusBadgeText, { color: quizAttempts > 0 ? '#047857' : '#B45309' }]}>
+                      {quizAttempts > 0 ? '✓ Done' : 'Required'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.statValue}>{quizAttempts}</Text>
+                <Text style={styles.statLabel}>Quiz Attempts</Text>
               </View>
-            ))}
+
+              {/* Attendance % Stat Box */}
+              <View style={styles.statBox}>
+                <View style={styles.statHeaderRow}>
+                  <View style={[styles.statIconBadge, { backgroundColor: '#ECFDF5' }]}>
+                    <Ionicons name="calendar" size={22} color="#10B981" />
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: attendancePct >= 75 ? '#ECFDF5' : '#FEF3C7' }]}>
+                    <Text style={[styles.statusBadgeText, { color: attendancePct >= 75 ? '#047857' : '#B45309' }]}>
+                      {attendancePct >= 75 ? '✓ On Track' : '>= 75% Needed'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.statValue}>{attendancePct}%</Text>
+                <Text style={styles.statLabel}>Attendance</Text>
+              </View>
+
+              {/* Overall Eligibility Banner */}
+              <View style={[styles.statBoxFull, { borderColor: eligible ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.2)' }]}>
+                <View style={[styles.statIconBadge, { backgroundColor: eligible ? '#ECFDF5' : '#FEE2E2' }]}>
+                  <Ionicons name={eligible ? "checkmark-circle" : "alert-circle"} size={24} color={eligible ? "#10B981" : "#EF4444"} />
+                </View>
+                <View style={styles.statFullContent}>
+                  <Text style={styles.statValueText}>{eligible ? 'Qualified for Certificates' : 'Eligibility Incomplete'}</Text>
+                  <Text style={styles.statSubText}>
+                    {eligible ? 'You have met all academic criteria to generate course certificates.' : 'Complete at least 1 quiz and achieve 75% attendance to qualify.'}
+                  </Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: eligible ? '#ECFDF5' : '#FEE2E2' }]}>
+                  <Text style={[styles.statusBadgeText, { color: eligible ? '#047857' : '#B91C1C' }]}>
+                    {eligible ? 'ELIGIBLE' : 'LOCKED'}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
+
+          {/* ─── Course Selector ─── */}
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionTitle}>📚  SELECT COURSE</Text>
+            <View style={styles.card}>
+              {courses.length === 0 ? (
+                <Text style={styles.empty}>No courses available right now.</Text>
+              ) : (
+                <View style={styles.courseList}>
+                  {courses.map((course) => {
+                    const isSelected = selectedCourseId === course.id;
+                    return (
+                      <ScalePressable
+                        key={course.id}
+                        style={[styles.courseChip, isSelected && styles.courseChipActive]}
+                        onPress={() => setSelectedCourseId(course.id)}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: isSelected }}
+                        accessibilityLabel={course.name}
+                      >
+                        <View style={[styles.courseIconBadge, { backgroundColor: isSelected ? '#D1FAE5' : '#F1F5F9' }]}>
+                          <Ionicons name="book" size={20} color={isSelected ? '#047857' : '#64748B'} />
+                        </View>
+                        <Text style={[styles.courseChipText, isSelected && styles.courseChipTextActive]} numberOfLines={2}>
+                          {course.name}
+                        </Text>
+                        <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]}>
+                          {isSelected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+                        </View>
+                      </ScalePressable>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Generate & Share CTA */}
+              <TouchableOpacity
+                style={[styles.btn, (!eligible || !selectedCourseId || generating) && styles.btnDisabled]}
+                disabled={!eligible || !selectedCourseId || generating}
+                onPress={generateCertificate}
+                accessibilityRole="button"
+                accessibilityLabel="Generate and Share Certificate"
+              >
+                {generating ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name={!eligible ? "lock-closed-outline" : "ribbon-outline"} size={22} color={(!eligible || !selectedCourseId) ? "#94A3B8" : "#FFFFFF"} />
+                )}
+                <Text style={[styles.btnText, (!eligible || !selectedCourseId) && styles.btnTextDisabled]}>
+                  {generating ? 'Generating Certificate...' : 'Generate & Share Certificate'}
+                </Text>
+              </TouchableOpacity>
+              
+              {(!eligible || !selectedCourseId) && (
+                <Text style={styles.ctaHelperText}>
+                  {!eligible ? '⚠️ Meet eligibility requirements above to unlock certificate generation.' : '💡 Please select a course above to generate your official certificate.'}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {/* ─── My Certificates ─── */}
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionTitle}>🏆  MY CERTIFICATES</Text>
+            {certs.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <View style={[styles.emptyIconBadge, { backgroundColor: '#FEF3C7' }]}>
+                  <Ionicons name="ribbon-outline" size={36} color="#D97706" />
+                </View>
+                <Text style={styles.emptyTitle}>No Certificates Awarded Yet</Text>
+                <Text style={styles.emptyDesc}>
+                  Your official completion certificates will appear here once you finish a course and meet the academic eligibility criteria.
+                </Text>
+                <View style={styles.emptyGuidanceBox}>
+                  <Ionicons name="bulb-outline" size={18} color="#D97706" style={{ marginRight: 8 }} />
+                  <Text style={styles.emptyGuidanceText}>
+                    Complete at least 1 course quiz and maintain 75% attendance to unlock your certificate.
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.certList}>
+                {certs.map((cert) => (
+                  <View key={cert.id} style={styles.certCard}>
+                    <View style={[styles.certIconBadge, { backgroundColor: '#FEF3C7' }]}>
+                      <Ionicons name="trophy" size={24} color="#D97706" />
+                    </View>
+                    <View style={styles.certContent}>
+                      <Text style={styles.certCourseName} numberOfLines={2}>{cert.course_name}</Text>
+                      <Text style={styles.certUserName} numberOfLines={1}>Awarded to: {cert.user_name || profile?.name || 'Student'}</Text>
+                      <View style={styles.certDateRow}>
+                        <Ionicons name="calendar-outline" size={12} color={COLORS.textMuted} style={{ marginRight: 4 }} />
+                        <Text style={styles.certDateText}>{cert.completion_date || 'Completed'}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.certShareBtn}
+                      onPress={() => handleShareExistingCert(cert)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Share certificate for ${cert.course_name}`}
+                    >
+                      <Ionicons name="share-social-outline" size={20} color="#4F46E5" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
         </ScrollView>
       )}
     </View>
   );
 }
 
+const CARD_RADIUS = 20;
+const CARD_BORDER = 'rgba(15, 23, 42, 0.06)';
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  header: { backgroundColor: COLORS.surface, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOWS.header },
-  title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
-  subtitle: { fontSize: 13, color: COLORS.textMuted },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  body: { padding: SPACING.md, gap: 10, paddingBottom: 20 },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card, gap: 8 },
-  meta: { color: COLORS.textMain, fontSize: 13, fontWeight: '600' },
-  chip: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: 10, paddingVertical: 8 },
-  chipActive: { borderColor: COLORS.primary, backgroundColor: '#EEF6F2' },
-  chipText: { color: COLORS.textMain, fontSize: 13 },
-  chipTextActive: { color: COLORS.primary, fontWeight: '700' },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  loadingText: { marginTop: 12, fontSize: 14, color: '#64748B', fontWeight: '500' },
+
+  /* Hero Header */
+  heroHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: CARD_BORDER,
+    ...SHADOWS.card,
+    shadowOpacity: 0.04,
+  },
+  heroContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heroIconBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  heroTextContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  heroSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+
+  /* Body & Sections */
+  body: { paddingHorizontal: 16, paddingTop: 20, gap: 24 },
+  sectionBlock: { gap: 12 },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
+    marginLeft: 4,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+
+  /* Stats Dashboard */
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 12,
+  },
+  statBox: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+    minHeight: 112,
+    justifyContent: 'space-between',
+  },
+  statHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  statIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  statBoxFull: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: 16,
+    borderWidth: 1.5,
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statFullContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  statValueText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  statSubText: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+
+  /* Standard Card */
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+    gap: 16,
+  },
+  courseList: {
+    gap: 12,
+  },
+  courseChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    minHeight: 56,
+  },
+  courseChipActive: {
+    borderColor: '#10B981',
+    backgroundColor: '#ECFDF5',
+  },
+  courseIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  courseChipText: {
+    flex: 1,
+    color: '#334155',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  courseChipTextActive: {
+    color: '#065F46',
+    fontWeight: '700',
+  },
+  radioCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  radioCircleActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+
+  /* Button */
   btn: {
     backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.lg,
-    paddingVertical: 14,
-    paddingHorizontal: SPACING.lg,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
+    minHeight: 56,
+    width: '100%',
+    ...SHADOWS.card,
+    shadowOpacity: 0.1,
   },
-  btnText: { color: '#fff', fontWeight: '700' },
-  certRow: { borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 8 },
-  certTitle: { color: COLORS.textMain, fontWeight: '700' },
-  certSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
-  empty: { color: COLORS.textMuted, fontSize: 13 },
+  btnDisabled: {
+    backgroundColor: '#E2E8F0',
+    shadowOpacity: 0,
+  },
+  btnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  btnTextDisabled: {
+    color: '#94A3B8',
+  },
+  ctaHelperText: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+
+  /* My Certificates List */
+  certList: {
+    gap: 12,
+  },
+  certCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+    minHeight: 80,
+  },
+  certIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  certContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  certCourseName: {
+    color: '#0F172A',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  certUserName: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  certDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  certDateText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: '400',
+  },
+  certShareBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+
+  /* Empty State */
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+    alignItems: 'center',
+    textAlign: 'center',
+  },
+  emptyIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  emptyDesc: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+    maxWidth: 320,
+  },
+  emptyGuidanceBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    width: '100%',
+  },
+  emptyGuidanceText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  empty: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
 });
