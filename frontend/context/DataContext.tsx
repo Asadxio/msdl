@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   collection,
@@ -989,23 +989,40 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     fetchLearning().catch(() => {});
   }, [fetchLearning]);
 
+  const contextValue = useMemo(() => ({
+    courses, teachers, books, loading, booksLoading, error,
+    modules, lessons, assignments, submissions, lessonProgress,
+    courseContentLoading, courseContentError,
+    hasMoreModulesByCourse, hasMoreLessonsByModule, hasMoreAssignmentsByLesson,
+    refetch: fetchData, refetchBooks: fetchBooks, refetchLearning: fetchLearning,
+    fetchCourseModules, fetchMoreCourseModules,
+    fetchLessonsForModule, fetchMoreLessonsForModule,
+    fetchAssignmentsForLesson, fetchMoreAssignmentsForLesson,
+    fetchSubmissionsForAssignment,
+    getModulesForCourse, getLessonsForModule, getLessonById, getAssignmentsForLesson,
+    getSubmissionForAssignment, getSubmissionsForAssignment,
+    markLessonOpened, markLessonComplete, markLessonQuizComplete, submitAssignment, reviewSubmission,
+    getResumeLearning, getCourseProgress,
+    addBook, deleteBook,
+  }), [
+    courses, teachers, books, loading, booksLoading, error,
+    modules, lessons, assignments, submissions, lessonProgress,
+    courseContentLoading, courseContentError,
+    hasMoreModulesByCourse, hasMoreLessonsByModule, hasMoreAssignmentsByLesson,
+    fetchData, fetchBooks, fetchLearning,
+    fetchCourseModules, fetchMoreCourseModules,
+    fetchLessonsForModule, fetchMoreLessonsForModule,
+    fetchAssignmentsForLesson, fetchMoreAssignmentsForLesson,
+    fetchSubmissionsForAssignment,
+    getModulesForCourse, getLessonsForModule, getLessonById, getAssignmentsForLesson,
+    getSubmissionForAssignment, getSubmissionsForAssignment,
+    markLessonOpened, markLessonComplete, markLessonQuizComplete, submitAssignment, reviewSubmission,
+    getResumeLearning, getCourseProgress,
+    addBook, deleteBook,
+  ]);
+
   return (
-    <DataContext.Provider value={{
-      courses, teachers, books, loading, booksLoading, error,
-      modules, lessons, assignments, submissions, lessonProgress,
-      courseContentLoading, courseContentError,
-      hasMoreModulesByCourse, hasMoreLessonsByModule, hasMoreAssignmentsByLesson,
-      refetch: fetchData, refetchBooks: fetchBooks, refetchLearning: fetchLearning,
-      fetchCourseModules, fetchMoreCourseModules,
-      fetchLessonsForModule, fetchMoreLessonsForModule,
-      fetchAssignmentsForLesson, fetchMoreAssignmentsForLesson,
-      fetchSubmissionsForAssignment,
-      getModulesForCourse, getLessonsForModule, getLessonById, getAssignmentsForLesson,
-      getSubmissionForAssignment, getSubmissionsForAssignment,
-      markLessonOpened, markLessonComplete, markLessonQuizComplete, submitAssignment, reviewSubmission,
-      getResumeLearning, getCourseProgress,
-      addBook, deleteBook,
-    }}>
+    <DataContext.Provider value={contextValue}>
       {children}
     </DataContext.Provider>
   );

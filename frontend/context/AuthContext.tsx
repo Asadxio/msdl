@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -306,7 +306,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
-              setProfile(nextProfile);
+              setProfile((prev) => {
+                if (prev && JSON.stringify(prev) === JSON.stringify(nextProfile)) {
+                  return prev;
+                }
+                return nextProfile;
+              });
               setProfileIssue(issue);
               await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
               await syncPublicProfile(firebaseUser.uid, nextProfile);
@@ -590,13 +595,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSignupVerificationFlowActive(false);
   };
 
+  const contextValue = useMemo(() => ({
+    user, profile, profileIssue, authLoading, emailVerified,
+    signIn, signUp, signOut: signOutUser, refreshProfile,
+    resendVerification, changeEmailAddress, resetPassword, refreshUser, profileOffline,
+    showSignupVerificationPrompt, signupVerificationFlowActive, acknowledgeSignupVerificationPrompt,
+  }), [
+    user, profile, profileIssue, authLoading, emailVerified, profileOffline,
+    showSignupVerificationPrompt, signupVerificationFlowActive,
+  ]);
+
   return (
-    <AuthContext.Provider value={{
-      user, profile, profileIssue, authLoading, emailVerified,
-      signIn, signUp, signOut: signOutUser, refreshProfile,
-      resendVerification, changeEmailAddress, resetPassword, refreshUser, profileOffline,
-      showSignupVerificationPrompt, signupVerificationFlowActive, acknowledgeSignupVerificationPrompt,
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

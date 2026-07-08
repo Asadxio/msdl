@@ -1,6 +1,6 @@
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, ScrollView,
 } from 'react-native';
@@ -85,15 +85,14 @@ export default function AdminAnalyticsScreen() {
   const [metrics, setMetrics] = useState<AnalyticsMetrics>(EMPTY_METRICS);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
-  const loadAnalytics = async () => {
-    setLoading(true);
+  const loadAnalytics = useCallback(async () => {
+    if (!lastRefreshed) setLoading(true);
     setError('');
     try {
       const now = new Date();
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const thirtyDaysAgoTs = Timestamp.fromDate(thirtyDaysAgo);
-      const startOfMonthTs = Timestamp.fromDate(startOfMonth);
 
       // Parallel fetches — users by role
       const [
@@ -119,55 +118,44 @@ export default function AdminAnalyticsScreen() {
       // Attendance calculations
       let presentCount = 0;
       let absentCount = 0;
-      attendanceSnap.forEach((d) => {
-        const item = d.data() as { status?: string };
-        if (item.status === 'present') presentCount++;
-        else if (item.status === 'absent') absentCount++;
+      attendanceSnap.forEach((docSnap) => {
+        const d = docSnap.data() as { status?: string };
+        if (d.status === 'present') presentCount++;
+        else if (d.status === 'absent') absentCount++;
       });
-      const totalAttendance = presentCount + absentCount;
-      const attendancePct = totalAttendance ? Math.round((presentCount / totalAttendance) * 100) : 0;
+      const totalAtt = presentCount + absentCount;
+      const attendancePct = totalAtt > 0 ? Math.round((presentCount / totalAtt) * 100) : 0;
 
-      // Live class calculations
-      let classesHosted = 0;
-      liveClassesSnap.forEach((d) => {
-        const data = d.data() as { ended_at?: unknown };
-        if (data.ended_at) {
-          classesHosted++;
-        }
-      });
-      
+      // Live class sessions
+      const classesHosted = liveClassesSnap.size;
 
-      // Payment calculations
+      // Financials
       let totalRevenue = 0;
       let totalDonations = 0;
       let totalFees = 0;
       let failedPayments = 0;
       let monthlyRevenue = 0;
       let pendingPayments = 0;
-      const donationTypes = new Set(['sadqa', 'zakat', 'fitra', 'langar']);
 
-      allPaymentsSnap.forEach((d) => {
-        const p = d.data() as {
-          amount?: number; type?: string; state?: string; status?: string;
-          created_at?: { toMillis?: () => number };
+      allPaymentsSnap.forEach((docSnap) => {
+        const d = docSnap.data() as { 
+            amount?: number, status?: string, state?: string, type?: string, created_at?: { toDate: () => Date } 
         };
-        const amt = Number(p.amount || 0);
-        const state = String(p.state ?? p.status ?? '');
-        const pType = String(p.type || 'fees');
-        const isSucceeded = ['succeeded', 'approved', 'verified'].includes(state);
-        const isFailed = ['failed', 'rejected', 'cancelled', 'expired'].includes(state);
-        const isPending = ['pending', 'processing', 'submitted'].includes(state);
+        const amt = Number(d.amount || 0);
+        const status = d.status || d.state || 'pending';
+        const type = d.type || 'fees';
+        const created = d.created_at?.toDate ? d.created_at.toDate() : null;
 
-        if (isSucceeded) {
+        if (status === 'succeeded' || status === 'completed' || status === 'verified' || status === 'approved') {
           totalRevenue += amt;
-          if (donationTypes.has(pType)) totalDonations += amt;
-          else if (pType === 'fees') totalFees += amt;
-          // Monthly
-          const createdMs = p.created_at?.toMillis ? p.created_at.toMillis() : 0;
-          if (createdMs >= startOfMonthTs.toMillis()) monthlyRevenue += amt;
+          if (type === 'donation' || ['sadqa', 'zakat', 'fitra', 'langar'].includes(type)) totalDonations += amt;
+          else totalFees += amt;
+          if (created && created >= startOfMonth) monthlyRevenue += amt;
+        } else if (status === 'failed' || status === 'rejected' || status === 'cancelled' || status === 'expired') {
+          failedPayments++;
+        } else if (status === 'pending' || status === 'submitted' || status === 'processing') {
+          pendingPayments++;
         }
-        if (isFailed) failedPayments++;
-        if (isPending) pendingPayments++;
       });
 
       setMetrics({
@@ -183,8 +171,6 @@ export default function AdminAnalyticsScreen() {
         presentCount,
         absentCount,
         classesHosted,
-        
-        
         totalRevenue,
         totalDonations,
         totalFees,
@@ -205,7 +191,7 @@ export default function AdminAnalyticsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [lastRefreshed, profile?.role, profile?.status]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await loadAnalytics();
@@ -217,8 +203,7 @@ export default function AdminAnalyticsScreen() {
       return;
     }
     if (isAdmin) loadAnalytics().catch(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, isAdmin]);
+  }, [isAdmin]);
 
   if (profile && !isAdmin) return null;
 

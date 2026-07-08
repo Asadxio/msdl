@@ -65,7 +65,12 @@ export default function AdminPaymentsScreen() {
   const loadPayments = useCallback(async (direction: 'reset' | 'next' | 'prev' = 'reset') => {
     if (!isAdmin || fetching) return;
     setFetching(true);
-    if (direction === 'reset') setLoading(true);
+    if (direction === 'reset') {
+      setPayments((curr) => {
+        if (curr.length === 0) setLoading(true);
+        return curr;
+      });
+    }
     try {
       if (statusFilter !== 'all') {
         const [statePage, statusPage] = await Promise.all([
@@ -90,7 +95,7 @@ export default function AdminPaymentsScreen() {
       setLoading(false);
       setFetching(false);
     }
-  }, [cursor, fetching, isAdmin, statusFilter]);
+  }, [cursor, fetching, isAdmin, statusFilter, profile?.role, profile?.status]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await loadPayments('reset');
@@ -103,8 +108,7 @@ export default function AdminPaymentsScreen() {
     }
     if (!isAdmin) return;
     loadPayments('reset');
-    return () => {};
-  }, [profile, isAdmin, router, statusFilter]);
+  }, [isAdmin, statusFilter]);
 
   const setStatus = async (id: string, status: 'succeeded' | 'rejected' | 'refunded' | 'disputed') => {
     const currentUser = auth.currentUser;

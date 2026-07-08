@@ -11,9 +11,18 @@
       "backgroundColor": "#F7F2E9",
       "barStyle": "dark-content"
     },
-    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F4EA"
+    },
     "ios": {
       "supportsTablet": true,
+      "splash": {
+        "image": "./assets/images/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#F8F4EA"
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Allow camera access for profile photos, status media, live classes, and the native Camera Qibla Finder overlay.",
         "NSMicrophoneUsageDescription": "Allow microphone access for video status content and built-in live classes.",
@@ -25,6 +34,11 @@
       }
     },
     "android": {
+      "splash": {
+        "image": "./assets/images/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#F8F4EA"
+      },
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
@@ -48,7 +62,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.madrasatussalikat.lilbanat",
-      "versionCode": 16,
+      "versionCode": 17,
       "googleServicesFile": "./google-services.json"
     },
     "web": {

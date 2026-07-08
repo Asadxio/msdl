@@ -1,6 +1,6 @@
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, StatusBar, ActivityIndicator,
 } from 'react-native';
@@ -102,8 +102,8 @@ export default function ManageAcademicsScreen() {
     return ((lessons.length + recordings.length) / courses.length).toFixed(1);
   }, [courses.length, lessons.length, recordings.length]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = useCallback(async () => {
+    if (courses.length === 0) setLoading(true);
     try {
       const [courseSnap, teacherSnap, lessonSnap, recordingSnap, studentsSnap] = await Promise.all([
         getDocs(collection(db, 'courses')),
@@ -175,7 +175,7 @@ export default function ManageAcademicsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [courses.length, profile?.role, profile?.status]);
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -183,8 +183,7 @@ export default function ManageAcademicsScreen() {
       return;
     }
     if (isAdmin) fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, isAdmin, router]);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!selectedTeacherId) {

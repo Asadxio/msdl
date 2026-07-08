@@ -1,6 +1,6 @@
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   StatusBar, ActivityIndicator, Alert, ScrollView, TextInput, Image,
@@ -45,10 +45,15 @@ export default function AdminUsersScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const fetchUsers = async (direction: 'next' | 'prev' | 'reset' = 'reset') => {
+  const fetchUsers = useCallback(async (direction: 'next' | 'prev' | 'reset' = 'reset') => {
     if (fetching) return;
     setFetching(true);
-    if (direction === 'reset') setLoading(true);
+    if (direction === 'reset') {
+      setUsers((current) => {
+        if (current.length === 0) setLoading(true);
+        return current;
+      });
+    }
     try {
       const extra: any[] = [];
       if (roleFilter !== 'all') extra.push(where('role', '==', roleFilter));
@@ -70,7 +75,7 @@ export default function AdminUsersScreen() {
     }
     setLoading(false);
     setFetching(false);
-  };
+  }, [fetching, roleFilter, statusFilter, cursor, profile?.role, profile?.status]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await fetchUsers('reset');
@@ -81,8 +86,8 @@ export default function AdminUsersScreen() {
       router.replace('/unauthorized?required=admin');
       return;
     }
-    if (isAdmin) fetchUsers();
-  }, [profile, isAdmin, router, roleFilter, statusFilter]);
+    if (isAdmin) fetchUsers('reset');
+  }, [isAdmin, roleFilter, statusFilter]);
 
   const updateUser = async (uid: string, updates: Partial<UserProfile>) => {
     try {
