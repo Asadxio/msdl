@@ -204,12 +204,17 @@ export default function MoreLandingScreen() {
       </View>
 
       {/* ─── 👤 Profile Card ─── */}
-      <ScalePressable style={styles.profileCard} onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="View Profile">
+      <ScalePressable 
+        style={styles.profileCard} 
+        onPress={() => router.push('/settings')} 
+        accessibilityRole="button" 
+        accessibilityLabel="View Profile and Settings"
+      >
         <View style={styles.profileAvatar}>
           <Text style={styles.profileInitials}>{initials}</Text>
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.profileGreeting}>As-salamu alaykum ✨</Text>
+          <Text style={styles.profileGreeting}>AS-SALAMU ALAYKUM ✨</Text>
           <Text style={styles.profileName} numberOfLines={1}>{profile?.name || user?.displayName || 'Student'}</Text>
           <View style={styles.profileBadges}>
             <View style={styles.roleBadge}>
@@ -226,28 +231,28 @@ export default function MoreLandingScreen() {
 
       {/* ─── Stats Card ─── */}
       <View style={styles.statsGrid}>
-        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel="Courses Available">
+        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Courses Available: ${totalCourses}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#EEF2FF' }]}>
             <Ionicons name="book" size={24} color="#4F46E5" />
           </View>
           <Text style={styles.statValue}>{totalCourses}</Text>
           <Text style={styles.statLabel}>Courses Available</Text>
         </ScalePressable>
-        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel="Lessons Done">
+        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Lessons Done: ${lessonsCompleted}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#ECFDF5' }]}>
             <Ionicons name="checkmark-circle" size={24} color="#10B981" />
           </View>
           <Text style={styles.statValue}>{lessonsCompleted}</Text>
           <Text style={styles.statLabel}>Lessons Done</Text>
         </ScalePressable>
-        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel="Quizzes Done">
+        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Quizzes Done: ${quizzesCompleted}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#FEF3C7' }]}>
             <Ionicons name="help-circle" size={24} color="#D97706" />
           </View>
           <Text style={styles.statValue}>{quizzesCompleted}</Text>
           <Text style={styles.statLabel}>Quizzes Done</Text>
         </ScalePressable>
-        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel="Library Books">
+        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Library Books: ${totalBooks}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#F5F3FF' }]}>
             <Ionicons name="library" size={24} color="#7C3AED" />
           </View>
@@ -291,7 +296,7 @@ export default function MoreLandingScreen() {
                   else if (item.route) router.push(item.route as any);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={item.label}
+                accessibilityLabel={`${item.label}, ${item.subtitle}`}
                 disabled={item.disabled}
               >
                 <View style={[styles.rowIconContainer, { backgroundColor: item.colorBg || section.colorBg }]}>
@@ -322,13 +327,13 @@ export default function MoreLandingScreen() {
           <View style={styles.aboutMeta}>
             <View style={styles.aboutMetaRow}>
               <View style={[styles.aboutIconBox, { backgroundColor: '#EEF2FF' }]}>
-                <Ionicons name="location-outline" size={16} color="#4F46E5" />
+                <Ionicons name="location-outline" size={18} color="#4F46E5" />
               </View>
               <Text style={styles.aboutMetaText}>Madrasa Tus Salikat Lil Banat</Text>
             </View>
             <View style={styles.aboutMetaRow}>
               <View style={[styles.aboutIconBox, { backgroundColor: '#ECFDF5' }]}>
-                <Ionicons name="school-outline" size={16} color="#10B981" />
+                <Ionicons name="school-outline" size={18} color="#10B981" />
               </View>
               <Text style={styles.aboutMetaText}>Islamic Education for Girls</Text>
             </View>
@@ -341,7 +346,7 @@ export default function MoreLandingScreen() {
         <Text style={styles.sectionTitle}>❤️  SUPPORT</Text>
         <View style={styles.supportCard}>
           <Text style={styles.supportTitle}>Need Help?</Text>
-          <Text style={styles.supportSubtitle}>We're here to help you. Contact the Madrasa anytime.</Text>
+          <Text style={styles.supportSubtitle}>We&apos;re here to help you. Contact the Madrasa anytime.</Text>
           
           {/* Social Links */}
           <View style={styles.socialRow}>
@@ -353,7 +358,7 @@ export default function MoreLandingScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={link.label}
               >
-                <Ionicons name={link.icon} size={22} color={link.fg} />
+                <Ionicons name={link.icon} size={24} color={link.fg} />
               </ScalePressable>
             ))}
           </View>
@@ -362,10 +367,11 @@ export default function MoreLandingScreen() {
           <View style={styles.supportList}>
             <ScalePressable style={styles.supportRow} onPress={handleShareApp} accessibilityRole="button" accessibilityLabel="Share App">
               <View style={[styles.supportIcon, { backgroundColor: '#DBEAFE' }]}>
-                <Ionicons name="share-social-outline" size={20} color="#2563EB" />
+                <Ionicons name="share-social-outline" size={22} color="#2563EB" />
               </View>
               <View style={styles.supportRowContent}>
                 <Text style={styles.supportLabel}>Share App</Text>
+                <Text style={styles.supportRowSub}>Share MSDL with friends and family</Text>
               </View>
               <View style={styles.rowChevronContainer}>
                 <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
@@ -374,10 +380,11 @@ export default function MoreLandingScreen() {
 
             <ScalePressable style={styles.supportRow} onPress={handleRateApp} accessibilityRole="button" accessibilityLabel="Rate App">
               <View style={[styles.supportIcon, { backgroundColor: '#FEF9C3' }]}>
-                <Ionicons name="star-outline" size={20} color="#CA8A04" />
+                <Ionicons name="star-outline" size={22} color="#CA8A04" />
               </View>
               <View style={styles.supportRowContent}>
                 <Text style={styles.supportLabel}>Rate App</Text>
+                <Text style={styles.supportRowSub}>Leave a review on Google Play</Text>
               </View>
               <View style={styles.rowChevronContainer}>
                 <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
@@ -385,12 +392,13 @@ export default function MoreLandingScreen() {
             </ScalePressable>
 
             {WHATSAPP_HELP_URL ? (
-              <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(WHATSAPP_HELP_URL)} accessibilityRole="button" accessibilityLabel="Contact Us">
+              <ScalePressable style={styles.supportRow} onPress={() => Linking.openURL(WHATSAPP_HELP_URL)} accessibilityRole="button" accessibilityLabel="Contact Us via WhatsApp">
                 <View style={[styles.supportIcon, { backgroundColor: '#DCFCE7' }]}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={20} color="#16A34A" />
+                  <Ionicons name="chatbubble-ellipses-outline" size={22} color="#16A34A" />
                 </View>
                 <View style={styles.supportRowContent}>
                   <Text style={styles.supportLabel}>Contact Us</Text>
+                  <Text style={styles.supportRowSub}>Direct support desk via WhatsApp</Text>
                 </View>
                 <View style={styles.rowChevronContainer}>
                   <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
@@ -422,8 +430,8 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16 },
 
   /* Header */
-  header: { marginBottom: 20 },
-  title: { ...TYPOGRAPHY.title, fontSize: 28, color: '#0F172A', letterSpacing: -0.5, fontWeight: '800', marginBottom: 4 },
+  header: { marginBottom: 24 },
+  title: { ...TYPOGRAPHY.title, fontSize: 24, color: '#0F172A', letterSpacing: -0.4, fontWeight: '800', marginBottom: 4 },
   subtitle: { ...TYPOGRAPHY.body, fontSize: 14, color: '#64748B', lineHeight: 20 },
   
   /* Profile Card */
@@ -438,12 +446,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     borderWidth: 1,
     borderColor: CARD_BORDER,
-    minHeight: 104,
+    minHeight: 112,
   },
   profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: '#1B4332',
     alignItems: 'center',
     justifyContent: 'center',
@@ -452,8 +460,8 @@ const styles = StyleSheet.create({
   profileInitials: {
     color: '#FFFFFF',
     fontSize: 24,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   profileInfo: {
     flex: 1,
@@ -461,17 +469,16 @@ const styles = StyleSheet.create({
   },
   profileGreeting: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#10B981',
     marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   profileName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 4,
+    marginBottom: 6,
     letterSpacing: -0.3,
   },
   profileBadges: {
@@ -491,7 +498,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   profileEmail: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
     color: '#475569',
     marginBottom: 4,
@@ -502,21 +509,22 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   profileChevron: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
   },
 
-  /* Stats Grid */
+  /* Stats Grid (2 Columns, Equal Height, Centered Content) */
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: 12,
+    columnGap: 12,
     marginBottom: 24,
   },
   statCard: {
@@ -528,13 +536,14 @@ const styles = StyleSheet.create({
     shadowOpacity: CARD_SHADOW_OPACITY,
     borderWidth: 1,
     borderColor: CARD_BORDER,
-    minHeight: 112,
-    justifyContent: 'space-between',
+    minHeight: 116,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
@@ -545,14 +554,16 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 4,
     letterSpacing: -0.5,
+    textAlign: 'center',
   },
   statLabel: {
     fontSize: 13,
     color: '#64748B',
     fontWeight: '600',
+    textAlign: 'center',
   },
 
-  /* Quick Actions Grid */
+  /* Quick Actions Grid (4 Columns) */
   quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -575,8 +586,8 @@ const styles = StyleSheet.create({
   },
   quickLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#334155',
+    fontWeight: '700',
+    color: '#1E293B',
     textAlign: 'center',
   },
 
@@ -590,7 +601,7 @@ const styles = StyleSheet.create({
     color: '#475569',
     marginBottom: 12,
     marginLeft: 4,
-    letterSpacing: 0.8,
+    letterSpacing: 1.0,
     textTransform: 'uppercase',
   },
   sectionList: {
@@ -623,7 +634,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowLabel: { 
-    fontSize: 15, 
+    fontSize: 14, 
     fontWeight: '700', 
     color: '#0F172A',
     marginBottom: 4,
@@ -634,9 +645,10 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   rowChevronContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -652,17 +664,17 @@ const styles = StyleSheet.create({
     borderColor: CARD_BORDER,
   },
   aboutName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 8,
+    marginBottom: 12,
     letterSpacing: -0.3,
   },
   aboutDesc: {
-    fontSize: 13,
-    color: '#64748B',
-    lineHeight: 20,
-    marginBottom: 16,
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 22,
+    marginBottom: 20,
   },
   aboutMeta: {
     gap: 12,
@@ -673,15 +685,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   aboutIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   aboutMetaText: {
-    fontSize: 13,
-    color: '#475569',
+    fontSize: 14,
+    color: '#334155',
     fontWeight: '600',
   },
 
@@ -696,15 +708,15 @@ const styles = StyleSheet.create({
     borderColor: CARD_BORDER,
   },
   supportTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   supportSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#64748B',
-    marginBottom: 16,
+    marginBottom: 20,
     lineHeight: 20,
   },
   socialRow: {
@@ -713,9 +725,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   socialButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -725,13 +737,15 @@ const styles = StyleSheet.create({
   supportRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    minHeight: 56,
+    padding: 16,
+    borderRadius: CARD_RADIUS,
+    backgroundColor: '#F8FAFC',
+    minHeight: 72,
   },
   supportIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -741,16 +755,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   supportLabel: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#0F172A',
+    marginBottom: 4,
+  },
+  supportRowSub: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '400',
   },
 
   /* Footer */
   footer: {
     alignItems: 'center',
     marginTop: 16,
-    paddingVertical: 20,
+    paddingVertical: 24,
     borderTopWidth: 1,
     borderTopColor: 'rgba(15, 23, 42, 0.06)',
   },
@@ -758,7 +778,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#64748B',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   footerTitle: {
     fontSize: 14,

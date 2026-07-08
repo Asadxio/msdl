@@ -1,11 +1,11 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, deleteDoc, doc, getDocs, getCountFromServer, query, serverTimestamp, updateDoc, where, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, getCountFromServer, query, serverTimestamp, setDoc, updateDoc, where, Timestamp } from 'firebase/firestore';
 import { useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -54,6 +54,8 @@ export default function QuizScreen() {
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const [error, setError] = useState('');
   const [sessionExpired, setSessionExpired] = useState(false);
+  const submissionLockRef = useRef(false);
+  const currentAttemptIdRef = useRef<string | null>(null);
 
   // Admin State
   const [editingId, setEditingId] = useState('');
@@ -152,11 +154,15 @@ export default function QuizScreen() {
   }, [user?.uid, profile]);
 
   const selectCategory = (cat: string) => {
+    submissionLockRef.current = false;
+    currentAttemptIdRef.current = null;
     setSelectedCategory(cat);
     loadQuiz(cat);
   };
 
   const quitQuiz = () => {
+    submissionLockRef.current = false;
+    currentAttemptIdRef.current = null;
     setSelectedCategory(null);
     setQuestions([]);
     setResult(null);
@@ -177,20 +183,37 @@ export default function QuizScreen() {
   })), [questions, answers]);
 
   const submitQuiz = async () => {
-    if (!user?.uid || submitting) return;
+    console.info('[QuizSubmission] 1. Button pressed - starting submitQuiz pipeline');
+    if (!user?.uid || submitting || submissionLockRef.current || Boolean(result)) {
+      console.info('[QuizSubmission] Early return: busy or already submitted');
+      return;
+    }
     if (sessionExpired) {
+      console.warn('[QuizSubmission] Validation failure: Quiz session expired');
       setError('Quiz session expired. Please restart attempt.');
       trackSecurity('quiz_session_expired_submit', { uid: user.uid });
       return;
     }
     if (questions.some((q) => !answers[q.id])) {
+      console.warn('[QuizSubmission] Validation failure: Unanswered questions');
       setError('Please answer all questions before submitting.');
       return;
     }
+    console.info('[QuizSubmission] 2. Validation passed - all questions answered');
     setError('');
     setSubmitting(true);
+    submissionLockRef.current = true;
+
+    // Generate deterministic attempt ID once for this attempt so retries never duplicate
+    if (!currentAttemptIdRef.current) {
+      const randSuffix = Math.random().toString(36).substring(2, 10);
+      currentAttemptIdRef.current = `${user.uid}_${Date.now()}_${randSuffix}`;
+    }
+    const attemptDocId = currentAttemptIdRef.current;
+
     try {
       const score = questions.reduce((sum, q) => (answers[q.id] === q.correct_answer ? sum + 1 : sum), 0);
+      console.info(`[QuizSubmission] 3. Score calculation complete: ${score}/${questions.length}`);
       
       const cleanCat = selectedCategory && typeof selectedCategory === 'string' && selectedCategory.trim().length > 0
         ? selectedCategory.trim().slice(0, 100)
@@ -203,17 +226,40 @@ export default function QuizScreen() {
         category: cleanCat,
         created_at: Timestamp.now(),
       };
+      console.info('[QuizSubmission] 4. Payload creation complete:', { user_id: user.uid, score, total_questions: questions.length, category: cleanCat, attemptDocId });
 
-      await Promise.race([
-        addDoc(collection(db, 'quiz_results'), payload),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_ERROR')), 20000))
-      ]);
+      const docRef = doc(collection(db, 'quiz_results'), attemptDocId);
 
+      // Save with exponential backoff retry logic (up to 3 attempts, 30s timeout per attempt)
+      let lastErr: any = null;
+      console.info('[QuizSubmission] 5. API/Firestore request start - writing to quiz_results collection');
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await Promise.race([
+            setDoc(docRef, payload, { merge: true }),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_ERROR')), 30000))
+          ]);
+          lastErr = null;
+          break;
+        } catch (err: any) {
+          lastErr = err;
+          console.warn(`[QuizSubmission] Attempt ${attempt} failed:`, err?.message);
+          if (attempt === 3) break;
+          const delayMs = Math.min(1500 * Math.pow(2, attempt - 1), 6000);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+      if (lastErr) throw lastErr;
+
+      console.info('[QuizSubmission] 6. API/Firestore request success - quiz result saved');
       setResult({ score, total: questions.length });
+
+      // Secondary cleanups (session clear) should never discard or fail the saved result
       const quizKey = String(questions.map((q) => q.id).join('-')).slice(0, 180);
       await clearQuizSession(user.uid, quizKey).catch(() => {});
     } catch (e: any) {
-      logFirestoreFailure({ collection: 'quiz_results/notifications', operation: 'add', query: 'create quiz result', role: profile?.role, status: profile?.status }, e);
+      console.error('[QuizSubmission] 7. API/Firestore request failure:', e);
+      logFirestoreFailure({ collection: 'quiz_results', operation: 'set', query: 'save quiz result with backoff retry', role: profile?.role, status: profile?.status }, e);
       const code = String(e?.code || '');
       const msg = String(e?.message || '');
       
@@ -223,18 +269,24 @@ export default function QuizScreen() {
       if (msg === 'TIMEOUT_ERROR' || msg.toLowerCase().includes('timeout')) {
         displayMsg = 'Request timed out while saving quiz results. Please try again.';
         isNetworkError = true;
+        console.warn('[QuizSubmission] Timeout Error:', msg);
       } else if (code.includes('permission-denied') || msg.toLowerCase().includes('permission')) {
         displayMsg = 'Permission denied. You do not have permission to submit quiz results.';
+        console.warn('[QuizSubmission] Permission Denied Error:', code, msg);
       } else if (code.includes('unavailable') || code.includes('network') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('offline') || msg.toLowerCase().includes('connection') || msg.toLowerCase().includes('failed to fetch')) {
         displayMsg = 'Network unavailable. Please check your internet connection.';
         isNetworkError = true;
-      } else if (msg && msg !== 'TIMEOUT_ERROR') {
-        displayMsg = msg;
+        console.warn('[QuizSubmission] Network Unavailable Error:', code, msg);
+      } else {
+        displayMsg = msg || displayMsg;
+        console.warn('[QuizSubmission] API/Firestore Error:', code, msg);
       }
 
       setError(displayMsg);
 
       if (isNetworkError) {
+        // Unlock only for retry of the same deterministic attemptDocId
+        submissionLockRef.current = false;
         Alert.alert(
           'Submission Failed',
           displayMsg,
@@ -568,11 +620,11 @@ export default function QuizScreen() {
                 <Text style={styles.btnText}>Next</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={[styles.btn, submitting && { opacity: 0.7 }]} onPress={submitQuiz} disabled={submitting}>
+              <TouchableOpacity style={[styles.btn, (submitting || Boolean(result)) && { opacity: 0.7 }]} onPress={submitQuiz} disabled={submitting || Boolean(result)}>
                 {submitting ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     <ActivityIndicator size="small" color="#FFFFFF" />
-                    <Text style={styles.btnText}>Submitting your quiz...</Text>
+                    <Text style={styles.btnText}>Saving Quiz Results...</Text>
                   </View>
                 ) : (
                   <Text style={styles.btnText}>Submit Quiz</Text>

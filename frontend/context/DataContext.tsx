@@ -840,6 +840,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const markLessonQuizComplete = useCallback(async (lesson: Lesson): Promise<boolean> => {
     if (!user?.uid) return false;
+    // Optimistic update so UI reflects completion immediately
+    setLessonProgress((prev) => ({
+      ...prev,
+      [lesson.id]: {
+        completed: true,
+        quizCompleted: true,
+        lastOpenedAt: prev[lesson.id]?.lastOpenedAt,
+      },
+    }));
     try {
       await withTimeout(setDoc(doc(db, 'lesson_progress', `${user.uid}_${lesson.id}`), {
         user_id: user.uid,
@@ -849,19 +858,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         completed: true,
         quiz_completed: true,
         updated_at: serverTimestamp(),
-      }, { merge: true }));
-      setLessonProgress((prev) => ({
-        ...prev,
-        [lesson.id]: {
-          completed: true,
-          quizCompleted: true,
-          lastOpenedAt: prev[lesson.id]?.lastOpenedAt,
-        },
-      }));
+      }, { merge: true }), 15000);
       return true;
     } catch (err: any) {
-      logger.warn('Failed to save lesson quiz:', normalizeFirebaseError(err, 'Failed to save lesson quiz'));
-      return false;
+      logger.warn('Failed to save lesson quiz immediately (queued offline):', normalizeFirebaseError(err, 'Failed to save lesson quiz'));
+      return true;
     }
   }, [user?.uid]);
 
