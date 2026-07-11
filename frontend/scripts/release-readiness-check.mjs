@@ -22,9 +22,7 @@ if (missing.length) {
   process.exitCode = 1;
 }
 
-if (!process.env.EXPO_PUBLIC_AGORA_APP_ID) {
-  console.warn('[release-check] optional EXPO_PUBLIC_AGORA_APP_ID is not set; the live-class token API must return app_id at runtime.');
-}
+
 
 const placeholderValues = required.filter((k) => /YOUR-|your_|localhost|127\.0\.0\.1/i.test(String(process.env[k] || '')));
 if (process.env.EXPO_PUBLIC_APP_ENV === 'production' && placeholderValues.length) {
