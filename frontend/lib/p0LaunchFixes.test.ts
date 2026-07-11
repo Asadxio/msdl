@@ -18,9 +18,9 @@ describe('P0 launch blocker fixes', () => {
     expect(source).toContain('**({"course_id": course_id} if ptype == "fees" else {})');
   });
 
-  it('live class join can use backend token app id when build env is absent', () => {
+  it('live class join uses verified Google Meet url launching', () => {
     const source = fs.readFileSync(path.join(__dirname, '../app/live-class/[id].tsx'), 'utf8');
-    expect(source).toContain('AGORA_APP_ID || rtcToken.appId');
-    expect(source).toContain('Agora App ID is not available from the app build or live token service');
+    expect(source).toContain('liveClass.meet_url');
+    expect(source).toContain('Linking.openURL(meetUrl)');
   });
 });

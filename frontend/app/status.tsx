@@ -169,7 +169,9 @@ export default function StatusScreen() {
   }, [profile?.role, user?.uid]);
 
   const postStatus = async () => {
-    console.log("[Status] Post button clicked");
+    if (__DEV__) {
+      console.log("[Status] Post button clicked");
+    }
     if (!canPostStatus || !user?.uid || !profile) return;
     if (!statusText.trim() && !statusMediaUrl.trim()) {
       Alert.alert("Missing content", "Please add text or a media URL.");

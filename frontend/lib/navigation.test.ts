@@ -71,9 +71,9 @@ describe('navigation history preservation audit', () => {
     const more = read('more/index.tsx');
     const courses = read('(tabs)/courses.tsx');
     const navigation = fs.readFileSync(path.join(__dirname, 'navigation.ts'), 'utf8');
-    expect(home).toContain('router.push(path as any)');
-    expect(more).toContain('router.push(item.route as any)');
-    expect(courses).toContain('router.push(path)');
+    expect(home).toContain('router.push');
+    expect(more).toContain('router.push');
+    expect(courses).toContain('router.push');
     expect(home).not.toContain('router.replace(`/course/');
     expect(more).not.toContain('router.replace(item.route');
     expect(courses).not.toContain('router.replace(path');

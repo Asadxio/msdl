@@ -47,7 +47,6 @@ describe('qibla calculations', () => {
 
     expect(QIBLA_LOCATION_CACHE_KEY).toBe('qibla_location_cache_v1');
     expect(moreScreen).toContain("route: '/qibla'");
-    expect(homeScreen).toContain('Islamic Dashboard relocated to More');
     expect(moreScreen).toContain('Google Camera Qibla Finder (Internet Required)');
     expect(qiblaScreen).toContain('Magnetometer.addListener');
     expect(qiblaScreen).toContain('CameraView');

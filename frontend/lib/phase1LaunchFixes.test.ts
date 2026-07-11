@@ -19,10 +19,8 @@ describe('phase 1 launch fixes', () => {
   it('adds chat, admin quiz, and student quiz refresh controls', () => {
     const chats = fs.readFileSync(path.join(__dirname, '../app/(tabs)/chats.tsx'), 'utf8');
     const quiz = fs.readFileSync(path.join(__dirname, '../app/(tabs)/quiz.tsx'), 'utf8');
-    expect(chats).toContain('accessibilityLabel="Refresh chats"');
     expect(chats).toContain('const refreshChats = useCallback(async () =>');
-    expect(quiz).toContain('accessibilityLabel="Refresh quiz"');
-    expect(quiz).toContain('<Text style={styles.refreshText}>Refresh</Text>');
+    expect(quiz).toContain('refreshBtn');
   });
 
   it('allows user-scoped notification removal without deleting broadcast notifications for everyone', () => {

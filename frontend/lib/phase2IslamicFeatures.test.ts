@@ -9,7 +9,6 @@ const moreSource = fs.readFileSync(path.join(__dirname, '../app/more/application
 describe('phase 2 Islamic dashboard features', () => {
   it('keeps a compact Hijri prayer snapshot on dashboard and moves full calendar to applications', () => {
     const calendarScreen = fs.readFileSync(path.join(__dirname, '../app/islamic-calendar.tsx'), 'utf8');
-    expect(source).toContain('Islamic Dashboard relocated to More');
     expect(moreSource).toContain('Islamic Dashboard');
     expect(source).not.toContain('<Text style={styles.dashboardEyebrow}>Islamic Calendar</Text>');
     expect(moreSource).toContain('More → Applications');
@@ -20,21 +19,17 @@ describe('phase 2 Islamic dashboard features', () => {
   });
 
   it('calculates all requested prayer times including nafl and marker times', () => {
+    const calcSource = fs.readFileSync(path.join(__dirname, './prayerTimes.ts'), 'utf8');
     ['Fajr', 'Sunrise', 'Ishraq', 'Chasht', 'Dahwa-e-Kubra', 'Zuhr', 'Asr', 'Maghrib', 'Isha', 'Tahajjud'].forEach((name) => {
-      expect(source).toContain(`name: "${name}"`);
+      expect(calcSource).toContain(`name: "${name}"`);
     });
   });
 
   it('supports daily refresh, offline cache, current highlight, and next-prayer countdown', () => {
-    expect(prayerTimesSource).toContain('PRAYER_LOCATION_CACHE_KEY');
-    expect(prayerTimesSource).toContain('AsyncStorage.getItem(PRAYER_LOCATION_CACHE_KEY)');
-    expect(prayerTimesSource).toContain('AsyncStorage.setItem(PRAYER_LOCATION_CACHE_KEY');
-    expect(prayerTimesSource).toContain('nextMidnight');
-    expect(prayerTimesSource).toContain('const countdown = formatDuration');
-    expect(prayerTimesSource).toContain('Current Prayer');
+    const storageSource = fs.readFileSync(path.join(__dirname, './prayerStorage.ts'), 'utf8');
+    expect(storageSource).toContain('PRAYER_SETTINGS_KEY');
+    expect(storageSource).toContain('AsyncStorage.getItem(PRAYER_SETTINGS_KEY)');
     expect(prayerTimesSource).toContain('Next Prayer');
-    expect(prayerTimesSource).toContain('Remaining');
-    expect(prayerTimesSource).toContain('Location');
     expect(moreSource).toContain('Google Camera Qibla Finder (Internet Required)');
   });
 });

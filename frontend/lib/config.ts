@@ -17,10 +17,12 @@ const EXPO_PUBLIC_ENV: Record<ConfigVarName, string | undefined> = {
   EXPO_PUBLIC_PUSH_API_URL: process.env.EXPO_PUBLIC_PUSH_API_URL,
 };
 
-console.log('API_BASE_URL', process.env.EXPO_PUBLIC_API_BASE_URL);
-console.log('FIREBASE_PROJECT_ID', process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID);
-console.log('LIVE_API_URL', process.env.EXPO_PUBLIC_LIVE_API_URL);
-console.log('PUSH_API_URL', process.env.EXPO_PUBLIC_PUSH_API_URL);
+if (__DEV__) {
+  console.log('API_BASE_URL', process.env.EXPO_PUBLIC_API_BASE_URL);
+  console.log('FIREBASE_PROJECT_ID', process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID);
+  console.log('LIVE_API_URL', process.env.EXPO_PUBLIC_LIVE_API_URL);
+  console.log('PUSH_API_URL', process.env.EXPO_PUBLIC_PUSH_API_URL);
+}
 
 function normalizeEnvValue(value: unknown): string {
   const raw = String(value ?? '').trim();
