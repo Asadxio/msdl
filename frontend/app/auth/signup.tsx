@@ -155,6 +155,7 @@ const SegmentedControl = React.memo(function SegmentedControl({
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
   
+  const [width, setWidth] = useState(0);
   const animatedValue = useRef(new Animated.Value(activeRole === 'student' ? 0 : 1)).current;
   
   useEffect(() => {
@@ -165,19 +166,24 @@ const SegmentedControl = React.memo(function SegmentedControl({
     }).start();
   }, [activeRole]);
   
-  const slideLeft = animatedValue.interpolate({
+  const activeBgWidth = (width - 8) / 2;
+  const translateX = animatedValue.interpolate({
     inputRange: [0, 1],
-    outputRange: ['2%', '50%'],
+    outputRange: [0, activeBgWidth > 0 ? activeBgWidth : 0],
   });
 
   return (
     <View style={styles.inputContainer}>
       <Text style={[styles.inputLabel, { color: colors.textMuted }]}>User Type</Text>
-      <View style={[styles.segmentedContainer, { backgroundColor: isDarkMode ? '#1A332B' : '#F1F5F9' }]}>
+      <View 
+        style={[styles.segmentedContainer, { backgroundColor: isDarkMode ? '#1A332B' : '#F1F5F9' }]}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      >
         <Animated.View style={[
           styles.segmentedActiveBg,
           {
-            left: slideLeft,
+            width: activeBgWidth > 0 ? activeBgWidth : '48%',
+            transform: [{ translateX }],
             backgroundColor: isDarkMode ? '#10B981' : '#0F7660',
           }
         ]} />
@@ -882,7 +888,7 @@ const styles = StyleSheet.create({
 
   // Segmented Control
   segmentedContainer: {
-    minHeight: 50,
+    height: 52,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -891,8 +897,8 @@ const styles = StyleSheet.create({
   },
   segmentedActiveBg: {
     position: 'absolute',
+    left: 4,
     height: '84%',
-    width: '48%',
     borderRadius: 8,
   },
   segmentedOption: {
