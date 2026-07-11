@@ -31,15 +31,15 @@ export function UIButton({ label, onPress, loading, disabled, variant = 'primary
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 46,
-    borderRadius: UX_RADIUS.md,
+    minHeight: 56,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: UX_SPACING.md,
+    paddingHorizontal: 20,
   },
-  text: { fontWeight: '700', fontSize: 14 },
-  disabled: { opacity: 0.6 },
-  pressed: { transform: [{ scale: 0.99 }] },
+  text: { fontWeight: '700', fontSize: 16 },
+  disabled: { opacity: 0.5 },
+  pressed: { transform: [{ scale: 0.98 }] },
 });
 
 const variantStyles = {

@@ -56,12 +56,25 @@ export function RetryState({ title, message, actionLabel = 'Retry', onRetry }: {
   );
 }
 
-export function EmptyState({ icon = 'folder-open-outline', title, message }: { icon?: keyof typeof Ionicons.glyphMap; title: string; message: string }) {
+export function EmptyState({
+  icon = 'folder-open-outline',
+  title,
+  message,
+  action,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  title: string;
+  message: string;
+  action?: { label: string; onPress: () => void };
+}) {
   return (
     <View accessibilityRole="summary" style={styles.stateWrap}>
       <Ionicons name={icon} size={30} color={COLORS.textMuted} />
       <Text allowFontScaling style={styles.stateTitle}>{title}</Text>
       <Text allowFontScaling style={styles.stateMessage}>{message}</Text>
+      {action ? (
+        <UIButton label={action.label} onPress={action.onPress} style={{ marginTop: 12 }} />
+      ) : null}
     </View>
   );
 }
@@ -72,7 +85,7 @@ export function useFeedbackMessage(success: string, error: string) {
 
 const styles = StyleSheet.create({
   fullscreen: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.background, padding: SPACING.lg },
-  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: '#FDECEC', borderWidth: 1, borderColor: '#F9C7C3', borderRadius: RADIUS.md, padding: SPACING.sm },
+  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: '#FDECEC', borderWidth: 1, borderColor: COLORS.error, borderRadius: RADIUS.md, padding: SPACING.sm },
   errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1 },
   busyRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   busyText: { ...TYPOGRAPHY.label, color: COLORS.textMuted },

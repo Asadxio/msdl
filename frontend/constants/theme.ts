@@ -42,19 +42,19 @@ export function getThemeColors(isDark?: boolean) {
 
 export const SPACING = {
   xs: 8,
-  sm: 8,
+  sm: 12,
   md: 16,
-  lg: 24,
+  lg: 20,
   xl: 24,
   xxl: 32,
 };
 
 export const RADIUS = {
   sm: 12,
-  md: 12,
-  lg: 16,
-  xl: 16,
-  xxl: 16,
+  md: 16, // Standardized button radius
+  lg: 20, // Standardized card radius
+  xl: 20,
+  xxl: 20,
   full: 999,
 };
 
@@ -69,6 +69,11 @@ export const TYPOGRAPHY = {
     fontWeight: '700' as const,
     lineHeight: 26,
   },
+  section: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    lineHeight: 22,
+  },
   body: {
     fontSize: 14,
     fontWeight: '500' as const,
@@ -79,15 +84,25 @@ export const TYPOGRAPHY = {
     fontWeight: '600' as const,
     lineHeight: 18,
   },
+  caption: {
+    fontSize: 12,
+    fontWeight: '400' as const,
+    lineHeight: 16,
+  },
+  button: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    lineHeight: 22,
+  },
 };
 
 export const SHADOWS = {
   card: {
     shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
   header: {
     shadowColor: COLORS.text,

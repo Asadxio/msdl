@@ -5,12 +5,15 @@ export const UX_SPACING = {
   md: 16,
   lg: 20,
   xl: 24,
+  xxl: 32,
+  xxxl: 40,
+  huge: 48,
 } as const;
 
 export const UX_RADIUS = {
-  sm: 10,
-  md: 14,
-  lg: 18,
+  sm: 12,
+  md: 16, // Standardized button radius
+  lg: 20, // Standardized card radius
   pill: 999,
 } as const;
 

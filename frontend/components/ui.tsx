@@ -128,7 +128,15 @@ export function FeedbackBanner({ type, message }: { type: 'success' | 'error'; m
   );
 }
 
-type AppInputProps = TextInputProps & { label: string; leftIcon?: keyof typeof Ionicons.glyphMap; style?: StyleProp<ViewStyle> };
+type AppInputProps = TextInputProps & {
+  label: string;
+  leftIcon?: keyof typeof Ionicons.glyphMap;
+  style?: StyleProp<ViewStyle>;
+  error?: string;
+  success?: boolean;
+  rightElement?: React.ReactNode;
+  prefix?: React.ReactNode;
+};
 
 export const AppInput = React.memo(function AppInput({
   label,
@@ -136,6 +144,10 @@ export const AppInput = React.memo(function AppInput({
   style,
   onFocus,
   onBlur,
+  error,
+  success,
+  rightElement,
+  prefix,
   ...props
 }: AppInputProps) {
   const focusAnim = useRef(new Animated.Value(0)).current;
@@ -158,30 +170,39 @@ export const AppInput = React.memo(function AppInput({
     onBlur?.(e);
   }, [animateFocus, onBlur]);
 
-  const animatedInputStyle = React.useMemo(() => ({
-    borderColor: focusAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['#E5E5E5', COLORS.primary],
-    }),
-    shadowOpacity: focusAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, 0.14],
-    }),
-    shadowRadius: focusAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, 10],
-    }),
-    elevation: focusAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, 2],
-    }),
-  }), [focusAnim]);
+  const animatedInputStyle = React.useMemo(() => {
+    if (error) {
+      return { borderColor: COLORS.error, shadowOpacity: 0, elevation: 0 };
+    }
+    if (success) {
+      return { borderColor: COLORS.success, shadowOpacity: 0, elevation: 0 };
+    }
+    return {
+      borderColor: focusAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['#E5E5E5', COLORS.primary],
+      }),
+      shadowOpacity: focusAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 0.14],
+      }),
+      shadowRadius: focusAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 10],
+      }),
+      elevation: focusAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 2],
+      }),
+    };
+  }, [focusAnim, error, success]);
 
   return (
     <View style={[styles.field, style]}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, error ? { color: COLORS.error } : null]}>{label}</Text>
       <Animated.View style={[styles.inputRow, animatedInputStyle]}>
-        {leftIcon ? <Ionicons name={leftIcon} size={18} color={COLORS.textMuted} /> : null}
+        {leftIcon ? <Ionicons name={leftIcon} size={18} color={error ? COLORS.error : COLORS.textMuted} style={{ marginRight: 4 }} /> : null}
+        {prefix ? <View style={{ marginRight: 6 }}>{prefix}</View> : null}
         <TextInput
           {...props}
           style={styles.input}
@@ -189,7 +210,13 @@ export const AppInput = React.memo(function AppInput({
           onFocus={handleFocus}
           onBlur={handleBlur}
         />
+        {rightElement}
       </Animated.View>
+      {error ? (
+        <Text style={[styles.inputErrorText, { color: COLORS.error }]}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 });
@@ -204,8 +231,10 @@ export { SkeletonShimmer, CourseCardSkeleton, NoticeSkeleton } from './ui/Skelet
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    padding: 24,
     ...SHADOWS.card,
   },
   emptyStateCard: {
@@ -322,6 +351,12 @@ const styles = StyleSheet.create({
   feedbackText: {
     ...TYPOGRAPHY.body,
     flex: 1,
+  },
+  inputErrorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingLeft: 4,
+    marginTop: 2,
   },
 });
 
