@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Madars tus salikat Lilbanat - \u0645\u062f\u0631\u0633\u06c3 \u0627\u0644\u0633\u0627\u0644\u06a9\u0627\u062a \u0644\u0644\u0628\u0646\u0627\u062a",
+    "name": "Madars tus salikat Lilbanat - مدرسۃ السالکات للبنات",
     "slug": "frontend",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -95,7 +95,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a6f42044-1978-448f-bc63-8c97ae6fe651"
+        "projectId": "50ba9cd3-1704-43e8-89cb-3970421f0bb2"
       }
     },
     "owner": "mslb"
