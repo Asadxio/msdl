@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,48 +10,173 @@ import {
   ActivityIndicator,
   StatusBar,
   Linking,
+  Modal,
+  useColorScheme,
   Alert,
+  TextInput,
+  Image,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, getThemeColors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
-import { WHATSAPP_HELP_URL, normalizeWhatsAppUrl } from '@/lib/links';
+import { FadeInView, ScalePressable } from '@/components/ui';
+import { WHATSAPP_HELP_URL } from '@/lib/links';
 
-/**
- * Production-safe Login UI:
- * - SafeAreaView + ScrollView for small devices
- * - KeyboardAvoidingView for keyboard overlap
- * - Defensive validation + async guards
- */
+type PremiumInputProps = {
+  label: string;
+  leftIcon: keyof typeof Ionicons.glyphMap;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder: string;
+  error?: string;
+  success?: boolean;
+  secureTextEntry?: boolean;
+  rightElement?: React.ReactNode;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  disabled?: boolean;
+  autoComplete?: 'email' | 'password' | 'off';
+  textContentType?: 'emailAddress' | 'password' | 'none';
+  testID?: string;
+};
+
+const PremiumInput = React.memo(function PremiumInput({
+  label,
+  leftIcon,
+  value,
+  onChangeText,
+  placeholder,
+  error,
+  success,
+  secureTextEntry,
+  rightElement,
+  keyboardType = 'default',
+  autoCapitalize = 'none',
+  disabled = false,
+  autoComplete = 'off',
+  textContentType = 'none',
+  testID,
+}: PremiumInputProps) {
+  const [focused, setFocused] = useState(false);
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getThemeColors(isDarkMode);
+
+  let borderColor = isDarkMode ? '#2E3D5C' : '#E2E8E5';
+  if (focused) {
+    borderColor = isDarkMode ? '#10B981' : '#0F7660'; 
+  } else if (error) {
+    borderColor = colors.error;
+  } else if (success && value.length > 0) {
+    borderColor = colors.success;
+  }
+
+  return (
+    <View style={styles.inputContainer}>
+      <Text style={[
+        styles.inputLabel,
+        { color: error ? colors.error : focused ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted }
+      ]}>
+        {label}
+      </Text>
+      <View style={[
+        styles.inputRow,
+        { borderColor, backgroundColor: isDarkMode ? '#102820' : '#FFFFFF' },
+        focused && styles.inputRowFocused,
+        disabled && styles.inputRowDisabled
+      ]}>
+        <Ionicons 
+          name={leftIcon} 
+          size={20} 
+          color={error ? colors.error : focused ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted} 
+          style={styles.leftIcon} 
+        />
+        <TextInput
+          style={[styles.textInput, { color: colors.text }]}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textMuted}
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          editable={!disabled}
+          autoComplete={autoComplete}
+          textContentType={textContentType}
+          testID={testID}
+          accessibilityLabel={label}
+        />
+        {rightElement}
+      </View>
+      {error ? (
+        <Text style={[styles.inputErrorText, { color: colors.error }]}>
+          {error}
+        </Text>
+      ) : null}
+    </View>
+  );
+});
+
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getThemeColors(isDarkMode);
   const { signIn } = useAuth();
 
+  // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  // UI State
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleEmailChange = useCallback((text: string) => setEmail(text), []);
-  const handlePasswordChange = useCallback((text: string) => setPassword(text), []);
+  // Real-time error messages
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
+  // Email Validation
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
-
-  const handleLogin = async () => {
-    if (loading) return;
-    if (!email.trim() || !password) {
-      setError('Please fill in all fields');
+  useEffect(() => {
+    if (email.length === 0) {
+      setEmailError('');
       return;
     }
     if (!emailValid) {
-      setError('Please enter a valid email address');
+      setEmailError('Please enter a valid email address');
+    } else {
+      setEmailError('');
+    }
+  }, [email, emailValid]);
+
+  // Password Validation
+  useEffect(() => {
+    if (password.length === 0) {
+      setPasswordError('');
       return;
     }
+    if (password.length < 6) {
+      setPasswordError('Password must be at least 6 characters');
+    } else {
+      setPasswordError('');
+    }
+  }, [password]);
+
+  // Determine if form is ready to submit
+  const formIsValid = useMemo(() => {
+    return emailValid && password.length >= 6 && !loading;
+  }, [emailValid, password, loading]);
+
+  const handleLogin = async () => {
+    if (!formIsValid || loading) return;
 
     setLoading(true);
     setError('');
@@ -66,8 +191,8 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
@@ -78,78 +203,127 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Hero Section */}
           <FadeInView style={styles.headerSection}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to continue learning</Text>
+            <View style={styles.logoContainer}>
+              <Image source={require('../../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+            </View>
+            <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
+            <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+              Sign in to continue your Islamic learning journey.
+            </Text>
           </FadeInView>
 
+          {/* Premium Login Card */}
           <FadeInView delay={60}>
-            <AppCard style={styles.formCard}>
+            <View style={[styles.formCard, { backgroundColor: isDarkMode ? '#102820' : '#FFFFFF', borderColor: colors.border }]}>
+              
+              {/* Premium Inline Error Card */}
               {error ? (
-                <View style={styles.errorBox} testID="login-error">
+                <View style={[styles.errorBox, { backgroundColor: isDarkMode ? '#2D0A0A' : '#FEE4E2' }]} testID="login-error">
                   <Ionicons name="alert-circle" size={18} color={COLORS.error} />
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={[styles.errorText, { color: COLORS.error }]}>{error}</Text>
                 </View>
               ) : null}
 
-              <AppInput
-                label="Email"
+              {/* 1. Email Address Input */}
+              <PremiumInput
+                label="Email Address"
                 leftIcon="mail-outline"
-                placeholder="Enter your email"
+                placeholder="Enter your email address"
                 value={email}
-                onChangeText={handleEmailChange}
-                autoCapitalize="none"
+                onChangeText={setEmail}
+                error={emailError}
+                success={emailValid}
+                disabled={loading}
                 keyboardType="email-address"
+                autoComplete="email"
+                textContentType="emailAddress"
                 testID="login-email-input"
               />
 
-              <View>
-                <AppInput
+              {/* 2. Password Input */}
+              <View style={styles.passwordFieldContainer}>
+                <PremiumInput
                   label="Password"
                   leftIcon="lock-closed-outline"
                   placeholder="Enter your password"
                   value={password}
-                  onChangeText={handlePasswordChange}
+                  onChangeText={setPassword}
                   secureTextEntry={!showPass}
+                  disabled={loading}
+                  success={password.length >= 6}
+                  error={passwordError}
+                  autoComplete="password"
+                  textContentType="password"
+                  rightElement={
+                    <TouchableOpacity 
+                      onPress={() => setShowPass(v => !v)} 
+                      style={styles.eyeBtn} 
+                      accessibilityLabel={showPass ? 'Hide password' : 'Show password'}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  }
                   testID="login-password-input"
                 />
+
+                {/* Forgot Password Right-Aligned Layout */}
                 <TouchableOpacity
-                  onPress={() => setShowPass((v) => !v)}
-                  style={styles.eyeBtn}
-                  testID="toggle-password"
-                  accessibilityLabel={showPass ? 'Hide password' : 'Show password'}
+                  style={styles.forgotRow}
+                  onPress={() => router.push('/auth/forgot-password')}
+                  disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot Password"
+                  testID="forgot-password-btn"
                 >
-                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.textMuted} />
+                  <Text style={[styles.forgotText, { color: isDarkMode ? '#10B981' : '#0F7660' }]}>
+                    Forgot Password?
+                  </Text>
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                style={styles.forgotRow}
-                onPress={() => router.push('/auth/forgot-password')}
-                testID="forgot-password-btn"
-              >
-                <Text style={styles.forgotText}>Forgot Password?</Text>
-              </TouchableOpacity>
-
-              <ScalePressable
-                style={[styles.primaryBtn, loading && styles.btnDisabled]}
-                onPress={handleLogin}
-                disabled={loading}
+              {/* Primary Action Button (Sign In) */}
+              <ScalePressable 
+                style={[
+                  styles.primaryBtn, 
+                  { backgroundColor: isDarkMode ? '#10B981' : '#0F7660' },
+                  !formIsValid && styles.btnDisabled
+                ]} 
+                onPress={handleLogin} 
+                disabled={!formIsValid || loading} 
                 testID="login-submit-btn"
               >
-                {loading ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Sign In</Text>}
+                {loading ? (
+                  <View style={styles.loaderContainer}>
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <Text style={styles.loaderText}>Signing you in...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.primaryBtnText}>Sign In</Text>
+                )}
               </ScalePressable>
-            </AppCard>
+
+              {loading && (
+                <Text style={[styles.loaderSubtext, { color: colors.textMuted }]}>
+                  Please wait...
+                </Text>
+              )}
+
+            </View>
           </FadeInView>
 
+          {/* Secondary Actions */}
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Don&apos;t have an account? </Text>
+            <Text style={[styles.footerText, { color: colors.textMuted }]}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => router.replace('/auth/signup')} testID="goto-signup-btn">
-              <Text style={styles.footerLink}>Sign Up</Text>
+              <Text style={[styles.footerLink, { color: isDarkMode ? '#10B981' : '#0F7660' }]}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+          
           <TouchableOpacity
-            style={styles.helpBtn}
+            style={[styles.helpBtn, { backgroundColor: isDarkMode ? '#213B31' : '#DCFCE7' }]}
             onPress={async () => {
               const phone = '916366919122';
               const text = 'Salam. I am interested in guidance services. I clicked from your website and would like more information.';
@@ -157,8 +331,6 @@ export default function LoginScreen() {
               const directUrl = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
               try {
                 if (Platform.OS === 'android') {
-                  // On Android 11+, canOpenURL requires <queries> in manifest.
-                  // Use wa.me URL which opens WhatsApp directly if installed.
                   await Linking.openURL(webUrl);
                 } else {
                   const canOpen = await Linking.canOpenURL(directUrl);
@@ -169,15 +341,13 @@ export default function LoginScreen() {
                   }
                 }
               } catch {
-                try {
-                  await Linking.openURL(WHATSAPP_HELP_URL);
-                } catch {
-                  Alert.alert('WhatsApp Unavailable', 'Could not open WhatsApp. Please install WhatsApp or contact us directly.');
-                }
+                Alert.alert('WhatsApp Unavailable', 'Could not open WhatsApp. Please contact us directly.');
               }
             }}
           >
-            <Text style={styles.helpBtnText}>Need Help? WhatsApp Us</Text>
+            <Text style={[styles.helpBtnText, { color: isDarkMode ? '#10B981' : '#166534' }]}>
+              Need Help? WhatsApp Support
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -187,56 +357,197 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.xl,
-    gap: SPACING.md,
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 40,
   },
-  headerSection: { marginBottom: SPACING.md },
-  title: { ...TYPOGRAPHY.title, color: COLORS.text, fontWeight: '800', textAlign: 'left' },
-  subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, marginTop: SPACING.xs, textAlign: 'left' },
+  headerSection: { 
+    alignItems: 'center', 
+    marginBottom: 24, 
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+  },
+  logoContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  title: { 
+    ...TYPOGRAPHY.title, 
+    fontSize: 26, 
+    fontWeight: '800', 
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  subtitle: { 
+    ...TYPOGRAPHY.body, 
+    textAlign: 'center', 
+    lineHeight: 20,
+    paddingHorizontal: 16,
+  },
   formCard: {
-    gap: SPACING.md,
-    backgroundColor: '#FFFFFF',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 4,
+    shadowRadius: 20,
+    elevation: 5,
+    gap: 20,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    backgroundColor: '#FEE4E2',
-    padding: SPACING.sm,
-    borderRadius: RADIUS.md,
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FDA29B',
   },
-  errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1, textAlign: 'left' },
-  eyeBtn: { position: 'absolute', right: SPACING.sm, top: 34, height: 40, justifyContent: 'center' },
-  primaryBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.lg,
+  errorText: { 
+    ...TYPOGRAPHY.body, 
+    flex: 1, 
+    fontWeight: '600' 
+  },
+  
+  // Premium Inputs styles
+  inputContainer: { 
+    gap: 6,
+    width: '100%',
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    paddingLeft: 4,
+  },
+  inputRow: {
+    minHeight: 56,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  inputRowFocused: {
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  inputRowDisabled: {
+    opacity: 0.65,
+  },
+  leftIcon: {
+    marginRight: 10,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
     paddingVertical: 14,
-    paddingHorizontal: SPACING.lg,
+  },
+  inputErrorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingLeft: 4,
+    marginTop: 2,
+  },
+  
+  passwordFieldContainer: {
+    gap: 8,
+    width: '100%',
+  },
+  forgotRow: { 
+    alignSelf: 'flex-end', 
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  forgotText: { 
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // Show/Hide Password Eye Button
+  eyeBtn: {
+    height: '100%',
+    justifyContent: 'center',
+    paddingLeft: 8,
+  },
+
+  // Submit button
+  primaryBtn: {
+    borderRadius: 12,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
+    width: '100%',
+    marginTop: 8,
   },
-  btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  forgotRow: { alignSelf: 'flex-end', marginTop: SPACING.xs },
-  forgotText: { ...TYPOGRAPHY.label, color: COLORS.primary },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.md },
-  footerText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
-  footerLink: { ...TYPOGRAPHY.label, color: COLORS.primary },
-  helpBtn: { alignSelf: 'center', marginTop: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: '#DCFCE7' },
-  helpBtnText: { ...TYPOGRAPHY.label, color: '#166534', fontWeight: '700' },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+  primaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  loaderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loaderText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  loaderSubtext: {
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: -8,
+  },
+
+  // Footer & Help
+  footerRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  footerText: { 
+    ...TYPOGRAPHY.body,
+  },
+  footerLink: { 
+    ...TYPOGRAPHY.label, 
+    fontWeight: '700',
+  },
+  helpBtn: { 
+    alignSelf: 'center', 
+    marginTop: 20, 
+    paddingHorizontal: 20, 
+    paddingVertical: 12, 
+    borderRadius: 24, 
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  helpBtnText: { 
+    ...TYPOGRAPHY.label, 
+    fontWeight: '700',
+  },
 });
