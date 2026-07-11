@@ -294,8 +294,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   inputRow: {
-    minHeight: 52,
-    borderRadius: RADIUS.md,
+    height: 56,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E5E5',
     backgroundColor: '#FFFFFF',
@@ -308,9 +308,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    height: '100%',
     ...TYPOGRAPHY.body,
     color: COLORS.text,
-    paddingVertical: 12,
+    paddingVertical: 0,
   },
   skeletonCard: {
     backgroundColor: COLORS.surface,

@@ -776,7 +776,7 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   inputRow: {
-    minHeight: 56,
+    height: 56,
     borderRadius: 12,
     borderWidth: 1.5,
     flexDirection: 'row',
@@ -797,9 +797,10 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
+    height: '100%',
     fontSize: 15,
     fontWeight: '500',
-    paddingVertical: 14,
+    paddingVertical: 0,
   },
   inputErrorText: {
     fontSize: 12,
