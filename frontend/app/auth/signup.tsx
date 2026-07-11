@@ -13,15 +13,19 @@ import {
   Modal,
   useColorScheme,
   Alert,
+  TextInput,
+  Image,
+  Pressable,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, getThemeColors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import type { OnboardingRole } from '@/lib/roles';
-import { AppCard, AppInput, FadeInView, ScalePressable } from '@/components/ui';
-import { WHATSAPP_HELP_URL, normalizeWhatsAppUrl } from '@/lib/links';
+import { FadeInView, ScalePressable } from '@/components/ui';
+import { WHATSAPP_HELP_URL } from '@/lib/links';
 import {
   markSignupStarted,
   markVerificationModalContinue,
@@ -29,34 +33,313 @@ import {
   trackEmailVerificationError,
 } from '@/lib/emailVerificationAnalytics';
 
-/**
- * Production-safe Signup UI:
- * - SafeArea + ScrollView for all device sizes
- * - Defensive async handling and validation
- */
+// FUTURE ARCHITECTURE PREPARATION CONFIG (DISABLED FOR CURRENT STAGE)
+// Set phonePersistenceEnabled to true after Firestore rules update to allow 'phone' key.
+const FUTURE_CHANNELS_CONFIG = {
+  persistence: {
+    phonePersistenceEnabled: false, 
+    guardianContactEnabled: false,
+    parentAccountsEnabled: false,
+  },
+  verification: {
+    otpLoginEnabled: false,
+    whatsappVerificationEnabled: false,
+    smsNotificationsEnabled: false,
+  }
+};
+
+type PremiumInputProps = {
+  label: string;
+  leftIcon: keyof typeof Ionicons.glyphMap;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder: string;
+  error?: string;
+  success?: boolean;
+  secureTextEntry?: boolean;
+  rightElement?: React.ReactNode;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  disabled?: boolean;
+  prefix?: React.ReactNode;
+  testID?: string;
+};
+
+const PremiumInput = React.memo(function PremiumInput({
+  label,
+  leftIcon,
+  value,
+  onChangeText,
+  placeholder,
+  error,
+  success,
+  secureTextEntry,
+  rightElement,
+  keyboardType = 'default',
+  autoCapitalize = 'none',
+  disabled = false,
+  prefix,
+  testID,
+}: PremiumInputProps) {
+  const [focused, setFocused] = useState(false);
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getThemeColors(isDarkMode);
+
+  let borderColor = isDarkMode ? '#2E3D5C' : '#E2E8E5';
+  if (focused) {
+    borderColor = isDarkMode ? '#10B981' : '#0F7660'; 
+  } else if (error) {
+    borderColor = colors.error;
+  } else if (success && value.length > 0) {
+    borderColor = colors.success;
+  }
+
+  return (
+    <View style={styles.inputContainer}>
+      <Text style={[
+        styles.inputLabel,
+        { color: error ? colors.error : focused ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted }
+      ]}>
+        {label}
+      </Text>
+      <View style={[
+        styles.inputRow,
+        { borderColor, backgroundColor: isDarkMode ? '#102820' : '#FFFFFF' },
+        focused && styles.inputRowFocused,
+        disabled && styles.inputRowDisabled
+      ]}>
+        <Ionicons 
+          name={leftIcon} 
+          size={20} 
+          color={error ? colors.error : focused ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted} 
+          style={styles.leftIcon} 
+        />
+        {prefix ? <View style={styles.prefixContainer}>{prefix}</View> : null}
+        <TextInput
+          style={[styles.textInput, { color: colors.text }]}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textMuted}
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          editable={!disabled}
+          testID={testID}
+          accessibilityLabel={label}
+        />
+        {rightElement}
+      </View>
+      {error ? (
+        <Text style={[styles.inputErrorText, { color: colors.error }]}>
+          {error}
+        </Text>
+      ) : null}
+    </View>
+  );
+});
+
+const SegmentedControl = React.memo(function SegmentedControl({
+  activeRole,
+  onChange,
+  disabled
+}: {
+  activeRole: OnboardingRole;
+  onChange: (role: OnboardingRole) => void;
+  disabled?: boolean;
+}) {
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getThemeColors(isDarkMode);
+  
+  const animatedValue = useRef(new Animated.Value(activeRole === 'student' ? 0 : 1)).current;
+  
+  useEffect(() => {
+    Animated.timing(animatedValue, {
+      toValue: activeRole === 'student' ? 0 : 1,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [activeRole]);
+  
+  const slideLeft = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['2%', '50%'],
+  });
+
+  return (
+    <View style={styles.inputContainer}>
+      <Text style={[styles.inputLabel, { color: colors.textMuted }]}>User Type</Text>
+      <View style={[styles.segmentedContainer, { backgroundColor: isDarkMode ? '#1A332B' : '#F1F5F9' }]}>
+        <Animated.View style={[
+          styles.segmentedActiveBg,
+          {
+            left: slideLeft,
+            backgroundColor: isDarkMode ? '#10B981' : '#0F7660',
+          }
+        ]} />
+        <Pressable
+          style={styles.segmentedOption}
+          onPress={() => !disabled && onChange('student')}
+          accessibilityRole="button"
+          accessibilityLabel="Select Student"
+          accessibilityState={{ selected: activeRole === 'student' }}
+          testID="role-student-btn"
+        >
+          <Text style={[
+            styles.segmentedText,
+            { color: activeRole === 'student' ? '#FFFFFF' : colors.textMuted }
+          ]}>
+            Student
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.segmentedOption}
+          onPress={() => !disabled && onChange('teacher')}
+          accessibilityRole="button"
+          accessibilityLabel="Select Teacher"
+          accessibilityState={{ selected: activeRole === 'teacher' }}
+          testID="role-teacher-btn"
+        >
+          <Text style={[
+            styles.segmentedText,
+            { color: activeRole === 'teacher' ? '#FFFFFF' : colors.textMuted }
+          ]}>
+            Teacher
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
 export default function SignupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
+  const colors = getThemeColors(isDarkMode);
+  
   const { user, signUp, showSignupVerificationPrompt, acknowledgeSignupVerificationPrompt } = useAuth();
   const modalShownTrackedRef = useRef(false);
 
+  // Form State
   const [name, setName] = useState('');
+  const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [referralCode, setReferralCode] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<OnboardingRole>('student');
+  const [referralCode, setReferralCode] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  // UI State
   const [showPass, setShowPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleNameChange = useCallback((text: string) => setName(text), []);
-  const handleEmailChange = useCallback((text: string) => setEmail(text), []);
-  const handlePasswordChange = useCallback((text: string) => setPassword(text), []);
-  const handleReferralCodeChange = useCallback((text: string) => setReferralCode(text), []);
+  // Real-time error messages
+  const [nameError, setNameError] = useState('');
+  const [mobileError, setMobileError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [confirmPasswordMessage, setConfirmPasswordMessage] = useState('');
+  const [confirmPasswordIsError, setConfirmPasswordIsError] = useState(false);
 
+  // Name Validation
+  useEffect(() => {
+    if (name.length === 0) {
+      setNameError('');
+      return;
+    }
+    if (name.trim().length < 3) {
+      setNameError('Name must be at least 3 characters');
+    } else if (/\d/.test(name)) {
+      setNameError('Name cannot contain numbers');
+    } else {
+      setNameError('');
+    }
+  }, [name]);
+
+  // Mobile Validation
+  useEffect(() => {
+    if (mobile.length === 0) {
+      setMobileError('');
+      return;
+    }
+    if (!/^\d*$/.test(mobile)) {
+      setMobileError('Mobile number must contain digits only');
+    } else if (mobile.length !== 10) {
+      setMobileError('Mobile number must be exactly 10 digits');
+    } else {
+      setMobileError('');
+    }
+  }, [mobile]);
+
+  // Email Validation
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
+  useEffect(() => {
+    if (email.length === 0) {
+      setEmailError('');
+      return;
+    }
+    if (!emailValid) {
+      setEmailError('Please enter a valid email address');
+    } else {
+      setEmailError('');
+    }
+  }, [email, emailValid]);
+
+  // Password Strength
+  const passwordValidation = useMemo(() => {
+    const hasMinLen = password.length >= 8;
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+    return {
+      hasMinLen,
+      hasUpper,
+      hasLower,
+      hasNumber,
+      hasSpecial,
+      isValid: hasMinLen && hasUpper && hasLower && hasNumber && hasSpecial,
+    };
+  }, [password]);
+
+  // Confirm Password Validation
+  useEffect(() => {
+    if (confirmPassword.length === 0) {
+      setConfirmPasswordMessage('');
+      setConfirmPasswordIsError(false);
+      return;
+    }
+    if (confirmPassword === password) {
+      setConfirmPasswordMessage('✓ Passwords Match');
+      setConfirmPasswordIsError(false);
+    } else {
+      setConfirmPasswordMessage('❌ Passwords Do Not Match');
+      setConfirmPasswordIsError(true);
+    }
+  }, [password, confirmPassword]);
+
+  // Determine if form is ready to submit
+  const formIsValid = useMemo(() => {
+    return (
+      name.trim().length >= 3 &&
+      !/\d/.test(name) &&
+      /^\d{10}$/.test(mobile) &&
+      emailValid &&
+      passwordValidation.isValid &&
+      confirmPassword === password &&
+      termsAccepted &&
+      !loading
+    );
+  }, [name, mobile, emailValid, passwordValidation.isValid, confirmPassword, password, termsAccepted, loading]);
 
   useEffect(() => {
     if (!showSignupVerificationPrompt || modalShownTrackedRef.current) return;
@@ -69,29 +352,23 @@ export default function SignupScreen() {
     acknowledgeSignupVerificationPrompt();
     try {
       router.replace('/auth/pending');
-    } catch (error) {
-      trackEmailVerificationError('verification_navigation_failed', error, { uid: user?.uid || '', target: '/auth/pending' });
+    } catch (err) {
+      trackEmailVerificationError('verification_navigation_failed', err, { uid: user?.uid || '', target: '/auth/pending' });
     }
   }, [acknowledgeSignupVerificationPrompt, router, user?.uid]);
 
   const handleSignup = async () => {
-    if (loading) return;
-    if (!name.trim() || !email.trim() || !password) {
-      setError('Please fill in all fields');
-      return;
-    }
-    if (!emailValid) {
-      setError('Please enter a valid email address');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
+    if (!formIsValid || loading) return;
 
     markSignupStarted();
     setLoading(true);
     setError('');
+
+    // Future-ready Phone architecture trigger hook
+    if (FUTURE_CHANNELS_CONFIG.persistence.phonePersistenceEnabled) {
+      console.log('[FUTURE_ARCHITECTURE] Phone capability trigger placeholder. Value:', `+91${mobile}`);
+    }
+
     try {
       const err = await signUp(name.trim(), email.trim(), password, role, referralCode.trim());
       if (err) setError(err);
@@ -102,8 +379,16 @@ export default function SignupScreen() {
     }
   };
 
+  const phonePrefix = useMemo(() => (
+    <View style={styles.countrySelector}>
+      <Text style={styles.flagText}>🇮🇳</Text>
+      <Text style={[styles.codeText, { color: colors.text }]}>+91</Text>
+      <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+    </View>
+  ), [colors]);
+
   return (
-    <SafeAreaView style={[styles.container, isDarkMode && styles.containerDark]} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -116,57 +401,244 @@ export default function SignupScreen() {
           showsVerticalScrollIndicator={false}
         >
           <FadeInView style={styles.headerSection}>
-            <Text style={[styles.title, isDarkMode && styles.titleDark]}>Create Account</Text>
-            <Text style={[styles.subtitle, isDarkMode && styles.subtitleDark]}>Join our learning community</Text>
+            <View style={styles.logoContainer}>
+              <Image source={require('../../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+            </View>
+            <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Create Account</Text>
+            <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+              Join Madrasa Tus Salikat Lil Banat and begin your Islamic learning journey.
+            </Text>
           </FadeInView>
 
           <FadeInView delay={60}>
-            <AppCard style={[styles.formCard, isDarkMode && styles.formCardDark]}>
+            <View style={[styles.formCard, { backgroundColor: isDarkMode ? '#102820' : '#FFFFFF', borderColor: colors.border }]}>
+              
               {error ? (
-                <View style={styles.errorBox} testID="signup-error">
+                <View style={[styles.errorBox, { backgroundColor: isDarkMode ? '#2D0A0A' : '#FEE4E2' }]} testID="signup-error">
                   <Ionicons name="alert-circle" size={18} color={COLORS.error} />
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={[styles.errorText, { color: COLORS.error }]}>{error}</Text>
                 </View>
               ) : null}
 
-              <AppInput label="Full Name" leftIcon="person-outline" placeholder="Enter your name" value={name} onChangeText={handleNameChange} testID="signup-name-input" />
-              <AppInput label="Email" leftIcon="mail-outline" placeholder="Enter your email" value={email} onChangeText={handleEmailChange} autoCapitalize="none" keyboardType="email-address" testID="signup-email-input" />
+              {/* 1. Full Name */}
+              <PremiumInput
+                label="Full Name"
+                leftIcon="person-outline"
+                placeholder="Enter your full name"
+                value={name}
+                onChangeText={setName}
+                error={nameError}
+                success={name.length >= 3 && !nameError}
+                disabled={loading}
+                autoCapitalize="words"
+                testID="signup-name-input"
+              />
 
+              {/* 2. Mobile Number */}
+              <PremiumInput
+                label="Mobile Number"
+                leftIcon="phone-portrait-outline"
+                placeholder="00000 00000"
+                value={mobile}
+                onChangeText={setMobile}
+                prefix={phonePrefix}
+                keyboardType="numeric"
+                error={mobileError}
+                success={mobile.length === 10 && !mobileError}
+                disabled={loading}
+                testID="signup-mobile-input"
+              />
+
+              {/* 3. Email Address */}
+              <PremiumInput
+                label="Email Address"
+                leftIcon="mail-outline"
+                placeholder="Enter your email address"
+                value={email}
+                onChangeText={setEmail}
+                error={emailError}
+                success={emailValid}
+                disabled={loading}
+                keyboardType="email-address"
+                testID="signup-email-input"
+              />
+
+              {/* 4. Password */}
               <View>
-                <AppInput label="Password" leftIcon="lock-closed-outline" placeholder="Min 6 characters" value={password} onChangeText={handlePasswordChange} secureTextEntry={!showPass} testID="signup-password-input" />
-                <TouchableOpacity onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn} testID="toggle-password" accessibilityLabel={showPass ? 'Hide password' : 'Show password'}>
-                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.textMuted} />
-                </TouchableOpacity>
+                <PremiumInput
+                  label="Password"
+                  leftIcon="lock-closed-outline"
+                  placeholder="Create password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPass}
+                  disabled={loading}
+                  success={passwordValidation.isValid}
+                  rightElement={
+                    <TouchableOpacity 
+                      onPress={() => setShowPass(v => !v)} 
+                      style={styles.eyeBtn} 
+                      accessibilityLabel={showPass ? 'Hide password' : 'Show password'}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  }
+                  testID="signup-password-input"
+                />
+
+                {/* Password Strength Checklist */}
+                {password.length > 0 && (
+                  <View style={[styles.strengthContainer, { backgroundColor: isDarkMode ? '#132C23' : '#F8FAFC' }]}>
+                    <Text style={[styles.strengthTitle, { color: colors.text }]}>Password Requirements:</Text>
+                    <View style={styles.requirementRow}>
+                      <Ionicons name={passwordValidation.hasMinLen ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordValidation.hasMinLen ? '#10B981' : colors.textMuted} />
+                      <Text style={[styles.requirementText, { color: colors.textMuted }, passwordValidation.hasMinLen && styles.requirementActive]}>✓ Minimum 8 characters</Text>
+                    </View>
+                    <View style={styles.requirementRow}>
+                      <Ionicons name={passwordValidation.hasUpper ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordValidation.hasUpper ? '#10B981' : colors.textMuted} />
+                      <Text style={[styles.requirementText, { color: colors.textMuted }, passwordValidation.hasUpper && styles.requirementActive]}>✓ One uppercase</Text>
+                    </View>
+                    <View style={styles.requirementRow}>
+                      <Ionicons name={passwordValidation.hasLower ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordValidation.hasLower ? '#10B981' : colors.textMuted} />
+                      <Text style={[styles.requirementText, { color: colors.textMuted }, passwordValidation.hasLower && styles.requirementActive]}>✓ One lowercase</Text>
+                    </View>
+                    <View style={styles.requirementRow}>
+                      <Ionicons name={passwordValidation.hasNumber ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordValidation.hasNumber ? '#10B981' : colors.textMuted} />
+                      <Text style={[styles.requirementText, { color: colors.textMuted }, passwordValidation.hasNumber && styles.requirementActive]}>✓ One number</Text>
+                    </View>
+                    <View style={styles.requirementRow}>
+                      <Ionicons name={passwordValidation.hasSpecial ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordValidation.hasSpecial ? '#10B981' : colors.textMuted} />
+                      <Text style={[styles.requirementText, { color: colors.textMuted }, passwordValidation.hasSpecial && styles.requirementActive]}>✓ One special character</Text>
+                    </View>
+                  </View>
+                )}
               </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>I am a</Text>
-                <View style={styles.roleRow}>
-                  <ScalePressable style={[styles.roleBtn, role === 'student' && styles.roleBtnActive]} onPress={() => setRole('student')} testID="role-student-btn">
-                    <Text style={[styles.roleBtnText, role === 'student' && styles.roleBtnTextActive]}>Student</Text>
-                  </ScalePressable>
-                  <ScalePressable style={[styles.roleBtn, role === 'teacher' && styles.roleBtnActive]} onPress={() => setRole('teacher')} testID="role-teacher-btn">
-                    <Text style={[styles.roleBtnText, role === 'teacher' && styles.roleBtnTextActive]}>Teacher</Text>
-                  </ScalePressable>
-                </View>
+              {/* 5. Confirm Password */}
+              <View>
+                <PremiumInput
+                  label="Confirm Password"
+                  leftIcon="lock-closed-outline"
+                  placeholder="Repeat password"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPass}
+                  disabled={loading}
+                  success={confirmPassword.length > 0 && confirmPassword === password}
+                  error={confirmPasswordIsError ? 'Passwords do not match' : undefined}
+                  rightElement={
+                    <TouchableOpacity 
+                      onPress={() => setShowConfirmPass(v => !v)} 
+                      style={styles.eyeBtn} 
+                      accessibilityLabel={showConfirmPass ? 'Hide confirm password' : 'Show confirm password'}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name={showConfirmPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  }
+                  testID="signup-confirm-password-input"
+                />
+                
+                {confirmPasswordMessage ? (
+                  <Text style={[
+                    styles.confirmMessageText, 
+                    { color: confirmPasswordIsError ? colors.error : '#10B981' }
+                  ]}>
+                    {confirmPasswordMessage}
+                  </Text>
+                ) : null}
               </View>
 
-              <AppInput label="Referral Code (optional)" leftIcon="gift-outline" placeholder="Enter referral code" value={referralCode} onChangeText={handleReferralCodeChange} autoCapitalize="characters" />
+              {/* 6. User Type Segmented Control */}
+              <SegmentedControl
+                activeRole={role}
+                onChange={setRole}
+                disabled={loading}
+              />
 
-              <ScalePressable style={[styles.primaryBtn, loading && styles.btnDisabled]} onPress={handleSignup} disabled={loading} testID="signup-submit-btn">
-                {loading ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Create Account</Text>}
+              {/* 7. Referral Code (Optional) */}
+              <PremiumInput
+                label="Referral Code"
+                leftIcon="gift-outline"
+                placeholder="Enter referral code (if any)"
+                value={referralCode}
+                onChangeText={setReferralCode}
+                disabled={loading}
+                autoCapitalize="characters"
+              />
+              <Text style={[styles.helperText, { color: colors.textMuted }]}>
+                Leave empty if you don't have a referral code.
+              </Text>
+
+              {/* 8. Required Consent checkbox */}
+              <View style={styles.consentRow}>
+                <Pressable
+                  onPress={() => !loading && setTermsAccepted(v => !v)}
+                  style={styles.checkboxTouch}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel="Accept Terms and Conditions and Privacy Policy"
+                  accessibilityState={{ checked: termsAccepted }}
+                  disabled={loading}
+                >
+                  <Ionicons 
+                    name={termsAccepted ? 'checkbox' : 'square-outline'} 
+                    size={22} 
+                    color={termsAccepted ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted} 
+                  />
+                </Pressable>
+                <Text style={[styles.consentLabel, { color: colors.textMain }]}>
+                  I agree to the{' '}
+                  <Text style={styles.hyperlink} onPress={() => router.push('/terms')}>
+                    Terms & Conditions
+                  </Text>{' '}
+                  and{' '}
+                  <Text style={styles.hyperlink} onPress={() => router.push('/privacy')}>
+                    Privacy Policy
+                  </Text>.
+                </Text>
+              </View>
+
+              {/* Submit Button & Creating Account Loader overlay details */}
+              <ScalePressable 
+                style={[
+                  styles.primaryBtn, 
+                  { backgroundColor: isDarkMode ? '#10B981' : '#0F7660' },
+                  !formIsValid && styles.btnDisabled
+                ]} 
+                onPress={handleSignup} 
+                disabled={!formIsValid || loading} 
+                testID="signup-submit-btn"
+              >
+                {loading ? (
+                  <View style={styles.loaderContainer}>
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <Text style={styles.loaderText}>Creating your account...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.primaryBtnText}>Create Account</Text>
+                )}
               </ScalePressable>
-            </AppCard>
+
+              {loading && (
+                <Text style={[styles.loaderSubtext, { color: colors.textMuted }]}>
+                  Please wait...
+                </Text>
+              )}
+
+            </View>
           </FadeInView>
 
+          {/* Secondary Footer */}
           <View style={styles.footerRow}>
-            <Text style={[styles.footerText, isDarkMode && styles.footerTextDark]}>Already have an account? </Text>
+            <Text style={[styles.footerText, { color: colors.textMuted }]}>Already have an account? </Text>
             <TouchableOpacity onPress={() => router.replace('/auth/login')} testID="goto-login-btn">
-              <Text style={[styles.footerLink, isDarkMode && styles.footerLinkDark]}>Sign In</Text>
+              <Text style={[styles.footerLink, { color: isDarkMode ? '#10B981' : '#0F7660' }]}>Sign In</Text>
             </TouchableOpacity>
           </View>
+          
           <TouchableOpacity
-            style={styles.helpBtn}
+            style={[styles.helpBtn, { backgroundColor: isDarkMode ? '#213B31' : '#DCFCE7' }]}
             onPress={async () => {
               const phone = '916366919122';
               const text = 'Salam. I am interested in guidance services. I clicked from your website and would like more information.';
@@ -174,8 +646,6 @@ export default function SignupScreen() {
               const directUrl = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
               try {
                 if (Platform.OS === 'android') {
-                  // On Android 11+, canOpenURL requires <queries> in manifest.
-                  // Use wa.me URL which opens WhatsApp directly if installed.
                   await Linking.openURL(webUrl);
                 } else {
                   const canOpen = await Linking.canOpenURL(directUrl);
@@ -186,29 +656,36 @@ export default function SignupScreen() {
                   }
                 }
               } catch {
-                try {
-                  await Linking.openURL(WHATSAPP_HELP_URL);
-                } catch {
-                  Alert.alert('WhatsApp Unavailable', 'Could not open WhatsApp. Please install WhatsApp or contact us directly.');
-                }
+                Alert.alert('WhatsApp Unavailable', 'Could not open WhatsApp. Please contact us directly.');
               }
             }}
           >
-            <Text style={styles.helpBtnText}>Need Help? WhatsApp Us</Text>
+            <Text style={[styles.helpBtnText, { color: isDarkMode ? '#10B981' : '#166534' }]}>
+              Need Help? WhatsApp Support
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Success Flow Verification Modal Redesign */}
       <Modal transparent visible={showSignupVerificationPrompt} animationType="fade" onRequestClose={handleContinueToVerification}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, isDarkMode && styles.modalCardDark]} testID="signup-verification-modal">
-            <View style={[styles.modalIconCircle, isDarkMode && styles.modalIconCircleDark]}>
-              <Ionicons name="mail-unread-outline" size={28} color={isDarkMode ? COLORS.secondary : COLORS.primary} />
+          <View style={[styles.modalCard, { backgroundColor: isDarkMode ? '#102820' : '#FFFFFF', borderColor: colors.border }]} testID="signup-verification-modal">
+            <View style={[styles.modalIconCircle, { backgroundColor: isDarkMode ? '#213B31' : '#E6F7EE' }]}>
+              <Ionicons name="checkmark-circle-outline" size={32} color="#10B981" />
             </View>
-            <Text style={[styles.modalTitle, isDarkMode && styles.modalTitleDark]}>Verify Your Email</Text>
-            <Text style={[styles.modalMessage, isDarkMode && styles.modalMessageDark]}>
-              We have sent a verification email to your email address. If you don{'\''}t see it within a few minutes, please check your Spam/Junk, Promotions, or Updates folders.
+            <Text style={[styles.modalTitle, { color: colors.text }]}>✅ Account Created Successfully</Text>
+            <Text style={[styles.modalMessage, { color: colors.textMuted }]}>
+              Your account has been created successfully.
             </Text>
-            <ScalePressable style={styles.modalButton} onPress={handleContinueToVerification} testID="signup-verification-continue-btn">
+            
+            <View style={[styles.modalBulletBox, { backgroundColor: isDarkMode ? '#132C23' : '#F8FAFC', borderColor: colors.border }]}>
+              <Text style={[styles.modalBulletText, { color: colors.text }]}>• Please verify your email.</Text>
+              <Text style={[styles.modalBulletText, { color: colors.text }]}>• Your account will be reviewed by the Administrator.</Text>
+              <Text style={[styles.modalBulletText, { color: colors.text }]}>• You'll receive access after approval.</Text>
+            </View>
+
+            <ScalePressable style={[styles.modalButton, { backgroundColor: isDarkMode ? '#10B981' : '#0F7660' }]} onPress={handleContinueToVerification} testID="signup-verification-continue-btn">
               <Text style={styles.modalButtonText}>Continue</Text>
             </ScalePressable>
           </View>
@@ -220,91 +697,364 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  containerDark: { backgroundColor: '#071A14' },
+  container: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.xl,
-    gap: SPACING.md,
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 40,
   },
-  headerSection: { marginBottom: SPACING.md },
-  title: { ...TYPOGRAPHY.title, color: COLORS.text, fontWeight: '800', textAlign: 'left' },
-  titleDark: { color: '#F8FAF9' },
-  subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, marginTop: SPACING.xs, textAlign: 'left' },
-  subtitleDark: { color: '#A9BBB4' },
+  headerSection: { 
+    alignItems: 'center', 
+    marginBottom: 24, 
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+  },
+  logoContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  title: { 
+    ...TYPOGRAPHY.title, 
+    fontSize: 26, 
+    fontWeight: '800', 
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  subtitle: { 
+    ...TYPOGRAPHY.body, 
+    textAlign: 'center', 
+    lineHeight: 20,
+    paddingHorizontal: 16,
+  },
   formCard: {
-    gap: SPACING.md,
-    backgroundColor: '#FFFFFF',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 4,
-  },
-  formCardDark: {
-    backgroundColor: '#102820',
-    borderColor: '#214438',
-    shadowColor: '#000000',
+    shadowRadius: 20,
+    elevation: 5,
+    gap: 20,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    backgroundColor: '#FEE4E2',
-    padding: SPACING.sm,
-    borderRadius: RADIUS.md,
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FDA29B',
   },
-  errorText: { ...TYPOGRAPHY.body, color: COLORS.error, flex: 1, textAlign: 'left' },
-  eyeBtn: { position: 'absolute', right: SPACING.sm, top: 34, height: 40, justifyContent: 'center' },
-  field: { gap: SPACING.xs },
-  label: { ...TYPOGRAPHY.label, color: '#6A6A6A', fontSize: 12, fontWeight: '500', textAlign: 'left' },
-  roleRow: { flexDirection: 'row', gap: SPACING.sm },
-  roleBtn: {
+  errorText: { 
+    ...TYPOGRAPHY.body, 
+    flex: 1, 
+    fontWeight: '600' 
+  },
+  
+  // Premium Inputs styles
+  inputContainer: { 
+    gap: 6,
+    width: '100%',
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    paddingLeft: 4,
+  },
+  inputRow: {
+    minHeight: 56,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  inputRowFocused: {
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  inputRowDisabled: {
+    opacity: 0.65,
+  },
+  leftIcon: {
+    marginRight: 10,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    paddingVertical: 14,
+  },
+  inputErrorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingLeft: 4,
+    marginTop: 2,
+  },
+  confirmMessageText: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingLeft: 4,
+    marginTop: 4,
+  },
+  helperText: {
+    fontSize: 12,
+    fontWeight: '500',
+    paddingLeft: 4,
+    marginTop: -14,
+  },
+
+  // Country prefix selector
+  prefixContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countrySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+    gap: 6,
+  },
+  flagText: {
+    fontSize: 18,
+  },
+  codeText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  dividerLine: {
+    width: 1,
+    height: 20,
+    marginLeft: 6,
+  },
+
+  // Show/Hide Password Eye Button
+  eyeBtn: {
+    height: '100%',
+    justifyContent: 'center',
+    paddingLeft: 8,
+  },
+
+  // Password Requirements checklists
+  strengthContainer: {
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 10,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  strengthTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  requirementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  requirementText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  requirementActive: {
+    color: '#10B981',
+    fontWeight: '600',
+  },
+
+  // Segmented Control
+  segmentedContainer: {
+    minHeight: 50,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+    padding: 4,
+  },
+  segmentedActiveBg: {
+    position: 'absolute',
+    height: '84%',
+    width: '48%',
+    borderRadius: 8,
+  },
+  segmentedOption: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    backgroundColor: '#FFFFFF',
+    height: '100%',
+    zIndex: 2,
   },
-  roleBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  roleBtnText: { ...TYPOGRAPHY.label, color: COLORS.textMuted },
-  roleBtnTextActive: { color: '#FFFFFF' },
-  primaryBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.lg,
-    paddingVertical: 14,
-    paddingHorizontal: SPACING.lg,
+  segmentedText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // Consent checkbox
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  checkboxTouch: {
+    paddingVertical: 2,
+    minHeight: 48,
+    minWidth: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
+    marginTop: -10,
   },
-  btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.md },
-  footerText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
-  footerTextDark: { color: '#A9BBB4' },
-  footerLink: { ...TYPOGRAPHY.label, color: COLORS.primary },
-  footerLinkDark: { color: COLORS.secondary },
-  helpBtn: { alignSelf: 'center', marginTop: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: '#DCFCE7' },
-  helpBtnText: { ...TYPOGRAPHY.label, color: '#166534', fontWeight: '700' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.42)', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
-  modalCard: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: RADIUS.xl, padding: SPACING.lg, alignItems: 'center', gap: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
-  modalCardDark: { backgroundColor: '#102820', borderColor: '#214438' },
-  modalIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.goldBg, alignItems: 'center', justifyContent: 'center' },
-  modalIconCircleDark: { backgroundColor: '#213B31' },
-  modalTitle: { ...TYPOGRAPHY.heading, color: COLORS.textMain, textAlign: 'center', fontWeight: '800' },
-  modalTitleDark: { color: '#F8FAF9' },
-  modalMessage: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', lineHeight: 22 },
-  modalMessageDark: { color: '#C8D7D1' },
-  modalButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, minHeight: 50, width: '100%', alignItems: 'center', justifyContent: 'center', marginTop: SPACING.xs },
-  modalButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  consentLabel: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  hyperlink: {
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+
+  // Submit button
+  primaryBtn: {
+    borderRadius: 12,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    marginTop: 8,
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+  primaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  loaderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loaderText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  loaderSubtext: {
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: -8,
+  },
+
+  // Footer & Help
+  footerRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  footerText: { 
+    ...TYPOGRAPHY.body,
+  },
+  footerLink: { 
+    ...TYPOGRAPHY.label, 
+    fontWeight: '700',
+  },
+  helpBtn: { 
+    alignSelf: 'center', 
+    marginTop: 20, 
+    paddingHorizontal: 20, 
+    paddingVertical: 12, 
+    borderRadius: 24, 
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  helpBtnText: { 
+    ...TYPOGRAPHY.label, 
+    fontWeight: '700',
+  },
+
+  // Success Modal
+  modalBackdrop: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0, 0, 0, 0.42)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    padding: 20,
+  },
+  modalCard: { 
+    width: '100%', 
+    maxWidth: 420, 
+    borderRadius: 24, 
+    padding: 24, 
+    alignItems: 'center', 
+    gap: 16, 
+    borderWidth: 1, 
+  },
+  modalIconCircle: { 
+    width: 64, 
+    height: 64, 
+    borderRadius: 32, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: { 
+    ...TYPOGRAPHY.heading, 
+    fontSize: 22,
+    textAlign: 'center', 
+    fontWeight: '800',
+  },
+  modalMessage: { 
+    ...TYPOGRAPHY.body, 
+    textAlign: 'center', 
+    lineHeight: 20,
+  },
+  modalBulletBox: {
+    width: '100%',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    gap: 8,
+    marginVertical: 4,
+  },
+  modalBulletText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  modalButton: { 
+    borderRadius: 12, 
+    minHeight: 52, 
+    width: '100%', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginTop: 8,
+  },
+  modalButtonText: { 
+    color: '#FFFFFF', 
+    fontSize: 16, 
+    fontWeight: '700',
+  },
 });
