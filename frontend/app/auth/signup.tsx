@@ -247,29 +247,30 @@ export default function SignupScreen() {
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   // Name Validation derived cleanly
   const nameError = useMemo(() => {
-    if (name.length === 0) return '';
+    if (!submitted || name.length === 0) return '';
     if (name.trim().length < 3) return 'Name must be at least 3 characters';
     if (/\d/.test(name)) return 'Name cannot contain numbers';
     return '';
-  }, [name]);
+  }, [submitted, name]);
 
   // Mobile Validation derived cleanly
   const mobileError = useMemo(() => {
-    if (mobile.length === 0) return '';
+    if (!submitted || mobile.length === 0) return '';
     if (!/^\d*$/.test(mobile)) return 'Mobile number must contain digits only';
     if (mobile.length !== 10) return 'Mobile number must be exactly 10 digits';
     return '';
-  }, [mobile]);
+  }, [submitted, mobile]);
 
   // Email Validation derived cleanly
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
   const emailError = useMemo(() => {
-    if (email.length === 0 || emailValid) return '';
+    if (!submitted || email.length === 0 || emailValid) return '';
     return 'Please enter a valid email address';
-  }, [email, emailValid]);
+  }, [submitted, email, emailValid]);
 
   // Password Strength
   const passwordValidation = useMemo(() => {
@@ -291,14 +292,14 @@ export default function SignupScreen() {
 
   // Confirm Password Validation derived cleanly
   const confirmPasswordMessage = useMemo(() => {
-    if (confirmPassword.length === 0) return '';
+    if (!submitted || confirmPassword.length === 0) return '';
     return confirmPassword === password ? '✓ Passwords Match' : '❌ Passwords Do Not Match';
-  }, [password, confirmPassword]);
+  }, [submitted, password, confirmPassword]);
 
   const confirmPasswordIsError = useMemo(() => {
-    if (confirmPassword.length === 0) return false;
+    if (!submitted || confirmPassword.length === 0) return false;
     return confirmPassword !== password;
-  }, [password, confirmPassword]);
+  }, [submitted, password, confirmPassword]);
 
   // Determine if form is ready to submit
   const formIsValid = useMemo(() => {
@@ -318,7 +319,14 @@ export default function SignupScreen() {
     if (!showSignupVerificationPrompt || modalShownTrackedRef.current) return;
     modalShownTrackedRef.current = true;
     void markVerificationModalShown(user?.uid || '');
-  }, [showSignupVerificationPrompt, user?.uid]);
+    const timer = setTimeout(() => {
+      acknowledgeSignupVerificationPrompt();
+      if (user) {
+        router.replace('/');
+      }
+    }, 2800);
+    return () => clearTimeout(timer);
+  }, [showSignupVerificationPrompt, acknowledgeSignupVerificationPrompt, router, user]);
 
   const handleContinueToVerification = useCallback(() => {
     void markVerificationModalContinue(user?.uid);
@@ -331,6 +339,7 @@ export default function SignupScreen() {
   }, [acknowledgeSignupVerificationPrompt, router, user?.uid]);
 
   const handleSignup = async () => {
+    setSubmitted(true);
     if (!formIsValid || loading) return;
 
     markSignupStarted();
@@ -366,6 +375,7 @@ export default function SignupScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+        enabled={Platform.OS === 'ios'}
         style={styles.flex}
       >
         <ScrollView

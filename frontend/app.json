@@ -61,6 +61,7 @@
         "backgroundColor": "#F8F4EA"
       },
       "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "pan",
       "package": "com.madrasatussalikat.lilbanat",
       "versionCode": 17,
       "googleServicesFile": "./google-services.json"

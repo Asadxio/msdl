@@ -1,7 +1,7 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { I18nManager, Platform } from 'react-native';
+import { I18nManager, Platform, StyleSheet, View } from 'react-native';
 import { COLORS } from '@/constants/theme';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
@@ -65,6 +65,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const segmentKey = segments.join('/');
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
+  const navigationReady = Boolean(rootNavigationState?.key);
 
   const performReplace = useCallback((route: string) => {
     try {
@@ -177,8 +179,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, [user?.uid, profileStatus, segmentKey]);
 
   useEffect(() => {
-    if (authLoading || onboardingStatus === 'checking') {
-      startupLog('Navigation guard waiting', { authLoading, onboardingStatus });
+    if (!navigationReady || authLoading || onboardingStatus === 'checking') {
+      startupLog('Navigation guard waiting', { navigationReady, authLoading, onboardingStatus });
       return;
     }
 
@@ -289,7 +291,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance, onboardingStatus, signupVerificationFlowActive]);
+  }, [navigationReady, user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance, onboardingStatus, signupVerificationFlowActive]);
 
   useEffect(() => {
     if (shouldShowTutorial || authLoading || onboardingStatus !== 'complete' || !user?.uid) return;
@@ -408,17 +410,20 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [router, user?.uid]);
 
-  if (!splashHidden || authLoading || onboardingStatus === 'checking') {
-    return (
-      <FullScreenLoader label={splashHidden ? 'Loading account…' : 'Starting app…'} />
-    );
-  }
+  const showLoader = !splashHidden || authLoading || onboardingStatus === 'checking';
 
   return (
     <OnboardingProvider value={{ markEntryCompleteInSession }}>
       <TutorialProvider autoShowOnMount={shouldShowTutorial} initialStep="dashboard">
-        {children}
-        <InAppTutorialOverlay />
+        <View style={{ flex: 1 }}>
+          {children}
+          {showLoader ? (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: COLORS.background }]}>
+              <FullScreenLoader label={splashHidden ? 'Loading account…' : 'Starting app…'} />
+            </View>
+          ) : null}
+          <InAppTutorialOverlay />
+        </View>
       </TutorialProvider>
     </OnboardingProvider>
   );

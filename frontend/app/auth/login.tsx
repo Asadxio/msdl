@@ -138,18 +138,19 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   // Email & Password Validation derived cleanly without cascading useEffect renders
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
   const emailError = useMemo(() => {
-    if (email.length === 0 || emailValid) return '';
+    if (!submitted || email.length === 0 || emailValid) return '';
     return 'Please enter a valid email address';
-  }, [email, emailValid]);
+  }, [submitted, email, emailValid]);
 
   const passwordError = useMemo(() => {
-    if (password.length === 0 || password.length >= 6) return '';
+    if (!submitted || password.length === 0 || password.length >= 6) return '';
     return 'Password must be at least 6 characters';
-  }, [password]);
+  }, [submitted, password]);
 
   // Determine if form is ready to submit
   const formIsValid = useMemo(() => {
@@ -157,6 +158,7 @@ export default function LoginScreen() {
   }, [emailValid, password, loading]);
 
   const handleLogin = async () => {
+    setSubmitted(true);
     if (!formIsValid || loading) return;
 
     setLoading(true);
@@ -177,6 +179,7 @@ export default function LoginScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+        enabled={Platform.OS === 'ios'}
         style={styles.flex}
       >
         <ScrollView
