@@ -1,6 +1,5 @@
 import time
 import uuid
-from firebase_admin import firestore as admin_firestore
 from queues.job_models import QueueJob
 from queues.retry_policy import next_backoff_ms, classify_failure
 

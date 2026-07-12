@@ -11,11 +11,15 @@ def _normalized(weights: dict[str, float]) -> dict[str, float]:
 
 
 def choose_provider_weighted(weights: dict[str, float], seed_key: str = '') -> str:
+    if not weights:
+        return ''
     if seed_key:
         rnd = random.Random(abs(hash(seed_key)) % (2**32))
     else:
         rnd = random.Random()
     norm = _normalized(weights)
+    if not norm:
+        return ''
     # starvation guard floor
     floor = 0.05
     norm = _normalized({k: max(floor, v) for k, v in norm.items()})
@@ -27,4 +31,4 @@ def choose_provider_weighted(weights: dict[str, float], seed_key: str = '') -> s
         if roll <= acc:
             chosen = provider
             break
-    return chosen or next(iter(norm.keys()))
+    return chosen or (next(iter(norm.keys())) if norm else '')

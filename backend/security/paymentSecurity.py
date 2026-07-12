@@ -11,12 +11,12 @@ ALLOWED_TRANSITIONS = {
     "approved": {"processing", "cancelled", "expired", "failed", "rejected", "succeeded"},
     "processing": {"succeeded", "failed", "rejected", "cancelled", "disputed", "expired"},
     "succeeded": {"refunded", "disputed"},
-    "failed": set(),
+    "failed": {"succeeded"},
     "rejected": set(),
     "cancelled": set(),
     "refunded": set(),
     "disputed": {"refunded"},
-    "expired": set(),
+    "expired": {"succeeded", "processing"},
 }
 
 

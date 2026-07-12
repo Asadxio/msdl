@@ -54,6 +54,9 @@ class FakeDb:
     def collection(self, name):
         return FakeCollection(name, self.root)
 
+    def transaction(self):
+        return FakeTransaction()
+
 
 class FakeTransaction:
     def get(self, doc):

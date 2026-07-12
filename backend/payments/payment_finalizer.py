@@ -4,7 +4,7 @@ from security.paymentSecurity import can_transition
 from payments.payment_state import payment_state_update
 
 
-def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source_event_id: str = "") -> dict:
+def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source_event_id: str = "", extra_update: dict = None) -> dict:
     if firebase_db is None:
         return {"ok": False, "reason": "no_db"}
 
@@ -31,7 +31,7 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
         grants_subscription = payment_type == "fees"
         grants_course_access = grants_subscription and bool(course_id)
 
-        tx.set(p_ref, payment_state_update(
+        update_payload = payment_state_update(
             "succeeded",
             entitlement_granted=grants_subscription,
             finalized_at=admin_firestore.SERVER_TIMESTAMP,
@@ -39,7 +39,11 @@ def finalize_successful_payment(firebase_db, payment_id: str, actor: str, source
             reconciliation={"finalized": True, "source_event_id": source_event_id, "updated_at_ms": now_ms},
             updated_at=admin_firestore.SERVER_TIMESTAMP,
             updated_at_ms=now_ms,
-        ), merge=True)
+        )
+        if extra_update:
+            update_payload.update(extra_update)
+
+        tx.set(p_ref, update_payload, merge=True)
 
         if grants_subscription:
             s_ref = firebase_db.collection("subscriptions").document(uid)

@@ -13,7 +13,7 @@ type Props = {
   accessibilityLabel?: string;
 };
 
-export function UIButton({ label, onPress, loading, disabled, variant = 'primary', style, accessibilityLabel }: Props) {
+export const UIButton = React.memo(function UIButton({ label, onPress, loading, disabled, variant = 'primary', style, accessibilityLabel }: Props) {
   const v = variantStyles[variant];
   const isDisabled = !!disabled || !!loading;
   return (
@@ -27,7 +27,7 @@ export function UIButton({ label, onPress, loading, disabled, variant = 'primary
       {loading ? <ActivityIndicator size="small" color={v.text.color} /> : <Text style={[styles.text, v.text]}>{label}</Text>}
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   base: {

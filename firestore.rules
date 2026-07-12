@@ -157,7 +157,7 @@ service cloud.firestore {
     function isValidUserUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'founder']
+          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -200,7 +200,7 @@ service cloud.firestore {
     }
 
     function isValidReferralCountIncrement() {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referral_count', 'updated_at'])
         && request.resource.data.name == resource.data.name
         && request.resource.data.email == resource.data.email
@@ -288,7 +288,7 @@ service cloud.firestore {
           || (isTeacherOrAdmin() && request.resource.data.user_id is string && request.resource.data.user_id != 'all')
           || (isSelf(request.resource.data.user_id))
           || (
-            isSignedIn()
+            isApprovedVerifiedUser()
             && request.resource.data.user_id == 'role_targeted'
             && request.resource.data.category == 'assignment_submitted'
             && request.resource.data.target_roles is list
@@ -408,11 +408,11 @@ service cloud.firestore {
     }
 
     function isChatParticipant() {
-      return isSignedIn() && request.auth.uid in resource.data.participants;
+      return isApprovedVerifiedUser() && request.auth.uid in resource.data.participants;
     }
 
     function isChatParticipantByData() {
-      return isSignedIn() && request.auth.uid in request.resource.data.participants;
+      return isApprovedVerifiedUser() && request.auth.uid in request.resource.data.participants;
     }
 
     function isBroadcastChat() {
@@ -498,7 +498,7 @@ service cloud.firestore {
     }
 
     function canReadMessage() {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && exists(/databases/$(database)/documents/chats/$(resource.data.chat_id))
         && (
           get(/databases/$(database)/documents/chats/$(resource.data.chat_id)).data.type == 'broadcast'
@@ -760,12 +760,30 @@ service cloud.firestore {
 
 
 
+    // canReadLearningContent: base check used by categories, quizzes, audio_lessons.
+    // modules, lessons, assignments use canReadLearningContentForCourse which
+    // additionally enforces enrollment for courses that have a course_id set.
     function canReadLearningContent(data) {
       return isApprovedVerifiedUser();
     }
 
+    // For content tied to a specific course, require active enrollment.
+    // Teachers/admins bypass enrollment check (they can see all content).
     function canReadCourseData(courseId, data) {
+      // Course metadata (title, description, price) is readable by all approved users.
+      // Course content (lessons, modules) requires enrollment — see canReadLearningContentForCourse.
       return canReadLearningContent(data);
+    }
+
+    function canReadLearningContentForCourse(data) {
+      return isApprovedVerifiedUser()
+        && (
+          isTeacherOrAdmin()
+          || !('course_id' in data)
+          || data.course_id == null
+          || data.course_id == ''
+          || hasActiveEnrollmentForCourse(data.course_id)
+        );
     }
 
     function canReadRecordingData(data) {
@@ -895,7 +913,7 @@ service cloud.firestore {
     }
 
     function isValidPrivacyRequestCreate() {
-      return isSignedIn()
+      return isApprovedVerifiedUser()
         && hasOnlyAllowedKeys(request.resource.data, ['user_id', 'type', 'reason', 'state', 'lifecycle', 'created_at', 'updated_at'])
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.type in ['deletion', 'export']
@@ -1132,7 +1150,7 @@ service cloud.firestore {
       allow read: if isApprovedVerifiedUser();
       allow create: if isValidStatusCreate();
       allow update: if isValidStatusInteractionUpdate();
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow delete: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
     }
 
     match /status_updates/{statusId}/comments/{commentId} {
@@ -1163,16 +1181,16 @@ service cloud.firestore {
     }
 
     match /status_updates/{statusId}/views/{viewerId} {
-      allow read: if isAdmin() || (isSignedIn() && (viewerId == request.auth.uid || get(/databases/$(database)/documents/status_updates/$(statusId)).data.user_id == request.auth.uid));
-      allow create, update: if isSignedIn() && viewerId == request.auth.uid
+      allow read: if isAdmin() || (isApprovedVerifiedUser() && (viewerId == request.auth.uid || get(/databases/$(database)/documents/status_updates/$(statusId)).data.user_id == request.auth.uid));
+      allow create, update: if isApprovedVerifiedUser() && viewerId == request.auth.uid
         && request.resource.data.keys().hasOnly(['user_id', 'viewed_at', 'viewed_at_ms'])
         && request.resource.data.user_id == request.auth.uid;
       allow delete: if false;
     }
-
+ 
     match /status_reports/{reportId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.reporter_id == request.auth.uid);
-      allow create: if isSignedIn()
+      allow read: if isAdmin() || (isApprovedVerifiedUser() && resource.data.reporter_id == request.auth.uid);
+      allow create: if isApprovedVerifiedUser()
         && request.resource.data.keys().hasOnly(['reporter_id', 'status_id', 'owner_id', 'reason', 'created_at'])
         && request.resource.data.reporter_id == request.auth.uid
         && request.resource.data.status_id is string
@@ -1244,16 +1262,11 @@ service cloud.firestore {
     match /quiz_results/{resultId} {
       allow get: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
       allow list: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
-      allow create: if isApprovedVerifiedUser()
-        && request.resource.data.user_id == request.auth.uid
-        && request.resource.data.score is number
-        && request.resource.data.total_questions is number
-        && request.resource.data.created_at is timestamp
-        && 'category' in request.resource.data
-        && request.resource.data.category is string
-        && request.resource.data.category.size() > 0
-        && request.resource.data.category.size() <= 100
-        && request.resource.data.keys().hasOnly(['user_id', 'score', 'total_questions', 'category', 'created_at']);
+      // SECURITY FIX (Phase 8): Students MUST NOT write quiz results directly to Firestore.
+      // All quiz submissions must go through the /lms/quiz/submit backend API endpoint,
+      // which performs server-side grading and deduplication.
+      // Direct client writes would allow score manipulation (e.g. always submitting score=10/10).
+      allow create: if false;  // Server-only via Admin SDK
       allow update, delete: if isAdmin();
     }
 
@@ -1275,17 +1288,20 @@ service cloud.firestore {
     }
 
     match /modules/{moduleId} {
-      allow read: if canReadLearningContent(resource.data);
+      // Phase 8: Modules are course-specific content; require active enrollment.
+      allow read: if canReadLearningContentForCourse(resource.data);
       allow create, update, delete: if isAdmin();
     }
 
     match /lessons/{lessonId} {
-      allow read: if canReadLearningContent(resource.data);
+      // Phase 8: Lessons are course-specific content; require active enrollment.
+      allow read: if canReadLearningContentForCourse(resource.data);
       allow create, update, delete: if isAdmin();
     }
 
     match /assignments/{assignmentId} {
-      allow read: if canReadLearningContent(resource.data);
+      // Phase 8: Assignments are course-specific; require active enrollment.
+      allow read: if canReadLearningContentForCourse(resource.data);
       allow create, update, delete: if isAdmin();
     }
 

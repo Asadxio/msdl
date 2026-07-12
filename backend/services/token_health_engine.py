@@ -41,7 +41,7 @@ def update_token_registry(firebase_db, logger, token: str, provider: str, platfo
     else:
         failures += 1
         cons += 1
-        if 'invalid' in reason.lower() or 'unregistered' in reason.lower():
+        if 'invalid' in reason.lower() or 'unregistered' in reason.lower() or 'notregistered' in reason.lower():
             invalid_signals += 1
     last_success_ms = int(cur.get('last_success_at') or now_ms)
     age_ms = 0 if success else max(0, now_ms - last_success_ms)

@@ -1,19 +1,24 @@
+import sys
+from pathlib import Path
+
+_backend_dir = str(Path(__file__).resolve().parent)
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
-from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List
 from urllib import request as urlrequest
-import base64
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import time
-import requests
+import asyncio
 from fastapi import HTTPException, Header, Request
 from firebase_admin import app_check as firebase_app_check, auth as firebase_auth, credentials, firestore as admin_firestore, initialize_app, messaging
 import firebase_admin
@@ -52,9 +57,15 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL')
+db_name = os.environ.get('DB_NAME')
+
+if mongo_url and db_name:
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[db_name]
+else:
+    client = None
+    db = None
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -83,16 +94,18 @@ async def root():
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate, request: Request, authorization: str | None = Header(default=None)):
-    uid, _ = _verify_firebase_request(authorization)
-    _verify_app_check(request, required=True)
-    _enforce_rate_limit(f"{uid}:status_create", 10, 60)
-    status_dict = input.dict()
+    if db is None:
+        raise HTTPException(status_code=500, detail="MongoDB not configured")
+    uid, _ = _require_authenticated_request(request, authorization, "status_create", 10, 60)
+    status_dict = input.model_dump()
     status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
+    _ = await db.status_checks.insert_one(status_obj.model_dump())
     return status_obj
 
 @api_router.get("/status", response_model=List[StatusCheck])
 async def get_status_checks(request: Request, authorization: str | None = Header(default=None)):
+    if db is None:
+        raise HTTPException(status_code=500, detail="MongoDB not configured")
     _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "status_list")
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
@@ -113,6 +126,17 @@ app.add_middleware(
     allow_methods=cors_methods,
     allow_headers=cors_headers,
 )
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
 
 # Configure logging
 logging.basicConfig(
@@ -151,6 +175,12 @@ def _enforce_rate_limit(key: str, limit_count: int, window_sec: int) -> None:
         raise HTTPException(status_code=429, detail="Too many privileged requests")
     bucket.append(now)
     SECURITY_EVENT_RATE[key] = bucket
+    # Prune stale keys to prevent unbounded memory growth
+    if len(SECURITY_EVENT_RATE) > 5000:
+        cutoff = now - 3600
+        stale = [k for k, v in SECURITY_EVENT_RATE.items() if not v or v[-1] < cutoff]
+        for k in stale:
+            del SECURITY_EVENT_RATE[k]
 
 
 def _enforce_nonce(request: Request, uid: str) -> None:
@@ -163,6 +193,12 @@ def _enforce_nonce(request: Request, uid: str) -> None:
     if now - last < 300:
         raise HTTPException(status_code=409, detail="Replay detected")
     NONCE_CACHE[key] = now
+    # Prune expired nonces to prevent unbounded memory growth
+    if len(NONCE_CACHE) > 10000:
+        cutoff = now - 300
+        expired = [k for k, v in NONCE_CACHE.items() if v < cutoff]
+        for k in expired:
+            del NONCE_CACHE[k]
 
 
 def _verify_app_check(request: Request, required: bool = True) -> None:
@@ -190,21 +226,40 @@ def _classify_security_severity(event: str, payload: dict) -> str:
     return "low"
 
 
+SENSITIVE_LOG_KEYS = {"token", "password", "secret", "authorization", "key", "id_token", "credit_card", "cvv"}
+
+
+def _sanitize_log_payload(data: Any) -> Any:
+    if isinstance(data, dict):
+        clean = {}
+        for k, v in data.items():
+            if any(s in str(k).lower() for s in SENSITIVE_LOG_KEYS):
+                clean[k] = "[REDACTED]"
+            else:
+                clean[k] = _sanitize_log_payload(v)
+        return clean
+    elif isinstance(data, list):
+        return [_sanitize_log_payload(item) for item in data]
+    return data
+
+
 def _log_security_event(event: str, payload: dict) -> None:
-    severity = _classify_security_severity(event, payload)
-    logger.warning("SECURITY_EVENT %s severity=%s %s", event, severity, json.dumps(payload, ensure_ascii=False))
+    sanitized = _sanitize_log_payload(payload)
+    severity = _classify_security_severity(event, sanitized)
+    logger.warning("SECURITY_EVENT %s severity=%s %s", event, severity, json.dumps(sanitized, ensure_ascii=False))
     if firebase_db is not None:
         firebase_db.collection("security_events_immutable").add({
             "event": event,
             "severity": severity,
-            "payload": payload,
+            "payload": sanitized,
             "created_at": admin_firestore.SERVER_TIMESTAMP,
             "created_at_ms": int(time.time() * 1000),
         })
 
 
 def _require_capability(request: Request, authorization: str | None, allowed_roles: set[str], action: str, confirm: str | None = None) -> tuple[str, str]:
-    uid, role = _verify_firebase_request(authorization)
+    # Privileged operations must check token revocation
+    uid, role = _verify_firebase_request(authorization, check_revoked=True)
     _verify_app_check(request, required=True)
     _validate_admin_origin(request)
     _enforce_rate_limit(f"{uid}:{action}", 30, 60)
@@ -219,7 +274,8 @@ def _require_capability(request: Request, authorization: str | None, allowed_rol
 
 
 def _require_authenticated_request(request: Request, authorization: str | None, action: str, limit_count: int = 60, window_sec: int = 60) -> tuple[str, str]:
-    uid, role = _verify_firebase_request(authorization)
+    # Non-privileged authenticated request defaults to no revocation check for performance
+    uid, role = _verify_firebase_request(authorization, check_revoked=False)
     _verify_app_check(request, required=True)
     _enforce_rate_limit(f"{uid}:{action}", limit_count, window_sec)
     return uid, role
@@ -315,8 +371,12 @@ class QuizSubmitRequest(BaseModel):
     quiz_id: str
     nonce: str
     started_at_ms: int
-    score: int
-    total_questions: int
+    # Server-side grading: send answers dict {question_id: chosen_option_index}
+    # Legacy clients that don't send answers will fall back to score/total_questions
+    answers: dict | None = None
+    # Legacy fields — used only if answers is None (backward-compat fallback)
+    score: int | None = None
+    total_questions: int | None = None
 
 
 class AnalyticsEventItem(BaseModel):
@@ -387,14 +447,23 @@ def _is_active_enrollment(data: dict, uid: str, course_id: str) -> bool:
 
 
 
-def _verify_firebase_request(authorization: str | None) -> tuple[str, str]:
+def _verify_firebase_request(authorization: str | None, check_revoked: bool = False) -> tuple[str, str]:
     try:
-        decoded = firebase_auth.verify_id_token(_bearer_token(authorization))
-    except Exception:
+        token = _bearer_token(authorization)
+    except HTTPException as e:
+        _log_security_event("auth_token_missing", {"detail": e.detail})
+        raise e
+
+    try:
+        decoded = firebase_auth.verify_id_token(token, check_revoked=check_revoked)
+    except Exception as exc:
+        _log_security_event("auth_token_failed", {"error": str(exc)})
         raise HTTPException(status_code=401, detail="Invalid auth token")
+
     uid = decoded.get("uid", "")
     role = _fetch_user_role(uid)
     if not uid or not role:
+        _log_security_event("auth_unapproved_user", {"uid": uid, "email": decoded.get("email", "")})
         raise HTTPException(status_code=403, detail="Approved user required")
         
     if decoded.get("email_verified") is not True:
@@ -403,6 +472,7 @@ def _verify_firebase_request(authorization: str | None) -> tuple[str, str]:
                 snap = firebase_db.collection("users").document(uid).get()
                 if snap.exists and snap.to_dict().get("founder") is True:
                     return uid, role
+        _log_security_event("auth_unverified_email", {"uid": uid, "email": decoded.get("email", "")})
         raise HTTPException(status_code=403, detail="Verified email required")
     return uid, role
 
@@ -505,27 +575,38 @@ def _dedupe(values: list[str]) -> list[str]:
     return list(dict.fromkeys(values))
 
 
+def _chunked(values: list, size: int):
+    for index in range(0, len(values), size):
+        yield values[index:index + size]
+
+
 def _collect_tokens(user_ids: list[str]) -> tuple[list[str], list[str], dict[str, list[str]]]:
     if firebase_db is None or not user_ids:
         return [], [], {}
     fcm_tokens: list[str] = []
     expo_tokens: list[str] = []
     token_owners: dict[str, list[str]] = {}
-    for uid in user_ids:
-        snap = firebase_db.collection("users").document(uid).get()
-        if not snap.exists:
-            continue
-        data = snap.to_dict() or {}
-        for token in (data.get("fcm_tokens") or []):
-            if isinstance(token, str) and token.strip():
-                safe_token = token.strip()
-                fcm_tokens.append(safe_token)
-                token_owners[safe_token] = token_owners.get(safe_token, []) + [uid]
-        for token in (data.get("expo_push_tokens") or []):
-            if isinstance(token, str) and token.strip():
-                safe_token = token.strip()
-                expo_tokens.append(safe_token)
-                token_owners[safe_token] = token_owners.get(safe_token, []) + [uid]
+    for chunk in _chunked(user_ids, 100):
+        refs = [firebase_db.collection("users").document(uid) for uid in chunk]
+        try:
+            snaps = firebase_db.get_all(refs)
+        except Exception:
+            snaps = [ref.get() for ref in refs]
+        for snap in snaps:
+            if not snap.exists:
+                continue
+            uid = snap.id
+            data = snap.to_dict() or {}
+            for token in (data.get("fcm_tokens") or []):
+                if isinstance(token, str) and token.strip():
+                    safe_token = token.strip()
+                    fcm_tokens.append(safe_token)
+                    token_owners[safe_token] = token_owners.get(safe_token, []) + [uid]
+            for token in (data.get("expo_push_tokens") or []):
+                if isinstance(token, str) and token.strip():
+                    safe_token = token.strip()
+                    expo_tokens.append(safe_token)
+                    token_owners[safe_token] = token_owners.get(safe_token, []) + [uid]
     return _dedupe(fcm_tokens), _dedupe(expo_tokens), token_owners
 
 
@@ -560,11 +641,6 @@ def _post_expo_json(url: str, payload: dict | list) -> dict:
     )
     with urlrequest.urlopen(req, timeout=15) as response:
         return json.loads(response.read().decode("utf-8") or "{}")
-
-
-def _chunked(values: list, size: int):
-    for index in range(0, len(values), size):
-        yield values[index:index + size]
 
 
 def _send_expo_push(tokens: list[str], payload: PushSendRequest, token_owners: dict[str, list[str]], dedupe_id: str = "") -> dict:
@@ -699,21 +775,16 @@ async def cleanup_call(payload: CallCleanupRequest, request: Request, authorizat
 
 
 @api_router.post("/push/send")
-async def send_push(payload: PushSendRequest, authorization: str | None = Header(default=None)):
+async def send_push(payload: PushSendRequest, request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Push service not configured")
 
-    try:
-        decoded = firebase_auth.verify_id_token(_bearer_token(authorization))
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
+    uid, role = _require_authenticated_request(request, authorization, "push_send", 30, 60)
 
-    requester_uid = decoded.get("uid", "")
-    requester_role = _fetch_user_role(requester_uid)
-    is_admin = requester_role == "admin"
-
-    if payload.send_to_all and not is_admin:
+    if payload.send_to_all and role not in {"admin", "super_admin"}:
         raise HTTPException(status_code=403, detail="Admin required for broadcast push")
+
+    requester_uid = uid
 
     target_user_ids = list(set(payload.user_ids or []))
     if payload.send_to_all:
@@ -737,7 +808,7 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
         }, merge=True)
 
     # Non-admin push guard: allow chat participant pushes and teacher-owned live-class start pushes.
-    if not is_admin:
+    if role not in {"admin", "super_admin"}:
         event_type = str((payload.data or {}).get("type", "")).strip()
         if event_type in {"chat_message", "chat_broadcast"}:
             chat_id = str((payload.data or {}).get("chat_id", "")).strip()
@@ -750,13 +821,13 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
             participants = chat_data.get("participants") or []
             if requester_uid not in participants:
                 raise HTTPException(status_code=403, detail="Not allowed to push for this chat")
-            for uid in target_user_ids:
-                if uid not in participants:
+            for recipient_uid in target_user_ids:
+                if recipient_uid not in participants:
                     raise HTTPException(status_code=403, detail="Recipient outside chat participants")
             muted_by = set(chat_data.get("muted_by") or [])
             if muted_by:
-                target_user_ids = [uid for uid in target_user_ids if uid not in muted_by]
-        elif event_type == "live_class_started" and requester_role in {"teacher", "admin"}:
+                target_user_ids = [recipient_uid for recipient_uid in target_user_ids if recipient_uid not in muted_by]
+        elif event_type == "live_class_started" and role in {"teacher", "admin"}:
             live_class_id = str((payload.data or {}).get("live_class_id", "")).strip()
             if not live_class_id:
                 raise HTTPException(status_code=403, detail="Live class push requires class context")
@@ -764,11 +835,11 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
             if not class_snap.exists:
                 raise HTTPException(status_code=404, detail="Live class not found")
             class_data = class_snap.to_dict() or {}
-            if class_data.get("teacher_id") != requester_uid and requester_role != "admin":
+            if class_data.get("teacher_id") != requester_uid and role != "admin":
                 raise HTTPException(status_code=403, detail="Not allowed to push for this live class")
             allowed_students = set(class_data.get("student_ids") or [])
-            for uid in target_user_ids:
-                if uid not in allowed_students:
+            for recipient_uid in target_user_ids:
+                if recipient_uid not in allowed_students:
                     raise HTTPException(status_code=403, detail="Recipient outside live class enrollment")
         else:
             raise HTTPException(status_code=403, detail="Non-admin push is restricted to chat and live-class notifications")
@@ -787,8 +858,8 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
             data={k: str(v) for k, v in (payload.data or {}).items()},
             tokens=tokens,
         )
-        result = messaging.send_each_for_multicast(message)
-    expo_result = _send_expo_push(expo_tokens, payload, token_owners, dedupe_id)
+        result = await asyncio.to_thread(messaging.send_each_for_multicast, message)
+    expo_result = await asyncio.to_thread(_send_expo_push, expo_tokens, payload, token_owners, dedupe_id)
     stale_codes = {
         "messaging/registration-token-not-registered",
         "messaging/invalid-registration-token",
@@ -821,9 +892,12 @@ async def send_push(payload: PushSendRequest, authorization: str | None = Header
 
 @api_router.post("/push/enqueue")
 async def enqueue_push(payload: QueueEnqueueRequest, request: Request, authorization: str | None = Header(default=None)):
-    uid, _ = _require_authenticated_request(request, authorization, "push_enqueue", 60, 60)
+    uid, enqueue_role = _require_authenticated_request(request, authorization, "push_enqueue", 60, 60)
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Push service not configured")
+    # Only teachers and above may enqueue push notifications.
+    if enqueue_role not in {"admin", "super_admin", "teacher", "moderator"}:
+        raise HTTPException(status_code=403, detail="Insufficient privileges to enqueue push notifications")
     now_ms = int(time.time() * 1000)
     queue_id = str(uuid.uuid4())
     firebase_db.collection("notification_dispatch_queue").document(queue_id).set({
@@ -1032,14 +1106,61 @@ async def submit_quiz_authoritative(payload: QuizSubmitRequest, request: Request
     if existing.exists:
         raise HTTPException(status_code=409, detail='Duplicate attempt submission')
 
+    # ------------------------------------------------------------------
+    # Server-side grading (preferred path)
+    # ------------------------------------------------------------------
+    grading_mode = 'server'
+    computed_score: int
+    total_questions: int
+
+    if payload.answers is not None:
+        # Load quiz questions and correct answers from Firestore
+        quiz_snap = firebase_db.collection('quizzes').document(payload.quiz_id).get()
+        if not quiz_snap.exists:
+            raise HTTPException(status_code=404, detail='Quiz not found')
+        quiz_data = quiz_snap.to_dict() or {}
+        questions: list = quiz_data.get('questions') or []
+        total_questions = len(questions)
+        computed_score = 0
+        for q in questions:
+            q_id = str(q.get('id') or q.get('question_id') or '')
+            correct = q.get('correctOptionIndex') if 'correctOptionIndex' in q else q.get('correct_option_index')
+            if correct is None:
+                correct = q.get('correctAnswer')  # Legacy field name
+            if q_id and correct is not None:
+                student_answer = payload.answers.get(q_id)
+                if student_answer is not None and str(student_answer) == str(correct):
+                    computed_score += 1
+    else:
+        # Legacy fallback: trust client-supplied score (backward compat)
+        # This path is flagged so it can be monitored / deprecated
+        grading_mode = 'legacy_client_score'
+        computed_score = int(payload.score or 0)
+        total_questions = int(payload.total_questions or 0)
+        log_security_event(firebase_db, logger, 'quiz_submit_legacy_client_score', {
+            'uid': uid,
+            'quiz_id': payload.quiz_id,
+            'client_score': computed_score,
+        })
+
     suspicious = suspicious_timing(payload.started_at_ms, now_ms)
     firebase_db.collection('quiz_attempt_locks').document(dedupe).set({'uid': uid, 'quiz_id': payload.quiz_id, 'created_at_ms': now_ms, 'operation_key': op_key})
     op_ref.set({'uid': uid, 'operation': 'quiz_submit', 'created_at_ms': now_ms, 'ttl_ms': now_ms + 24 * 60 * 60 * 1000})
-    firebase_db.collection('quiz_results').add({'user_id': uid, 'quiz_id': payload.quiz_id, 'score': int(payload.score), 'total_questions': int(payload.total_questions), 'created_at': admin_firestore.SERVER_TIMESTAMP, 'attempt_key': dedupe, 'submitted_at_ms': now_ms, 'suspicious_timing': suspicious})
+    firebase_db.collection('quiz_results').add({
+        'user_id': uid,
+        'quiz_id': payload.quiz_id,
+        'score': computed_score,
+        'total_questions': total_questions,
+        'grading_mode': grading_mode,
+        'created_at': admin_firestore.SERVER_TIMESTAMP,
+        'attempt_key': dedupe,
+        'submitted_at_ms': now_ms,
+        'suspicious_timing': suspicious,
+    })
 
     if suspicious:
         log_security_event(firebase_db, logger, 'quiz_submit_suspicious_timing', {'uid': uid, 'quiz_id': payload.quiz_id, 'started_at_ms': payload.started_at_ms, 'submitted_at_ms': now_ms})
-    return {'ok': True, 'attempt_key': dedupe, 'suspicious_timing': suspicious}
+    return {'ok': True, 'attempt_key': dedupe, 'score': computed_score, 'total_questions': total_questions, 'grading_mode': grading_mode, 'suspicious_timing': suspicious}
 
 
 @api_router.post("/jobs/repair-status-reaction-counts")
@@ -1068,9 +1189,10 @@ async def repair_status_reaction_counts(request: Request, authorization: str | N
 
 
 @api_router.post("/jobs/run-status-maintenance")
-async def run_status_maintenance(authorization: str | None = Header(default=None)):
-    cleanup = await cleanup_expired_statuses(authorization)
-    repair = await repair_status_reaction_counts(authorization)
+async def run_status_maintenance(request: Request, authorization: str | None = Header(default=None)):
+    _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "run_status_maintenance")
+    cleanup = await cleanup_expired_statuses(request, authorization)
+    repair = await repair_status_reaction_counts(request, authorization)
     logger.info("run_status_maintenance cleanup=%s repair=%s", cleanup, repair)
     return {"ok": True, "cleanup": cleanup, "repair": repair}
 
@@ -1079,9 +1201,7 @@ async def run_status_maintenance(authorization: str | None = Header(default=None
 async def analytics_ingest(payload: AnalyticsIngestRequest, request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    uid, _ = _verify_firebase_request(authorization)
-    _verify_app_check(request, required=True)
-    _enforce_rate_limit(f"{uid}:analytics_ingest", 60, 60)
+    uid, _ = _require_authenticated_request(request, authorization, "analytics_ingest", 60, 60)
 
     now_ms = int(time.time() * 1000)
     accepted = 0
@@ -1093,7 +1213,7 @@ async def analytics_ingest(payload: AnalyticsIngestRequest, request: Request, au
             write_error_event(firebase_db, {**(event.payload or {}), "at_ms": event.ts})
         accepted += 1
 
-    day = datetime.utcnow().strftime("%Y-%m-%d")
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     summary_ref = firebase_db.collection("analytics_daily_summary").document(day)
     summary_ref.set({
         "updated_at_ms": now_ms,
@@ -1156,9 +1276,7 @@ async def ops_health(request: Request, authorization: str | None = Header(defaul
 
 @api_router.post("/ai/infer")
 async def ai_infer(payload: AIInferRequest, request: Request, authorization: str | None = Header(default=None)):
-    uid, role = _verify_firebase_request(authorization)
-    _verify_app_check(request, required=True)
-    _enforce_rate_limit(f"{uid}:ai_infer", 30, 60)
+    uid, role = _require_authenticated_request(request, authorization, "ai_infer", 30, 60)
 
     feature = str(payload.feature or "").strip().lower()
     body = payload.payload or {}
@@ -1189,32 +1307,61 @@ def _course_requires_payment(course: dict) -> bool:
 
 
 def _has_completed_course(uid: str, course_id: str) -> bool:
+    """Return True only if the student has a completed lesson_progress record
+    for EVERY lesson in the course.
+
+    BUG FIX (Phase 8): the previous implementation used all() over only the
+    lesson_progress docs that already existed, meaning a student who opened
+    and completed a single lesson in a 10-lesson course was incorrectly
+    considered to have completed the whole course.
+    """
     if firebase_db is None:
         return False
-    progress = list(firebase_db.collection("lesson_progress").where("user_id", "==", uid).where("course_id", "==", course_id).limit(200).stream())
-    if not progress:
+    # Count all lessons in the course
+    course_lessons = list(
+        firebase_db.collection("lessons")
+        .where("course_id", "==", course_id)
+        .limit(500)
+        .stream()
+    )
+    total_lessons = len(course_lessons)
+    if total_lessons == 0:
+        # No lessons defined → course not completable
         return False
-    return all((doc.to_dict() or {}).get("completed") is True for doc in progress)
+    # Count the student's completed lesson_progress records for this course
+    completed_progress = list(
+        firebase_db.collection("lesson_progress")
+        .where("user_id", "==", uid)
+        .where("course_id", "==", course_id)
+        .where("completed", "==", True)
+        .limit(500)
+        .stream()
+    )
+    return len(completed_progress) >= total_lessons
 
 
 def _has_successful_course_payment(uid: str, course_id: str) -> bool:
     if firebase_db is None:
         return False
-    base = firebase_db.collection("payments").where("user_id", "==", uid).where("course_id", "==", course_id)
-    state_docs = base.where("state", "==", "succeeded").limit(1).stream()
-    if any(True for _ in state_docs):
-        return True
-    status_docs = base.where("status", "==", "succeeded").limit(1).stream()
-    return any(True for _ in status_docs)
+    payment_docs = list(
+        firebase_db.collection("payments")
+        .where("user_id", "==", uid)
+        .where("course_id", "==", course_id)
+        .limit(10)
+        .stream()
+    )
+    for doc in payment_docs:
+        data = doc.to_dict() or {}
+        if str(data.get("state") or data.get("status") or "").strip().lower() == "succeeded":
+            return True
+    return False
 
 
 @api_router.post("/certificates/generate")
 async def generate_certificate(payload: CertificateGenerateRequest, request: Request, authorization: str | None = Header(default=None)):
     if firebase_db is None:
         raise HTTPException(status_code=500, detail="Firebase service not configured")
-    uid, _ = _verify_firebase_request(authorization)
-    _verify_app_check(request, required=True)
-    _enforce_rate_limit(f"{uid}:certificate_generate", 5, 300)
+    uid, _ = _require_authenticated_request(request, authorization, "certificate_generate", 5, 300)
 
     course_id = str(payload.course_id or "").strip()
     if not course_id or len(course_id) > 128 or "/" in course_id:
@@ -1236,10 +1383,41 @@ async def generate_certificate(payload: CertificateGenerateRequest, request: Req
     if _course_requires_payment(course) and not _has_successful_course_payment(uid, course_id):
         raise HTTPException(status_code=402, detail="Successful payment required")
 
+    # ------------------------------------------------------------------
+    # Certificate eligibility: enforce quiz attempts + attendance thresholds
+    # (Phase 8 fix: backend must mirror frontend's quizAttempts > 0 &&
+    # attendancePct >= 75 checks so the API cannot be called directly to
+    # bypass these requirements)
+    # ------------------------------------------------------------------
+    quiz_attempts = list(
+        firebase_db.collection('quiz_results')
+        .where('user_id', '==', uid)
+        .limit(1)
+        .stream()
+    )
+    if not quiz_attempts:
+        raise HTTPException(status_code=409, detail="At least one quiz attempt required for certificate")
+
+    attendance_docs = list(
+        firebase_db.collection('attendance')
+        .where('user_id', '==', uid)
+        .where('course_id', '==', course_id)
+        .limit(500)
+        .stream()
+    )
+    if attendance_docs:
+        attended = sum(1 for d in attendance_docs if (d.to_dict() or {}).get('present') is True)
+        attendance_pct = (attended / len(attendance_docs)) * 100
+        if attendance_pct < 75:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Minimum 75% attendance required (current: {attendance_pct:.1f}%)"
+            )
+
     user_snap = firebase_db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
     cert_id = f"{uid}:{course_id}"
-    completion_date = datetime.utcnow().date().isoformat()
+    completion_date = datetime.now(timezone.utc).date().isoformat()
     cert_ref = firebase_db.collection("certificates").document(cert_id)
     cert_ref.set({
         "user_id": uid,
@@ -1377,9 +1555,8 @@ async def payments_admin_action(payload: PaymentAdminActionRequest, request: Req
             "updated_at_ms": now_ms,
         }
         if nxt == "succeeded":
-            finalize_result = finalize_successful_payment(firebase_db, pid, admin_uid, source_event_id="admin_action")
+            finalize_result = finalize_successful_payment(firebase_db, pid, admin_uid, source_event_id="admin_action", extra_update=review_update)
             logger.info("Admin payment finalize result %s", json.dumps({**log_context, "finalize_result": finalize_result}, ensure_ascii=False))
-            ref.set(review_update, merge=True)
         else:
             ref.set(payment_state_update(nxt, **review_update), merge=True)
             logger.info("Admin payment state update wrote %s", json.dumps(log_context, ensure_ascii=False))
@@ -1521,4 +1698,5 @@ app.include_router(api_router)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    if client is not None:
+        client.close()

@@ -17,25 +17,25 @@ export function useMinimumLoading(active: boolean, minMs = 350): boolean {
   return visible;
 }
 
-export function FullScreenLoader({ label = 'Loading…' }: { label?: string }) {
+export const FullScreenLoader = React.memo(function FullScreenLoader({ label = 'Loading…' }: { label?: string }) {
   return (
     <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.fullscreen}>
       <ActivityIndicator size="large" color={COLORS.primary} />
       <Text allowFontScaling style={styles.busyText}>{label}</Text>
     </View>
   );
-}
+});
 
-export function InlineLoader({ label }: { label: string }) {
+export const InlineLoader = React.memo(function InlineLoader({ label }: { label: string }) {
   return (
     <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.busyRow}>
       <ActivityIndicator size="small" color={COLORS.primary} />
       <Text allowFontScaling style={styles.busyText}>{label}</Text>
     </View>
   );
-}
+});
 
-export function InlineError({ message }: { message: string }) {
+export const InlineError = React.memo(function InlineError({ message }: { message: string }) {
   if (!message) return null;
   return (
     <View accessibilityRole="alert" style={styles.errorWrap}>
@@ -43,9 +43,9 @@ export function InlineError({ message }: { message: string }) {
       <Text allowFontScaling style={styles.errorText}>{message}</Text>
     </View>
   );
-}
+});
 
-export function RetryState({ title, message, actionLabel = 'Retry', onRetry }: { title: string; message: string; actionLabel?: string; onRetry: () => void }) {
+export const RetryState = React.memo(function RetryState({ title, message, actionLabel = 'Retry', onRetry }: { title: string; message: string; actionLabel?: string; onRetry: () => void }) {
   return (
     <View accessibilityRole="summary" style={styles.stateWrap}>
       <Ionicons name="warning-outline" size={28} color={COLORS.error} />
@@ -54,9 +54,22 @@ export function RetryState({ title, message, actionLabel = 'Retry', onRetry }: {
       <UIButton label={actionLabel} onPress={onRetry} accessibilityLabel={`${actionLabel}. ${title}`} />
     </View>
   );
-}
+});
 
-export function EmptyState({
+export const OfflineState = React.memo(function OfflineState({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <View accessibilityRole="summary" style={styles.stateWrap}>
+      <Ionicons name="cloud-offline-outline" size={32} color={COLORS.textMuted} />
+      <Text allowFontScaling style={styles.stateTitle}>You appear to be offline</Text>
+      <Text allowFontScaling style={styles.stateMessage}>Please check your network connection and try again.</Text>
+      {onRetry ? (
+        <UIButton label="Reconnect" onPress={onRetry} style={{ marginTop: 12 }} />
+      ) : null}
+    </View>
+  );
+});
+
+export const EmptyState = React.memo(function EmptyState({
   icon = 'folder-open-outline',
   title,
   message,
@@ -77,7 +90,7 @@ export function EmptyState({
       ) : null}
     </View>
   );
-}
+});
 
 export function useFeedbackMessage(success: string, error: string) {
   return useMemo(() => (error ? `Error: ${error}` : success), [success, error]);

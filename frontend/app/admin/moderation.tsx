@@ -172,6 +172,7 @@ export default function ModerationDashboard() {
         data={filtered}
         keyExtractor={(i, idx) => i.id || String(idx)}
         removeClippedSubviews
+        initialNumToRender={12}
         windowSize={8}
         maxToRenderPerBatch={10}
         ListEmptyComponent={

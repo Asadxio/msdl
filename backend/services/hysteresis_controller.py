@@ -1,6 +1,3 @@
-import time
-
-
 def apply_hysteresis(current_state: str, target_state: str, last_changed_at: int, now_ms: int, cooldown_ms: int = 60000) -> tuple[str, bool]:
     if current_state == target_state:
         return current_state, False

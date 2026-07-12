@@ -248,55 +248,27 @@ export default function SignupScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Real-time error messages
-  const [nameError, setNameError] = useState('');
-  const [mobileError, setMobileError] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [confirmPasswordMessage, setConfirmPasswordMessage] = useState('');
-  const [confirmPasswordIsError, setConfirmPasswordIsError] = useState(false);
-
-  // Name Validation
-  useEffect(() => {
-    if (name.length === 0) {
-      setNameError('');
-      return;
-    }
-    if (name.trim().length < 3) {
-      setNameError('Name must be at least 3 characters');
-    } else if (/\d/.test(name)) {
-      setNameError('Name cannot contain numbers');
-    } else {
-      setNameError('');
-    }
+  // Name Validation derived cleanly
+  const nameError = useMemo(() => {
+    if (name.length === 0) return '';
+    if (name.trim().length < 3) return 'Name must be at least 3 characters';
+    if (/\d/.test(name)) return 'Name cannot contain numbers';
+    return '';
   }, [name]);
 
-  // Mobile Validation
-  useEffect(() => {
-    if (mobile.length === 0) {
-      setMobileError('');
-      return;
-    }
-    if (!/^\d*$/.test(mobile)) {
-      setMobileError('Mobile number must contain digits only');
-    } else if (mobile.length !== 10) {
-      setMobileError('Mobile number must be exactly 10 digits');
-    } else {
-      setMobileError('');
-    }
+  // Mobile Validation derived cleanly
+  const mobileError = useMemo(() => {
+    if (mobile.length === 0) return '';
+    if (!/^\d*$/.test(mobile)) return 'Mobile number must contain digits only';
+    if (mobile.length !== 10) return 'Mobile number must be exactly 10 digits';
+    return '';
   }, [mobile]);
 
-  // Email Validation
+  // Email Validation derived cleanly
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
-  useEffect(() => {
-    if (email.length === 0) {
-      setEmailError('');
-      return;
-    }
-    if (!emailValid) {
-      setEmailError('Please enter a valid email address');
-    } else {
-      setEmailError('');
-    }
+  const emailError = useMemo(() => {
+    if (email.length === 0 || emailValid) return '';
+    return 'Please enter a valid email address';
   }, [email, emailValid]);
 
   // Password Strength
@@ -317,20 +289,15 @@ export default function SignupScreen() {
     };
   }, [password]);
 
-  // Confirm Password Validation
-  useEffect(() => {
-    if (confirmPassword.length === 0) {
-      setConfirmPasswordMessage('');
-      setConfirmPasswordIsError(false);
-      return;
-    }
-    if (confirmPassword === password) {
-      setConfirmPasswordMessage('✓ Passwords Match');
-      setConfirmPasswordIsError(false);
-    } else {
-      setConfirmPasswordMessage('❌ Passwords Do Not Match');
-      setConfirmPasswordIsError(true);
-    }
+  // Confirm Password Validation derived cleanly
+  const confirmPasswordMessage = useMemo(() => {
+    if (confirmPassword.length === 0) return '';
+    return confirmPassword === password ? '✓ Passwords Match' : '❌ Passwords Do Not Match';
+  }, [password, confirmPassword]);
+
+  const confirmPasswordIsError = useMemo(() => {
+    if (confirmPassword.length === 0) return false;
+    return confirmPassword !== password;
   }, [password, confirmPassword]);
 
   // Determine if form is ready to submit
@@ -397,7 +364,7 @@ export default function SignupScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
         style={styles.flex}
       >

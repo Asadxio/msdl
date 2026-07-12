@@ -139,35 +139,16 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Real-time error messages
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-
-  // Email Validation
+  // Email & Password Validation derived cleanly without cascading useEffect renders
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
-  useEffect(() => {
-    if (email.length === 0) {
-      setEmailError('');
-      return;
-    }
-    if (!emailValid) {
-      setEmailError('Please enter a valid email address');
-    } else {
-      setEmailError('');
-    }
+  const emailError = useMemo(() => {
+    if (email.length === 0 || emailValid) return '';
+    return 'Please enter a valid email address';
   }, [email, emailValid]);
 
-  // Password Validation
-  useEffect(() => {
-    if (password.length === 0) {
-      setPasswordError('');
-      return;
-    }
-    if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
-    } else {
-      setPasswordError('');
-    }
+  const passwordError = useMemo(() => {
+    if (password.length === 0 || password.length >= 6) return '';
+    return 'Password must be at least 6 characters';
   }, [password]);
 
   // Determine if form is ready to submit
@@ -194,7 +175,7 @@ export default function LoginScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
         style={styles.flex}
       >
