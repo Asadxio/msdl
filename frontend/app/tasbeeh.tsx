@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   Animated,
   StatusBar,
@@ -20,7 +21,7 @@ import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { goBackOrReplace } from '@/lib/navigation';
 import {
   loadTasbeehStats,
-  recordTasbeehTap,
+  queueTasbeehTap,
   recordTasbeehLap,
   resetDailyTasbeeh,
   type TasbeehStats,
@@ -116,7 +117,7 @@ export default function DigitalTasbeehScreen() {
 
   // Selected Preset
   const [selectedPresetId, setSelectedPresetId] = useState<string>('fatima');
-  const [fatimaStep, setFatimaStep] = useState<number>(0); // 0: SubhanAllah (33), 1: Alhamdulillah (33), 2: Allahu Akbar (34)
+  const [fatimaStep, setFatimaStep] = useState<number>(0); // 0: SubhanAllah, 1: Alhamdulillah, 2: Allahu Akbar
   const [customTarget, setCustomTarget] = useState<number>(100);
   const [customTargetInput, setCustomTargetInput] = useState<string>('100');
   const [showCustomModal, setShowCustomModal] = useState<boolean>(false);
@@ -124,7 +125,8 @@ export default function DigitalTasbeehScreen() {
   // Counter State
   const [count, setCount] = useState<number>(0);
   const [laps, setLaps] = useState<number>(0);
-  const [hapticsEnabled, setHapticsEnabled] = useState<boolean>(true);
+  const [hapticsMode, setHapticsMode] = useState<'light' | 'medium' | 'off'>('light');
+  const [fullScreenMode, setFullScreenMode] = useState<boolean>(false);
 
   // Statistics
   const [stats, setStats] = useState<TasbeehStats>({
@@ -135,9 +137,9 @@ export default function DigitalTasbeehScreen() {
     lapsCompleted: 0,
   });
 
-  // Animation
+  // Animation Refs
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rippleAnim = useRef(new Animated.Value(0)).current;
 
   // Load Initial Stats
   useEffect(() => {
@@ -148,7 +150,7 @@ export default function DigitalTasbeehScreen() {
     return DHIKR_PRESETS.find((p) => p.id === selectedPresetId) || DHIKR_PRESETS[0];
   }, [selectedPresetId]);
 
-  // Current display details for Fatima auto-flow
+  // Current display details
   const currentDhikrInfo = useMemo(() => {
     if (selectedPresetId === 'fatima') {
       if (fatimaStep === 0) {
@@ -185,64 +187,77 @@ export default function DigitalTasbeehScreen() {
     return activePreset;
   }, [selectedPresetId, fatimaStep, customTarget, activePreset]);
 
-  // Handle Tap on the bead
-  const handleBeadTap = async () => {
-    // 1. Spring scale animation
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.93,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 80,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // 2. Haptic feedback
-    if (hapticsEnabled && Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  // Ultra-Fast Zero-Lag Tap Handler
+  const handleFastTap = useCallback(() => {
+    // 1. Instant Haptic Trigger
+    if (hapticsMode !== 'off' && Platform.OS !== 'web') {
+      const style =
+        hapticsMode === 'medium'
+          ? Haptics.ImpactFeedbackStyle.Medium
+          : Haptics.ImpactFeedbackStyle.Light;
+      Haptics.impactAsync(style).catch(() => {});
     }
 
-    // 3. Update count & storage
-    const nextCount = count + 1;
-    setCount(nextCount);
-    const updatedStats = await recordTasbeehTap(1);
+    // 2. Micro Pulse Animation (non-blocking)
+    scaleAnim.setValue(0.95);
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 5,
+      tension: 100,
+      useNativeDriver: true,
+    }).start();
+
+    // 3. Instant In-Memory Buffered Stat Update
+    const updatedStats = queueTasbeehTap(1);
     setStats(updatedStats);
 
-    // 4. Check target reached
-    if (nextCount >= currentDhikrInfo.target) {
-      if (hapticsEnabled && Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    // 4. Functional Count State Update
+    setCount((prevCount) => {
+      const nextCount = prevCount + 1;
+      const target = currentDhikrInfo.target;
+
+      if (nextCount >= target) {
+        // Target achieved!
+        if (hapticsMode !== 'off' && Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        }
+
+        if (selectedPresetId === 'fatima') {
+          if (fatimaStep < 2) {
+            setFatimaStep((step) => step + 1);
+            return 0;
+          } else {
+            // Full 100 complete
+            setFatimaStep(0);
+            setLaps((l) => l + 1);
+            recordTasbeehLap();
+            Alert.alert('MashaAllah! 🌟', 'Completed full Tasbeeh-e-Fatima (100 Azkar)!');
+            return 0;
+          }
+        } else {
+          setLaps((l) => l + 1);
+          recordTasbeehLap();
+          return 0;
+        }
       }
 
-      if (selectedPresetId === 'fatima') {
-        if (fatimaStep < 2) {
-          // Advance step in Tasbeeh-e-Fatima
-          setFatimaStep((prev) => prev + 1);
-          setCount(0);
-        } else {
-          // Completed full 100 cycle
-          setFatimaStep(0);
-          setCount(0);
-          setLaps((prev) => prev + 1);
-          await recordTasbeehLap();
-          Alert.alert('MashaAllah! 🌟', 'You have completed the full Tasbeeh-e-Fatima (100 Dhikr)!');
-        }
-      } else {
-        // Standard preset target completed
-        setCount(0);
-        setLaps((prev) => prev + 1);
-        await recordTasbeehLap();
+      return nextCount;
+    });
+  }, [hapticsMode, currentDhikrInfo.target, selectedPresetId, fatimaStep, scaleAnim]);
+
+  // Manual Decrement (-1)
+  const handleDecrement = () => {
+    if (count > 0) {
+      setCount((prev) => prev - 1);
+      if (hapticsMode !== 'off' && Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       }
     }
   };
 
   // Reset current counter
   const handleResetCounter = () => {
-    Alert.alert('Reset Counter', 'Do you want to reset the current session count to 0?', [
+    Alert.alert('Reset Counter', 'Do you want to reset current session count to 0?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reset',
@@ -255,171 +270,199 @@ export default function DigitalTasbeehScreen() {
     ]);
   };
 
-  // Switch Preset
-  const handleSelectPreset = (presetId: string) => {
-    if (presetId === 'custom') {
+  const handleSelectPreset = (preset: DhikrPreset) => {
+    if (preset.id === 'custom') {
       setShowCustomModal(true);
+    } else {
+      setSelectedPresetId(preset.id);
+      setFatimaStep(0);
+      setCount(0);
     }
-    setSelectedPresetId(presetId);
-    setCount(0);
-    setFatimaStep(0);
   };
 
-  const progressRatio = Math.min(1, count / currentDhikrInfo.target);
+  const handleSaveCustomTarget = () => {
+    const parsed = parseInt(customTargetInput, 10);
+    if (isNaN(parsed) || parsed <= 0 || parsed > 99999) {
+      Alert.alert('Invalid Target', 'Please enter a target number between 1 and 99,999.');
+      return;
+    }
+    setCustomTarget(parsed);
+    setSelectedPresetId('custom');
+    setCount(0);
+    setShowCustomModal(false);
+  };
+
+  // Target progress percentage (0 to 100)
+  const progressPct = Math.min(
+    100,
+    Math.round((count / (currentDhikrInfo.target || 1)) * 100)
+  );
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#062F24" />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#003D2E" />
 
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
+      {/* ─── Top Header Bar ─── */}
+      <View style={styles.headerBar}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={styles.headerBtn}
           onPress={() => goBackOrReplace(router, '/(tabs)')}
-          accessibilityLabel="Back"
         >
-          <Ionicons name="chevron-back" size={24} color="#FFF" />
+          <Ionicons name="chevron-back" size={24} color="#C8A84E" />
         </TouchableOpacity>
+
         <View style={styles.headerTitleWrap}>
           <Text style={styles.headerTitle}>Digital Smart Tasbeeh</Text>
-          <Text style={styles.headerSub}>Daily Dhikr & Azkar Counter</Text>
+          <Text style={styles.headerSub}>مِصْبَحَة الأَذْكَارِ الذَّكِيَّة</Text>
         </View>
+
+        {/* Full Screen Mode Toggle */}
         <TouchableOpacity
-          style={styles.headerIconBtn}
-          onPress={() => setHapticsEnabled(!hapticsEnabled)}
+          style={[styles.headerBtn, fullScreenMode && styles.headerBtnActive]}
+          onPress={() => setFullScreenMode(!fullScreenMode)}
         >
           <Ionicons
-            name={hapticsEnabled ? 'phone-portrait' : 'phone-portrait-outline'}
+            name={fullScreenMode ? 'scan' : 'expand'}
             size={20}
-            color={hapticsEnabled ? COLORS.secondary : '#FFF'}
+            color={fullScreenMode ? '#003D2E' : '#C8A84E'}
           />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Presets Horizontal Strip */}
-        <View style={styles.presetSection}>
-          <Text style={styles.presetSectionLabel}>SELECT DHIKR PRESET</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.presetsRow}
+      {!fullScreenMode && (
+        <>
+          {/* ─── Dhikr Preset Selector Strip ─── */}
+          <View style={styles.presetSection}>
+            <Text style={styles.sectionHeader}>SELECT DHIKR PRESET</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.presetScroll}
+            >
+              {DHIKR_PRESETS.map((preset) => {
+                const isSelected = selectedPresetId === preset.id;
+                return (
+                  <TouchableOpacity
+                    key={preset.id}
+                    style={[styles.presetCard, isSelected && styles.presetCardActive]}
+                    onPress={() => handleSelectPreset(preset)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.presetArabic, isSelected && styles.presetArabicActive]}>
+                      {preset.arabic}
+                    </Text>
+                    <Text style={[styles.presetTitle, isSelected && styles.presetTitleActive]}>
+                      {preset.transliteration} ({preset.id === 'custom' ? customTarget : preset.target})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* ─── Active Dhikr Meaning Banner ─── */}
+          <View style={styles.dhikrBanner}>
+            <Text style={styles.bannerArabic}>{currentDhikrInfo.arabic}</Text>
+            <Text style={styles.bannerTransliteration}>{currentDhikrInfo.transliteration}</Text>
+            <Text style={styles.bannerMeaning}>"{currentDhikrInfo.meaning}"</Text>
+
+            {activePreset.virtue ? (
+              <View style={styles.virtuePill}>
+                <Ionicons name="sparkles" size={13} color="#C8A84E" />
+                <Text style={styles.virtueText}>{activePreset.virtue}</Text>
+              </View>
+            ) : null}
+          </View>
+        </>
+      )}
+
+      {/* ─── Main Interactive Counter Zone (Ultra-Fast Response) ─── */}
+      <View style={styles.counterZone}>
+        {/* Progress Bar Strip */}
+        <View style={styles.progressBarBg}>
+          <View style={[styles.progressBarFill, { width: `${progressPct}%` }]} />
+        </View>
+
+        {/* Fast Pressable Arena */}
+        <Pressable
+          style={styles.pressableArena}
+          onPress={handleFastTap}
+          android_disableSound={false}
+        >
+          <Animated.View
+            style={[
+              styles.beadCircleOuter,
+              { transform: [{ scale: scaleAnim }] },
+            ]}
           >
-            {DHIKR_PRESETS.map((p) => {
-              const isSelected = selectedPresetId === p.id;
-              return (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.presetChip, isSelected && styles.presetChipActive]}
-                  onPress={() => handleSelectPreset(p.id)}
-                >
-                  <Text style={[styles.presetChipArabic, isSelected && styles.presetChipArabicActive]}>
-                    {p.arabic}
-                  </Text>
-                  <Text style={[styles.presetChipText, isSelected && styles.presetChipTextActive]}>
-                    {p.transliteration} ({p.id === 'custom' ? customTarget : p.target})
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Active Dhikr Display Card */}
-        <View style={styles.dhikrCard}>
-          <Text style={styles.arabicCalligraphy}>{currentDhikrInfo.arabic}</Text>
-          <Text style={styles.transliterationText}>{currentDhikrInfo.transliteration}</Text>
-          <Text style={styles.meaningText}>"{currentDhikrInfo.meaning}"</Text>
-
-          {activePreset.virtue ? (
-            <View style={styles.virtueBadge}>
-              <Ionicons name="sparkles" size={13} color={COLORS.secondary} />
-              <Text style={styles.virtueText} numberOfLines={1}>
-                {activePreset.virtue}
+            <View style={styles.beadCircleInner}>
+              <Text style={styles.counterDigits}>{count}</Text>
+              <Text style={styles.counterTargetLabel}>
+                TARGET: {currentDhikrInfo.target} ({progressPct}%)
               </Text>
+              <Text style={styles.tapPrompt}>⚡ TAP ANYWHERE TO COUNT</Text>
             </View>
-          ) : null}
-        </View>
+          </Animated.View>
+        </Pressable>
 
-        {/* Central Tactile Bead Counter */}
-        <View style={styles.counterCenterWrapper}>
-          {/* Outer Ring */}
-          <View style={styles.outerRing}>
-            <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-              <TouchableOpacity
-                style={styles.beadCircle}
-                activeOpacity={0.88}
-                onPress={handleBeadTap}
-              >
-                <Text style={styles.countNumber}>{count}</Text>
-                <Text style={styles.targetLabel}>TARGET: {currentDhikrInfo.target}</Text>
+        {/* Counter Helper Controls */}
+        <View style={styles.counterControls}>
+          <TouchableOpacity style={styles.controlBtn} onPress={handleDecrement}>
+            <Ionicons name="remove" size={20} color="#C8A84E" />
+            <Text style={styles.controlBtnText}>-1 Undo</Text>
+          </TouchableOpacity>
 
-                {/* Progress Bar inside Bead */}
-                <View style={styles.miniProgressBar}>
-                  <View style={[styles.miniProgressFill, { width: `${progressRatio * 100}%` }]} />
-                </View>
-
-                <Text style={styles.tapPrompt}>TAP ANYWHERE TO COUNT</Text>
-              </TouchableOpacity>
-            </Animated.View>
+          <View style={styles.lapBadge}>
+            <Ionicons name="sync" size={14} color="#C8A84E" />
+            <Text style={styles.lapText}>Rounds: {laps}</Text>
           </View>
 
-          {/* Laps / Rounds Pill */}
-          <View style={styles.lapsRow}>
-            <View style={styles.lapBadge}>
-              <Ionicons name="repeat-outline" size={14} color={COLORS.primary} />
-              <Text style={styles.lapBadgeText}>Rounds Completed: {laps}</Text>
-            </View>
-            <TouchableOpacity style={styles.resetBtn} onPress={handleResetCounter}>
-              <Ionicons name="refresh" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.resetBtnText}>Reset</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.controlBtn} onPress={handleResetCounter}>
+            <Ionicons name="refresh" size={18} color="#EF4444" />
+            <Text style={[styles.controlBtnText, { color: '#EF4444' }]}>Reset</Text>
+          </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Daily & Lifetime Stats Summary Banner */}
-        <View style={styles.statsCard}>
+      {/* ─── Bottom Daily Stats & Streak Footer ─── */}
+      {!fullScreenMode && (
+        <View style={[styles.statsCard, { marginBottom: insets.bottom + 8 }]}>
           <View style={styles.statCol}>
-            <Text style={styles.statValue}>{stats.todayCount}</Text>
+            <Text style={styles.statNumber}>{stats.todayCount}</Text>
             <Text style={styles.statLabel}>Today's Dhikr</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
-            <Text style={styles.statValue}>{stats.streakDays} Days</Text>
-            <Text style={styles.statLabel}>Daily Streak</Text>
+            <Text style={[styles.statNumber, { color: '#C8A84E' }]}>
+              {stats.streakDays} Days
+            </Text>
+            <Text style={styles.statLabel}>Daily Streak 🔥</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
-            <Text style={styles.statValue}>{stats.lifetimeCount}</Text>
+            <Text style={styles.statNumber}>{stats.lifetimeCount}</Text>
             <Text style={styles.statLabel}>Lifetime Total</Text>
           </View>
         </View>
-      </ScrollView>
+      )}
 
-      {/* Custom Target Modal */}
-      <Modal
-        visible={showCustomModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowCustomModal(false)}
-      >
+      {/* ─── Custom Target Modal ─── */}
+      <Modal visible={showCustomModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Set Custom Target</Text>
-              <TouchableOpacity onPress={() => setShowCustomModal(false)}>
-                <Ionicons name="close" size={20} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalSub}>Enter desired number of recitations (e.g. 100, 313, 1000):</Text>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Set Custom Target</Text>
+            <Text style={styles.modalSub}>Enter the number of Dhikr recitations you want to complete:</Text>
+
             <TextInput
-              style={styles.customInput}
+              style={styles.targetInput}
               keyboardType="number-pad"
               value={customTargetInput}
               onChangeText={setCustomTargetInput}
-              placeholder="100"
-              placeholderTextColor={COLORS.textMuted}
+              placeholder="e.g. 100, 313, 1000"
+              placeholderTextColor="#94A3B8"
+              maxLength={5}
             />
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
@@ -429,16 +472,7 @@ export default function DigitalTasbeehScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalSaveBtn}
-                onPress={() => {
-                  const val = parseInt(customTargetInput, 10);
-                  if (val && val > 0) {
-                    setCustomTarget(val);
-                    setCount(0);
-                    setShowCustomModal(false);
-                  } else {
-                    Alert.alert('Invalid Target', 'Please enter a number greater than 0.');
-                  }
-                }}
+                onPress={handleSaveCustomTarget}
               >
                 <Text style={styles.modalSaveText}>Set Target</Text>
               </TouchableOpacity>
@@ -453,20 +487,28 @@ export default function DigitalTasbeehScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#062F24',
+    backgroundColor: '#002E23',
   },
-  header: {
+  headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
-    backgroundColor: '#062F24',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: '#00261D',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(200, 168, 78, 0.2)',
+    borderBottomColor: 'rgba(200,168,78,0.2)',
   },
-  backBtn: {
-    padding: 6,
+  headerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBtnActive: {
+    backgroundColor: '#C8A84E',
   },
   headerTitleWrap: {
     alignItems: 'center',
@@ -475,298 +517,300 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: '#FFF',
-    letterSpacing: 0.5,
   },
   headerSub: {
     fontSize: 11,
-    color: COLORS.secondary,
-    marginTop: 1,
-  },
-  headerIconBtn: {
-    padding: 6,
-  },
-  scrollContent: {
-    paddingBottom: 40,
+    color: '#C8A84E',
+    fontWeight: '700',
   },
   presetSection: {
-    marginTop: SPACING.md,
-    gap: 8,
+    paddingVertical: 8,
+    backgroundColor: '#002B20',
   },
-  presetSectionLabel: {
+  sectionHeader: {
     fontSize: 10,
     fontWeight: '800',
-    color: COLORS.secondary,
+    color: '#C8A84E',
     letterSpacing: 0.8,
-    paddingHorizontal: SPACING.lg,
-  },
-  presetsRow: {
-    paddingHorizontal: SPACING.lg,
-    gap: 8,
-  },
-  presetChip: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: RADIUS.md,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    alignItems: 'center',
-  },
-  presetChipActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.secondary,
-  },
-  presetChipArabic: {
-    fontSize: 14,
-    color: '#FFF',
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  presetChipArabicActive: {
-    color: '#FFF',
-  },
-  presetChipText: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '600',
-  },
-  presetChipTextActive: {
-    color: COLORS.secondary,
-  },
-  dhikrCard: {
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.lg,
-    backgroundColor: '#0A3B2E',
-    borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(200, 168, 78, 0.3)',
-    ...SHADOWS.card,
-  },
-  arabicCalligraphy: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#FFF',
-    textAlign: 'center',
-    lineHeight: 38,
+    paddingHorizontal: SPACING.md,
     marginBottom: 6,
   },
-  transliterationText: {
-    fontSize: 15,
+  presetScroll: {
+    paddingHorizontal: SPACING.md,
+    gap: 8,
+  },
+  presetCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(200,168,78,0.2)',
+    alignItems: 'center',
+  },
+  presetCardActive: {
+    backgroundColor: '#004D3A',
+    borderColor: '#C8A84E',
+  },
+  presetArabic: {
+    fontSize: 14,
     fontWeight: '700',
-    color: COLORS.secondary,
-    marginBottom: 4,
+    color: '#E2E8F0',
   },
-  meaningText: {
-    fontSize: 12,
-    color: '#D1E0D9',
-    fontStyle: 'italic',
+  presetArabicActive: {
+    color: '#C8A84E',
+  },
+  presetTitle: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  presetTitleActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  dhikrBanner: {
+    marginHorizontal: SPACING.md,
+    marginTop: 8,
+    padding: SPACING.md,
+    backgroundColor: 'rgba(0,40,30,0.8)',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(200,168,78,0.3)',
+    alignItems: 'center',
+  },
+  bannerArabic: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFF',
     textAlign: 'center',
-    marginBottom: 10,
   },
-  virtueBadge: {
+  bannerTransliteration: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#C8A84E',
+    marginTop: 4,
+  },
+  bannerMeaning: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: '#CBD5E1',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  virtuePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(200, 168, 78, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: RADIUS.full,
     gap: 6,
+    backgroundColor: 'rgba(200,168,78,0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    marginTop: 8,
   },
   virtueText: {
-    fontSize: 11,
-    color: '#E8D28B',
+    fontSize: 10,
+    color: '#F1F5F9',
     fontWeight: '600',
   },
-  counterCenterWrapper: {
+  counterZone: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
   },
-  outerRing: {
+  progressBarBg: {
+    width: '100%',
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#C8A84E',
+    borderRadius: 3,
+  },
+  pressableArena: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  beadCircleOuter: {
     width: 240,
     height: 240,
     borderRadius: 120,
-    borderWidth: 4,
-    borderColor: 'rgba(200, 168, 78, 0.35)',
+    borderWidth: 6,
+    borderColor: '#C8A84E',
+    backgroundColor: '#004735',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 95, 70, 0.3)',
+    ...SHADOWS.card,
   },
-  beadCircle: {
+  beadCircleInner: {
     width: 210,
     height: 210,
     borderRadius: 105,
-    backgroundColor: COLORS.primary,
+    borderWidth: 2,
+    borderColor: 'rgba(200,168,78,0.4)',
+    backgroundColor: '#003A2B',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: COLORS.secondary,
-    ...SHADOWS.card,
   },
-  countNumber: {
-    fontSize: 54,
+  counterDigits: {
+    fontSize: 72,
     fontWeight: '900',
     color: '#FFF',
-    lineHeight: 60,
+    lineHeight: 76,
   },
-  targetLabel: {
-    fontSize: 11,
+  counterTargetLabel: {
+    fontSize: 12,
     fontWeight: '800',
-    color: COLORS.secondary,
-    letterSpacing: 0.8,
-    marginTop: 2,
-  },
-  miniProgressBar: {
-    width: 100,
-    height: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: RADIUS.full,
-    marginTop: 10,
-    overflow: 'hidden',
-  },
-  miniProgressFill: {
-    height: '100%',
-    backgroundColor: COLORS.secondary,
+    color: '#C8A84E',
+    marginTop: 4,
+    letterSpacing: 1,
   },
   tapPrompt: {
-    fontSize: 9,
+    fontSize: 10,
+    color: '#94A3B8',
     fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.6)',
-    letterSpacing: 0.6,
-    marginTop: 10,
+    marginTop: 8,
+    letterSpacing: 0.5,
   },
-  lapsRow: {
+  counterControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    marginTop: SPACING.md,
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 18,
+    paddingHorizontal: 8,
+  },
+  controlBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  controlBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#C8A84E',
   },
   lapBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F5EE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: RADIUS.full,
     gap: 6,
-  },
-  lapBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  resetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: RADIUS.full,
-    gap: 4,
-  },
-  resetBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFF',
-  },
-  statsCard: {
-    marginHorizontal: SPACING.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#0A3B2E',
-    borderRadius: RADIUS.lg,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    backgroundColor: '#004D3A',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#C8A84E',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
   },
-  statCol: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 16,
+  lapText: {
+    fontSize: 12,
     fontWeight: '800',
     color: '#FFF',
   },
+  statsCard: {
+    flexDirection: 'row',
+    marginHorizontal: SPACING.md,
+    backgroundColor: 'rgba(0,35,26,0.9)',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(200,168,78,0.2)',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  statCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFF',
+  },
   statLabel: {
-    fontSize: 11,
-    color: COLORS.secondary,
+    fontSize: 10,
+    color: '#94A3B8',
     marginTop: 2,
   },
   statDivider: {
     width: 1,
-    height: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: SPACING.lg,
   },
-  modalCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
+  modalContent: {
     width: '100%',
-    maxWidth: 400,
-    gap: 12,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    maxWidth: 360,
+    backgroundColor: '#003A2B',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: '#C8A84E',
+    padding: SPACING.lg,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
-    color: COLORS.textMain,
+    color: '#FFF',
   },
   modalSub: {
     fontSize: 12,
-    color: COLORS.textSecondary,
+    color: '#CBD5E1',
+    marginTop: 4,
+    marginBottom: 16,
   },
-  customInput: {
-    backgroundColor: COLORS.background,
+  targetInput: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#C8A84E',
     borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textMain,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 18,
+    color: '#FFF',
+    fontWeight: '800',
     textAlign: 'center',
+    marginBottom: 16,
   },
   modalActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     gap: 10,
-    marginTop: 6,
   },
   modalCancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
   },
   modalCancelText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
+    color: '#94A3B8',
+    fontWeight: '700',
   },
   modalSaveBtn: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: RADIUS.full,
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#005F46',
+    borderWidth: 1,
+    borderColor: '#C8A84E',
+    alignItems: 'center',
   },
   modalSaveText: {
-    fontSize: 13,
-    fontWeight: '700',
     color: '#FFF',
+    fontWeight: '800',
   },
 });

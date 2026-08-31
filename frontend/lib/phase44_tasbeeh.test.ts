@@ -6,9 +6,10 @@ describe('Phase 44 — Digital Smart Tasbeeh Counter & Daily Azkar Tracker', () 
   const tasbeehStorageSrc = fs.readFileSync(path.resolve(__dirname, './tasbeehStorage.ts'), 'utf8');
   const homeScreenSrc = fs.readFileSync(path.resolve(__dirname, '../app/(tabs)/index.tsx'), 'utf8');
 
-  test('tasbeehStorage.ts provides required count persistence methods', () => {
+  test('tasbeehStorage.ts provides required count persistence methods with non-blocking memory buffering', () => {
     expect(tasbeehStorageSrc).toContain('loadTasbeehStats');
     expect(tasbeehStorageSrc).toContain('saveTasbeehStats');
+    expect(tasbeehStorageSrc).toContain('queueTasbeehTap');
     expect(tasbeehStorageSrc).toContain('recordTasbeehTap');
     expect(tasbeehStorageSrc).toContain('recordTasbeehLap');
     expect(tasbeehStorageSrc).toContain('resetDailyTasbeeh');
@@ -26,14 +27,14 @@ describe('Phase 44 — Digital Smart Tasbeeh Counter & Daily Azkar Tracker', () 
     expect(tasbeehScreenSrc).toContain('darood');
   });
 
-  test('tasbeeh.tsx contains tactile bead counter, haptic feedback, and Fatima auto sequence', () => {
-    expect(tasbeehScreenSrc).toContain('handleBeadTap');
+  test('tasbeeh.tsx contains ultra-fast touch, haptic feedback, and Fatima auto sequence', () => {
+    expect(tasbeehScreenSrc).toContain('handleFastTap');
     expect(tasbeehScreenSrc).toContain('Haptics.impactAsync');
     expect(tasbeehScreenSrc).toContain('fatimaStep');
     expect(tasbeehScreenSrc).toContain('SubhanAllah (1/3)');
     expect(tasbeehScreenSrc).toContain('Alhamdulillah (2/3)');
     expect(tasbeehScreenSrc).toContain('Allahu Akbar (3/3)');
-    expect(tasbeehScreenSrc).toContain('lapsRow');
+    expect(tasbeehScreenSrc).toContain('fullScreenMode');
   });
 
   test('index.tsx includes Digital Smart Tasbeeh shortcut in Islamic Utilities', () => {
