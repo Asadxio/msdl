@@ -26,6 +26,13 @@ import {
   type LiveClass,
 } from '@/lib/liveClasses';
 import { TajweedBoard, type TajweedBoardView } from '@/components/classroom/TajweedBoard';
+import {
+  startClassRecording,
+  stopAndSaveRecording,
+  formatDuration,
+  type SavedRecording,
+} from '@/lib/classRecording';
+import type { Audio } from 'expo-av';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { goBackOrReplace } from '@/lib/navigation';
 
@@ -40,6 +47,14 @@ export default function LiveClassroomScreen() {
   const [joining, setJoining] = useState(false);
   const [micMuted, setMicMuted] = useState(true);
   const [waveAnim] = useState(new Animated.Value(1));
+
+  // Inbuilt Audio Recording State
+  const [recordingInstance, setRecordingInstance] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDurationSec, setRecordingDurationSec] = useState(0);
+  const [isSavingRecording, setIsSavingRecording] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
+  const [savedRecording, setSavedRecording] = useState<SavedRecording | null>(null);
 
   useEffect(() => {
     if (!classId) {
@@ -69,8 +84,75 @@ export default function LiveClassroomScreen() {
     return () => loop.stop();
   }, [waveAnim]);
 
+  // Recording Timer effect
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    if (isRecording) {
+      timer = setInterval(() => {
+        setRecordingDurationSec((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setRecordingDurationSec(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isRecording]);
+
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
   const isSpeaking = liveClass?.active_speaker_uid === user?.uid || (isTeacher && !liveClass?.active_speaker_uid);
+
+  // Inbuilt Class Audio Recording handlers
+  const handleStartAudioRecording = async () => {
+    if (!isTeacher) return;
+    try {
+      const rec = await startClassRecording();
+      setRecordingInstance(rec);
+      setIsRecording(true);
+      setSavedRecording(null);
+    } catch (err: any) {
+      Alert.alert('Recording Error', err?.message || 'Could not start recording. Please check microphone permission.');
+    }
+  };
+
+  const handleStopAndSaveAudioRecording = () => {
+    if (!recordingInstance || !liveClass || !user || !profile) return;
+    Alert.alert(
+      'Save Audio Recording',
+      'Stop recording and upload this session to the Madrasa Recordings library?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Stop & Save',
+          onPress: async () => {
+            setIsSavingRecording(true);
+            setIsRecording(false);
+            try {
+              const saved = await stopAndSaveRecording(
+                recordingInstance,
+                {
+                  classId: (classId as string) || '',
+                  classTitle: liveClass.title || 'Live Class Session',
+                  courseId: liveClass.course_id || '',
+                  teacherId: user.uid,
+                  teacherName: profile.name || liveClass.teacher_name || 'Ustaadha',
+                },
+                (progress) => setSaveProgress(progress)
+              );
+              setRecordingInstance(null);
+              setSavedRecording(saved);
+              Alert.alert('Recording Saved ✓', `"${saved.title}" is now available in the Recordings library.`);
+            } catch (err: any) {
+              Alert.alert('Save Failed', err?.message || 'Could not save recording.');
+            } finally {
+              setIsSavingRecording(false);
+              setSaveProgress(0);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleJoinExternalMeet = async () => {
     if (!liveClass || !user || !profile) return;
@@ -319,6 +401,70 @@ export default function LiveClassroomScreen() {
             </View>
           )}
         </View>
+
+        {/* Inbuilt Live Class Audio Recording (Teacher Controls / Student Indicator) */}
+        {isTeacher ? (
+          <View style={[styles.recordingCard, isRecording && styles.recordingCardActive]}>
+            <View style={styles.recordingHeader}>
+              <View style={styles.recordingTitleRow}>
+                <Ionicons name="mic-circle" size={22} color={isRecording ? COLORS.error : COLORS.primary} />
+                <View>
+                  <Text style={styles.recordingTitle}>Inbuilt Class Audio Recording</Text>
+                  <Text style={styles.recordingSub}>
+                    {isRecording
+                      ? 'Microphone audio recording in progress'
+                      : 'Auto-saves to Madrasa Recordings library'}
+                  </Text>
+                </View>
+              </View>
+              {isRecording && (
+                <View style={styles.recBadge}>
+                  <View style={styles.recDot} />
+                  <Text style={styles.recText}>REC {formatDuration(recordingDurationSec)}</Text>
+                </View>
+              )}
+            </View>
+
+            {isSavingRecording ? (
+              <View style={styles.savingRow}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.savingText}>Uploading to Madrasa Cloud Storage ({saveProgress}%)...</Text>
+              </View>
+            ) : isRecording ? (
+              <TouchableOpacity
+                style={styles.stopRecBtn}
+                onPress={handleStopAndSaveAudioRecording}
+              >
+                <Ionicons name="stop" size={18} color="#fff" />
+                <Text style={styles.stopRecBtnText}>Stop & Save Class Recording</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.startRecBtn}
+                onPress={handleStartAudioRecording}
+              >
+                <Ionicons name="radio-button-on" size={18} color="#fff" />
+                <Text style={styles.startRecBtnText}>Start Audio Recording</Text>
+              </TouchableOpacity>
+            )}
+
+            {savedRecording && !isRecording && !isSavingRecording && (
+              <View style={styles.savedNotice}>
+                <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                <Text style={styles.savedNoticeText} numberOfLines={1}>
+                  Saved: {savedRecording.title} ({formatDuration(savedRecording.duration_sec)})
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.studentAudioBadge}>
+            <Ionicons name="volume-medium" size={16} color={COLORS.primary} />
+            <Text style={styles.studentAudioText}>
+              High-fidelity Quranic audio stream active • Modesty protected
+            </Text>
+          </View>
+        )}
 
         {/* Audio Controls & External Bridge */}
         <View style={styles.controlsCard}>
@@ -678,5 +824,132 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontSize: 12,
     fontWeight: '700',
+  },
+  recordingCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 10,
+    ...SHADOWS.card,
+  },
+  recordingCardActive: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FFF8F8',
+  },
+  recordingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  recordingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  recordingTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  recordingSub: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  recBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FDE8E8',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    gap: 5,
+  },
+  recDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.error,
+  },
+  recText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.error,
+  },
+  startRecBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  startRecBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  stopRecBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.error,
+    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  stopRecBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  savingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+    padding: 12,
+    borderRadius: RADIUS.md,
+    gap: 8,
+  },
+  savingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  savedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5EE',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.md,
+    gap: 6,
+  },
+  savedNoticeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.success,
+    flex: 1,
+  },
+  studentAudioBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5EE',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+  },
+  studentAudioText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.primary,
+    flex: 1,
   },
 });

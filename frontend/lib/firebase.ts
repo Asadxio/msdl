@@ -43,7 +43,9 @@ try {
 }
 
 import { getFunctions } from 'firebase/functions';
+import { getStorage } from 'firebase/storage';
 
 const functions = getFunctions(app, 'us-central1');
+const storage = getStorage(app);
 
-export { db, auth, functions, app };
+export { db, auth, functions, storage, app };

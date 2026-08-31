@@ -1423,7 +1423,9 @@ service cloud.firestore {
 
     match /recordings/{recordingId} {
       allow read: if canReadRecordingData(resource.data);
-      allow create, update, delete: if isAdmin();
+      allow create: if isTeacherOrAdmin();
+      allow update: if isTeacherOrAdmin() && (isAdmin() || resource.data.teacher_id == request.auth.uid);
+      allow delete: if isAdmin() || (isTeacherOrAdmin() && resource.data.teacher_id == request.auth.uid);
     }
 
     match /live_classes/{classId} {

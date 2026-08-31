@@ -205,6 +205,14 @@ service firebase.storage {
       allow write: if false;
     }
 
+    match /recordings/{classId}/{fileName} {
+      allow read: if isApprovedVerifiedUser();
+      allow create, update: if isTeacherOrAdmin()
+        && request.resource.size <= 209715200
+        && request.resource.contentType in ['audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac', 'audio/mpeg', 'audio/webm'];
+      allow delete: if isTeacherOrAdmin();
+    }
+
     match /assignment_submissions/{userId}/{fileName} {
       allow read: if isApprovedVerifiedUser() && (request.auth.uid == userId || isTeacherOrAdmin());
       allow write: if isApprovedVerifiedUser()
