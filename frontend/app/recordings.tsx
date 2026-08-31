@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, deleteDoc, doc, getDocs, orderBy, query } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
 import { Audio, type AVPlaybackStatus } from 'expo-av';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -30,6 +30,7 @@ type RecordingItem = {
   id: string;
   title: string;
   description?: string;
+  notes_text?: string;
   file_url: string;
   storage_path?: string;
   course_id?: string;
@@ -70,6 +71,11 @@ export default function RecordingsScreen() {
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [fullPlayerVisible, setFullPlayerVisible] = useState(false);
 
+  // Dars Notes State
+  const [editingNotesModal, setEditingNotesModal] = useState(false);
+  const [notesInput, setNotesInput] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+
   // Offline Caching State
   const [offlineMap, setOfflineMap] = useState<Record<string, boolean>>({});
   const [downloadProgressMap, setDownloadProgressMap] = useState<Record<string, number>>({});
@@ -107,6 +113,7 @@ export default function RecordingsScreen() {
           id: d.id,
           title: String(data.title || ''),
           description: data.description ? String(data.description) : '',
+          notes_text: data.notes_text ? String(data.notes_text) : '',
           file_url: String(data.file_url || ''),
           storage_path: data.storage_path ? String(data.storage_path) : '',
           course_id: data.course_id ? String(data.course_id) : '',
@@ -803,6 +810,119 @@ export default function RecordingsScreen() {
                       ))}
                     </View>
                   </View>
+
+                  {/* Dars Notes & Reference Material Section */}
+                  <View style={styles.modalNotesSection}>
+                    <View style={styles.modalNotesHeader}>
+                      <View style={styles.modalNotesTitleRow}>
+                        <Ionicons name="book-outline" size={16} color={COLORS.primary} />
+                        <Text style={styles.modalNotesTitle}>Dars Notes & Tajweed Rules</Text>
+                      </View>
+                      {(isAdmin || (isTeacher && activePlayingItem.teacher_id === user?.uid)) && (
+                        <TouchableOpacity
+                          style={styles.editNotesBtn}
+                          onPress={() => {
+                            setNotesInput(activePlayingItem.notes_text || '');
+                            setEditingNotesModal(true);
+                          }}
+                        >
+                          <Ionicons name="create-outline" size={13} color={COLORS.primary} />
+                          <Text style={styles.editNotesBtnText}>
+                            {activePlayingItem.notes_text ? 'Edit Notes' : '+ Add Notes'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {activePlayingItem.notes_text ? (
+                      <View style={styles.modalNotesCard}>
+                        <Text style={styles.modalNotesText}>{activePlayingItem.notes_text}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.modalNotesEmpty}>
+                        {isTeacher
+                          ? 'No notes attached yet. Tap "+ Add Notes" to write Tajweed points for your students.'
+                          : 'Ustaadha has not attached written notes for this Dars.'}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </Modal>
+          )}
+
+          {/* Edit Dars Notes Modal */}
+          {activePlayingItem && (
+            <Modal
+              visible={editingNotesModal}
+              animationType="fade"
+              transparent
+              onRequestClose={() => setEditingNotesModal(false)}
+            >
+              <View style={styles.notesModalOverlay}>
+                <View style={styles.notesModalCard}>
+                  <View style={styles.notesModalHeader}>
+                    <Text style={styles.notesModalTitle}>Edit Dars Notes</Text>
+                    <TouchableOpacity onPress={() => setEditingNotesModal(false)}>
+                      <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.notesModalSub}>
+                    Write Tajweed guidelines, homework, or lesson summary for students:
+                  </Text>
+                  <TextInput
+                    style={styles.notesTextInput}
+                    multiline
+                    numberOfLines={4}
+                    placeholder="e.g. Surah Al-Mulk Ayah 1-5 Tajweed: focus on Ghunnah on Noon Mushaddad and Ikhfa..."
+                    placeholderTextColor={COLORS.textMuted}
+                    value={notesInput}
+                    onChangeText={setNotesInput}
+                    textAlignVertical="top"
+                  />
+                  <View style={styles.notesModalActions}>
+                    <TouchableOpacity
+                      style={styles.notesCancelBtn}
+                      onPress={() => setEditingNotesModal(false)}
+                    >
+                      <Text style={styles.notesCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.notesSaveBtn, savingNotes && { opacity: 0.7 }]}
+                      onPress={async () => {
+                        if (!activePlayingItem) return;
+                        setSavingNotes(true);
+                        try {
+                          await updateDoc(doc(db, 'recordings', activePlayingItem.id), {
+                            notes_text: notesInput.trim(),
+                          });
+                          setActivePlayingItem((prev) =>
+                            prev ? { ...prev, notes_text: notesInput.trim() } : null
+                          );
+                          setItems((prev) =>
+                            prev.map((it) =>
+                              it.id === activePlayingItem.id
+                                ? { ...it, notes_text: notesInput.trim() }
+                                : it
+                            )
+                          );
+                          setEditingNotesModal(false);
+                          Alert.alert('Notes Saved ✓', 'Dars notes updated successfully.');
+                        } catch (err: any) {
+                          Alert.alert('Save Failed', err?.message || 'Could not save notes.');
+                        } finally {
+                          setSavingNotes(false);
+                        }
+                      }}
+                      disabled={savingNotes}
+                    >
+                      {savingNotes ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.notesSaveText}>Save Notes</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </Modal>
@@ -1250,6 +1370,127 @@ const styles = StyleSheet.create({
     color: COLORS.textMain,
   },
   modalSpeedChoiceTextActive: {
+    color: '#fff',
+  },
+  modalNotesSection: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    gap: 8,
+    marginTop: 4,
+  },
+  modalNotesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalNotesTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modalNotesTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  editNotesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#E8F5EE',
+    borderRadius: RADIUS.sm,
+  },
+  editNotesBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  modalNotesCard: {
+    backgroundColor: COLORS.surface,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalNotesText: {
+    fontSize: 12,
+    color: COLORS.textMain,
+    lineHeight: 18,
+  },
+  modalNotesEmpty: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
+  notesModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  notesModalCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 450,
+    gap: 12,
+    ...SHADOWS.card,
+  },
+  notesModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  notesModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+  },
+  notesModalSub: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  notesTextInput: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    padding: SPACING.sm,
+    fontSize: 13,
+    color: COLORS.textMain,
+    minHeight: 100,
+  },
+  notesModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 4,
+  },
+  notesCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: RADIUS.full,
+  },
+  notesCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  notesSaveBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: RADIUS.full,
+  },
+  notesSaveText: {
+    fontSize: 13,
+    fontWeight: '700',
     color: '#fff',
   },
 });

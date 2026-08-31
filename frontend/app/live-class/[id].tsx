@@ -10,10 +10,13 @@ import {
   Linking,
   ScrollView,
   Animated,
+  Modal,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
+import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import {
   subscribeLiveClass,
@@ -55,6 +58,15 @@ export default function LiveClassroomScreen() {
   const [isSavingRecording, setIsSavingRecording] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
   const [savedRecording, setSavedRecording] = useState<SavedRecording | null>(null);
+
+  // In-Class Attendance State
+  const [attendanceModalVisible, setAttendanceModalVisible] = useState(false);
+  const [attendanceStudents, setAttendanceStudents] = useState<
+    Array<{ id: string; name: string; email: string; status: 'present' | 'absent' }>
+  >([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [savingAttendance, setSavingAttendance] = useState(false);
+  const [attendanceSubmittedCount, setAttendanceSubmittedCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!classId) {
@@ -152,6 +164,119 @@ export default function LiveClassroomScreen() {
         },
       ]
     );
+  };
+
+  // In-Class Attendance handlers
+  const handleOpenAttendanceModal = async () => {
+    if (!isTeacher || !liveClass) return;
+    setAttendanceModalVisible(true);
+    setLoadingStudents(true);
+    try {
+      let studentList: Array<{ id: string; name: string; email: string; status: 'present' | 'absent' }> = [];
+
+      // Try fetching enrolled students for this course
+      if (liveClass.course_id) {
+        const enrollmentsSnap = await getDocs(
+          query(
+            collection(db, 'enrollments'),
+            where('course_id', '==', liveClass.course_id),
+            where('status', '==', 'active')
+          )
+        );
+        const userIds = enrollmentsSnap.docs.map((d) => d.data().user_id).filter(Boolean);
+        if (userIds.length > 0) {
+          const usersSnap = await getDocs(
+            query(collection(db, 'users'), where('role', '==', 'student'), where('status', '==', 'approved'))
+          );
+          usersSnap.forEach((docSnap) => {
+            if (userIds.includes(docSnap.id)) {
+              const uData = docSnap.data();
+              studentList.push({
+                id: docSnap.id,
+                name: uData.name || 'Taliba',
+                email: uData.email || '',
+                status: 'present',
+              });
+            }
+          });
+        }
+      }
+
+      // Fallback: if no enrollment records found, load approved students
+      if (studentList.length === 0) {
+        const usersSnap = await getDocs(
+          query(collection(db, 'users'), where('role', '==', 'student'), where('status', '==', 'approved'))
+        );
+        usersSnap.forEach((docSnap) => {
+          const uData = docSnap.data();
+          studentList.push({
+            id: docSnap.id,
+            name: uData.name || 'Taliba',
+            email: uData.email || '',
+            status: 'present',
+          });
+        });
+      }
+
+      // If students participated in Tilawat recitation queue, ensure they are marked 'present'
+      const recitedUids = (liveClass.recitation_queue || []).map((q) => q.uid);
+      studentList = studentList.map((st) => ({
+        ...st,
+        status: recitedUids.includes(st.id) ? 'present' : st.status,
+      }));
+
+      studentList.sort((a, b) => a.name.localeCompare(b.name));
+      setAttendanceStudents(studentList);
+    } catch (err: any) {
+      console.warn('[LiveClass] Fetching attendance students error:', err);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  const handleToggleStudentAttendance = (studentId: string) => {
+    setAttendanceStudents((prev) =>
+      prev.map((st) =>
+        st.id === studentId ? { ...st, status: st.status === 'present' ? 'absent' : 'present' } : st
+      )
+    );
+  };
+
+  const handleSubmitInClassAttendance = async () => {
+    if (!user || !profile || !liveClass || attendanceStudents.length === 0) return;
+    setSavingAttendance(true);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    try {
+      let presentCount = 0;
+      for (const st of attendanceStudents) {
+        if (st.status === 'present') presentCount++;
+        await addDoc(collection(db, 'attendance'), {
+          user_id: st.id,
+          user_name: st.name,
+          user_email: st.email,
+          date: dateStr,
+          status: st.status,
+          marked_by: 'live_class',
+          marked_by_uid: user.uid,
+          marked_by_name: profile.name || liveClass.teacher_name || 'Ustaadha',
+          live_class_id: (classId as string) || '',
+          course_id: liveClass.course_id || '',
+          marked_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+          created_at: serverTimestamp(),
+        });
+      }
+      setAttendanceSubmittedCount(presentCount);
+      setAttendanceModalVisible(false);
+      Alert.alert(
+        'Attendance Recorded ✓',
+        `Recorded attendance for ${attendanceStudents.length} students (${presentCount} Present).`
+      );
+    } catch (err: any) {
+      Alert.alert('Attendance Error', err?.message || 'Failed to submit attendance.');
+    } finally {
+      setSavingAttendance(false);
+    }
   };
 
   const handleJoinExternalMeet = async () => {
@@ -456,6 +581,19 @@ export default function LiveClassroomScreen() {
                 </Text>
               </View>
             )}
+
+            {/* In-Class 1-Tap Attendance Trigger Button */}
+            <TouchableOpacity
+              style={styles.attendanceTriggerBtn}
+              onPress={handleOpenAttendanceModal}
+            >
+              <Ionicons name="clipboard-outline" size={17} color={COLORS.primary} />
+              <Text style={styles.attendanceTriggerText}>
+                {attendanceSubmittedCount !== null
+                  ? `Attendance Saved (${attendanceSubmittedCount} Present) • Tap to Edit`
+                  : 'Take Class Attendance (1-Tap Register)'}
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.studentAudioBadge}>
@@ -501,6 +639,113 @@ export default function LiveClassroomScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* In-Class Live Attendance Modal */}
+      <Modal
+        visible={attendanceModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setAttendanceModalVisible(false)}
+      >
+        <View style={styles.attModalOverlay}>
+          <View style={styles.attModalContent}>
+            {/* Header */}
+            <View style={styles.attModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.attModalTitle}>📋 Class Attendance Register</Text>
+                <Text style={styles.attModalSub} numberOfLines={1}>
+                  {liveClass.title} • {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.attModalCloseBtn}
+                onPress={() => setAttendanceModalVisible(false)}
+              >
+                <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingStudents ? (
+              <View style={styles.attModalLoading}>
+                <ActivityIndicator color={COLORS.primary} size="large" />
+                <Text style={styles.attModalLoadingText}>Loading student roster...</Text>
+              </View>
+            ) : (
+              <>
+                {/* Quick Action Bar */}
+                <View style={styles.attQuickBar}>
+                  <Text style={styles.attCountText}>
+                    {attendanceStudents.filter((s) => s.status === 'present').length} Present •{' '}
+                    {attendanceStudents.filter((s) => s.status === 'absent').length} Absent
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.attMarkAllBtn}
+                    onPress={() =>
+                      setAttendanceStudents((prev) => prev.map((s) => ({ ...s, status: 'present' })))
+                    }
+                  >
+                    <Text style={styles.attMarkAllText}>Mark All Present</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Students List */}
+                <ScrollView style={styles.attStudentsList} showsVerticalScrollIndicator={false}>
+                  {attendanceStudents.length === 0 ? (
+                    <Text style={styles.attEmptyText}>No approved students found in roster.</Text>
+                  ) : (
+                    attendanceStudents.map((st, idx) => (
+                      <View key={st.id || idx} style={styles.attStudentRow}>
+                        <View style={styles.attStudentInfo}>
+                          <Text style={styles.attStudentName}>{st.name}</Text>
+                          {st.email ? <Text style={styles.attStudentEmail}>{st.email}</Text> : null}
+                        </View>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.attStatusChip,
+                            st.status === 'present' ? styles.attStatusPresent : styles.attStatusAbsent,
+                          ]}
+                          onPress={() => handleToggleStudentAttendance(st.id)}
+                        >
+                          <Ionicons
+                            name={st.status === 'present' ? 'checkmark-circle' : 'close-circle'}
+                            size={14}
+                            color={st.status === 'present' ? '#065F46' : '#991B1B'}
+                          />
+                          <Text
+                            style={[
+                              styles.attStatusText,
+                              st.status === 'present' ? styles.attTextPresent : styles.attTextAbsent,
+                            ]}
+                          >
+                            {st.status === 'present' ? 'Present' : 'Absent'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+
+                {/* Submit Action */}
+                <TouchableOpacity
+                  style={[styles.attSubmitBtn, savingAttendance && { opacity: 0.7 }]}
+                  onPress={handleSubmitInClassAttendance}
+                  disabled={savingAttendance || attendanceStudents.length === 0}
+                >
+                  {savingAttendance ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-done" size={18} color="#fff" />
+                      <Text style={styles.attSubmitBtnText}>Save & Submit Attendance</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -951,5 +1196,167 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.primary,
     flex: 1,
+  },
+  attendanceTriggerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5EE',
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+    borderRadius: RADIUS.full,
+    paddingVertical: 10,
+    gap: 6,
+    marginTop: 2,
+  },
+  attendanceTriggerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  attModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  attModalContent: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xl,
+    maxHeight: '80%',
+    gap: 12,
+  },
+  attModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  attModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+  },
+  attModalSub: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  attModalCloseBtn: {
+    padding: 6,
+  },
+  attModalLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 10,
+  },
+  attModalLoadingText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  attQuickBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+  },
+  attCountText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  attMarkAllBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#E8F5EE',
+    borderRadius: RADIUS.sm,
+  },
+  attMarkAllText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  attStudentsList: {
+    maxHeight: 300,
+  },
+  attEmptyText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  attStudentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  attStudentInfo: {
+    flex: 1,
+  },
+  attStudentName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  attStudentEmail: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  attStatusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  attStatusPresent: {
+    backgroundColor: '#D1FAE5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+  },
+  attStatusAbsent: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+  },
+  attStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  attTextPresent: {
+    color: '#065F46',
+  },
+  attTextAbsent: {
+    color: '#991B1B',
+  },
+  attSubmitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingVertical: 14,
+    gap: 8,
+    marginTop: 4,
+  },
+  attSubmitBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

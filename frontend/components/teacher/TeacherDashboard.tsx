@@ -66,6 +66,9 @@ export function TeacherDashboard({
   const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
   const [attendanceCount, setAttendanceCount] = useState<number>(0);
   const [loadingSchedule, setLoadingSchedule] = useState(true);
+  const [selectedDayIdx, setSelectedDayIdx] = useState<number>(
+    new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
+  );
 
   // Filter courses assigned to this teacher
   const myAssignedCourses = useMemo(() => {
@@ -359,6 +362,20 @@ export function TeacherDashboard({
             <TouchableOpacity
               style={styles.actionCard}
               activeOpacity={0.7}
+              onPress={() => router.push('/recordings' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="mic-outline" size={20} color="#D97706" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Dars Recordings</Text>
+                <Text style={styles.actionSubtitle}>Audio & Tajweed notes</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
               onPress={() => router.push('/(tabs)/quiz' as any)}
             >
               <View style={[styles.actionIconBox, { backgroundColor: '#FDF2F8' }]}>
@@ -383,6 +400,111 @@ export function TeacherDashboard({
                 <Text style={styles.actionSubtitle}>Direct 1-on-1 guidance</Text>
               </View>
             </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ========================================================================= */}
+        {/* SECTION 3.5: 7-DAY VISUAL WEEKLY TIMETABLE & AUTOMATION WIDGET           */}
+        {/* ========================================================================= */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Weekly Teaching Timetable</Text>
+              <Text style={styles.sectionSubtitle}>Class schedules & quick session launcher</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.quickRecordPill}
+              onPress={() => router.push('/live-class' as any)}
+            >
+              <Ionicons name="radio-button-on" size={13} color="#fff" />
+              <Text style={styles.quickRecordText}>Start Class</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 7 Days Strip */}
+          <View style={styles.daysStripRow}>
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName, idx) => {
+              const currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+              const isToday = idx === currentDayIndex;
+              const isSelected = idx === selectedDayIdx;
+              return (
+                <TouchableOpacity
+                  key={dayName}
+                  style={[
+                    styles.dayPill,
+                    isSelected && styles.dayPillSelected,
+                    isToday && !isSelected && styles.dayPillToday,
+                  ]}
+                  onPress={() => setSelectedDayIdx(idx)}
+                >
+                  <Text
+                    style={[
+                      styles.dayPillName,
+                      isSelected && styles.dayPillNameSelected,
+                      isToday && !isSelected && styles.dayPillNameToday,
+                    ]}
+                  >
+                    {dayName}
+                  </Text>
+                  {isToday && (
+                    <View
+                      style={[
+                        styles.todayDot,
+                        isSelected ? { backgroundColor: '#fff' } : { backgroundColor: COLORS.primary },
+                      ]}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Day Schedule Content Card */}
+          <View style={styles.timetableContentCard}>
+            <View style={styles.timetableHeader}>
+              <Ionicons name="calendar" size={16} color={COLORS.primary} />
+              <Text style={styles.timetableDayTitle}>
+                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][selectedDayIdx]}’s
+                Teaching Schedule
+              </Text>
+            </View>
+
+            {myAssignedCourses.length > 0 ? (
+              <View style={styles.timetableCoursesList}>
+                {myAssignedCourses.map((c, idx) => (
+                  <View key={c.id || idx} style={styles.timetableRow}>
+                    <View style={styles.timetableCourseMeta}>
+                      <Text style={styles.timetableCourseTitle} numberOfLines={1}>
+                        {c.name || (c as any).title || 'Madrasa Course'}
+                      </Text>
+                      <Text style={styles.timetableCourseTiming}>
+                        {c.schedule || c.time || c.class_time || 'Regular Class Session • 1 Hour'}
+                      </Text>
+                    </View>
+                    <View style={styles.timetableActions}>
+                      <TouchableOpacity
+                        style={styles.timetableAttendanceBtn}
+                        onPress={() => router.push('/attendance' as any)}
+                      >
+                        <Ionicons name="checkbox-outline" size={14} color={COLORS.primary} />
+                        <Text style={styles.timetableAttendanceText}>Register</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.timetableLaunchBtn}
+                        onPress={() => router.push('/live-class' as any)}
+                      >
+                        <Ionicons name="play" size={12} color="#fff" />
+                        <Text style={styles.timetableLaunchText}>Host</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.timetableEmptyText}>
+                No specific classes scheduled for this day. Tap "+ Schedule Live Class" below.
+              </Text>
+            )}
           </View>
         </View>
 
@@ -678,7 +800,12 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: COLORS.textMain,
-    marginBottom: 12,
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 8,
   },
   viewAllText: {
     fontSize: 13,
@@ -990,6 +1117,146 @@ const styles = StyleSheet.create({
   },
   portalSub: {
     fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.75)',
+    color: '#E2E8E4',
+  },
+  quickRecordPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.error,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  quickRecordText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  daysStripRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: SPACING.sm,
+    gap: 4,
+  },
+  dayPill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  dayPillSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  dayPillToday: {
+    borderColor: COLORS.primary,
+  },
+  dayPillName: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  dayPillNameSelected: {
+    color: '#fff',
+  },
+  dayPillNameToday: {
+    color: COLORS.primary,
+  },
+  todayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 3,
+  },
+  timetableContentCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 10,
+  },
+  timetableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  timetableDayTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  timetableCoursesList: {
+    gap: 8,
+  },
+  timetableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surfaceAlt,
+  },
+  timetableCourseMeta: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  timetableCourseTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  timetableCourseTiming: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  timetableActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timetableAttendanceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: RADIUS.sm,
+    backgroundColor: '#E8F5EE',
+    gap: 4,
+  },
+  timetableAttendanceText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  timetableLaunchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.primary,
+    gap: 4,
+  },
+  timetableLaunchText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  timetableEmptyText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 10,
   },
 });
