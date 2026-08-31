@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator,
-  FlatList, Alert, Linking, TextInput, ScrollView,
+  FlatList, Alert, Linking, TextInput, ScrollView, Modal, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,6 +16,15 @@ import { prepareExternalUrl } from '@/lib/links';
 import { EmptyState, FullScreenLoader, RetryState } from '@/components/ui';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { formatDuration, formatFileSize, deleteClassRecording } from '@/lib/classRecording';
+import {
+  isAudioCached,
+  getPlayableAudioUri,
+  downloadAudioForOffline,
+  deleteCachedAudio,
+  getCachedAudioSizeMb,
+} from '@/lib/offlineAudioCache';
+
+const PLAYBACK_SPEEDS = [0.75, 1.0, 1.25, 1.5, 2.0];
 
 type RecordingItem = {
   id: string;
@@ -50,16 +59,31 @@ export default function RecordingsScreen() {
   const [search, setSearch] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
 
-  // In-App Audio Player State
+  // Audio Playback State
   const [soundObj, setSoundObj] = useState<Audio.Sound | null>(null);
   const [activePlayingId, setActivePlayingId] = useState<string | null>(null);
   const [activePlayingItem, setActivePlayingItem] = useState<RecordingItem | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackLoadingId, setPlaybackLoadingId] = useState<string | null>(null);
-  const [playbackPositionSec, setPlaybackPositionSec] = useState(0);
-  const [playbackDurationSec, setPlaybackDurationSec] = useState(0);
+  const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
+  const [playbackDurationMs, setPlaybackDurationMs] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+  const [fullPlayerVisible, setFullPlayerVisible] = useState(false);
 
-  // Unload audio on unmount
+  // Offline Caching State
+  const [offlineMap, setOfflineMap] = useState<Record<string, boolean>>({});
+  const [downloadProgressMap, setDownloadProgressMap] = useState<Record<string, number>>({});
+
+  // Check offline cache status for all items
+  const checkOfflineCacheForItems = useCallback(async (recordingsList: RecordingItem[]) => {
+    const map: Record<string, boolean> = {};
+    for (const rec of recordingsList) {
+      map[rec.id] = await isAudioCached(rec.id);
+    }
+    setOfflineMap(map);
+  }, []);
+
+  // Cleanup audio on unmount
   useEffect(() => {
     return () => {
       if (soundObj) {
@@ -102,27 +126,31 @@ export default function RecordingsScreen() {
       });
       setItems(next);
       setCourseMap(nextMap);
+      await checkOfflineCacheForItems(next);
     } catch (error: unknown) {
-      logFirestoreFailure({ collection: 'recordings/courses', operation: 'get', query: 'recordings orderBy created_at desc and all courses', role: profile?.role, status: profile?.status }, error);
+      logFirestoreFailure(
+        {
+          collection: 'recordings/courses',
+          operation: 'get',
+          query: 'recordings orderBy created_at desc and all courses',
+          role: profile?.role,
+          status: profile?.status,
+        },
+        error
+      );
       setLoadError('Could not load recordings. Please refresh.');
     } finally {
       setLoading(false);
     }
-  }, [profile?.role, profile?.status]);
+  }, [profile?.role, profile?.status, checkOfflineCacheForItems]);
 
   useEffect(() => {
     fetchRecordings().catch(() => {});
   }, [fetchRecordings]);
 
-  // Audio Playback handler
+  // Audio Play / Pause / Load Handler
   const handleTogglePlayback = async (item: RecordingItem) => {
-    const rawUrl = prepareExternalUrl(item.file_url);
-    if (!rawUrl) {
-      Alert.alert('Invalid URL', 'Recording URL is missing or invalid.');
-      return;
-    }
-
-    // If tapping the same track that is already loaded
+    // If clicking same track that is already loaded
     if (activePlayingId === item.id && soundObj) {
       try {
         if (isPlaying) {
@@ -133,13 +161,11 @@ export default function RecordingsScreen() {
           setIsPlaying(true);
         }
       } catch {
-        // Fallback: reload
         await stopActiveSound();
       }
       return;
     }
 
-    // Switching to a new track or starting fresh
     setPlaybackLoadingId(item.id);
     try {
       if (soundObj) {
@@ -154,17 +180,21 @@ export default function RecordingsScreen() {
         staysActiveInBackground: true,
       });
 
+      // Get playable URI (local file:// if offline, otherwise remote https:// stream)
+      const rawRemoteUrl = prepareExternalUrl(item.file_url) || item.file_url;
+      const playUri = await getPlayableAudioUri(item.id, rawRemoteUrl);
+
       const { sound } = await Audio.Sound.createAsync(
-        { uri: rawUrl },
-        { shouldPlay: true },
+        { uri: playUri },
+        { shouldPlay: true, rate: playbackSpeed, shouldCorrectPitch: true },
         (status: AVPlaybackStatus) => {
           if (status.isLoaded) {
             setIsPlaying(status.isPlaying);
-            setPlaybackPositionSec(Math.floor((status.positionMillis || 0) / 1000));
-            setPlaybackDurationSec(Math.floor((status.durationMillis || 0) / 1000));
+            setPlaybackPositionMs(status.positionMillis || 0);
+            setPlaybackDurationMs(status.durationMillis || (item.duration_sec ? item.duration_sec * 1000 : 0));
             if (status.didJustFinish) {
               setIsPlaying(false);
-              setPlaybackPositionSec(0);
+              setPlaybackPositionMs(0);
             }
           }
         }
@@ -198,8 +228,86 @@ export default function RecordingsScreen() {
     setActivePlayingId(null);
     setActivePlayingItem(null);
     setIsPlaying(false);
-    setPlaybackPositionSec(0);
-    setPlaybackDurationSec(0);
+    setPlaybackPositionMs(0);
+    setPlaybackDurationMs(0);
+  };
+
+  // Interactive Seek Scrubber Handler
+  const handleSeekByRatio = async (ratio: number) => {
+    if (!soundObj || playbackDurationMs <= 0) return;
+    const targetMs = Math.max(0, Math.min(playbackDurationMs, Math.floor(ratio * playbackDurationMs)));
+    setPlaybackPositionMs(targetMs);
+    try {
+      await soundObj.setPositionAsync(targetMs);
+    } catch (err) {
+      console.warn('[Recordings] Seek failed:', err);
+    }
+  };
+
+  // 10s Forward / Rewind Handler
+  const handleSkipSeconds = async (deltaSec: number) => {
+    if (!soundObj || playbackDurationMs <= 0) return;
+    const deltaMs = deltaSec * 1000;
+    const targetMs = Math.max(0, Math.min(playbackDurationMs, playbackPositionMs + deltaMs));
+    setPlaybackPositionMs(targetMs);
+    try {
+      await soundObj.setPositionAsync(targetMs);
+    } catch (err) {
+      console.warn('[Recordings] Skip failed:', err);
+    }
+  };
+
+  // Playback Speed Handler
+  const handleSetSpeed = async (speed: number) => {
+    setPlaybackSpeed(speed);
+    if (soundObj) {
+      try {
+        await soundObj.setRateAsync(speed, true);
+      } catch (err) {
+        console.warn('[Recordings] SetRate failed:', err);
+      }
+    }
+  };
+
+  // Offline Download Handler
+  const handleDownloadOffline = async (item: RecordingItem) => {
+    const rawUrl = prepareExternalUrl(item.file_url);
+    if (!rawUrl) {
+      Alert.alert('Invalid URL', 'Recording download URL is missing.');
+      return;
+    }
+
+    try {
+      setDownloadProgressMap((prev) => ({ ...prev, [item.id]: 1 }));
+      await downloadAudioForOffline(item.id, rawUrl, (percent) => {
+        setDownloadProgressMap((prev) => ({ ...prev, [item.id]: percent }));
+      });
+      setOfflineMap((prev) => ({ ...prev, [item.id]: true }));
+      Alert.alert('Saved for Offline ✓', `"${item.title}" is saved on your device. You can listen without internet.`);
+    } catch (err: any) {
+      Alert.alert('Download Error', err?.message || 'Could not download audio.');
+    } finally {
+      setDownloadProgressMap((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    }
+  };
+
+  // Delete Local Offline Cache
+  const handleDeleteOffline = async (item: RecordingItem) => {
+    Alert.alert('Remove Offline Audio', `Delete the downloaded file for "${item.title}" to free up device space?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteCachedAudio(item.id);
+          setOfflineMap((prev) => ({ ...prev, [item.id]: false }));
+        },
+      },
+    ]);
   };
 
   const safeOpenExternal = async (rawUrl: string) => {
@@ -235,6 +343,7 @@ export default function RecordingsScreen() {
           }
           setUpdatingId(item.id);
           try {
+            await deleteCachedAudio(item.id);
             if (item.storage_path) {
               await deleteClassRecording(item.id, item.storage_path);
             } else {
@@ -242,7 +351,17 @@ export default function RecordingsScreen() {
             }
             await fetchRecordings();
           } catch (error: unknown) {
-            logFirestoreFailure({ collection: 'recordings', operation: 'delete', path: `recordings/${item.id}`, query: 'delete recording', role: profile?.role, status: profile?.status }, error);
+            logFirestoreFailure(
+              {
+                collection: 'recordings',
+                operation: 'delete',
+                path: `recordings/${item.id}`,
+                query: 'delete recording',
+                role: profile?.role,
+                status: profile?.status,
+              },
+              error
+            );
             Alert.alert('Delete Failed', 'Could not delete recording.');
           } finally {
             setUpdatingId(null);
@@ -256,19 +375,25 @@ export default function RecordingsScreen() {
     const base = Array.isArray(items) ? items : [];
     const q = search.trim().toLowerCase();
     return base.filter((item) => {
-      const matchSearch = !q
-        || item.title.toLowerCase().includes(q)
-        || (item.description || '').toLowerCase().includes(q)
-        || (item.teacher_name || '').toLowerCase().includes(q)
-        || (courseMap[item.course_id || ''] || '').toLowerCase().includes(q);
+      const matchSearch =
+        !q ||
+        item.title.toLowerCase().includes(q) ||
+        (item.description || '').toLowerCase().includes(q) ||
+        (item.teacher_name || '').toLowerCase().includes(q) ||
+        (courseMap[item.course_id || ''] || '').toLowerCase().includes(q);
       const matchCourse = !selectedCourseId || item.course_id === selectedCourseId;
       return matchSearch && matchCourse;
     });
   }, [items, search, selectedCourseId, courseMap]);
 
-  const courseOptions = useMemo(() =>
-    Object.entries(courseMap).map(([id, name]) => ({ id, name })),
-  [courseMap]);
+  const courseOptions = useMemo(
+    () => Object.entries(courseMap).map(([id, name]) => ({ id, name })),
+    [courseMap]
+  );
+
+  const progressRatio = playbackDurationMs > 0 ? Math.min(1, playbackPositionMs / playbackDurationMs) : 0;
+  const currentPosSec = Math.floor(playbackPositionMs / 1000);
+  const totalDurSec = Math.floor(playbackDurationMs / 1000);
 
   return (
     <View style={styles.container}>
@@ -279,7 +404,7 @@ export default function RecordingsScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Class Recordings</Text>
-          <Text style={styles.subtitle}>Listen to past Dars & Live Class sessions</Text>
+          <Text style={styles.subtitle}>Listen, revise & download Dars sessions</Text>
         </View>
         <TouchableOpacity style={styles.iconBtn} onPress={() => fetchRecordings()}>
           <Ionicons name="refresh" size={18} color={COLORS.primary} />
@@ -289,7 +414,13 @@ export default function RecordingsScreen() {
       {loading ? (
         <FullScreenLoader label="Loading recordings…" />
       ) : loadError ? (
-        <RetryState title="Unable to load recordings" message={loadError} onRetry={() => { void fetchRecordings(); }} />
+        <RetryState
+          title="Unable to load recordings"
+          message={loadError}
+          onRetry={() => {
+            void fetchRecordings();
+          }}
+        />
       ) : (
         <>
           {/* Search + Course filter */}
@@ -302,7 +433,11 @@ export default function RecordingsScreen() {
               onChangeText={setSearch}
             />
             {courseOptions.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courseFilterRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.courseFilterRow}
+              >
                 <TouchableOpacity
                   style={[styles.courseChip, !selectedCourseId && styles.courseChipActive]}
                   onPress={() => setSelectedCourseId('')}
@@ -331,11 +466,13 @@ export default function RecordingsScreen() {
             windowSize={5}
             data={sortedItems}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={[styles.list, activePlayingItem ? { paddingBottom: 110 } : null]}
+            contentContainerStyle={[styles.list, activePlayingItem ? { paddingBottom: 130 } : null]}
             renderItem={({ item }) => {
               const isThisPlaying = activePlayingId === item.id && isPlaying;
               const isThisLoaded = activePlayingId === item.id;
               const isLoadingThis = playbackLoadingId === item.id;
+              const isOffline = Boolean(offlineMap[item.id]);
+              const downloadPercent = downloadProgressMap[item.id];
               const canDelete = isAdmin || (isTeacher && item.teacher_id === user?.uid);
 
               return (
@@ -345,9 +482,7 @@ export default function RecordingsScreen() {
                     <View style={styles.cardInfo}>
                       <Text style={styles.cardTitle}>{item.title || 'Live Class Recording'}</Text>
                       <View style={styles.metaRow}>
-                        <Text style={styles.cardMetaCourse}>
-                          {courseMap[item.course_id || ''] || 'General Session'}
-                        </Text>
+                        <Text style={styles.cardMetaCourse}>{courseMap[item.course_id || ''] || 'General Session'}</Text>
                         {item.teacher_name ? (
                           <Text style={styles.cardMetaTeacher}> • {item.teacher_name}</Text>
                         ) : null}
@@ -368,8 +503,18 @@ export default function RecordingsScreen() {
                   </View>
 
                   {item.description ? (
-                    <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
+                    <Text style={styles.cardDesc} numberOfLines={2}>
+                      {item.description}
+                    </Text>
                   ) : null}
+
+                  {/* Offline Status Badge */}
+                  {isOffline && (
+                    <View style={styles.offlineNotice}>
+                      <Ionicons name="checkmark-circle" size={13} color={COLORS.success} />
+                      <Text style={styles.offlineNoticeText}>Saved on device • Plays without internet</Text>
+                    </View>
+                  )}
 
                   {/* Actions Row */}
                   <View style={styles.cardActionsRow}>
@@ -395,11 +540,30 @@ export default function RecordingsScreen() {
                       )}
                     </TouchableOpacity>
 
+                    {/* Offline Download / Delete Button */}
+                    {downloadPercent !== undefined ? (
+                      <View style={styles.downloadProgressBtn}>
+                        <ActivityIndicator size="small" color={COLORS.primary} />
+                        <Text style={styles.downloadPercentText}>{downloadPercent}%</Text>
+                      </View>
+                    ) : isOffline ? (
+                      <TouchableOpacity
+                        style={styles.cachedBtn}
+                        onPress={() => void handleDeleteOffline(item)}
+                      >
+                        <Ionicons name="cloud-done" size={16} color={COLORS.success} />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.downloadBtn}
+                        onPress={() => void handleDownloadOffline(item)}
+                      >
+                        <Ionicons name="download-outline" size={16} color={COLORS.primary} />
+                      </TouchableOpacity>
+                    )}
+
                     {/* External Link Option */}
-                    <TouchableOpacity
-                      style={styles.externalBtn}
-                      onPress={() => void safeOpenExternal(item.file_url)}
-                    >
+                    <TouchableOpacity style={styles.externalBtn} onPress={() => void safeOpenExternal(item.file_url)}>
                       <Ionicons name="open-outline" size={15} color={COLORS.textSecondary} />
                     </TouchableOpacity>
 
@@ -424,38 +588,224 @@ export default function RecordingsScreen() {
             ListEmptyComponent={
               <EmptyState
                 title="No recordings yet"
-                message={search || selectedCourseId ? 'No recordings match your filter.' : 'Live class recordings will appear here once teachers record audio sessions.'}
+                message={
+                  search || selectedCourseId
+                    ? 'No recordings match your filter.'
+                    : 'Live class recordings will appear here once teachers record audio sessions.'
+                }
                 icon="musical-notes-outline"
               />
             }
           />
 
-          {/* Sticky Bottom Mini-Player when a track is active */}
+          {/* Sticky Bottom Mini-Player with Scrubber & Skip Controls */}
           {activePlayingItem && (
-            <View style={[styles.miniPlayer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-              <View style={styles.miniPlayerContent}>
-                <View style={styles.miniPlayerIcon}>
-                  <Ionicons name="radio" size={18} color={COLORS.primary} />
+            <View style={[styles.miniPlayer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+              {/* Seek Scrubber Bar on top of miniplayer */}
+              <TouchableOpacity
+                activeOpacity={1}
+                style={styles.scrubberContainer}
+                onPress={(e) => {
+                  const x = e.nativeEvent.locationX;
+                  const width = Dimensions.get('window').width - 32;
+                  const ratio = Math.max(0, Math.min(1, x / width));
+                  void handleSeekByRatio(ratio);
+                }}
+              >
+                <View style={styles.scrubberTrack}>
+                  <View style={[styles.scrubberProgress, { width: `${progressRatio * 100}%` }]} />
+                  <View style={[styles.scrubberKnob, { left: `${progressRatio * 100}%` }]} />
                 </View>
-                <View style={styles.miniPlayerDetails}>
+              </TouchableOpacity>
+
+              <View style={styles.miniPlayerContent}>
+                {/* Expand Player Sheet Button */}
+                <TouchableOpacity
+                  style={styles.miniPlayerDetails}
+                  onPress={() => setFullPlayerVisible(true)}
+                  activeOpacity={0.8}
+                >
                   <Text style={styles.miniPlayerTitle} numberOfLines={1}>
                     {activePlayingItem.title || 'Playing Recording'}
                   </Text>
-                  <Text style={styles.miniPlayerSub}>
-                    {formatDuration(playbackPositionSec)} / {formatDuration(playbackDurationSec || activePlayingItem.duration_sec || 0)}
-                  </Text>
+                  <View style={styles.miniPlayerSubRow}>
+                    <Text style={styles.miniPlayerSub}>
+                      {formatDuration(currentPosSec)} / {formatDuration(totalDurSec || activePlayingItem.duration_sec || 0)}
+                    </Text>
+                    {offlineMap[activePlayingItem.id] && (
+                      <View style={styles.miniPlayerOfflineBadge}>
+                        <Ionicons name="cloud-done" size={10} color={COLORS.success} />
+                        <Text style={styles.miniPlayerOfflineText}>Offline</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                {/* Quick Controls Row */}
+                <View style={styles.miniPlayerControls}>
+                  <TouchableOpacity
+                    style={styles.skipBtn}
+                    onPress={() => void handleSkipSeconds(-10)}
+                  >
+                    <Ionicons name="play-back" size={16} color={COLORS.primary} />
+                    <Text style={styles.skipBtnText}>10s</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.miniPlayerPlayBtn}
+                    onPress={() => void handleTogglePlayback(activePlayingItem)}
+                  >
+                    <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color="#fff" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.skipBtn}
+                    onPress={() => void handleSkipSeconds(10)}
+                  >
+                    <Ionicons name="play-forward" size={16} color={COLORS.primary} />
+                    <Text style={styles.skipBtnText}>10s</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.speedPill}
+                    onPress={() => {
+                      const nextIdx = (PLAYBACK_SPEEDS.indexOf(playbackSpeed) + 1) % PLAYBACK_SPEEDS.length;
+                      void handleSetSpeed(PLAYBACK_SPEEDS[nextIdx]);
+                    }}
+                  >
+                    <Text style={styles.speedPillText}>{playbackSpeed}x</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.miniPlayerCloseBtn} onPress={() => void stopActiveSound()}>
+                    <Ionicons name="close" size={18} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.miniPlayerPlayBtn}
-                  onPress={() => void handleTogglePlayback(activePlayingItem)}
-                >
-                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.miniPlayerCloseBtn} onPress={() => void stopActiveSound()}>
-                  <Ionicons name="close" size={18} color={COLORS.textSecondary} />
-                </TouchableOpacity>
               </View>
             </View>
+          )}
+
+          {/* Full Screen / Sheet Audio Player Modal */}
+          {activePlayingItem && (
+            <Modal
+              visible={fullPlayerVisible}
+              animationType="slide"
+              transparent
+              onRequestClose={() => setFullPlayerVisible(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+                  {/* Modal Header */}
+                  <View style={styles.modalHeader}>
+                    <View style={styles.modalGrabber} />
+                    <TouchableOpacity
+                      style={styles.modalCloseBtn}
+                      onPress={() => setFullPlayerVisible(false)}
+                    >
+                      <Ionicons name="chevron-down" size={24} color={COLORS.textMain} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Artwork / Icon Box */}
+                  <View style={styles.modalArtwork}>
+                    <Ionicons name="mic-circle" size={64} color={COLORS.primary} />
+                    <Text style={styles.modalArtworkLabel}>Madrasa Live Session Audio</Text>
+                  </View>
+
+                  {/* Title & Teacher Details */}
+                  <View style={styles.modalMetaSection}>
+                    <Text style={styles.modalTitle} numberOfLines={2}>
+                      {activePlayingItem.title || 'Live Class Recording'}
+                    </Text>
+                    <Text style={styles.modalCourse}>
+                      {courseMap[activePlayingItem.course_id || ''] || 'General Course'} • {activePlayingItem.teacher_name || 'Ustaadha'}
+                    </Text>
+                    {offlineMap[activePlayingItem.id] && (
+                      <View style={styles.modalOfflineBadge}>
+                        <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
+                        <Text style={styles.modalOfflineText}>Saved Locally on Device (Zero Data Streaming)</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Interactive Scrubber Slider */}
+                  <View style={styles.modalScrubberSection}>
+                    <TouchableOpacity
+                      activeOpacity={1}
+                      style={styles.modalScrubberTouchArea}
+                      onPress={(e) => {
+                        const x = e.nativeEvent.locationX;
+                        const width = Dimensions.get('window').width - 48;
+                        const ratio = Math.max(0, Math.min(1, x / width));
+                        void handleSeekByRatio(ratio);
+                      }}
+                    >
+                      <View style={styles.modalScrubberTrack}>
+                        <View style={[styles.modalScrubberFill, { width: `${progressRatio * 100}%` }]} />
+                        <View style={[styles.modalScrubberThumb, { left: `${progressRatio * 100}%` }]} />
+                      </View>
+                    </TouchableOpacity>
+                    <View style={styles.modalTimeRow}>
+                      <Text style={styles.modalTimeText}>{formatDuration(currentPosSec)}</Text>
+                      <Text style={styles.modalTimeText}>
+                        -{formatDuration(Math.max(0, totalDurSec - currentPosSec))}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Large Controls Row */}
+                  <View style={styles.modalControlsRow}>
+                    <TouchableOpacity
+                      style={styles.modalSkipBtn}
+                      onPress={() => void handleSkipSeconds(-10)}
+                    >
+                      <Ionicons name="play-back" size={24} color={COLORS.primary} />
+                      <Text style={styles.modalSkipText}>-10s</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.modalMainPlayBtn}
+                      onPress={() => void handleTogglePlayback(activePlayingItem)}
+                    >
+                      <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color="#fff" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.modalSkipBtn}
+                      onPress={() => void handleSkipSeconds(10)}
+                    >
+                      <Ionicons name="play-forward" size={24} color={COLORS.primary} />
+                      <Text style={styles.modalSkipText}>+10s</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Speed Selector Pills */}
+                  <View style={styles.modalSpeedSection}>
+                    <Text style={styles.modalSpeedLabel}>Playback Speed:</Text>
+                    <View style={styles.modalSpeedPillsRow}>
+                      {PLAYBACK_SPEEDS.map((spd) => (
+                        <TouchableOpacity
+                          key={spd}
+                          style={[
+                            styles.modalSpeedChoice,
+                            playbackSpeed === spd && styles.modalSpeedChoiceActive,
+                          ]}
+                          onPress={() => void handleSetSpeed(spd)}
+                        >
+                          <Text
+                            style={[
+                              styles.modalSpeedChoiceText,
+                              playbackSpeed === spd && styles.modalSpeedChoiceTextActive,
+                            ]}
+                          >
+                            {spd}x
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           )}
         </>
       )}
@@ -521,6 +871,20 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   durationText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
+  offlineNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 5,
+  },
+  offlineNoticeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065F46',
+  },
   cardActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -545,6 +909,40 @@ const styles = StyleSheet.create({
   },
   playBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   playBtnTextActive: { color: '#fff' },
+  downloadBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+    backgroundColor: '#E8F5EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cachedBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  downloadProgressBtn: {
+    width: 44,
+    height: 36,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#E8F5EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  downloadPercentText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
   externalBtn: {
     width: 36,
     height: 36,
@@ -586,12 +984,18 @@ const styles = StyleSheet.create({
   },
   courseFilterRow: { gap: 8, paddingBottom: 4 },
   courseChip: {
-    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background,
-    borderRadius: RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
   },
   courseChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceAlt },
   courseChipText: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
   courseChipTextActive: { color: COLORS.primary },
+
+  /* Mini-Player Styles */
   miniPlayer: {
     position: 'absolute',
     bottom: 0,
@@ -600,36 +1004,254 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingHorizontal: SPACING.md,
-    paddingTop: 10,
     ...SHADOWS.header,
+  },
+  scrubberContainer: {
+    height: 12,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
+  },
+  scrubberTrack: {
+    height: 3,
+    backgroundColor: '#D1E7DD',
+    borderRadius: 2,
+    position: 'relative',
+  },
+  scrubberProgress: {
+    height: 3,
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+  },
+  scrubberKnob: {
+    position: 'absolute',
+    top: -4,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: COLORS.primary,
+    marginLeft: -5,
   },
   miniPlayerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
-  miniPlayerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E8F5EE',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingTop: 4,
+    gap: 8,
   },
   miniPlayerDetails: { flex: 1 },
   miniPlayerTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textMain },
-  miniPlayerSub: { fontSize: 11, color: COLORS.primary, fontWeight: '600', marginTop: 1 },
+  miniPlayerSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
+  miniPlayerSub: { fontSize: 11, color: COLORS.primary, fontWeight: '600' },
+  miniPlayerOfflineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: RADIUS.sm,
+    gap: 2,
+  },
+  miniPlayerOfflineText: { fontSize: 9, fontWeight: '700', color: '#065F46' },
+  miniPlayerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  skipBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  skipBtnText: { fontSize: 8, fontWeight: '700', color: COLORS.primary },
   miniPlayerPlayBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  miniPlayerCloseBtn: {
-    padding: 6,
+  speedPill: {
+    backgroundColor: '#E8F5EE',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+  },
+  speedPillText: { fontSize: 10, fontWeight: '700', color: COLORS.primary },
+  miniPlayerCloseBtn: { padding: 4 },
+
+  /* Modal Full Player Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 12,
+    gap: SPACING.md,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    position: 'relative',
+    paddingBottom: 4,
+  },
+  modalGrabber: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.border,
+  },
+  modalCloseBtn: {
+    position: 'absolute',
+    right: 0,
+    top: -4,
+    padding: 4,
+  },
+  modalArtwork: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.lg,
+    backgroundColor: '#F0F7F4',
+    borderRadius: RADIUS.lg,
+    gap: 8,
+  },
+  modalArtworkLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  modalMetaSection: {
+    gap: 4,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+  },
+  modalCourse: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  modalOfflineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 4,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  modalOfflineText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065F46',
+  },
+  modalScrubberSection: {
+    gap: 6,
+  },
+  modalScrubberTouchArea: {
+    height: 24,
+    justifyContent: 'center',
+  },
+  modalScrubberTrack: {
+    height: 4,
+    backgroundColor: '#D1E7DD',
+    borderRadius: 2,
+    position: 'relative',
+  },
+  modalScrubberFill: {
+    height: 4,
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+  },
+  modalScrubberThumb: {
+    position: 'absolute',
+    top: -6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    marginLeft: -8,
+  },
+  modalTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalTimeText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  modalControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+    paddingVertical: SPACING.xs,
+  },
+  modalSkipBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  modalSkipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  modalMainPlayBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.card,
+  },
+  modalSpeedSection: {
+    gap: 8,
+    paddingTop: 4,
+  },
+  modalSpeedLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  modalSpeedPillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modalSpeedChoice: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSpeedChoiceActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  modalSpeedChoiceText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  modalSpeedChoiceTextActive: {
+    color: '#fff',
   },
 });
+
 
