@@ -8,6 +8,7 @@ import {
   View, Text, StyleSheet, FlatList, StatusBar, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, Modal,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -77,6 +78,7 @@ function formatRelativeTime(item: NotificationItem): string {
 
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
@@ -197,6 +199,30 @@ export default function NotificationsScreen() {
       });
     } catch (err: unknown) {
       logFirestoreFailure({ collection: 'notifications', operation: 'update', query: `doc notifications/${item.id} mark unread` }, err);
+    }
+  };
+
+  const handlePressNotificationItem = (item: NotificationItem) => {
+    if (user?.uid && !item.read?.[user.uid]) {
+      void markAsRead(item);
+    }
+    const route = (item as any).route;
+    if (route && typeof route === 'string') {
+      router.push(route as any);
+      return;
+    }
+    const titleLower = item.title.toLowerCase();
+    const msgLower = (item.message || '').toLowerCase();
+    if (titleLower.includes('live') || titleLower.includes('class') || msgLower.includes('live class')) {
+      router.push('/live-class' as any);
+    } else if (titleLower.includes('recording') || titleLower.includes('audio') || titleLower.includes('dars')) {
+      router.push('/recordings' as any);
+    } else if (titleLower.includes('quiz') || titleLower.includes('sabaq') || titleLower.includes('assessment')) {
+      router.push('/(tabs)/quiz' as any);
+    } else if (titleLower.includes('library') || titleLower.includes('book') || titleLower.includes('pdf')) {
+      router.push('/(tabs)/library' as any);
+    } else if (titleLower.includes('course') || titleLower.includes('syllabus')) {
+      router.push('/(tabs)/courses' as any);
     }
   };
 
@@ -571,7 +597,7 @@ export default function NotificationsScreen() {
                     isPinned && styles.cardPinned,
                   ]}
                   testID={`notification-${item.id}`}
-                  onPress={() => isUnread ? markAsRead(item) : null}
+                  onPress={() => handlePressNotificationItem(item)}
                   onLongPress={() => togglePin(item.id)}
                 >
                   {isUnread && <View style={[styles.unreadLeftBar, { backgroundColor: catInfo.color }]} />}

@@ -41,6 +41,29 @@ type SentNotificationItem = {
   category?: string;
 };
 
+const QUICK_TEMPLATES = [
+  {
+    label: '🔴 Live Class Alert',
+    title: '🔴 Live Class Starting Now',
+    body: 'Your live interactive class session is now active. Please join the classroom on time.',
+  },
+  {
+    label: '🎙️ Dars Recording',
+    title: '🎙️ New Class Recording Available',
+    body: 'The latest audio recording and Tajweed notes for your course have been published.',
+  },
+  {
+    label: '🏆 Quiz & Sabaq Due',
+    title: '🏆 Sabaq & Quiz Assessment Reminder',
+    body: 'Please complete your pending Tajweed assessment before the deadline.',
+  },
+  {
+    label: '📢 Madrasa Notice',
+    title: '📢 Madrasa General Announcement',
+    body: 'Important notice regarding upcoming classes and Madrasa schedules.',
+  },
+];
+
 export default function AdminSendPushScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -414,10 +437,33 @@ export default function AdminSendPushScreen() {
           )}
         </View>
 
+        {/* Quick Templates Section */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>2. Quick Preset Templates</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.templateScroll}
+          >
+            {QUICK_TEMPLATES.map((tmpl) => (
+              <TouchableOpacity
+                key={tmpl.label}
+                style={styles.templateChip}
+                onPress={() => {
+                  setTitle(tmpl.title);
+                  setBody(tmpl.body);
+                }}
+              >
+                <Text style={styles.templateChipText}>{tmpl.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
         {/* Compose Notification */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>2. Compose Message</Text>
+            <Text style={styles.sectionTitle}>3. Compose Message</Text>
             <TouchableOpacity onPress={() => setPreviewVisible(true)} style={styles.previewBtnSmall}>
               <Ionicons name="eye" size={14} color={COLORS.primary} />
               <Text style={styles.previewBtnText}>Live Preview</Text>
@@ -813,6 +859,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#065F46',
+  },
+  templateScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  templateChip: {
+    backgroundColor: '#E8F5EE',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+  },
+  templateChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   previewBtnSmall: {
     flexDirection: 'row',

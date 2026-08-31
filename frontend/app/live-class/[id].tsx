@@ -38,6 +38,7 @@ import {
 import type { Audio } from 'expo-av';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { goBackOrReplace } from '@/lib/navigation';
+import { dispatchNotification } from '@/lib/dispatchNotification';
 
 export default function LiveClassroomScreen() {
   const { id } = useLocalSearchParams();
@@ -67,6 +68,10 @@ export default function LiveClassroomScreen() {
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
   const [attendanceSubmittedCount, setAttendanceSubmittedCount] = useState<number | null>(null);
+
+  // Live Push Notification State
+  const [notifyingStudents, setNotifyingStudents] = useState(false);
+  const [notifiedStudents, setNotifiedStudents] = useState(false);
 
   useEffect(() => {
     if (!classId) {
@@ -276,6 +281,50 @@ export default function LiveClassroomScreen() {
       Alert.alert('Attendance Error', err?.message || 'Failed to submit attendance.');
     } finally {
       setSavingAttendance(false);
+    }
+  };
+
+  const handleSendPushAlertToStudents = async () => {
+    if (!liveClass || !user || !profile) return;
+    setNotifyingStudents(true);
+    try {
+      let recipientUids: string[] = [];
+      if (liveClass.course_id) {
+        const enrollSnap = await getDocs(
+          query(
+            collection(db, 'enrollments'),
+            where('course_id', '==', liveClass.course_id),
+            where('status', '==', 'active')
+          )
+        );
+        recipientUids = enrollSnap.docs.map((d) => d.data().user_id).filter(Boolean);
+      }
+      if (recipientUids.length === 0) {
+        const usersSnap = await getDocs(
+          query(collection(db, 'users'), where('role', '==', 'student'), where('status', '==', 'approved'))
+        );
+        recipientUids = usersSnap.docs.map((d) => d.id).filter(Boolean);
+      }
+
+      await dispatchNotification({
+        channel: 'live_classes',
+        event: 'live_class_started',
+        title: `🔴 Live Class: ${liveClass.title}`,
+        body: `Ustaadha ${profile.name || liveClass.teacher_name || 'Faculty'} is now live. Tap to join class now!`,
+        recipientIds: recipientUids,
+        route: { pathname: `/live-class/${classId}` },
+        dedupeId: `live_alert_${classId}_${Date.now()}`,
+      });
+
+      setNotifiedStudents(true);
+      Alert.alert(
+        'Push Alert Sent 🔔',
+        `Instant notification dispatched to ${recipientUids.length} enrolled students.`
+      );
+    } catch (err: any) {
+      Alert.alert('Alert Error', err?.message || 'Failed to dispatch push notification.');
+    } finally {
+      setNotifyingStudents(false);
     }
   };
 
@@ -593,6 +642,30 @@ export default function LiveClassroomScreen() {
                   ? `Attendance Saved (${attendanceSubmittedCount} Present) • Tap to Edit`
                   : 'Take Class Attendance (1-Tap Register)'}
               </Text>
+            </TouchableOpacity>
+
+            {/* Instant Push Alert to Enrolled Students */}
+            <TouchableOpacity
+              style={[styles.notifyStudentsBtn, notifyingStudents && { opacity: 0.7 }]}
+              onPress={handleSendPushAlertToStudents}
+              disabled={notifyingStudents}
+            >
+              {notifyingStudents ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <>
+                  <Ionicons
+                    name={notifiedStudents ? 'notifications-circle' : 'notifications-outline'}
+                    size={17}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.notifyStudentsText}>
+                    {notifiedStudents
+                      ? '🔔 Push Alert Sent (Tap to Resend)'
+                      : '🔔 Send Push Alert to Students'}
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         ) : (
@@ -1213,6 +1286,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.primary,
+  },
+  notifyStudentsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: RADIUS.full,
+    paddingVertical: 10,
+    gap: 6,
+    marginTop: 2,
+  },
+  notifyStudentsText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B45309',
   },
   attModalOverlay: {
     flex: 1,
