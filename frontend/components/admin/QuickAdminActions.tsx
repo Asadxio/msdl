@@ -39,6 +39,7 @@ const ACTION_CATEGORIES: ActionCategory[] = [
       { id: 'courses', label: 'Manage Courses', subLabel: 'LMS Curriculum', icon: 'school-outline', route: '/admin/manage-academics', color: '#8B5CF6' },
       { id: 'library', label: 'Manage Library', subLabel: 'Publish Books', icon: 'book-outline', route: '/admin/add-book', color: '#06B6D4' },
       { id: 'attendance', label: 'Class Attendance', subLabel: 'Student Logs', icon: 'calendar-outline', route: '/attendance', color: '#6366F1' },
+      { id: 'certificates', label: 'Sanads & Credentials', subLabel: 'Academic Certificates', icon: 'ribbon-outline', route: '/(tabs)/certificate', color: '#D97706' },
     ],
   },
   {

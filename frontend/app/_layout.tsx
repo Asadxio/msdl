@@ -469,6 +469,7 @@ export default function RootLayout() {
             <Stack.Screen name="islamic-dashboard" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="islamic-calendar" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="prayer-times" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="tasbeeh" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />

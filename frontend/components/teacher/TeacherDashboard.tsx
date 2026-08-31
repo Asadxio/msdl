@@ -400,6 +400,48 @@ export function TeacherDashboard({
                 <Text style={styles.actionSubtitle}>Direct 1-on-1 guidance</Text>
               </View>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/(tabs)/certificate' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FEF9C3' }]}>
+                <Ionicons name="ribbon-outline" size={20} color="#CA8A04" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Issue Sanads / Certs</Text>
+                <Text style={styles.actionSubtitle}>Official graduation credentials</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/tasbeeh' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="finger-print-outline" size={20} color="#059669" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Smart Tasbeeh</Text>
+                <Text style={styles.actionSubtitle}>Daily Dhikr & Wazaif</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/admin/manage-academics' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="school-outline" size={20} color="#2563EB" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Manage Academics</Text>
+                <Text style={styles.actionSubtitle}>Curriculum & module structure</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
 

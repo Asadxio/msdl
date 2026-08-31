@@ -531,14 +531,18 @@ export default function HomeScreen() {
           <Text style={styles.sectionTitle}>Quick Access</Text>
           <View style={styles.quickAccessGrid}>
              {[
-               { name: 'Courses', icon: 'book', route: '/(tabs)/courses' },
+               { name: 'My Courses', icon: 'book', route: '/(tabs)/courses' },
+               { name: 'Smart Tasbeeh', icon: 'finger-print', route: '/tasbeeh' },
+               { name: 'Sanad / Cert', icon: 'ribbon', route: '/(tabs)/certificate' },
                { name: 'Pay Fees', icon: 'card', route: '/payment' },
+               { name: 'Live Classes', icon: 'videocam', route: '/live-class' },
+               { name: 'Dars Audio', icon: 'headset', route: '/recordings' },
                { name: 'Library', icon: 'library', route: '/(tabs)/library' },
                { name: 'Quiz', icon: 'help-circle', route: '/(tabs)/quiz' },
-               { name: 'Prayer', icon: 'time', route: '/prayer-times' },
-               { name: 'Qibla', icon: 'compass', route: '/qibla' },
-               { name: 'Live Classes', icon: 'videocam', route: '/live-class' },
-               { name: 'View All', icon: 'grid', route: '/more' },
+               { name: 'Prayer Times', icon: 'time', route: '/prayer-times' },
+               { name: 'Qibla Finder', icon: 'compass', route: '/qibla' },
+               { name: 'Hijri Calendar', icon: 'calendar', route: '/islamic-calendar' },
+               { name: 'All Services', icon: 'grid', route: '/more' },
              ].map((item, idx) => (
                <TouchableOpacity 
                  key={idx} 
@@ -550,7 +554,7 @@ export default function HomeScreen() {
                  activeOpacity={0.7}
                >
                  <View style={styles.quickAccessIcon}>
-                   <Ionicons name={item.icon as any} size={24} color={COLORS.primary} />
+                   <Ionicons name={item.icon as any} size={22} color={COLORS.primary} />
                  </View>
                  <Text style={styles.quickAccessText} numberOfLines={1}>{item.name}</Text>
                </TouchableOpacity>
