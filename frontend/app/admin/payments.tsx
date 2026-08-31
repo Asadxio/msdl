@@ -20,6 +20,8 @@ import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { adminPaymentAction, adminRefundPayment } from '@/lib/paymentAdminFunctions';
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { IslamicReceiptModal } from '@/components/IslamicReceiptModal';
+import type { FeeReceiptData } from '@/lib/receiptGenerator';
 
 type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
 
@@ -69,6 +71,8 @@ export default function AdminPaymentsScreen() {
   const [cursor, setCursor] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | PaymentStatus>('all');
   const [fetching, setFetching] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<FeeReceiptData | null>(null);
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
 
   const loadPayments = useCallback(async (direction: 'reset' | 'next' | 'prev' = 'reset') => {
     if (!isAdmin || fetching) return;
@@ -235,8 +239,31 @@ export default function AdminPaymentsScreen() {
                   <Text style={styles.time}>Created: {formatDate(item)}</Text>
 
                   {/* Actions based on payment state */}
-                  {isSucceeded && item.provider_payment_id ? (
-                    <View style={styles.actions}>
+                  <View style={styles.actions}>
+                    {/* View Official Receipt */}
+                    <TouchableOpacity
+                      style={styles.receiptBtn}
+                      onPress={() => {
+                        setSelectedReceipt({
+                          receiptId: `MSLB-REC-${item.id.slice(-6).toUpperCase()}`,
+                          studentName: item.user_name || 'Student / Donor',
+                          studentId: item.user_id,
+                          courseName: item.course_id,
+                          amount: Number(item.amount || 0),
+                          category: item.payment_type || item.type || 'fees',
+                          paymentMethod: item.provider ? 'Razorpay Online' : 'Direct Payment',
+                          transactionId: item.provider_payment_id || item.id,
+                          issueDateGregorian: formatDate(item) || new Date().toLocaleDateString(),
+                          status: isSucceeded ? 'Verified & Paid' : isRefunded ? 'Refunded' : 'Pending',
+                        });
+                        setReceiptModalVisible(true);
+                      }}
+                    >
+                      <Ionicons name="receipt-outline" size={14} color={COLORS.primary} />
+                      <Text style={styles.receiptBtnText}>Official Receipt</Text>
+                    </TouchableOpacity>
+
+                    {isSucceeded && item.provider_payment_id ? (
                       <TouchableOpacity
                         style={[styles.refundBtn, updatingId === item.id && styles.disabledBtn]}
                         onPress={() => handleRefund(item)}
@@ -245,12 +272,10 @@ export default function AdminPaymentsScreen() {
                         {updatingId === item.id ? (
                           <ActivityIndicator size="small" color="#DC2626" />
                         ) : (
-                          <Text style={styles.refundText}>Issue Razorpay Refund</Text>
+                          <Text style={styles.refundText}>Issue Refund</Text>
                         )}
                       </TouchableOpacity>
-                    </View>
-                  ) : isPending ? (
-                    <View style={styles.actions}>
+                    ) : isPending ? (
                       <TouchableOpacity
                         style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]}
                         onPress={() => handleLegacyReject(item.id)}
@@ -258,8 +283,8 @@ export default function AdminPaymentsScreen() {
                       >
                         <Text style={styles.rejectText}>Reject Pending</Text>
                       </TouchableOpacity>
-                    </View>
-                  ) : null}
+                    ) : null}
+                  </View>
                 </View>
               );
             }}
@@ -272,6 +297,16 @@ export default function AdminPaymentsScreen() {
           />
         </>
       )}
+
+      {/* Islamic Fee Receipt Modal */}
+      <IslamicReceiptModal
+        visible={receiptModalVisible}
+        receipt={selectedReceipt}
+        onClose={() => {
+          setReceiptModalVisible(false);
+          setSelectedReceipt(null);
+        }}
+      />
     </View>
   );
 }
@@ -302,6 +337,23 @@ const styles = StyleSheet.create({
   badgeTextPending: { color: '#92400E' },
   badgeTextRefunded: { color: '#991B1B' },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 8 },
+  receiptBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5EE',
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+    borderRadius: RADIUS.md,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  receiptBtnText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 12,
+  },
   refundBtn: { flex: 1, backgroundColor: '#FEE2E2', borderRadius: RADIUS.md, paddingVertical: 8, alignItems: 'center' },
   refundText: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
   rejectBtn: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: RADIUS.md, paddingVertical: 8, alignItems: 'center' },
