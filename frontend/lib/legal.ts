@@ -5,6 +5,7 @@ export type LegalDocKey = 'terms' | 'privacy' | 'community';
 export type LegalDocDefinition = {
   key: LegalDocKey;
   title: string;
+  arabicTitle: string;
   version: string;
   effectiveAt: string;
   summary: string;
@@ -15,25 +16,28 @@ export const LEGAL_DOCS: Record<LegalDocKey, LegalDocDefinition> = {
   terms: {
     key: 'terms',
     title: 'Terms & Conditions',
-    version: '2026.05.31',
-    effectiveAt: '2026-05-31T00:00:00.000Z',
-    summary: 'Defines acceptable use, eligibility, billing, and platform obligations.',
+    arabicTitle: 'الشُّرُوطُ وَالأَحْكَام',
+    version: '2026.09.01',
+    effectiveAt: '2026-09-01T00:00:00.000Z',
+    summary: 'Defines acceptable use, Islamic classroom adab, live Purdah classes, fees, and institutional regulations.',
     required: true,
   },
   privacy: {
     key: 'privacy',
     title: 'Privacy Policy',
-    version: '2026.05.31',
-    effectiveAt: '2026-05-31T00:00:00.000Z',
-    summary: 'Explains personal data use, sharing, retention, and user rights.',
+    arabicTitle: 'سِيَاسَةُ الخُصُوصِيَّة',
+    version: '2026.09.01',
+    effectiveAt: '2026-09-01T00:00:00.000Z',
+    summary: 'Explains protection of student/teacher personal data, audio recordings, fee records, and privacy safeguards.',
     required: true,
   },
   community: {
     key: 'community',
     title: 'Community Guidelines',
-    version: '2026.05.31',
-    effectiveAt: '2026-05-31T00:00:00.000Z',
-    summary: 'Safety standards, anti-harassment, and classroom behavior requirements.',
+    arabicTitle: 'إِرْشَادَاتُ المُجْتَمَعِ الإِسْلَامِيّ',
+    version: '2026.09.01',
+    effectiveAt: '2026-09-01T00:00:00.000Z',
+    summary: 'Islamic safety standards, Purdah sanctity, anti-harassment, respectful speech, and moderation rules.',
     required: true,
   },
 };

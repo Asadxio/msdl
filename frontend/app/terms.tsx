@@ -1,83 +1,101 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LegalDocScreen } from '@/components/ui';
 import { LEGAL_DOCS } from '@/lib/legal';
+import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 
 export default function TermsScreen() {
   const doc = LEGAL_DOCS.terms;
+
   return (
-    <LegalDocScreen title={doc.title} subtitle={`Version ${doc.version} • Effective ${doc.effectiveAt.slice(0, 10)}`}>
-      <Text accessibilityRole="header" allowFontScaling>
-        Platform Purpose
-      </Text>
-      <Text accessibilityRole="text" allowFontScaling>
-        Madarsa Tus Salikat Lil Banat provides Islamic education services, course materials, live classes, assignments,
-        chat, status updates, payment confirmation, donation support, and administrative tools for approved students,
-        teachers, and administrators.
+    <LegalDocScreen
+      title={doc.title}
+      subtitle={`Version ${doc.version} • Effective ${doc.effectiveAt.slice(0, 10)}`}
+      arabicTitle={doc.arabicTitle}
+      iconName="document-text"
+    >
+      {/* ─── Mission Banner ─── */}
+      <View style={styles.highlightBanner}>
+        <Ionicons name="book" size={20} color="#005F46" />
+        <Text style={styles.highlightText}>
+          By enrolling in Madrasatu-s-Salikat Lil Banat, students, parents, and teachers pledge to uphold Islamic values, academic integrity, and mutual respect.
+        </Text>
+      </View>
+
+      {/* 1. Platform Purpose */}
+      <Text style={styles.sectionHeading}>1. Educational Purpose & Islamic Framework</Text>
+      <Text style={styles.bodyText}>
+        Madrasatu-s-Salikat Lil Banat provides authentic Islamic education, Quran recitation with Tajweed, Islamic jurisprudence (Fiqh), Seerah, and Hadith studies. All curriculum materials, live audio lectures, and interactive resources are curated according to the Quran and authentic Sunnah.
       </Text>
 
-      <Text accessibilityRole="header" allowFontScaling>
-        Account Responsibilities
-      </Text>
-      <Text accessibilityRole="text" allowFontScaling>
-        You must provide accurate registration, profile, and payment information, keep your login private, and use only
-        your own account. Parents or guardians should supervise learners who need adult support. Accounts may require
-        email verification and admin approval before full access is available.
+      {/* 2. Account Eligibility & Responsibilities */}
+      <Text style={styles.sectionHeading}>2. Enrollment, Verification & Account Safety</Text>
+      <Text style={styles.bodyText}>
+        Learners must register with verified credentials. Parents or guardians must supervise minor learners. Accounts are personal and non-transferable. You are responsible for safeguarding your login credentials and must immediately report unauthorized access.
       </Text>
 
-      <Text accessibilityRole="header" allowFontScaling>
-        Acceptable Use and Classroom Conduct
-      </Text>
-      <Text accessibilityRole="text" allowFontScaling>
-        You agree to behave respectfully in courses, live classes, chats, comments, media uploads, and status posts. Do
-        not harass others, impersonate someone, share illegal or unsafe content, disrupt classes, spam, cheat, misuse
-        uploads, or attempt to access admin, teacher, payment, or student data without permission.
+      {/* 3. Live Purdah Classrooms & Audio Etiquette */}
+      <Text style={styles.sectionHeading}>3. Live Purdah Classrooms & Audio Code</Text>
+      <Text style={styles.bodyText}>
+        Our live classrooms prioritize student modesty and focused learning. Students must enter on time, observe Islamic adab, unmute only when invited by the Ustaadha for recitation (Dars/Sabaq), and maintain a quiet, dignified learning environment. Recording, screenshotting, or sharing class audio outside the platform without permission is strictly prohibited.
       </Text>
 
-      <Text accessibilityRole="header" allowFontScaling>
-        Content Rules and Moderation
-      </Text>
-      <Text accessibilityRole="text" allowFontScaling>
-        Course work, messages, images, videos, documents, and status posts may be reviewed by authorized teachers or
-        administrators for safety, abuse prevention, classroom management, support, or legal compliance. We may remove
-        content, restrict features, suspend accounts, or escalate serious issues when platform rules are violated.
+      {/* 4. Academic Integrity & Sanad Issuance */}
+      <Text style={styles.sectionHeading}>4. Assessments, Quizzes & Official Sanads</Text>
+      <Text style={styles.bodyText}>
+        All quizzes and assessments must be taken honestly without cheating or unfair assistance. Official Sanads (Certificates of Academic Excellence) are awarded based on verified scores (minimum 60% passing mark) and attendance compliance.
       </Text>
 
-      <Text accessibilityRole="header" allowFontScaling>
-        Payments and Donations
-      </Text>
-      <Text accessibilityRole="text" allowFontScaling>
-        Fees and donations must be submitted truthfully with valid reference details. Payment or donation records may be
-        held for manual admin verification before enrollment, access, receipts, or other benefits are updated. Fraudulent,
-        duplicate, disputed, or unverifiable payments may be rejected, delayed, refunded, or escalated according to the
-        madrasa payment process.
+      {/* 5. Tuition Fees, Donations & Receipts */}
+      <Text style={styles.sectionHeading}>5. Tuition Fees, Receipts & Donations</Text>
+      <Text style={styles.bodyText}>
+        Course tuition fees and voluntary contributions must be made through authorized payment channels. Official electronic fee vouchers with institutional verification numbers are issued upon reconciliation. Fee dispute or refund requests must be routed through the Academic Accounts Directorate.
       </Text>
 
-      <Text accessibilityRole="header" allowFontScaling>
-        Suspension and Termination
-      </Text>
-      <Text accessibilityRole="text" allowFontScaling>
-        We may limit, suspend, or deactivate access for safety concerns, non-payment, fraud, abuse, repeated classroom
-        disruption, policy violations, or legal requirements. Users may request data export or account deletion through
-        Settings → Data & Privacy, subject to retention needed for legal, safety, accounting, or dispute records.
+      {/* 6. Intellectual Property & Dars Materials */}
+      <Text style={styles.sectionHeading}>6. Intellectual Property & Course Materials</Text>
+      <Text style={styles.bodyText}>
+        All Islamic study guides, audio lectures, Tajweed rulebooks, and Dars notes provided in the Library are the property of Madrasatu-s-Salikat Lil Banat. Materials are licensed strictly for personal educational use and may not be sold or redistributed.
       </Text>
 
-      <Text accessibilityRole="header" allowFontScaling>
-        Service Availability and Liability
-      </Text>
-      <Text accessibilityRole="text" allowFontScaling>
-        We work to keep the platform reliable, but internet, device, Firebase, Railway, Agora, notification, storage, or
-        payment-provider issues may interrupt service. To the extent allowed by law, the platform is provided without a
-        guarantee of uninterrupted access, and liability is limited to the amount permitted by applicable law.
-      </Text>
-
-      <Text accessibilityRole="header" allowFontScaling>
-        Contact and Support
-      </Text>
-      <Text accessibilityRole="text" allowFontScaling>
-        For account, privacy, payment, deletion, or safety requests, use Settings → Data & Privacy or contact the madrasa
-        administration through the official support channel provided to enrolled users.
+      {/* 7. Suspension & Termination */}
+      <Text style={styles.sectionHeading}>7. Policy Enforcement & Account Termination</Text>
+      <Text style={styles.bodyText}>
+        The Madrasa reserves the right to restrict, suspend, or terminate access for individuals who violate Islamic adab, harass teachers/students, attempt fraud, or disrupt classrooms.
       </Text>
     </LegalDocScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  highlightBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#E8F5EE',
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.xs,
+  },
+  highlightText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#005F46',
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  sectionHeading: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 8,
+  },
+  bodyText: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 20,
+  },
+});

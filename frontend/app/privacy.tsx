@@ -1,115 +1,102 @@
 import React from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, StatusBar, TouchableOpacity,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { LegalDocScreen } from '@/components/ui';
 import { LEGAL_DOCS } from '@/lib/legal';
+import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { goBackOrReplace } from '@/lib/navigation';
 
 export default function PrivacyScreen() {
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const policy = LEGAL_DOCS.privacy;
+  const doc = LEGAL_DOCS.privacy;
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => goBackOrReplace(router, '/more')} accessibilityRole="button" accessibilityLabel="Go back">
-          <Ionicons name="chevron-back" size={18} color={COLORS.primary} />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Privacy Policy</Text>
-        <Text style={styles.subtitle}>Version {policy.version} • Effective {policy.effectiveAt.slice(0, 10)}</Text>
+    <LegalDocScreen
+      title={doc.title}
+      subtitle={`Version ${doc.version} • Effective ${doc.effectiveAt.slice(0, 10)}`}
+      arabicTitle={doc.arabicTitle}
+      iconName="lock-closed"
+    >
+      {/* ─── Commitment Notice ─── */}
+      <View style={styles.highlightBanner}>
+        <Ionicons name="shield-checkmark" size={20} color="#005F46" />
+        <Text style={styles.highlightText}>
+          Madrasatu-s-Salikat Lil Banat is committed to the highest standards of Islamic modesty (Purdah), student data protection, and transparent educational governance.
+        </Text>
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.card}>
-          <Text style={styles.heading}>Information We Collect</Text>
-          <Text style={styles.body}>
-            We collect account and authentication data such as name, email address, role, verification status, approval
-            status, profile photo/avatar, referral details, login metadata, and Firebase user identifiers needed to create
-            and protect student, teacher, and admin accounts.
-          </Text>
 
-          <Text style={styles.heading}>Learning, Class, and Attendance Data</Text>
-          <Text style={styles.body}>
-            We store course enrollment, progress, assignments, submissions, teacher feedback, attendance, live-class
-            session details, participant status, reconnect information, class duration, and recording metadata when those
-            features are used.
-          </Text>
+      {/* 1. Account & Identity */}
+      <Text style={styles.sectionHeading}>1. Account & Learner Profile Data</Text>
+      <Text style={styles.bodyText}>
+        We collect only necessary registration information such as student/teacher name, verified email address, role (Student, Teacher, Admin), enrollment status, and authentication credentials through Google Firebase Authentication. In accordance with Purdah guidelines, female student identities are strictly protected within secure Madrasa boundaries.
+      </Text>
 
-          <Text style={styles.heading}>Chat, Status, and Media Uploads</Text>
-          <Text style={styles.body}>
-            We process messages, read receipts, status posts, comments, reactions, uploaded images, videos, documents,
-            file names, file sizes, and moderation evidence so that classroom communication, assignments, media sharing,
-            abuse prevention, and safety review can work.
-          </Text>
+      {/* 2. Live Audio Classroom & Purdah Protection */}
+      <Text style={styles.sectionHeading}>2. Live Audio Classrooms & Inbuilt Recordings</Text>
+      <Text style={styles.bodyText}>
+        Our live classrooms operate under strict Islamic privacy protocols. Microphone audio is transmitted during live recitation and class sessions. Teacher-recorded lectures are securely archived in encrypted Firebase Storage for educational replay and student revision. Unauthorized third-party audio recording, screen capturing, or external distribution is strictly prohibited.
+      </Text>
 
-          <Text style={styles.heading}>Payments and Donations</Text>
-          <Text style={styles.body}>
-            We store payment or donation purpose, amount, reference details, user identity, review state, admin notes,
-            reconciliation status, audit events, and entitlement/enrollment updates. Do not submit card numbers or banking
-            secrets inside free-text fields.
-          </Text>
+      {/* 3. Islamic Utilities & Device Location */}
+      <Text style={styles.sectionHeading}>3. Islamic Utilities, Qibla & Tasbeeh Tracker</Text>
+      <Text style={styles.bodyText}>
+        Spiritual utilities—including the Digital Smart Tasbeeh, Daily Azkar Tracker, and Islamic Hijri Calendar—store progress locally on your device. GPS location is accessed temporarily on-device solely to compute precise prayer times and Qibla compass azimuth direction; your location coordinates are never tracked, logged, or transmitted to third parties.
+      </Text>
 
-          <Text style={styles.heading}>Notifications and Device Data</Text>
-          <Text style={styles.body}>
-            If you enable notifications, we may store Expo/Firebase push tokens and delivery metadata to send class,
-            payment, chat, status, admin, and reminder notifications. Device permissions such as camera, microphone,
-            gallery, documents, and notifications are requested only when a feature needs them.
-          </Text>
+      {/* 4. Official Receipts, Sanads & Financial Security */}
+      <Text style={styles.sectionHeading}>4. Fee Payments, Sanads & Credentials</Text>
+      <Text style={styles.bodyText}>
+        Tuition fees, registrations, and voluntary Sadqah/Zakat donations are processed via secure encrypted payment gateways (Razorpay). We do not store credit card numbers or banking secrets. Unique verification serial IDs on fee receipts and academic Sanads/Certificates are maintained for official authentication.
+      </Text>
 
-          <Text style={styles.heading}>Analytics, Security, and Logs</Text>
-          <Text style={styles.body}>
-            We may use operational logs, error reports, security events, moderation events, duplicate-upload checks, and
-            audit trails to maintain reliability, detect misuse, prevent fraud, support users, and protect students.
-          </Text>
+      {/* 5. Communication & Moderation */}
+      <Text style={styles.sectionHeading}>5. Classroom Communication & Adab Safety</Text>
+      <Text style={styles.bodyText}>
+        Student-teacher messages, homework submissions, and Dars notes are monitored by authorized Islamic moderators to ensure a safe, adab-compliant, and harassment-free learning atmosphere for female students.
+      </Text>
 
-          <Text style={styles.heading}>How We Use and Share Data</Text>
-          <Text style={styles.body}>
-            Data is used to provide education services, approve accounts, run live classes, manage payments and donations,
-            support users, send notifications, enforce safety rules, and meet legal or accounting duties. Access is limited
-            by role-based controls for students, teachers, and administrators. We use service providers such as Firebase,
-            Railway/backend hosting, Agora live-class services, push-notification services, file storage, and payment or
-            reconciliation providers where needed to operate the app.
-          </Text>
+      {/* 6. Data Rights & Permanent Deletion */}
+      <Text style={styles.sectionHeading}>6. Student Rights & Account Deletion</Text>
+      <Text style={styles.bodyText}>
+        Enrolled students and guardians have the full right to export their academic records or request permanent account and data deletion at any time via Settings → Data & Privacy. Deletion requests are processed promptly in compliance with Islamic ethics and data protection laws.
+      </Text>
 
-          <Text style={styles.heading}>Retention and User Rights</Text>
-          <Text style={styles.body}>
-            We keep data while your account is active or while needed for education, safety, legal, audit, dispute,
-            accounting, or compliance purposes. You can request export or deletion through Settings → Data & Privacy.
-            Some records may be retained or anonymized when required for legal, safety, fraud-prevention, or financial
-            recordkeeping reasons.
-          </Text>
-
-          <Text style={styles.heading}>Contact</Text>
-          <Text style={styles.body}>
-            For privacy, export, deletion, payment, or safety requests, use Settings → Data & Privacy or contact the
-            madrasa administration through the official support channel provided to enrolled users.
-          </Text>
-        </View>
-      </ScrollView>
-    </View>
+      {/* 7. Contact Academic Administration */}
+      <Text style={styles.sectionHeading}>7. Governance & Contact</Text>
+      <Text style={styles.bodyText}>
+        For privacy queries, data access requests, or official support, please contact the Madrasatu-s-Salikat Lil Banat administration via the in-app support center or official madrasa portal.
+      </Text>
+    </LegalDocScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+  highlightBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#E8F5EE',
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.xs,
   },
-  backButton: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, marginBottom: SPACING.xs },
-  backText: { color: COLORS.primary, fontWeight: '800', fontSize: 13 },
-  title: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
-  subtitle: { fontSize: 12, color: COLORS.textMuted },
-  content: { padding: SPACING.md, paddingBottom: 24 },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, ...SHADOWS.card, gap: 10 },
-  heading: { fontSize: 14, fontWeight: '800', color: COLORS.textMain },
-  body: { fontSize: 13, color: COLORS.textMuted, lineHeight: 20 },
+  highlightText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#005F46',
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  sectionHeading: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 8,
+  },
+  bodyText: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 20,
+  },
 });
