@@ -1,5 +1,13 @@
 export const ENROLLMENT_DOC_ID_SEPARATOR = ':';
 
+export type CourseSubject = {
+  id: string;
+  name: string;
+  teacher_id?: string;
+  teacher_name?: string;
+  schedule?: string;
+};
+
 export type EnrollmentLike = {
   user_id?: unknown;
   course_id?: unknown;

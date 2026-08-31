@@ -212,19 +212,21 @@ service cloud.firestore {
     function isValidCourseWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'teacher_name', 'teacherName', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'created_at', 'updated_at']
+          ['name', 'teacher_name', 'teacherName', 'teacher_id', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'subjects', 'created_at', 'updated_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && (!('teacher_name' in request.resource.data) || request.resource.data.teacher_name is string)
         && (!('teacherName' in request.resource.data) || request.resource.data.teacherName is string)
+        && (!('teacher_id' in request.resource.data) || request.resource.data.teacher_id is string)
         && (!('schedule' in request.resource.data) || request.resource.data.schedule is string)
         && (!('time' in request.resource.data) || request.resource.data.time is string)
         && (!('class_time' in request.resource.data) || request.resource.data.class_time is string)
         && (!('description' in request.resource.data) || request.resource.data.description is string)
         && (!('class_link' in request.resource.data) || request.resource.data.class_link is string)
         && (!('classLink' in request.resource.data) || request.resource.data.classLink is string)
-        && (!('meet_link' in request.resource.data) || request.resource.data.meet_link is string);
+        && (!('meet_link' in request.resource.data) || request.resource.data.meet_link is string)
+        && (!('subjects' in request.resource.data) || request.resource.data.subjects is list);
     }
 
     function isValidTeacherWrite() {
