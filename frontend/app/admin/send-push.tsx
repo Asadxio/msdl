@@ -19,7 +19,7 @@ import { useRouter } from 'expo-router';
 import { collection, getDocs, query, where, orderBy, limit as limitQ, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { RADIUS, SPACING, COLORS, SHADOWS } from '@/constants/theme';
-import { dispatchNotification } from '@/lib/notificationCenter';
+import { dispatchNotification } from '@/lib/dispatchNotification';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
@@ -226,14 +226,28 @@ export default function AdminSendPushScreen() {
       }
 
       const dedupe = `admin:${Date.now()}`;
+
+      // Build recipient list — for send_to_all, fetch all approved user IDs
+      let finalRecipientIds = targetUserIds;
+      if (isSendToAll) {
+        try {
+          const allUsersQ = query(collection(db, 'users'), where('status', '==', 'approved'));
+          const allUsersDocs = await getDocs(allUsersQ);
+          finalRecipientIds = allUsersDocs.docs.map((d) => d.id).filter(Boolean);
+        } catch {
+          // fallback: empty means dispatchNotification handles all
+          finalRecipientIds = [];
+        }
+      }
+
       await dispatchNotification({
-        channel: 'admin',
-        type: 'announcement',
+        channel: 'announcements',
+        event: 'announcement_posted',
         title: title.trim(),
-        message: body.trim(),
-        user_ids: targetUserIds,
-        send_to_all: isSendToAll,
-        dedupe_id: dedupe,
+        body: body.trim(),
+        recipientIds: finalRecipientIds,
+        sendToAll: isSendToAll,
+        dedupeId: dedupe,
       });
 
       setStatusMessage({ text: '✅ Notification dispatched successfully to target audience!', isError: false });
