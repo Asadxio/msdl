@@ -1,19 +1,20 @@
 export const COLORS = {
-  primary: '#064E3B',
-  background: '#FFFFFF',
-  surface: '#FFFFFF',
-  text: '#0F2F25',
-  textMain: '#0F2F25',
-  textMuted: '#5B6E67',
-  border: '#E2E8E5',
-  error: '#B42318',
-  success: '#0F7660',
-  // Backward-compat aliases to keep existing screens functional.
+  primary: '#005F46', // deep institutional emerald
   primaryLight: '#0B6B53',
-  secondary: '#D4AF37',
-  secondaryLight: '#F5ECD0',
-  surfaceAlt: '#F8FAF9',
-  goldBg: '#FAF4E1',
+  background: '#F7F8F6', // warm neutral
+  surface: '#FFFFFF',
+  surfaceAlt: '#F0F4F2',
+  text: '#12332A',
+  textMain: '#12332A',
+  textSecondary: '#60736B',
+  textMuted: '#60736B',
+  border: '#E2E8E4',
+  error: '#B42318',
+  success: '#0B6B53',
+  // Backward-compat aliases to keep existing screens functional.
+  secondary: '#C8A84E', // Gold accent
+  secondaryLight: '#E8D9A8', // Soft gold
+  goldBg: '#FDFBF4',
   goldText: '#9A7A1A',
 };
 
@@ -23,6 +24,7 @@ export const DARK_COLORS = {
   surface: '#1C2541',
   text: '#F8FAFC',
   textMain: '#F8FAFC',
+  textSecondary: '#94A3B8',
   textMuted: '#94A3B8',
   border: '#2E3D5C',
   error: '#EF4444',

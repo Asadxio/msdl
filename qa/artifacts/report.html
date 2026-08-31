@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>MSLB QA Automation Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F3F4F6;
+            margin: 0;
+            padding: 24px;
+            color: #1F2937;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #0F7660 0%, #10B981 100%);
+            color: #ffffff;
+            padding: 32px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .header h1 { margin: 0; font-size: 28px; font-weight: 800; }
+        .header p { margin: 8px 0 0 0; opacity: 0.9; }
+        
+        .verdict-banner {
+            padding: 20px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 20px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .verdict-pass { background-color: #D1FAE5; color: #065F46; border: 2px solid #34D399; }
+        .verdict-fail { background-color: #FEE2E2; color: #991B1B; border: 2px solid #F87171; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .card {
+            background: #ffffff;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .card h2 { margin-top: 0; font-size: 18px; font-weight: 700; border-bottom: 2px solid #E5E7EB; padding-bottom: 12px; }
+        .meta-list { list-style: none; padding: 0; margin: 0; }
+        .meta-list li { padding: 8px 0; border-bottom: 1px solid #F3F4F6; display: flex; justify-content: space-between; }
+        .meta-list li:last-child { border-bottom: none; }
+        .meta-list span { font-weight: 600; color: #111827; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        th { background-color: #F9FAFB; font-weight: 600; color: #374151; }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-pass { background-color: #D1FAE5; color: #065F46; }
+        .status-fail { background-color: #FEE2E2; color: #991B1B; }
+        
+        .table-img {
+            max-width: 80px;
+            height: auto;
+            border-radius: 6px;
+            border: 1px solid #D1D5DB;
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .table-img:hover { transform: scale(1.5); }
+        
+        pre {
+            background: #F9FAFB;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            color: #B91C1C;
+        }
+        .text-center { text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>MSLB Physical Device QA Report</h1>
+            <p>Execution Timestamp: 2026-08-05 04:17:07</p>
+        </div>
+
+        <div class="verdict-banner verdict-pass">
+            VERDICT: RELEASE APPROVED
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Target Device Profile</h2>
+                <ul class="meta-list">
+                    <li>Manufacturer: <span>vivo</span></li>
+                    <li>Model: <span>V2250</span></li>
+                    <li>Android Release: <span>15 (SDK 35)</span></li>
+                    <li>CPU ABI: <span>arm64-v8a</span></li>
+                    <li>Resolution: <span>1260x2800</span></li>
+                    <li>Density: <span>480 dpi</span></li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2>Staging APK Profile</h2>
+                <ul class="meta-list">
+                    <li>Package Name: <span>com.mslb.app</span></li>
+                    <li>Version Name: <span>1.0.2</span></li>
+                    <li>Version Code: <span>31</span></li>
+                    <li>Min SDK Target: <span>24</span></li>
+                    <li>Target SDK Level: <span>36</span></li>
+                    <li>APK File Size: <span>110.23 MB</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+            <h2>Execution Results (18 / 18 Passed)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Regression Case</th>
+                        <th>Verification Target</th>
+                        <th>Verdict</th>
+                        <th>Screenshot</th>
+                        <th>Observation Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+            <tr>
+                <td><strong>R001</strong></td>
+                <td>Splash Screen Rendering</td>
+                <td>Verify splash screen loads, visual logo scales correctly, and no crash occurs on boot.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R001_splash_screen_rendering.png" target="_blank"><img src="screenshots/R001_splash_screen_rendering.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R002</strong></td>
+                <td>Keyboard Focus Viewports</td>
+                <td>Verify inputs focus cleanly and keyboard does not obscure target text entries.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R002_keyboard_focus_viewports.png" target="_blank"><img src="screenshots/R002_keyboard_focus_viewports.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R003</strong></td>
+                <td>Root Layout Navigation Guard</td>
+                <td>Verify deep links or layout redirects protect unauthorized users.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R003_root_layout_navigation_guard.png" target="_blank"><img src="screenshots/R003_root_layout_navigation_guard.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R004</strong></td>
+                <td>Authentication Login</td>
+                <td>Verify student and admin user accounts login successfully using standard inputs.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R004_authentication_login.png" target="_blank"><img src="screenshots/R004_authentication_login.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R005</strong></td>
+                <td>User Registration / Signup</td>
+                <td>Verify registration saves account records in pending status and stores referral logs.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R005_user_registration__signup.png" target="_blank"><img src="screenshots/R005_user_registration__signup.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R006</strong></td>
+                <td>Forgot Password Lifecycle</td>
+                <td>Verify recovery reset emails are generated and sent successfully to matching inputs.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R006_forgot_password_lifecycle.png" target="_blank"><img src="screenshots/R006_forgot_password_lifecycle.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R007</strong></td>
+                <td>Dashboard Screen Render</td>
+                <td>Verify tabs, Islamic status widgets, and quick action components render correctly.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R007_dashboard_screen_render.png" target="_blank"><img src="screenshots/R007_dashboard_screen_render.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R008</strong></td>
+                <td>Course Lessons List</td>
+                <td>Verify registered courses display modules, lessons, and progress stats accurately.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R008_course_lessons_list.png" target="_blank"><img src="screenshots/R008_course_lessons_list.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R009</strong></td>
+                <td>Lesson Detail View & Audio Player</td>
+                <td>Verify lesson audio files stream, play, pause, and track progress.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R009_lesson_detail_view__audio_player.png" target="_blank"><img src="screenshots/R009_lesson_detail_view__audio_player.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R010</strong></td>
+                <td>Quiz Submission</td>
+                <td>Verify server-side quiz grading evaluates scores and blocks duplicate submissions.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R010_quiz_submission.png" target="_blank"><img src="screenshots/R010_quiz_submission.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R011</strong></td>
+                <td>Payment Submission</td>
+                <td>Verify student transaction submissions transition state to processing and update logs.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R011_payment_submission.png" target="_blank"><img src="screenshots/R011_payment_submission.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R012</strong></td>
+                <td>Certificate Generation</td>
+                <td>Verify PDF certificate generation loads in web viewer and download link operates.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R012_certificate_generation.png" target="_blank"><img src="screenshots/R012_certificate_generation.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R013</strong></td>
+                <td>Notification Inbox</td>
+                <td>Verify received push notifications render in notification screen list.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R013_notification_inbox.png" target="_blank"><img src="screenshots/R013_notification_inbox.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R014</strong></td>
+                <td>Profile Details Update</td>
+                <td>Verify custom avatars and profiles update without modifying locked attributes.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R014_profile_details_update.png" target="_blank"><img src="screenshots/R014_profile_details_update.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R015</strong></td>
+                <td>Settings Configurations</td>
+                <td>Verify theme changes, diagnostics check, and app settings operate.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R015_settings_configurations.png" target="_blank"><img src="screenshots/R015_settings_configurations.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R016</strong></td>
+                <td>Account Logout</td>
+                <td>Verify session tokens are cleared and user is redirected back to login screen.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R016_account_logout.png" target="_blank"><img src="screenshots/R016_account_logout.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R017</strong></td>
+                <td>Offline Mode Caching</td>
+                <td>Verify offline caching loads profile information and lessons without network access.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R017_offline_mode_caching.png" target="_blank"><img src="screenshots/R017_offline_mode_caching.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+            <tr>
+                <td><strong>R018</strong></td>
+                <td>Background State Resume</td>
+                <td>Verify app recovers active session and media playback after background pause.</td>
+                <td><span class="badge status-pass">PASS</span></td>
+                <td><a href="screenshots/R018_background_state_resume.png" target="_blank"><img src="screenshots/R018_background_state_resume.png" class="table-img" /></a></td>
+                <td>No observations recorded.</td>
+            </tr>
+            
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Logcat Telemetry Exceptions</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 150px;">Classification</th>
+                        <th>Log Snippet</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan='2' class='text-center'>🟢 No telemetry exceptions detected in Logcat.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
+        

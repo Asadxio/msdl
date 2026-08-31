@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Platform,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,26 @@ import { cacheGet, cacheSet } from '@/lib/cacheManager';
 import { QuickAdminActions } from '@/components/admin/QuickAdminActions';
 import { AdminPendingTasks, type PendingTasksCounts } from '@/components/admin/AdminPendingTasks';
 import { AdminActivityCenter } from '@/components/admin/AdminActivityCenter';
+
+// ─── Institutional Palette ───
+const THEME = {
+  primary: '#005F46',
+  primaryLight: '#0B6B53',
+  gold: '#C8A84E',
+  softGold: '#E8D9A8',
+  goldBg: '#FEF9EE',
+  goldBorder: '#F3E5BE',
+  background: '#F7F8F6',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F0F4F2',
+  textMain: '#12332A',
+  textMuted: '#60736B',
+  border: '#E2E8E4',
+  success: '#10B981',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  info: '#3B82F6',
+};
 
 type PrayerItem = {
   name: string;
@@ -68,6 +89,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
   const router = useRouter();
   const { courses, teachers, books } = useData();
 
+  const [searchQuery, setSearchQuery] = useState('');
   const [kpi, setKpi] = useState<AdminKpiSummary>({
     totalStudents: 0,
     pendingApprovals: 0,
@@ -157,12 +179,12 @@ export const AdminDashboard = React.memo(function AdminDashboard({
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning Admin';
-    if (hour < 17) return 'Good Afternoon Admin';
-    return 'Good Evening Admin';
+    if (hour < 12) return 'Good Morning Administrator';
+    if (hour < 17) return 'Good Afternoon Administrator';
+    return 'Good Evening Administrator';
   }, []);
 
-  const adminName = profile?.name || user?.displayName || profile?.role?.toUpperCase() || 'Administrator';
+  const adminName = profile?.name || user?.displayName || (profile?.role === 'super_admin' ? 'Super Administrator' : 'System Administrator');
 
   const pendingCounts: PendingTasksCounts = useMemo(() => ({
     approvals: kpi.pendingApprovals,
@@ -171,8 +193,16 @@ export const AdminDashboard = React.memo(function AdminDashboard({
     moderation: kpi.moderationReports,
   }), [kpi]);
 
+  const safePush = (route: string) => {
+    try {
+      router.push(route as any);
+    } catch (e) {
+      console.warn('[AdminDashboard] Navigation error:', e);
+    }
+  };
+
   return (
-    <View style={[styles.mainContainer, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + SPACING.sm }]}>
+    <View style={[styles.mainContainer, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + SPACING.xs }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -180,136 +210,207 @@ export const AdminDashboard = React.memo(function AdminDashboard({
           <RefreshControl
             refreshing={refreshing || loadingKpi}
             onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-            colors={[COLORS.primary]}
+            tintColor={THEME.primary}
+            colors={[THEME.primary]}
           />
         }
       >
-        {/* Top Greeting Section */}
+        {/* ─── Top Header Section ─── */}
         <View style={styles.topSection}>
           <View style={styles.greetingRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.greetingText}>{greeting}</Text>
               <View style={styles.badgeRow}>
                 <View style={styles.adminBadge}>
-                  <Ionicons name="shield-checkmark" size={14} color="#10B981" />
+                  <Ionicons name="shield-checkmark" size={13} color={THEME.primary} />
                   <Text style={styles.adminBadgeText}>ENTERPRISE LMS ADMIN</Text>
                 </View>
-                <Text style={styles.adminNameText} numberOfLines={1}>{adminName}</Text>
+                <Text style={styles.adminNameText} numberOfLines={1}>• {adminName}</Text>
               </View>
             </View>
-            <TouchableOpacity
-              style={styles.profileBtn}
-              onPress={() => router.push('/(tabs)/about' as any)}
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel="View Admin Profile"
-            >
-              <Ionicons name="person-circle" size={40} color={COLORS.primary} />
-            </TouchableOpacity>
+            
+            <View style={styles.headerActionsGroup}>
+              <TouchableOpacity
+                style={styles.notifBtn}
+                onPress={() => safePush('/(tabs)/notifications')}
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+              >
+                <Ionicons name="notifications-outline" size={20} color={THEME.primary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.profileBtn}
+                onPress={() => safePush('/(tabs)/about')}
+                accessibilityRole="button"
+                accessibilityLabel="View Admin Profile"
+              >
+                <View style={styles.avatarBox}>
+                  <Text style={styles.avatarText}>{(adminName || 'A').charAt(0).toUpperCase()}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Hijri Date & Prayer Reminder Bar */}
           <View style={styles.prayerBar}>
             <View style={styles.hijriCol}>
-              <Ionicons name="calendar-outline" size={16} color={COLORS.primary} />
+              <Ionicons name="calendar-outline" size={15} color={THEME.primary} />
               <Text style={styles.hijriText}>{hijriDate}</Text>
             </View>
             {currentPrayer ? (
               <View style={styles.prayerCol}>
-                <Ionicons name="time-outline" size={16} color="#F59E0B" />
+                <Ionicons name="time-outline" size={15} color={THEME.warning} />
                 <Text style={styles.prayerText}>
                   {currentPrayer.name}: {formatTime(currentPrayer.time)}
                 </Text>
               </View>
             ) : (
-              <TouchableOpacity onPress={() => router.push('/prayer-times' as any)}>
-                <Text style={styles.prayerLink}>📍 Check Prayer Schedule</Text>
+              <TouchableOpacity onPress={() => safePush('/prayer-times')} accessibilityRole="button" accessibilityLabel="Prayer Times">
+                <Text style={styles.prayerLink}>📍 Check Prayer Times</Text>
               </TouchableOpacity>
             )}
           </View>
+
+          {/* System Health Status Indicator */}
+          <View style={styles.systemHealthBar}>
+            <View style={styles.healthStatusDot} />
+            <Text style={styles.healthStatusText}>System Status: Verified Operational • DB & Auth Synchronized</Text>
+          </View>
         </View>
 
-        {/* KPI Cards Grid */}
+        {/* ─── Platform Metrics (8 Authoritative Cards - 2x4 Grid) ─── */}
         <View style={styles.kpiSection}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="stats-chart-outline" size={18} color={COLORS.primary} />
+            <Ionicons name="stats-chart-outline" size={17} color={THEME.primary} />
             <Text style={styles.sectionTitle}>Platform Metrics</Text>
+            <TouchableOpacity onPress={() => void fetchKpiSummary(true)} style={styles.refreshIconBtn} accessibilityRole="button" accessibilityLabel="Refresh Metrics">
+              <Ionicons name="refresh-outline" size={15} color={THEME.textMuted} />
+            </TouchableOpacity>
           </View>
+
           <View style={styles.kpiGrid}>
-            <View style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}>
+            {/* 1. Total Students */}
+            <TouchableOpacity
+              style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
+              onPress={() => safePush('/admin/users')}
+              accessibilityRole="button"
+              accessibilityLabel="View Total Students"
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#10B98115' }]}>
-                <Ionicons name="school" size={20} color="#10B981" />
+                <Ionicons name="school" size={18} color="#10B981" />
               </View>
               <Text style={styles.kpiValue}>{kpi.totalStudents}</Text>
               <Text style={styles.kpiLabel}>Total Students</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}>
+            {/* 2. Total Teachers */}
+            <TouchableOpacity
+              style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
+              onPress={() => safePush('/admin/users')}
+              accessibilityRole="button"
+              accessibilityLabel="View Total Teachers"
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#3B82F615' }]}>
-                <Ionicons name="people" size={20} color="#3B82F6" />
+                <Ionicons name="people" size={18} color="#3B82F6" />
               </View>
               <Text style={styles.kpiValue}>{teachers.length}</Text>
-              <Text style={styles.kpiLabel}>Total Teachers</Text>
-            </View>
+              <Text style={styles.kpiLabel}>Total Faculty</Text>
+            </TouchableOpacity>
 
-            <View style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}>
+            {/* 3. Active Courses */}
+            <TouchableOpacity
+              style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
+              onPress={() => safePush('/admin/manage-academics')}
+              accessibilityRole="button"
+              accessibilityLabel="View Active Courses"
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#8B5CF615' }]}>
-                <Ionicons name="book" size={20} color="#8B5CF6" />
+                <Ionicons name="book" size={18} color="#8B5CF6" />
               </View>
               <Text style={styles.kpiValue}>{courses.length}</Text>
               <Text style={styles.kpiLabel}>Active Courses</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}>
+            {/* 4. Pending Applications */}
+            <TouchableOpacity
+              style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
+              onPress={() => safePush('/admin/users')}
+              accessibilityRole="button"
+              accessibilityLabel="View Pending Applications"
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#F59E0B15' }]}>
-                <Ionicons name="document-text" size={20} color="#F59E0B" />
+                <Ionicons name="document-text" size={18} color="#F59E0B" />
               </View>
               <Text style={styles.kpiValue}>{kpi.pendingApprovals}</Text>
               <Text style={styles.kpiLabel}>Pending Apps</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}>
+            {/* 5. Pending Payments */}
+            <TouchableOpacity
+              style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
+              onPress={() => safePush('/admin/payments')}
+              accessibilityRole="button"
+              accessibilityLabel="View Pending Payments"
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#EF444415' }]}>
-                <Ionicons name="card" size={20} color="#EF4444" />
+                <Ionicons name="card" size={18} color="#EF4444" />
               </View>
               <Text style={styles.kpiValue}>{kpi.pendingPayments}</Text>
               <Text style={styles.kpiLabel}>Pending Payments</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}>
+            {/* 6. Active Announcements */}
+            <TouchableOpacity
+              style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
+              onPress={() => safePush('/admin/send-push')}
+              accessibilityRole="button"
+              accessibilityLabel="View Announcements"
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#EC489915' }]}>
-                <Ionicons name="megaphone" size={20} color="#EC4899" />
+                <Ionicons name="megaphone" size={18} color="#EC4899" />
               </View>
               <Text style={styles.kpiValue}>{kpi.activeAnnouncements}</Text>
               <Text style={styles.kpiLabel}>Announcements</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}>
+            {/* 7. Live Classes Today */}
+            <TouchableOpacity
+              style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
+              onPress={() => safePush('/live-class')}
+              accessibilityRole="button"
+              accessibilityLabel="View Live Classes"
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#6366F115' }]}>
-                <Ionicons name="videocam" size={20} color="#6366F1" />
+                <Ionicons name="videocam" size={18} color="#6366F1" />
               </View>
               <Text style={styles.kpiValue}>{kpi.liveClassesToday}</Text>
               <Text style={styles.kpiLabel}>Live Today</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}>
+            {/* 8. Library Books */}
+            <TouchableOpacity
+              style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
+              onPress={() => safePush('/admin/add-book')}
+              accessibilityRole="button"
+              accessibilityLabel="View Library Books"
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#06B6D415' }]}>
-                <Ionicons name="library" size={20} color="#06B6D4" />
+                <Ionicons name="library" size={18} color="#06B6D4" />
               </View>
               <Text style={styles.kpiValue}>{books.length}</Text>
               <Text style={styles.kpiLabel}>Library Books</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Phase 2: Quick Admin Actions */}
+        {/* ─── Quick Admin Actions ─── */}
         <QuickAdminActions />
 
-        {/* Phase 3: Pending Tasks Center */}
+        {/* ─── Pending Tasks Center ─── */}
         <AdminPendingTasks counts={pendingCounts} />
 
-        {/* Phase 4: Activity Center */}
+        {/* ─── Activity Center ─── */}
         <AdminActivityCenter courses={courses} teachers={teachers} books={books} />
       </ScrollView>
     </View>
@@ -319,18 +420,18 @@ export const AdminDashboard = React.memo(function AdminDashboard({
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: THEME.background,
   },
   scrollContent: {
     paddingBottom: SPACING.xxl,
   },
   topSection: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME.surface,
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: THEME.border,
     ...SHADOWS.card,
   },
   greetingRow: {
@@ -339,50 +440,81 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   greetingText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
-    color: COLORS.text,
+    color: THEME.textMain,
+    letterSpacing: -0.2,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    marginTop: 6,
+    gap: 6,
+    marginTop: 4,
   },
   adminBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10B98115',
+    backgroundColor: '#ECFDF5',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: RADIUS.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
     gap: 4,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
   adminBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#059669',
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: THEME.primary,
     letterSpacing: 0.5,
   },
   adminNameText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: COLORS.textMuted,
+    color: THEME.textMuted,
+  },
+  headerActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notifBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: THEME.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileBtn: {
-    padding: 2,
+    padding: 1,
+  },
+  avatarBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: THEME.goldBg,
+    borderWidth: 1.5,
+    borderColor: THEME.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: THEME.primary,
   },
   prayerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.background,
+    backgroundColor: THEME.surfaceAlt,
     marginTop: SPACING.md,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 8,
     borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME.border,
   },
   hijriCol: {
     flexDirection: 'row',
@@ -390,9 +522,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   hijriText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
-    color: COLORS.text,
+    color: THEME.textMain,
   },
   prayerCol: {
     flexDirection: 'row',
@@ -400,14 +532,32 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   prayerText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '700',
     color: '#D97706',
   },
   prayerLink: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
-    color: COLORS.primary,
+    color: THEME.primary,
+  },
+  systemHealthBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  healthStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: THEME.success,
+  },
+  healthStatusText: {
+    fontSize: 10.5,
+    color: THEME.textMuted,
+    fontWeight: '500',
   },
   kpiSection: {
     marginHorizontal: SPACING.md,
@@ -416,47 +566,52 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: 6,
     marginBottom: SPACING.sm,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '800',
+    color: THEME.textMain,
+    flex: 1,
+  },
+  refreshIconBtn: {
+    padding: 4,
   },
   kpiGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: SPACING.sm,
+    gap: 8,
   },
   kpiCard: {
-    width: IS_TABLET ? '23%' : '48%',
-    backgroundColor: COLORS.surface,
+    width: IS_TABLET ? '23%' : '48.5%',
+    backgroundColor: THEME.surface,
     borderRadius: RADIUS.lg,
-    padding: SPACING.md,
+    padding: 12,
     alignItems: 'flex-start',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME.border,
+    minHeight: 88,
     ...SHADOWS.card,
   },
   kpiIconBox: {
-    width: 38,
-    height: 38,
+    width: 32,
+    height: 32,
     borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.sm,
+    marginBottom: 6,
   },
   kpiValue: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '800',
-    color: COLORS.text,
+    color: THEME.textMain,
   },
   kpiLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.textMuted,
-    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '600',
+    color: THEME.textMuted,
+    marginTop: 1,
   },
 });

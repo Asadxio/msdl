@@ -172,27 +172,15 @@ export const AppInput = React.memo(function AppInput({
 
   const animatedInputStyle = React.useMemo(() => {
     if (error) {
-      return { borderColor: COLORS.error, shadowOpacity: 0, elevation: 0 };
+      return { borderColor: COLORS.error };
     }
     if (success) {
-      return { borderColor: COLORS.success, shadowOpacity: 0, elevation: 0 };
+      return { borderColor: COLORS.success };
     }
     return {
       borderColor: focusAnim.interpolate({
         inputRange: [0, 1],
         outputRange: ['#E5E5E5', COLORS.primary],
-      }),
-      shadowOpacity: focusAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 0.14],
-      }),
-      shadowRadius: focusAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 10],
-      }),
-      elevation: focusAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 2],
       }),
     };
   }, [focusAnim, error, success]);

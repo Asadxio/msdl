@@ -547,7 +547,7 @@ export default function ProgressScreen() {
                 <ScalePressable
                   key={i}
                   style={styles.attemptCard}
-                  onPress={() => {}}
+                  onPress={handleNavigateToQuiz}
                   accessibilityRole="button"
                   accessibilityLabel={`Quiz attempt for ${catName}, score ${pct}%`}
                 >

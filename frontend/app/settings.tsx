@@ -13,10 +13,12 @@ import { useTutorial } from '@/context/TutorialContext';
 import { useTheme } from '@/context/ThemeContext';
 import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
 import Constants from 'expo-constants';
-import { WHATSAPP_HELP_URL } from '@/lib/links';
+import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL } from '@/lib/links';
 import AdminHealthDashboard from '@/components/AdminHealthDashboard';
 import { useLanguage, type Language } from '@/context/LanguageContext';
 import { BugReportModal, FeatureSuggestModal, FaqModal } from '@/components/SupportModals';
+import * as Notifications from 'expo-notifications';
+import { clearQuizCounts } from '@/lib/lmsHardening';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
 const LARGE_TEXT_PREF_KEY = 'settings_large_text';
@@ -251,15 +253,62 @@ export default function SettingsScreen() {
     if (user?.uid) await updateNotificationPreferences(user.uid, { channels: next }).catch(() => {});
   };
 
-  const handleTestNotification = () => {
+  const handleTestNotification = async () => {
+    try {
+      if (Platform.OS === 'android' || Platform.OS === 'ios') {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+
+        if (finalStatus === 'granted') {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Madrasatu-s-Salikat Lil Banat 🔔',
+              body: 'Test notification delivered successfully with sound & vibration!',
+              data: { type: 'test_notification' },
+              sound: 'default',
+            },
+            trigger: null,
+          });
+          Alert.alert('Test Notification Sent / اطلاع بھیج دی گئی', 'A real test notification has been dispatched to your device status bar.');
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[Settings] Failed to schedule local test notification:', e);
+    }
     Alert.alert('Test Notification', 'This is a test notification sound and vibration.');
   };
 
   const handleClearCache = () => {
-    Alert.alert('Clear Cache', 'Are you sure you want to clear the app cache?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear', style: 'destructive', onPress: () => Alert.alert('Success', 'Cache cleared successfully.') }
-    ]);
+    Alert.alert(
+      'Clear App Cache / کیش صاف کریں',
+      'Are you sure you want to clear temporary cached data (quiz counts, temporary files)? Your login session will remain active.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Cache',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearQuizCounts();
+              const tempKeys = [
+                'library_recently_viewed_books',
+                'cached_announcements',
+                'offline_library_manifest_temp',
+              ];
+              await AsyncStorage.multiRemove(tempKeys);
+              Alert.alert('Cache Cleared / کیش صاف ہو گیا', 'Temporary cache cleared successfully. Fast loading preserved.');
+            } catch {
+              Alert.alert('Error', 'Failed to clear some cache files.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -598,6 +647,17 @@ export default function SettingsScreen() {
 
         {/* Section 8: About */}
         <SettingsSection title="About" icon="information-circle-outline" defaultOpen={false}>
+          <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL(MADRASA_WEBSITE_URL)}>
+            <View style={styles.linkRowLeft}>
+              <Ionicons name="globe-outline" size={20} color="#0FA958" />
+              <View>
+                <Text style={styles.linkText}>Official Website</Text>
+                <Text style={styles.linkSubtext}>madrasa-website-299.netlify.app</Text>
+              </View>
+            </View>
+            <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/terms')}>
             <View style={styles.linkRowLeft}>
               <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />

@@ -1,0 +1,18 @@
+2026-08-15 00:32:54,132 [INFO] =================================================================
+2026-08-15 00:32:54,133 [INFO] MSLB RENDER MIGRATION QA RUNNER
+2026-08-15 00:32:54,133 [INFO] Target Device: Vivo Y36 (Android 15) | Serial: 10BD9M0C6L0005H
+2026-08-15 00:32:54,133 [INFO] =================================================================
+2026-08-15 00:32:54,133 [INFO] 
+Re-installing APK on physical device...
+2026-08-15 00:33:00,026 [INFO] ADB Install Result: Performing Streamed Install
+Success
+2026-08-15 00:33:00,223 [INFO] 
+Measuring cold and warm launch speed...
+2026-08-15 00:34:10,390 [INFO] Cold Boot Avg: 944.2 ms | Warm Boot Avg: 155.4 ms
+2026-08-15 00:34:10,391 [INFO] 
+Testing Student Login flow...
+2026-08-15 00:34:39,102 [INFO]   📷 ✓ render_student_dashboard.png (242 KB)
+2026-08-15 00:34:39,757 [INFO]   📷 ✓ render_quiz_screen.png (242 KB)
+2026-08-15 00:34:48,815 [INFO]   📷 ✓ render_payment_screen.png (228 KB)
+2026-08-15 00:34:50,790 [INFO] 
+📄 Report generated: C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\RENDER_PRODUCTION_MIGRATION_REPORT.md

@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, FlatList,
-  ActivityIndicator, TextInput, Alert, ScrollView, Image, TouchableOpacity,
+  ActivityIndicator, TextInput, Alert, ScrollView, Image, TouchableOpacity, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
-  addDoc, arrayRemove, arrayUnion, collection, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where,
+  addDoc, arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -18,8 +18,20 @@ import { ReportReasonModal } from '@/components/ReportReasonModal';
 import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { canInitiateDirectChat, canCreateGroup, canCreateBroadcast } from '@/lib/chatPermissions';
 
-type AppUser = { id: string; name: string; email?: string; role: string; status: string; photo_url?: string; avatar?: string };
+type AppUser = {
+  id: string;
+  name: string;
+  email?: string;
+  role: string;
+  status: string;
+  photo_url?: string;
+  avatar?: string;
+  student_id?: string;
+  is_online?: boolean;
+  last_seen?: any;
+};
 
 function recordOfStrings(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object') return {};
@@ -43,6 +55,8 @@ type ChatItem = {
   unread_counts?: Record<string, number>;
   pinned_by?: string[];
   hidden_by?: string[];
+  archived_by?: string[];
+  muted_by?: string[];
 };
 
 function normalizeChatItem(id: string, raw: unknown): ChatItem {
@@ -59,6 +73,8 @@ function normalizeChatItem(id: string, raw: unknown): ChatItem {
     unread_counts: recordOfNumbers(safe.unread_counts),
     pinned_by: Array.isArray(safe.pinned_by) ? safe.pinned_by.filter((v: unknown) => typeof v === 'string') : [],
     hidden_by: Array.isArray(safe.hidden_by) ? safe.hidden_by.filter((v: unknown) => typeof v === 'string') : [],
+    archived_by: Array.isArray(safe.archived_by) ? safe.archived_by.filter((v: unknown) => typeof v === 'string') : [],
+    muted_by: Array.isArray(safe.muted_by) ? safe.muted_by.filter((v: unknown) => typeof v === 'string') : [],
   };
 }
 
@@ -91,7 +107,7 @@ function fmtChatTime(value: unknown): string {
   }
 }
 
-type FilterTab = 'all' | 'unread' | 'teachers' | 'students' | 'broadcasts' | 'support' | 'pinned';
+type FilterTab = 'all' | 'unread' | 'direct' | 'groups' | 'broadcasts' | 'pinned' | 'archived' | 'teachers' | 'students' | 'support';
 
 export default function ChatsScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
@@ -109,10 +125,11 @@ export default function ChatsScreen() {
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [showUsers, setShowUsers] = useState(false);
+  const [contactSearch, setContactSearch] = useState('');
+  const [previewUser, setPreviewUser] = useState<AppUser | null>(null);
   const [showGroupCreator, setShowGroupCreator] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
-  const [creatingDirectFor, setCreatingDirectFor] = useState<string | null>(null);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [openingBroadcast, setOpeningBroadcast] = useState(false);
   const [search, setSearch] = useState('');
@@ -228,11 +245,17 @@ export default function ChatsScreen() {
         const snap = await getDocs(query(collection(db, 'public_profiles'), where('searchable', '==', true)));
         const list: AppUser[] = [];
         snap.forEach((d) => {
-          const data = d.data() as Partial<AppUser> & { is_active?: boolean };
+          const data = d.data() as Partial<AppUser> & { is_active?: boolean; student_id?: string; email?: string };
           if (data.status !== 'approved' || data.is_active === false) return;
           list.push({
-            id: d.id, name: data.name || 'User', email: '', role: data.role || 'student', status: data.status,
-            photo_url: data.photo_url || '', avatar: data.avatar || 'person',
+            id: d.id,
+            name: data.name || 'User',
+            email: data.email || '',
+            role: data.role || 'student',
+            status: data.status,
+            photo_url: data.photo_url || '',
+            avatar: data.avatar || 'person',
+            student_id: data.student_id || '',
           });
         });
         setUsers(list);
@@ -242,7 +265,7 @@ export default function ChatsScreen() {
       }
     };
     loadUsers().catch(() => {});
-  }, []);
+  }, [profile?.status, user?.uid]);
 
   const toggleChatSelection = useCallback((chatId: string) => {
     setSelectedChatIds((prev) => (prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId]));
@@ -260,6 +283,20 @@ export default function ChatsScreen() {
       logFirestoreFailure({ collection: 'chats', operation: 'update', query: `doc chats/${chatItem.id} toggle pinned_by` }, error);
       console.log('[Chats] togglePinChat ERROR', error);
       Alert.alert('Action failed', error instanceof Error ? error.message : 'Could not update pin status.');
+    }
+  }, [user?.uid]);
+
+  const toggleArchiveChat = useCallback(async (chatItem: ChatItem) => {
+    if (!user?.uid) return;
+    try {
+      const isArchived = (Array.isArray(chatItem.archived_by) ? chatItem.archived_by : []).includes(user.uid);
+      await updateDoc(doc(db, 'chats', chatItem.id), {
+        archived_by: isArchived ? arrayRemove(user.uid) : arrayUnion(user.uid),
+      });
+      setFeedback({ type: 'success', text: isArchived ? 'Chat unarchived' : 'Chat archived' });
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'chats', operation: 'update', query: `doc chats/${chatItem.id} toggle archived_by` }, error);
+      Alert.alert('Action failed', error instanceof Error ? error.message : 'Could not archive chat.');
     }
   }, [user?.uid]);
 
@@ -299,46 +336,33 @@ export default function ChatsScreen() {
     ]);
   }, [bulkUpdating, safeChats, selectedChatIds, user?.uid]);
 
-  const getOrCreateDirectChat = async (target: AppUser) => {
-    if (!user) return;
+  const openDirectChat = useCallback((target: AppUser) => {
+    if (!user?.uid) return;
+    setShowUsers(false);
+    setPreviewUser(null);
     const existing = chats.find((c) => c.type === 'direct' && c.participants.length === 2 && c.participants.includes(target.id) && c.participants.includes(user.uid));
     if (existing) {
       safePush(`/chat/${existing.id}`);
       return;
     }
+    const deterministicChatId = `direct_${[user.uid, target.id].sort().join('_')}`;
+    safePush(`/chat/${deterministicChatId}`);
+  }, [chats, safePush, user?.uid]);
 
-    setCreatingDirectFor(target.id);
-    try {
-      const payload = {
-        type: 'direct',
-        name: '',
-        participants: [user.uid, target.id],
-        participant_names: {
-          [user.uid]: profile?.name || user.email || 'You',
-          [target.id]: target.name,
-        },
-        last_message: '',
-        created_by: user.uid,
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-        typing: {},
-        unread_counts: {
-          [user.uid]: 0,
-          [target.id]: 0,
-        },
-      };
-      const ref = await addDoc(collection(db, 'chats'), payload);
-      setShowUsers(false);
-      safePush(`/chat/${ref.id}`);
-    } catch (error: unknown) {
-      logFirestoreFailure({ collection: 'chats', operation: 'add', query: 'create direct chat' }, error);
-      const message = error instanceof Error ? error.message : 'Please try again.';
-      setFeedback({ type: 'error', text: message });
-      Alert.alert('Could not start chat', message);
-    } finally {
-      setCreatingDirectFor(null);
-    }
-  };
+  const directoryUsers = useMemo(() => {
+    return safeUsers.filter((u) => {
+      if (u.id === user?.uid) return false;
+      if (!contactSearch.trim()) return true;
+      const q = contactSearch.trim().toLowerCase();
+      return (
+        (u.name || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q) ||
+        (u.role || '').toLowerCase().includes(q) ||
+        (u.id || '').toLowerCase().includes(q) ||
+        (u.student_id || '').toLowerCase().includes(q)
+      );
+    });
+  }, [contactSearch, safeUsers, user?.uid]);
 
   const toggleParticipant = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id].slice(0, 200)));
@@ -440,13 +464,24 @@ export default function ChatsScreen() {
 
   const filteredChats = safeChats
     .filter((c) => !(Array.isArray(c.hidden_by) ? c.hidden_by : []).includes(user?.uid || ''))
-    .filter((c) => (
-    !debouncedSearch || chatTitle(c, usersMap, user?.uid || '').toLowerCase().includes(debouncedSearch)
-    ))
     .filter((c) => {
-      if (activeTab === 'all') return true;
+      const isArchived = (Array.isArray(c.archived_by) ? c.archived_by : []).includes(user?.uid || '');
+      if (activeTab === 'archived') return isArchived;
+      if (isArchived) return false;
+
+      if (!debouncedSearch) return true;
+      const titleMatch = chatTitle(c, usersMap, user?.uid || '').toLowerCase().includes(debouncedSearch);
+      const msgMatch = (c.last_message || '').toLowerCase().includes(debouncedSearch);
+      return titleMatch || msgMatch;
+    })
+    .filter((c) => {
+      const isArchived = (Array.isArray(c.archived_by) ? c.archived_by : []).includes(user?.uid || '');
+      if (activeTab === 'all') return !isArchived;
+      if (activeTab === 'archived') return isArchived;
       if (activeTab === 'unread') return (c.unread_counts?.[user?.uid || ''] || 0) > 0;
       if (activeTab === 'pinned') return (Array.isArray(c.pinned_by) ? c.pinned_by : []).includes(user?.uid || '');
+      if (activeTab === 'direct') return c.type === 'direct';
+      if (activeTab === 'groups') return c.type === 'group';
       if (activeTab === 'broadcasts') return c.type === 'broadcast';
       if (activeTab === 'teachers') {
         const otherIds = c.participants.filter((p) => p !== user?.uid);
@@ -521,52 +556,213 @@ export default function ChatsScreen() {
         />
       </View>
 
-      {(isAdmin || isTeacher) && (
-        <View style={styles.filterTabsContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabsScroll}>
-            {(['all', 'unread', 'teachers', 'students', 'broadcasts', 'support', 'pinned'] as FilterTab[]).map((tab) => {
-              const isActive = activeTab === tab;
-              const labels: Record<FilterTab, string> = {
-                all: 'All',
-                unread: 'Unread',
-                teachers: 'Teachers',
-                students: 'Student Requests',
-                broadcasts: 'Broadcasts',
-                support: 'Support',
-                pinned: 'Pinned',
-              };
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  style={[styles.filterTabChip, isActive && styles.filterTabChipActive]}
-                  onPress={() => setActiveTab(tab)}
-                >
-                  <Text style={[styles.filterTabText, isActive && styles.filterTabTextActive]}>
-                    {labels[tab]}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
+      <View style={styles.filterTabsContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabsScroll}>
+          {([
+            'all', 'unread', 'direct', 'groups', 'broadcasts', 'pinned', 'archived',
+            ...(isAdmin || isTeacher ? ['teachers', 'students', 'support'] : []),
+          ] as FilterTab[]).map((tab) => {
+            const isActive = activeTab === tab;
+            const labels: Record<FilterTab, string> = {
+              all: 'All',
+              unread: 'Unread',
+              direct: 'Direct',
+              groups: 'Groups',
+              broadcasts: 'Broadcasts',
+              pinned: 'Pinned',
+              archived: 'Archived',
+              teachers: 'Teachers',
+              students: 'Student Requests',
+              support: 'Support',
+            };
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.filterTabChip, isActive && styles.filterTabChipActive]}
+                onPress={() => setActiveTab(tab)}
+              >
+                <Text style={[styles.filterTabText, isActive && styles.filterTabTextActive]}>
+                  {labels[tab]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      {showUsers && (
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Start direct chat</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {filteredUsers.map((u) => (
-              <ScalePressable key={u.id} style={styles.userChip} onPress={() => getOrCreateDirectChat(u)}>
-                <Text style={styles.userChipText}>
-                  {creatingDirectFor === u.id ? 'Starting...' : u.name}
-                </Text>
-              </ScalePressable>
-            ))}
-          </ScrollView>
+      {/* WhatsApp-Style Contact Directory Modal */}
+      <Modal
+        visible={showUsers}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowUsers(false)}
+      >
+        <View style={[styles.directoryContainer, { paddingTop: insets.top + SPACING.sm }]}>
+          <View style={styles.directoryHeader}>
+            <ScalePressable style={styles.directoryBackBtn} onPress={() => setShowUsers(false)}>
+              <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
+            </ScalePressable>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.directoryTitle}>Select Contact</Text>
+              <Text style={styles.directorySubtitle}>{directoryUsers.length} contacts</Text>
+            </View>
+          </View>
+
+          <View style={styles.directorySearchWrap}>
+            <Ionicons name="search" size={18} color={COLORS.textMuted} style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.directorySearchInput}
+              value={contactSearch}
+              onChangeText={setContactSearch}
+              placeholder="Search name, role, or ID..."
+              placeholderTextColor={COLORS.textMuted}
+              autoCorrect={false}
+            />
+            {contactSearch ? (
+              <TouchableOpacity onPress={() => setContactSearch('')}>
+                <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <FlatList
+            data={directoryUsers}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.directoryList}
+            initialNumToRender={15}
+            maxToRenderPerBatch={15}
+            ListEmptyComponent={
+              <View style={styles.emptyDirectory}>
+                <Ionicons name="person-outline" size={48} color={COLORS.textMuted} />
+                <Text style={styles.emptyDirectoryText}>No contacts found</Text>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const roleUpper = (item.role || 'student').toUpperCase();
+              return (
+                <TouchableOpacity
+                  style={styles.contactRow}
+                  activeOpacity={0.7}
+                  onPress={() => openDirectChat(item)}
+                >
+                  <TouchableOpacity
+                    style={styles.contactAvatarWrap}
+                    onPress={() => setPreviewUser(item)}
+                  >
+                    {item.photo_url ? (
+                      <Image source={{ uri: item.photo_url }} style={styles.contactAvatar} />
+                    ) : (
+                      <View style={[
+                        styles.contactAvatarFallback,
+                        item.role === 'teacher' && styles.contactAvatarTeacher,
+                        item.role === 'admin' && styles.contactAvatarAdmin,
+                      ]}>
+                        <Ionicons
+                          name={item.role === 'admin' ? 'shield-checkmark' : item.role === 'teacher' ? 'school' : 'person'}
+                          size={20}
+                          color={item.role === 'admin' ? '#92400E' : item.role === 'teacher' ? '#6D28D9' : COLORS.primary}
+                        />
+                      </View>
+                    )}
+                    {item.is_online ? <View style={styles.contactOnlineBadge} /> : null}
+                  </TouchableOpacity>
+
+                  <View style={styles.contactInfo}>
+                    <View style={styles.contactNameRow}>
+                      <Text style={styles.contactName} numberOfLines={1}>{item.name}</Text>
+                      <View style={[
+                        styles.contactRoleBadge,
+                        item.role === 'teacher' && styles.contactRoleBadgeTeacher,
+                        item.role === 'admin' && styles.contactRoleBadgeAdmin,
+                      ]}>
+                        <Text style={[
+                          styles.contactRoleText,
+                          item.role === 'teacher' && styles.contactRoleTextTeacher,
+                          item.role === 'admin' && styles.contactRoleTextAdmin,
+                        ]}>
+                          {roleUpper}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      <Text style={styles.contactSubtitle}>
+                        {item.status === 'approved' || item.status === 'active' ? 'Active MSLB Member' : 'Member'}
+                      </Text>
+                      {item.student_id ? (
+                        <Text style={styles.contactStudentId}>• ID: {item.student_id}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  <Ionicons name="chatbubble-outline" size={20} color={COLORS.primary} />
+                </TouchableOpacity>
+              );
+            }}
+          />
         </View>
-      )}
+      </Modal>
+
+      {/* Profile Preview Modal */}
+      <Modal
+        visible={!!previewUser}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewUser(null)}
+      >
+        <View style={styles.previewBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setPreviewUser(null)}
+          />
+          <View style={styles.previewCard}>
+            {previewUser?.photo_url ? (
+              <Image source={{ uri: previewUser.photo_url }} style={styles.previewPhoto} />
+            ) : (
+              <View style={styles.previewPhotoFallback}>
+                <Ionicons name="person" size={48} color={COLORS.primary} />
+              </View>
+            )}
+            <Text style={styles.previewName}>{previewUser?.name}</Text>
+            <View style={[
+              styles.contactRoleBadge,
+              previewUser?.role === 'teacher' && styles.contactRoleBadgeTeacher,
+              previewUser?.role === 'admin' && styles.contactRoleBadgeAdmin,
+              { marginTop: 4, paddingHorizontal: 10, paddingVertical: 3 }
+            ]}>
+              <Text style={[
+                styles.contactRoleText,
+                previewUser?.role === 'teacher' && styles.contactRoleTextTeacher,
+                previewUser?.role === 'admin' && styles.contactRoleTextAdmin,
+                { fontSize: 11 }
+              ]}>
+                {(previewUser?.role || 'student').toUpperCase()}
+              </Text>
+            </View>
+            <Text style={styles.previewStatusText}>Institutional Member</Text>
+
+            <View style={styles.previewActionRow}>
+              <TouchableOpacity
+                style={styles.previewMessageBtn}
+                activeOpacity={0.7}
+                onPress={() => previewUser && openDirectChat(previewUser)}
+              >
+                <Ionicons name="chatbubble" size={18} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.previewMessageBtnText}>Message</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.previewCloseBtn}
+                activeOpacity={0.7}
+                onPress={() => setPreviewUser(null)}
+              >
+                <Text style={styles.previewCloseBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {showGroupCreator && (isAdmin || isTeacher) && (
         <View style={styles.panel}>
@@ -625,57 +821,78 @@ export default function ChatsScreen() {
             const otherId = (Array.isArray(item.participants) ? item.participants : []).find((p) => p !== user?.uid);
             const avatarUser = otherId ? userById[otherId] : undefined;
             const pinned = (Array.isArray(item.pinned_by) ? item.pinned_by : []).includes(user?.uid || '');
+            const isArchived = (Array.isArray(item.archived_by) ? item.archived_by : []).includes(user?.uid || '');
             const selectedNow = selectedChatIds.includes(item.id);
+            const unreadCount = item.unread_counts?.[user?.uid || ''] || 0;
+            const isOutgoing = item.last_sender_id === user?.uid;
+
             return (
-            <ScalePressable
-              style={[styles.chatCard, selectedNow && styles.chatCardSelected]}
-              onPress={() => safePush(`/chat/${item.id}`)}
-              onLongPress={() => toggleChatSelection(item.id)}
-            >
-              {avatarUser?.photo_url ? (
-                <Image source={{ uri: avatarUser.photo_url }} style={styles.chatAvatar} />
-              ) : (
-                <View style={styles.chatAvatarFallback}>
-                  <Text style={styles.chatAvatarInitial}>
-                    {(chatTitle(item, usersMap, user?.uid || '').charAt(0) || 'C').toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
-              <View style={styles.chatTitleRow}>
-                <Text style={[styles.chatName, (item.unread_counts?.[user?.uid || ''] || 0) > 0 && styles.chatNameUnread]}>{chatTitle(item, usersMap, user?.uid || '')}</Text>
-                <View style={styles.chatMetaTop}>
-                  {pinned ? <Ionicons name="pin" size={12} color={COLORS.primary} /> : null}
-                  <Text style={styles.chatType}>{item.type}</Text>
-                </View>
-              </View>
-              <View style={styles.previewRow}>
-                <Text style={[styles.chatPreview, (item.unread_counts?.[user?.uid || ''] || 0) > 0 && styles.chatPreviewUnread]} numberOfLines={1}>
-                  {item.last_message ? (item.last_sender_id === user?.uid ? `You: ${item.last_message}` : item.last_message) : 'No messages yet'}
-                </Text>
-                <View style={styles.metaRight}>
-                  <Text style={styles.chatTime}>{fmtChatTime(item.updated_at)}</Text>
-                  {(item.unread_counts?.[user?.uid || ''] || 0) > 0 ? (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadText}>{item.unread_counts?.[user?.uid || '']}</Text>
+              <ScalePressable
+                style={[styles.chatCard, selectedNow && styles.chatCardSelected]}
+                onPress={() => safePush(`/chat/${item.id}`)}
+                onLongPress={() => toggleChatSelection(item.id)}
+              >
+                {avatarUser?.photo_url ? (
+                  <Image source={{ uri: avatarUser.photo_url }} style={styles.chatAvatar} />
+                ) : (
+                  <View style={[styles.chatAvatarFallback, item.type === 'broadcast' && { backgroundColor: '#FEF3C7' }, item.type === 'group' && { backgroundColor: '#E0E7FF' }]}>
+                    <Ionicons
+                      name={item.type === 'broadcast' ? 'megaphone' : item.type === 'group' ? 'people' : 'person'}
+                      size={20}
+                      color={item.type === 'broadcast' ? COLORS.secondary : item.type === 'group' ? COLORS.primary : COLORS.goldText}
+                    />
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <View style={styles.chatTitleRow}>
+                    <Text style={[styles.chatName, unreadCount > 0 && styles.chatNameUnread]} numberOfLines={1}>
+                      {chatTitle(item, usersMap, user?.uid || '')}
+                    </Text>
+                    <View style={styles.chatMetaTop}>
+                      {pinned ? <Ionicons name="pin" size={12} color={COLORS.primary} style={{ marginRight: 2 }} /> : null}
+                      <Text style={[styles.chatType, item.type === 'broadcast' && { color: '#92400E', backgroundColor: '#FEF3C7' }, item.type === 'group' && { color: '#3730A3', backgroundColor: '#E0E7FF' }]}>
+                        {item.type}
+                      </Text>
                     </View>
-                  ) : null}
+                  </View>
+                  <View style={styles.previewRow}>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                      {isOutgoing && (
+                        <Ionicons
+                          name="checkmark-done"
+                          size={14}
+                          color={COLORS.primary}
+                          style={{ marginRight: 4 }}
+                        />
+                      )}
+                      <Text style={[styles.chatPreview, unreadCount > 0 && styles.chatPreviewUnread]} numberOfLines={1}>
+                        {item.last_message ? item.last_message : 'No messages yet'}
+                      </Text>
+                    </View>
+                    <View style={styles.metaRight}>
+                      <Text style={styles.chatTime}>{fmtChatTime(item.updated_at)}</Text>
+                      {unreadCount > 0 ? (
+                        <View style={styles.unreadBadge}>
+                          <Text style={styles.unreadText}>{unreadCount}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
                 </View>
-              </View>
-              </View>
-              <View style={styles.chatActions}>
-                <TouchableOpacity onPress={() => setReportChat(item)} style={styles.actionBtn} accessibilityLabel="Report chat">
-                  <Ionicons name="flag-outline" size={16} color={COLORS.textMuted} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => togglePinChat(item)} style={styles.actionBtn}>
-                  <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={16} color={COLORS.primary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => toggleChatSelection(item.id)} style={styles.actionBtn}>
-                  <Ionicons name={selectedNow ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={selectedNow ? COLORS.primary : COLORS.textMuted} />
-                </TouchableOpacity>
-              </View>
-            </ScalePressable>
-          )}}
+                <View style={styles.chatActions}>
+                  <TouchableOpacity onPress={() => setReportChat(item)} style={styles.actionBtn} accessibilityLabel="Report chat">
+                    <Ionicons name="flag-outline" size={16} color={COLORS.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => togglePinChat(item)} style={styles.actionBtn} accessibilityLabel="Pin chat">
+                    <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={16} color={pinned ? COLORS.primary : COLORS.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => toggleArchiveChat(item)} style={styles.actionBtn} accessibilityLabel="Archive chat">
+                    <Ionicons name={isArchived ? 'file-tray-full' : 'file-tray-outline'} size={16} color={isArchived ? COLORS.primary : COLORS.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              </ScalePressable>
+            );
+          }}
           ListEmptyComponent={(
             <EmptyState icon="chatbubbles-outline" title="No Conversations Yet" message="Start chatting with teachers and classmates." />
           )}
@@ -693,8 +910,8 @@ const styles = StyleSheet.create({
   },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.md },
   refreshBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
-  subtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  title: { fontSize: 22, fontWeight: '800', color: COLORS.textMain },
+  subtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2, fontWeight: '500' },
   feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: SPACING.md },
   toolBtn: {
@@ -707,10 +924,10 @@ const styles = StyleSheet.create({
   filterTabsScroll: { paddingHorizontal: SPACING.md, gap: 8 },
   filterTabChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   filterTabChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterTabText: { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
+  filterTabText: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary },
   filterTabTextActive: { color: '#FFF' },
   errorText: { color: '#B3261E', fontSize: 12, paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm },
-  panel: { marginHorizontal: SPACING.md, marginBottom: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, ...SHADOWS.card },
+  panel: { marginHorizontal: SPACING.md, marginBottom: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card },
   panelTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textMain, marginBottom: 8 },
   input: {
     backgroundColor: COLORS.surface,
@@ -724,14 +941,14 @@ const styles = StyleSheet.create({
   },
   groupUsers: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   userChip: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt },
-  userChipActive: { borderColor: COLORS.primary, backgroundColor: '#EEF6F2' },
+  userChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceAlt },
   userChipText: { color: COLORS.textMain, fontSize: 12, fontWeight: '600' },
   userChipTextActive: { color: COLORS.primary },
   createBtn: { marginTop: 12, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: SPACING.md, alignItems: 'center' },
   createBtnText: { color: '#fff', fontWeight: '700' },
   list: { padding: SPACING.md, gap: 8, paddingBottom: 24 },
   loadingList: { padding: SPACING.md, gap: SPACING.sm },
-  chatCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card, flexDirection: 'row', gap: 10 },
+  chatCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card, flexDirection: 'row', gap: 10 },
   chatAvatar: { width: 44, height: 44, borderRadius: 22, marginTop: 2 },
   chatAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.goldBg, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   chatAvatarInitial: { fontSize: 17, fontWeight: '800', color: COLORS.goldText },
@@ -756,5 +973,246 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
     marginTop: SPACING.md,
+  },
+  directoryContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  directoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  directoryBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  directoryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  directorySubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
+  directorySearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceAlt,
+    marginHorizontal: SPACING.md,
+    marginVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  directorySearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.textMain,
+    padding: 0,
+  },
+  directoryList: {
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.xl,
+  },
+  emptyDirectory: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xxl,
+    gap: SPACING.sm,
+  },
+  emptyDirectoryText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  contactAvatarWrap: {
+    position: 'relative',
+  },
+  contactOnlineBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+  },
+  contactStudentId: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  contactAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+  },
+  contactAvatarFallback: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactAvatarTeacher: {
+    backgroundColor: '#EDE9FE',
+    borderColor: '#C4B5FD',
+  },
+  contactAvatarAdmin: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  contactName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    flexShrink: 1,
+  },
+  contactRoleBadge: {
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  contactRoleBadgeTeacher: {
+    backgroundColor: '#EDE9FE',
+    borderColor: '#C4B5FD',
+  },
+  contactRoleBadgeAdmin: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  contactRoleText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    letterSpacing: 0.4,
+  },
+  contactRoleTextTeacher: {
+    color: '#6D28D9',
+  },
+  contactRoleTextAdmin: {
+    color: '#92400E',
+  },
+  contactSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  previewCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    ...SHADOWS.card,
+  },
+  previewPhoto: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    marginBottom: SPACING.md,
+  },
+  previewPhotoFallback: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  previewName: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    textAlign: 'center',
+  },
+  previewStatusText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    marginBottom: SPACING.lg,
+  },
+  previewActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  previewMessageBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+  },
+  previewMessageBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  previewCloseBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewCloseBtnText: {
+    color: COLORS.textMain,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

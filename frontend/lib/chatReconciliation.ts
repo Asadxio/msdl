@@ -9,8 +9,23 @@ export type Msg = {
 };
 
 function ms(m: Msg): number {
-  const d = m.created_at?.toDate ? m.created_at.toDate() : null;
-  return d ? d.getTime() : 0;
+  if (!m) return 0;
+  try {
+    const d = m.created_at?.toDate ? m.created_at.toDate() : null;
+    if (d && !isNaN(d.getTime())) return d.getTime();
+  } catch {
+    // ignore
+  }
+  if (typeof (m as any).created_at_ms === 'number' && (m as any).created_at_ms > 0) {
+    return (m as any).created_at_ms;
+  }
+  if (typeof (m as any).sent_at_ms === 'number' && (m as any).sent_at_ms > 0) {
+    return (m as any).sent_at_ms;
+  }
+  if (m.localOnly || m.status === 'pending' || m.status === 'sending' || !m.created_at) {
+    return Date.now();
+  }
+  return 0;
 }
 
 export function mergeServerAndLocal(server: Msg[], local: Msg[]): Msg[] {

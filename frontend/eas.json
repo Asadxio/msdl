@@ -26,9 +26,9 @@
       "channel": "production",
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production",
-        "EXPO_PUBLIC_API_BASE_URL": "https://msdl-production-9afb.up.railway.app/api",
-        "EXPO_PUBLIC_LIVE_API_URL": "https://msdl-production-9afb.up.railway.app",
-        "EXPO_PUBLIC_PUSH_API_URL": "https://msdl-production-9afb.up.railway.app",
+        "EXPO_PUBLIC_API_BASE_URL": "https://msdl-backend.onrender.com/api",
+        "EXPO_PUBLIC_LIVE_API_URL": "https://msdl-backend.onrender.com",
+        "EXPO_PUBLIC_PUSH_API_URL": "https://msdl-backend.onrender.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "madrasa-app-50d6c"
       }
     },

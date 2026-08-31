@@ -58,3 +58,40 @@ export async function loadAssignmentDraft(uid: string, assignmentId: string): Pr
 export async function clearAssignmentDraft(uid: string, assignmentId: string): Promise<void> {
   await AsyncStorage.removeItem(keyForAssignmentDraft(uid, assignmentId));
 }
+
+// ─── Quiz Category Counts Cache ────────────────────────────────────────────────
+// Caches the result of getQuizCategoryCounts Cloud Function for QUIZ_COUNTS_TTL_MS
+// so the quiz screen loads instantly without any network call on repeat visits.
+
+const QUIZ_COUNTS_KEY = 'quiz_category_counts_cache';
+/** Cache expires after 1 hour */
+export const QUIZ_COUNTS_TTL_MS = 60 * 60 * 1000;
+
+type QuizCountsCache = {
+  counts: Record<string, number>;
+  savedAt: number;
+};
+
+export async function saveQuizCounts(counts: Record<string, number>): Promise<void> {
+  const payload: QuizCountsCache = { counts, savedAt: Date.now() };
+  await AsyncStorage.setItem(QUIZ_COUNTS_KEY, JSON.stringify(payload));
+}
+
+export async function loadQuizCounts(): Promise<Record<string, number> | null> {
+  try {
+    const raw = await AsyncStorage.getItem(QUIZ_COUNTS_KEY);
+    if (!raw) return null;
+    const parsed: QuizCountsCache = JSON.parse(raw);
+    if (!parsed || Date.now() - parsed.savedAt > QUIZ_COUNTS_TTL_MS) {
+      await AsyncStorage.removeItem(QUIZ_COUNTS_KEY);
+      return null;
+    }
+    return parsed.counts;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearQuizCounts(): Promise<void> {
+  await AsyncStorage.removeItem(QUIZ_COUNTS_KEY);
+}

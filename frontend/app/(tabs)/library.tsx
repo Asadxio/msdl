@@ -124,11 +124,12 @@ export default function LibraryScreen() {
     getRecentlyViewed().then(setRecentlyViewedIds).catch(() => {});
   }, []);
 
-  const handleOpenBook = useCallback(async (book: Book) => {
-    await addRecentlyViewed(book.id);
-    const updated = await getRecentlyViewed();
-    setRecentlyViewedIds(updated);
+  const handleOpenBook = useCallback((book: Book) => {
     router.push(`/book/${book.id}`);
+    addRecentlyViewed(book.id)
+      .then(() => getRecentlyViewed())
+      .then(setRecentlyViewedIds)
+      .catch(() => {});
   }, [router]);
 
   const recentlyViewedBooks = useMemo(
@@ -374,8 +375,8 @@ const styles = StyleSheet.create({
     ...SHADOWS.header,
   },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
-  headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 4 },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.textMain },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2, fontWeight: '500' },
   feedbackWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   searchWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, gap: 8 },
   searchBar: {
@@ -392,7 +393,8 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
     color: COLORS.textMain,
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '500',
   },
   filterRow: { gap: 8, paddingVertical: 2 },
   filterChip: {
@@ -400,10 +402,10 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: 6,
   },
   filterChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceAlt },
-  filterChipText: { color: COLORS.textMuted, fontSize: 12, fontWeight: '600' },
-  filterChipTextActive: { color: COLORS.primary },
+  filterChipText: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '600' },
+  filterChipTextActive: { color: COLORS.primary, fontWeight: '700' },
   errorBanner: {
-    marginHorizontal: SPACING.md, marginTop: SPACING.sm, borderRadius: RADIUS.xxl,
+    marginHorizontal: SPACING.md, marginTop: SPACING.sm, borderRadius: RADIUS.lg,
     borderWidth: 1, borderColor: '#F2B8B5', backgroundColor: '#FDECEC',
     paddingHorizontal: SPACING.md, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
@@ -412,24 +414,24 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   refreshBtn: {
     width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: 'rgba(15,169,88,0.24)',
+    backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border,
   },
   refreshBtnDisabled: { opacity: 0.58 },
   addBtn: { padding: 4 },
   loadingList: { padding: SPACING.md, gap: SPACING.sm },
   centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, padding: SPACING.lg },
-  centerTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
-  centerText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '500', textAlign: 'center' },
+  centerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textMain },
+  centerText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '500', textAlign: 'center' },
   addFirstBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.primary,
-    paddingHorizontal: 20, paddingVertical: SPACING.md, borderRadius: RADIUS.xxl, marginTop: SPACING.md,
+    paddingHorizontal: 20, paddingVertical: SPACING.md, borderRadius: RADIUS.full, marginTop: SPACING.md,
   },
-  addFirstBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  addFirstBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   listContent: { padding: SPACING.md, paddingBottom: 30 },
   columnWrapper: { gap: SPACING.md, marginBottom: SPACING.md },
   card: {
-    flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl,
-    overflow: 'hidden', ...SHADOWS.card,
+    flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
+    overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card,
   },
   coverArea: {
     width: '100%', height: 110, alignItems: 'center', justifyContent: 'center',

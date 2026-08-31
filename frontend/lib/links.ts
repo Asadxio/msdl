@@ -46,6 +46,7 @@ export function prepareExternalUrl(raw: string): string | null {
 }
 
 export const WHATSAPP_HELP_URL = 'https://wa.link/mrtyi1';
+export const MADRASA_WEBSITE_URL = 'https://madrasa-website-299.netlify.app/';
 
 export function normalizeWhatsAppUrl(raw: string): string | null {
   const value = String(raw || '').trim();

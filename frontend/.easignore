@@ -2,3 +2,5 @@
 scratch/
 .git/
 node_modules/
+android/
+ios/

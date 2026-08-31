@@ -12,19 +12,19 @@ service firebase.storage {
           // Temporary admin bypass: allow admin/super_admin even when
           // email_verified is false, provided they have approved status.
           // TODO: Remove this bypass once admin emails are verified.
-          || (exists(/databases/(default)/documents/users/$(request.auth.uid))
-            && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
-            && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved')
+          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+            && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
+            && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved')
         );
     }
 
     function userDoc() {
-      return get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
 
     function isApprovedVerifiedUser() {
       return isVerified()
-        && exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
         && userDoc().status == 'approved';
     }
 
@@ -52,23 +52,35 @@ service firebase.storage {
       return request.resource != null
         && request.resource.size > 0
         && request.resource.size <= 20971520
-        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime', 'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/wav'];
+        && request.resource.contentType in [
+          'image/jpeg', 'image/png', 'image/webp',
+          'video/mp4', 'video/quicktime',
+          'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/wav', 'audio/m4a', 'audio/x-m4a',
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-powerpoint',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'text/plain'
+        ];
     }
 
     function canReadChatMedia(chatId) {
       return isSignedIn()
-        && exists(/databases/(default)/documents/chats/$(chatId))
-        && request.auth.uid in get(/databases/(default)/documents/chats/$(chatId)).data.participants;
+        && firestore.exists(/databases/(default)/documents/chats/$(chatId))
+        && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
     }
 
     function hasActiveEnrollmentForCourse(courseId) {
       return isApprovedVerifiedUser()
         && courseId is string
         && courseId.size() > 0
-        && exists(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
-        && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.user_id == request.auth.uid
-        && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.course_id == courseId
-        && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.status == 'active';
+        && firestore.exists(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
+        && firestore.get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.user_id == request.auth.uid
+        && firestore.get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.course_id == courseId
+        && firestore.get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.status == 'active';
     }
 
     function isLiveClassTeacherOrAdmin(data) {
@@ -81,10 +93,10 @@ service firebase.storage {
 
     function canReadLiveClassStorage(classId) {
       return isApprovedVerifiedUser()
-        && exists(/databases/(default)/documents/live_classes/$(classId))
+        && firestore.exists(/databases/(default)/documents/live_classes/$(classId))
         && (
-          isLiveClassTeacherOrAdmin(get(/databases/(default)/documents/live_classes/$(classId)).data)
-          || hasActiveEnrollmentForCourse(get(/databases/(default)/documents/live_classes/$(classId)).data.course_id)
+          isLiveClassTeacherOrAdmin(firestore.get(/databases/(default)/documents/live_classes/$(classId)).data)
+          || hasActiveEnrollmentForCourse(firestore.get(/databases/(default)/documents/live_classes/$(classId)).data.course_id)
         );
     }
 
@@ -114,16 +126,16 @@ service firebase.storage {
 
     function isAdmin() {
       return isApprovedVerifiedUser()
-        && exists(/databases/(default)/documents/users/$(request.auth.uid))
-        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
-        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin']
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
     function isTeacherOrAdmin() {
       return isApprovedVerifiedUser()
-        && exists(/databases/(default)/documents/users/$(request.auth.uid))
-        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin', 'super_admin']
-        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin', 'super_admin']
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
     function isSafeAssignmentUpload() {
@@ -144,10 +156,10 @@ service firebase.storage {
       return isApprovedVerifiedUser()
         && (
           userDoc().role in ['teacher', 'admin', 'super_admin']
-          || (exists(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
-            && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.user_id == request.auth.uid
-            && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.course_id == courseId
-            && get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.status == 'active')
+          || (firestore.exists(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
+            && firestore.get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.user_id == request.auth.uid
+            && firestore.get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.course_id == courseId
+            && firestore.get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.status == 'active')
         );
     }
 
@@ -199,6 +211,15 @@ service firebase.storage {
         && request.auth.uid == userId
         && fileName.matches('^[A-Za-z0-9._-]{6,140}$')
         && isSafeAssignmentUpload();
+    }
+
+    // ── Certificate PDFs ──────────────────────────────────────────────────────
+    // Generated server-side by generateCertificate Cloud Function (Admin SDK).
+    // Owner can read their own certificate PDF.
+    // Client writes are denied — Admin SDK bypasses these rules intentionally.
+    match /certificates/{userId}/{fileName} {
+      allow read: if isApprovedVerifiedUser() && request.auth.uid == userId;
+      allow write: if false;
     }
 
     match /{allPaths=**} {

@@ -60,12 +60,15 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ.get('MONGO_URL')
 db_name = os.environ.get('DB_NAME')
 
+client = None
+db = None
+
 if mongo_url and db_name:
-    client = AsyncIOMotorClient(mongo_url)
-    db = client[db_name]
-else:
-    client = None
-    db = None
+    try:
+        client = AsyncIOMotorClient(mongo_url)
+        db = client[db_name]
+    except Exception as mongo_err:
+        logging.warning(f"MongoDB client initialization warning: {mongo_err}")
 
 # Create the main app without a prefix
 app = FastAPI()

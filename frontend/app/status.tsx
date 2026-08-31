@@ -33,7 +33,8 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { COLORS, RADIUS, SHADOWS, SPACING } from "@/constants/theme";
-import { auth, db } from "@/lib/firebase";
+import { auth, db, functions } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
 import { useAuth } from "@/context/AuthContext";
 import { ReportReasonModal } from "@/components/ReportReasonModal";
 import { submitUgcReport, type ReportReason } from "@/lib/ugcReports";
@@ -226,26 +227,13 @@ export default function StatusScreen() {
 
   const reactEmoji = async (item: StatusItem, emoji: "❤️" | "🔥" | "👏") => {
     if (!user?.uid) return;
-    if (STATUS_API_URL && auth.currentUser) {
-      const token = await auth.currentUser.getIdToken().catch(() => "");
-      if (token) {
-        const response = await fetch(`${STATUS_API_URL}/api/status/react`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ status_id: item.id, reaction: emoji }),
-        }).catch(() => null);
-        if (response?.ok) return;
-      }
+    try {
+      const reactToStatusFn = httpsCallable(functions, 'reactToStatus');
+      await reactToStatusFn({ statusId: item.id, reaction: emoji });
+    } catch (error) {
+      console.error('[status] reactToStatus error:', error);
+      // Fallback to direct local optimistic update if needed, but the cloud function will handle it.
     }
-    const reactionRef = doc(db, "status_updates", item.id, "reactions", user.uid);
-    const prevSnap = await getDoc(reactionRef).catch(() => null);
-    const prevReaction = prevSnap?.exists() ? String((prevSnap.data() as any).reaction || "") : "";
-    if (prevReaction === emoji) return;
-    const updates: Record<string, any> = {};
-    if (prevReaction) updates[`reaction_counts.${prevReaction}`] = increment(-1);
-    updates[`reaction_counts.${emoji}`] = increment(1);
-    await setDoc(reactionRef, { reaction: emoji, user_id: user.uid, updated_at: serverTimestamp() }, { merge: true });
-    await updateDoc(doc(db, "status_updates", item.id), updates).catch(() => Alert.alert("Reaction failed", "Could not react right now."));
   };
 
   const submitStatusReport = async (reason: ReportReason) => {

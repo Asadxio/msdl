@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
-import { collection, doc, updateDoc, deleteDoc, where } from 'firebase/firestore';
+import { collection, doc, updateDoc, deleteDoc, where, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { UserProfile, useAuth } from '@/context/AuthContext';
@@ -89,9 +89,22 @@ export default function AdminUsersScreen() {
     if (isAdmin) fetchUsers('reset');
   }, [isAdmin, roleFilter, statusFilter]);
 
-  const updateUser = async (uid: string, updates: Partial<UserProfile>) => {
+  const updateUser = async (uid: string, updates: Partial<UserProfile> & { updated_at?: any }) => {
     try {
-      await updateDoc(doc(db, 'users', uid), updates);
+      const payload = { ...updates, updated_at: serverTimestamp() };
+      await updateDoc(doc(db, 'users', uid), payload);
+      if (updates.status) {
+        const uTarget = users.find((x) => x.id === uid);
+        await setDoc(doc(db, 'public_profiles', uid), {
+          uid,
+          name: uTarget?.name || 'User',
+          role: uTarget?.role || 'student',
+          status: updates.status,
+          searchable: updates.status === 'approved',
+          is_active: updates.status === 'approved',
+          updated_at: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      }
       await createAdminLog(profile, {
         action: 'user_update',
         performed_by: profile?.email || profile?.name || 'admin',
@@ -399,7 +412,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 30 },
-  userCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
+  userCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
   userTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 10 },
   searchInput: {
     backgroundColor: COLORS.surface,

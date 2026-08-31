@@ -180,7 +180,7 @@ export default function ModerationDashboard() {
             <View style={styles.emptyBox}>
               <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.textMuted} />
               <Text style={styles.emptyTitle}>Queue is Clear</Text>
-              <Text style={styles.emptyDesc}>There are currently no reports matching "{state.replace('_', ' ')}" status.</Text>
+              <Text style={styles.emptyDesc}>There are currently no reports matching &quot;{state.replace('_', ' ')}&quot; status.</Text>
             </View>
           )
         }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform, Animated, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,8 @@ import { calculatePrayerTimes, getPrayerCalculationSettings, getPrayerWindow, Pr
 import { loadPrayerSettings, PrayerSettings, subscribeToPrayerSettings } from '@/lib/prayerStorage';
 import { DAILY_WISDOM, MASNOON_DUAS, HADITHS, MOTIVATIONAL_QUOTES } from '@/constants/wisdomData';
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
+import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
+import { MADRASA_WEBSITE_URL } from '@/lib/links';
 
 const HIJRI_MONTH_NORMALIZATION: Record<string, string> = {
   "Dhuʻl-Qiʻdah": 'Zul Qidah', 'Dhu’l-Qi’dah': 'Zul Qidah',
@@ -37,6 +39,7 @@ export default function HomeScreen() {
   const { profile, user } = useAuth();
   const { 
     courses,
+    loading: dataLoading,
     getResumeLearning, 
     getCourseProgress,
     lessonProgress,
@@ -88,20 +91,18 @@ export default function HomeScreen() {
 
   const hijriDate = useMemo(() => formatHijri(now), [now]);
 
-  let currentPrayer: PrayerTime | null = null;
-  let nextPrayer: PrayerTime | null = null;
-  let progressRatio = 0;
-  
-  if (prayerSettings) {
+  const prayerWindow = useMemo(() => {
+    if (!prayerSettings) return { current: null, next: null, progress: 0 };
     const calcSettings = getPrayerCalculationSettings(
       prayerSettings.method === "auto" ? prayerSettings.country : prayerSettings.method
     );
     const prayers = calculatePrayerTimes(now, prayerSettings.latitude, prayerSettings.longitude, calcSettings, prayerSettings.altitude);
-    const window = getPrayerWindow(prayers, now, prayerSettings.latitude, prayerSettings.longitude, calcSettings, prayerSettings.altitude);
-    currentPrayer = window.current;
-    nextPrayer = window.next;
-    progressRatio = window.progress;
-  }
+    return getPrayerWindow(prayers, now, prayerSettings.latitude, prayerSettings.longitude, calcSettings, prayerSettings.altitude);
+  }, [prayerSettings, now]);
+
+  const currentPrayer = prayerWindow.current;
+  const nextPrayer = prayerWindow.next;
+  const progressRatio = prayerWindow.progress;
 
   const resume = getResumeLearning();
   const activeCourseProgress = useMemo(() => {
@@ -185,6 +186,22 @@ export default function HomeScreen() {
     );
   }
 
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
+  if (isTeacher) {
+    return (
+      <TeacherDashboard
+        profile={profile}
+        user={user}
+        hijriDate={hijriDate}
+        currentPrayer={currentPrayer}
+        nextPrayer={nextPrayer}
+        formatTime={formatTime}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -194,8 +211,8 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
         }
       >
-        {/* Section 1: Premium Hero Branding */}
-        <View style={[styles.heroSection, { paddingTop: insets.top + SPACING.sm }]}>
+        {/* Section 1: Institutional Header Branding */}
+        <View style={[styles.heroSection, { paddingTop: insets.top + SPACING.xs }]}>
           <View style={styles.headerActionsRow}>
             <View style={{ flex: 1 }} />
             <TouchableOpacity 
@@ -205,7 +222,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Notifications"
             >
-              <Ionicons name="notifications-outline" size={24} color={COLORS.surface} />
+              <Ionicons name="notifications-outline" size={22} color={COLORS.surface} />
               {badgeCount > 0 && (
                 <View style={styles.badgeDot}>
                   <Text style={styles.badgeDotText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
@@ -219,12 +236,11 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Settings"
             >
-              <Ionicons name="settings-outline" size={24} color={COLORS.surface} />
+              <Ionicons name="settings-outline" size={22} color={COLORS.surface} />
             </TouchableOpacity>
           </View>
           <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
-          <Text style={styles.welcomeTo}>WELCOME TO</Text>
-          <Text style={styles.madrasaName}>Madrasa Tus Salikat Lil Banat</Text>
+          <Text style={styles.madrasaName}>Madrasatu-s-Salikat Lil Banat</Text>
           <Text style={styles.madrasaArabic}>مدرسۃ السالکات للبنات</Text>
           <View style={styles.taglineRow}>
             <View style={styles.goldLine} />
@@ -233,14 +249,14 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Section 2: Phase 1 — Welcome Card Enhancement */}
+        {/* Section 2: Student Identity Card */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeInfo}>
-            <Text style={styles.welcomeBackText}>Welcome Back</Text>
+            <Text style={styles.welcomeBackText}>Student Portal</Text>
             <Text style={styles.userName} numberOfLines={1}>{profile?.name || 'Student'}</Text>
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>
-                {profile?.role === 'super_admin' || profile?.founder ? 'ADMINISTRATOR' : (profile?.role === 'teacher' ? 'TEACHER' : 'STUDENT')}
+                {profile?.role === 'super_admin' || profile?.founder ? 'ADMINISTRATOR' : (profile?.role === 'teacher' ? 'TEACHER' : 'ENROLLED STUDENT')}
               </Text>
             </View>
           </View>
@@ -251,12 +267,12 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Section 3: Daily Wisdom */}
+        {/* Section 3: Daily Wisdom (Editorial Islamic Quote Card) */}
         <View style={styles.sectionContainer}>
           <View style={styles.wisdomCard}>
              <View style={styles.sectionHeaderRow}>
-               <Ionicons name="sparkles" size={16} color={COLORS.secondary} />
-               <Text style={[styles.sectionEyebrow, { color: COLORS.secondary }]}>Daily Wisdom</Text>
+               <Ionicons name="sparkles" size={15} color={COLORS.secondary} />
+               <Text style={styles.sectionEyebrow}>Daily Wisdom</Text>
              </View>
              <Text style={styles.arabicTextLarge}>{randomWisdom.arabic}</Text>
              <Text style={styles.translationText}>&quot;{randomWisdom.translation}&quot;</Text>
@@ -268,8 +284,8 @@ export default function HomeScreen() {
         <View style={styles.twoColumnGrid}>
           <View style={[styles.gridCard, { flex: 1 }]}>
              <View style={styles.sectionHeaderRow}>
-               <Ionicons name="moon-outline" size={16} color={COLORS.secondary} />
-               <Text style={[styles.sectionEyebrow, { color: COLORS.textMuted }]}>Today&apos;s Dua</Text>
+               <Ionicons name="moon-outline" size={15} color={COLORS.secondary} />
+               <Text style={styles.sectionEyebrow}>Today&apos;s Dua</Text>
              </View>
              <Text style={styles.arabicTextMedium}>{randomDua.arabic}</Text>
              <Text style={styles.translationTextSmall}>&quot;{randomDua.translation}&quot;</Text>
@@ -277,8 +293,8 @@ export default function HomeScreen() {
           </View>
           <View style={[styles.gridCard, { flex: 1 }]}>
              <View style={styles.sectionHeaderRow}>
-               <Ionicons name="book-outline" size={16} color={COLORS.secondary} />
-               <Text style={[styles.sectionEyebrow, { color: COLORS.textMuted }]}>Today&apos;s Hadith</Text>
+               <Ionicons name="book-outline" size={15} color={COLORS.secondary} />
+               <Text style={styles.sectionEyebrow}>Today&apos;s Hadith</Text>
              </View>
              <Text style={styles.arabicTextMedium}>{randomHadith.arabic}</Text>
              <Text style={styles.translationTextSmall}>&quot;{randomHadith.translation}&quot;</Text>
@@ -370,7 +386,20 @@ export default function HomeScreen() {
         {/* Section 8: Phase 3 — Continue Learning */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Continue Learning</Text>
-          {resume && activeCourseProgress ? (
+          {dataLoading ? (
+            /* R1 FIX: Loading skeleton — prevents flash of empty data while DataContext hydrates */
+            <View style={styles.skeletonContinueCard}>
+              <View style={styles.skeletonRow}>
+                <View style={styles.skeletonIconBox} />
+                <View style={styles.skeletonTextCol}>
+                  <View style={[styles.skeletonLine, { width: '70%' }]} />
+                  <View style={[styles.skeletonLine, { width: '50%', marginTop: 6 }]} />
+                </View>
+              </View>
+              <View style={[styles.skeletonLine, { width: '100%', height: 8, marginTop: 16, borderRadius: 4 }]} />
+              <View style={[styles.skeletonLine, { width: '40%', height: 10, marginTop: 8 }]} />
+            </View>
+          ) : resume && activeCourseProgress ? (
             <TouchableOpacity 
                style={styles.continueCard}
                onPress={() => router.push(`/course/${resume.courseId}` as any)}
@@ -426,32 +455,45 @@ export default function HomeScreen() {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Today&apos;s Goal</Text>
           <View style={styles.checklistCard}>
-            {checklistItems.map((item, idx) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.checklistItemRow,
-                  idx < checklistItems.length - 1 && styles.checklistItemBorder
-                ]}
-                onPress={() => router.push(item.route as any)}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.title}: ${item.completed ? 'Completed' : 'Pending'}`}
-              >
-                <View style={[styles.checkboxCircle, item.completed && styles.checkboxCircleDone]}>
-                  <Ionicons 
-                    name={item.completed ? "checkmark" : "square-outline"} 
-                    size={item.completed ? 16 : 20} 
-                    color={item.completed ? COLORS.surface : COLORS.textMuted} 
-                  />
+            {dataLoading ? (
+              /* R1 FIX: skeleton rows while DataContext hydrates */
+              [0, 1, 2].map((i) => (
+                <View key={i} style={[styles.checklistItemRow, i < 2 && styles.checklistItemBorder]}>
+                  <View style={styles.skeletonIconBox} />
+                  <View style={styles.skeletonTextCol}>
+                    <View style={[styles.skeletonLine, { width: i === 0 ? '65%' : i === 1 ? '55%' : '70%' }]} />
+                    <View style={[styles.skeletonLine, { width: '45%', marginTop: 6 }]} />
+                  </View>
                 </View>
-                <View style={styles.checklistTextCol}>
-                  <Text style={[styles.checklistTitle, item.completed && styles.checklistTitleDone]}>{item.title}</Text>
-                  <Text style={styles.checklistSubtitle}>{item.subtitle}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-              </TouchableOpacity>
-            ))}
+              ))
+            ) : (
+              checklistItems.map((item, idx) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.checklistItemRow,
+                    idx < checklistItems.length - 1 && styles.checklistItemBorder
+                  ]}
+                  onPress={() => router.push(item.route as any)}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.title}: ${item.completed ? 'Completed' : 'Pending'}`}
+                >
+                  <View style={[styles.checkboxCircle, item.completed && styles.checkboxCircleDone]}>
+                    <Ionicons 
+                      name={item.completed ? "checkmark" : "square-outline"} 
+                      size={item.completed ? 16 : 20} 
+                      color={item.completed ? COLORS.surface : COLORS.textMuted} 
+                    />
+                  </View>
+                  <View style={styles.checklistTextCol}>
+                    <Text style={[styles.checklistTitle, item.completed && styles.checklistTitleDone]}>{item.title}</Text>
+                    <Text style={styles.checklistSubtitle}>{item.subtitle}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         </View>
 
@@ -461,12 +503,12 @@ export default function HomeScreen() {
           <View style={styles.quickAccessGrid}>
              {[
                { name: 'Courses', icon: 'book', route: '/(tabs)/courses' },
+               { name: 'Pay Fees', icon: 'card', route: '/payment' },
                { name: 'Library', icon: 'library', route: '/(tabs)/library' },
                { name: 'Quiz', icon: 'help-circle', route: '/(tabs)/quiz' },
                { name: 'Prayer', icon: 'time', route: '/prayer-times' },
                { name: 'Qibla', icon: 'compass', route: '/qibla' },
                { name: 'Live Classes', icon: 'videocam', route: '/live-class' },
-               { name: 'Progress', icon: 'trending-up', route: '/(tabs)/progress' },
                { name: 'View All', icon: 'grid', route: '/more' },
              ].map((item, idx) => (
                <TouchableOpacity 
@@ -520,6 +562,17 @@ export default function HomeScreen() {
         {/* Section 12: Phase 7 — Footer Polish */}
         <Animated.View style={[styles.footerContainer, { opacity: fadeAnim }]}>
           <View style={styles.footerDivider} />
+          <TouchableOpacity
+            style={styles.websiteFooterBtn}
+            onPress={() => Linking.openURL(MADRASA_WEBSITE_URL)}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Visit Official Madrasa Website"
+          >
+            <Ionicons name="globe-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.websiteFooterBtnText}>Visit Official Website</Text>
+            <Ionicons name="open-outline" size={13} color={COLORS.primary} />
+          </TouchableOpacity>
           <Text style={styles.ornamentText}>❁ ❖ ❁</Text>
           <Text style={styles.footerQuote}>&quot;{randomQuote.text}&quot;</Text>
           <Text style={styles.footerInstitutionText}>Madrasa Tus Salikat Lil Banat • Nurturing Faith & Excellence</Text>
@@ -533,15 +586,15 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.surfaceAlt,
+    backgroundColor: COLORS.background,
   },
   heroSection: {
     backgroundColor: COLORS.primary,
-    paddingBottom: 45,
+    paddingBottom: 28,
     alignItems: 'center',
-    borderBottomLeftRadius: 40,
-    borderBottomRightRadius: 40,
-    ...SHADOWS.card,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    ...SHADOWS.header,
   },
   headerActionsRow: {
     flexDirection: 'row',
@@ -549,22 +602,21 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
     gap: SPACING.sm,
   },
   headerActionBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    ...SHADOWS.card,
   },
   badgeDot: {
     position: 'absolute',
-    top: 10,
-    right: 12,
+    top: 8,
+    right: 8,
     backgroundColor: COLORS.error,
     borderRadius: 8,
     minWidth: 16,
@@ -581,64 +633,58 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   bismillah: {
-    fontSize: 24,
-    color: COLORS.secondary,
-    fontWeight: '400',
-    marginBottom: 16,
+    fontSize: 18,
+    color: COLORS.secondaryLight,
+    fontWeight: '500',
+    marginBottom: 8,
+    letterSpacing: 0.5,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
-  welcomeTo: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-    fontWeight: '800',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-  },
   madrasaName: {
-    fontSize: 26,
+    fontSize: 22,
     color: COLORS.surface,
-    fontWeight: '900',
-    marginTop: 4,
+    fontWeight: '800',
+    marginTop: 2,
     textAlign: 'center',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   madrasaArabic: {
-    fontSize: 22,
-    color: COLORS.secondary,
-    marginTop: 6,
+    fontSize: 19,
+    color: COLORS.secondaryLight,
+    marginTop: 4,
     fontWeight: '600',
-    lineHeight: 34,
+    lineHeight: 30,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   taglineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
-    gap: 12,
+    marginTop: 12,
+    gap: 10,
   },
   goldLine: {
-    height: 1.5,
-    width: 36,
+    height: 1,
+    width: 28,
     backgroundColor: COLORS.secondary,
   },
   tagline: {
     color: COLORS.secondary,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.8,
   },
   welcomeCard: {
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.lg,
-    marginTop: -28,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
+    marginTop: -20,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    borderColor: COLORS.border,
   },
   welcomeInfo: {
     flex: 1,
@@ -647,137 +693,139 @@ const styles = StyleSheet.create({
   },
   welcomeBackText: {
     fontSize: 11,
-    color: COLORS.textMuted,
+    color: COLORS.textSecondary,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
   },
   userName: {
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '800',
     color: COLORS.textMain,
     marginTop: 4,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   roleBadge: {
-    backgroundColor: 'rgba(212,175,55,0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    backgroundColor: 'rgba(200, 168, 78, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: RADIUS.full,
-    marginTop: 8,
+    marginTop: 6,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.4)',
+    borderColor: 'rgba(200, 168, 78, 0.3)',
   },
   roleBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#C59B27',
-    letterSpacing: 1,
+    color: COLORS.goldText,
+    letterSpacing: 0.8,
   },
   avatarCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: COLORS.secondary,
-    ...SHADOWS.card,
   },
   avatarText: {
-    fontSize: 26,
-    fontWeight: '900',
+    fontSize: 22,
+    fontWeight: '800',
     color: COLORS.surface,
   },
   sectionContainer: {
     paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.xl,
+    marginTop: SPACING.lg,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sectionEyebrow: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
+    color: COLORS.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: COLORS.textMain,
-    marginBottom: 14,
+    marginBottom: 12,
     letterSpacing: -0.3,
   },
   wisdomCard: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
     ...SHADOWS.card,
   },
   arabicTextLarge: {
-    fontSize: 24,
-    color: COLORS.surface,
+    fontSize: 21,
+    color: COLORS.textMain,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 12,
-    lineHeight: 38,
+    marginBottom: 10,
+    lineHeight: 34,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   translationText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    color: COLORS.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginBottom: 10,
-    lineHeight: 22,
+    marginBottom: 8,
+    lineHeight: 20,
   },
   referenceText: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.secondary,
     fontWeight: '700',
   },
   twoColumnGrid: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.xl,
-    gap: SPACING.md,
+    marginTop: SPACING.md,
+    gap: SPACING.sm,
   },
   gridCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
     ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(6,78,59,0.08)',
+    borderColor: COLORS.border,
   },
   arabicTextMedium: {
-    fontSize: 18,
+    fontSize: 16,
     color: COLORS.textMain,
     textAlign: 'right',
-    marginBottom: 8,
-    lineHeight: 30,
+    marginBottom: 6,
+    lineHeight: 26,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   translationTextSmall: {
     fontSize: 12,
-    color: COLORS.textMuted,
-    lineHeight: 18,
-    marginBottom: 8,
+    color: COLORS.textSecondary,
+    lineHeight: 17,
+    marginBottom: 6,
   },
   referenceTextSmall: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.secondary,
     fontWeight: '700',
   },
   prayerCard: {
     backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.lg,
     padding: SPACING.lg,
     ...SHADOWS.card,
   },
@@ -785,44 +833,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   prayerTitle: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '800',
     color: COLORS.surface,
   },
   prayerLocation: {
-    fontSize: 13,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.75)',
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 3,
   },
   locationPromptBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(212,175,55,0.2)',
+    backgroundColor: 'rgba(200, 168, 78, 0.2)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: RADIUS.full,
     marginTop: 6,
     alignSelf: 'flex-start',
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.4)',
+    borderColor: 'rgba(200, 168, 78, 0.4)',
   },
   locationPromptText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.secondary,
+    color: COLORS.secondaryLight,
   },
   glassBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: RADIUS.full,
     minHeight: 36,
   },
@@ -840,35 +888,35 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   prayerLabel: {
-    fontSize: 11,
-    color: COLORS.secondary,
+    fontSize: 10,
+    color: COLORS.secondaryLight,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   prayerName: {
-    fontSize: 22,
+    fontSize: 20,
     color: COLORS.surface,
-    fontWeight: '900',
+    fontWeight: '800',
     marginTop: 2,
   },
   prayerTime: {
-    fontSize: 15,
+    fontSize: 14,
     color: 'rgba(255,255,255,0.85)',
     fontWeight: '700',
     marginTop: 2,
   },
   prayerDivider: {
     width: 1,
-    height: 44,
+    height: 40,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    marginHorizontal: SPACING.lg,
+    marginHorizontal: SPACING.md,
   },
   progressTrack: {
-    height: 6,
+    height: 5,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 3,
-    marginTop: 18,
+    marginTop: 14,
     overflow: 'hidden',
   },
   progressFill: {
@@ -879,47 +927,47 @@ const styles = StyleSheet.create({
   prayerFallbackBox: {
     backgroundColor: 'rgba(255,255,255,0.1)',
     padding: SPACING.md,
-    borderRadius: RADIUS.lg,
-    marginTop: 8,
+    borderRadius: RADIUS.md,
+    marginTop: 6,
   },
   prayerFallbackText: {
     color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 18,
     textAlign: 'center',
   },
   calendarCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
     gap: SPACING.md,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.2)',
+    borderColor: COLORS.border,
     ...SHADOWS.card,
   },
   calendarTextCol: {
     flex: 1,
   },
   hijriTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
     color: COLORS.textMain,
   },
   gregorianSubtitle: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    fontWeight: '600',
-    marginTop: 3,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+    marginTop: 2,
   },
   continueCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.lg,
     padding: SPACING.lg,
     ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(6,78,59,0.1)',
+    borderColor: COLORS.border,
   },
   continueHeaderRow: {
     flexDirection: 'row',
@@ -928,46 +976,45 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   resumeIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    ...SHADOWS.card,
   },
   resumeTextCol: {
     flex: 1,
   },
   resumeCourseName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: COLORS.textMain,
   },
   resumeLessonName: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 3,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   progressBarContainer: {
     marginBottom: SPACING.md,
   },
   progressTrackBar: {
-    height: 8,
-    backgroundColor: 'rgba(6,78,59,0.08)',
-    borderRadius: 4,
+    height: 6,
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressFillBar: {
     height: '100%',
     backgroundColor: COLORS.primary,
-    borderRadius: 4,
+    borderRadius: 3,
   },
   progressPercentText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.textMuted,
-    marginTop: 6,
+    color: COLORS.textSecondary,
+    marginTop: 4,
     textAlign: 'right',
   },
   continueBtnRow: {
@@ -976,87 +1023,86 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: SPACING.sm,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.04)',
+    borderTopColor: COLORS.border,
   },
   continueBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: COLORS.primary,
   },
   emptyLearningCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
     alignItems: 'center',
     ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: COLORS.border,
   },
   emptyLearningIconBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(6,78,59,0.08)',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   emptyLearningTextCol: {
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   emptyLearningTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     color: COLORS.textMain,
   },
   emptyLearningSubtitle: {
-    fontSize: 13,
-    color: COLORS.textMuted,
+    fontSize: 12,
+    color: COLORS.textSecondary,
     textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 20,
-    paddingHorizontal: SPACING.md,
+    marginTop: 4,
+    lineHeight: 18,
+    paddingHorizontal: SPACING.sm,
   },
   exploreBtn: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: 14,
-    borderRadius: RADIUS.full,
-    minHeight: 48,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    ...SHADOWS.card,
   },
   exploreBtnText: {
     color: COLORS.surface,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
   },
   checklistCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    paddingHorizontal: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
     ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: COLORS.border,
   },
   checklistItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.md,
-    minHeight: 64,
-    gap: SPACING.md,
+    paddingVertical: SPACING.sm,
+    minHeight: 56,
+    gap: SPACING.sm,
   },
   checklistItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
+    borderBottomColor: COLORS.border,
   },
   checkboxCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1067,17 +1113,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   checklistTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: COLORS.textMain,
   },
   checklistTitleDone: {
     textDecorationLine: 'line-through',
-    color: COLORS.textMuted,
+    color: COLORS.textSecondary,
   },
   checklistSubtitle: {
-    fontSize: 12,
-    color: COLORS.textMuted,
+    fontSize: 11,
+    color: COLORS.textSecondary,
     marginTop: 2,
   },
   quickAccessGrid: {
@@ -1087,96 +1133,143 @@ const styles = StyleSheet.create({
   },
   quickAccessItem: {
     width: '48%',
-    minHeight: 64,
+    minHeight: 56,
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    padding: SPACING.sm,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     ...SHADOWS.card,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
+    borderColor: COLORS.border,
   },
   quickAccessIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(6,78,59,0.08)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quickAccessText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: COLORS.textMain,
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: SPACING.md,
+    gap: SPACING.sm,
   },
   statCard: {
     flex: 1,
-    minHeight: 110,
+    minHeight: 96,
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: COLORS.border,
     ...SHADOWS.card,
   },
   statIcon: {
-    marginBottom: 6,
+    marginBottom: 4,
   },
   statValue: {
-    fontSize: 26,
-    fontWeight: '900',
+    fontSize: 22,
+    fontWeight: '800',
     color: COLORS.primary,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: COLORS.textMuted,
+    color: COLORS.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginTop: 4,
+    marginTop: 2,
     textAlign: 'center',
   },
   footerContainer: {
-    marginTop: 48,
-    marginBottom: 24,
+    marginTop: 36,
+    marginBottom: 20,
     paddingHorizontal: SPACING.xl,
     alignItems: 'center',
   },
   footerDivider: {
-    width: 60,
-    height: 1.5,
-    backgroundColor: 'rgba(212,175,55,0.4)',
-    marginBottom: 16,
+    width: 48,
+    height: 1,
+    backgroundColor: 'rgba(200, 168, 78, 0.4)',
+    marginBottom: 12,
   },
   ornamentText: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.secondary,
-    marginBottom: 12,
-    letterSpacing: 4,
+    marginBottom: 8,
+    letterSpacing: 3,
   },
   footerQuote: {
-    fontSize: 13,
-    color: COLORS.textMuted,
+    fontSize: 12,
+    color: COLORS.textSecondary,
     textAlign: 'center',
     fontStyle: 'italic',
-    lineHeight: 22,
-    marginBottom: 10,
+    lineHeight: 19,
+    marginBottom: 8,
+  },
+  websiteFooterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 14,
+    ...SHADOWS.card,
+  },
+  websiteFooterBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   footerInstitutionText: {
-    fontSize: 11,
-    color: 'rgba(0,0,0,0.4)',
+    fontSize: 10,
+    color: COLORS.textSecondary,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
+  },
+  // ── R1 FIX: Skeleton styles ──────────────────────────────────────────────
+  skeletonContinueCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  skeletonIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  skeletonTextCol: {
+    flex: 1,
+  },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.surfaceAlt,
   },
 });

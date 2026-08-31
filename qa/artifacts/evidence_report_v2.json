@@ -1,0 +1,114 @@
+[
+  {
+    "id": "R001",
+    "name": "Splash Screen Cold Boot Timing",
+    "status": "PASS",
+    "confidence": 97,
+    "timings": {
+      "cold_launch_initiated": "04:34:39.771",
+      "total_time_ms": "921 ms",
+      "wait_time_ms": "933 ms",
+      "launch_state": "COLD"
+    },
+    "notes": [
+      "Clearing app data for clean cold boot...",
+      "am start -W (measures real cold boot time)...",
+      "am start: Starting: Intent { cmp=com.madrasatussalikat.lilbanat/.MainActivity }\nStatus: ok\nLaunchState: COLD\nActivity: com.madrasatussalikat.lilbanat/.MainActivity\nTotalTime: 921\nWaitTime: 933\nComplete",
+      "\u2713 Screenshot: R001_cold_boot.png",
+      "App in foreground (topResumedActivity): True",
+      "Logcat Displayed marker not in recent tail (buffer may have rotated)",
+      "\u2713 Cold boot confirmed. TotalTime=921 ms"
+    ],
+    "screenshots": [
+      "R001_cold_boot.png"
+    ],
+    "fail_reason": "",
+    "root_cause": "",
+    "source": ""
+  },
+  {
+    "id": "R002",
+    "name": "Keyboard Focus \u2014 Email Field",
+    "status": "PASS",
+    "confidence": 97,
+    "timings": {},
+    "notes": [
+      "App on login screen. Tapping email field...",
+      "Tapping email field at (675,1266)...",
+      "Keyboard open (mIsInputViewShown): True",
+      "IME raw state: mInputShown=false\n  mIsInputViewShown=true mStatusIcon=0",
+      "\u2713 Screenshot: R002_keyboard_open.png",
+      "Bottom inset: ",
+      "\u2713 Keyboard confirmed OPEN via mIsInputViewShown=true"
+    ],
+    "screenshots": [
+      "R002_keyboard_open.png"
+    ],
+    "fail_reason": "",
+    "root_cause": "",
+    "source": ""
+  },
+  {
+    "id": "R003",
+    "name": "Root Layout Navigation Guard \u2014 Unauthenticated Redirect",
+    "status": "PASS",
+    "confidence": 99,
+    "timings": {},
+    "notes": [
+      "Stopping app, clearing data, relaunching without auth...",
+      "\u2713 Screenshot: R003_nav_guard.png",
+      "App in foreground: True",
+      "Nodes found: 24",
+      "Screen texts: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\\uf434', 'Enter your email address', 'Password', '\\uf3c8', 'Enter your password']",
+      "\u2713 login-email-input at bounds=[277,1186][1072,1345]",
+      "\u2713 Navigation guard CONFIRMED: unauthenticated user redirected to login screen"
+    ],
+    "screenshots": [
+      "R003_nav_guard.png"
+    ],
+    "fail_reason": "",
+    "root_cause": "",
+    "source": ""
+  },
+  {
+    "id": "R004",
+    "name": "Login TextInput \u2014 Typed Value Verification",
+    "status": "PASS",
+    "confidence": 95,
+    "timings": {},
+    "notes": [
+      "Test email:    test_ntdobi@qa.mslb.test",
+      "Test password: QA_hcftqmgx_2026",
+      "Email field: [277,1186][1072,1345]",
+      "Password field: [277,1485][988,1644]",
+      "\ud83d\udcf8 BEFORE email: R004_01_before_email.png",
+      "Tapping email at (674,1265)...",
+      "Keyboard after email tap (mIsInputViewShown): True",
+      "Typing: test_ntdobi@qa.mslb.test",
+      "\ud83d\udcf8 AFTER email: R004_02_after_email.png",
+      "Read-back email: 'test_ntdobi@qa.mslb.test'",
+      "Expected email:  'test_ntdobi@qa.mslb.test'",
+      "\u2705 EXACT MATCH \u2014 Email TextInput verified",
+      "\ud83d\udcf8 BEFORE password: R004_03_before_pass.png",
+      "Tapping password at (632,1564)...",
+      "Keyboard after password tap (mIsInputViewShown): True",
+      "Typing: QA_hcftqmgx_2026",
+      "Email field retained value: 'test_ntdobi@qa.mslb.test'",
+      "\u2705 Email value retained after password focus switch",
+      "Password field type=password: True (expected: True)",
+      "Password field focused: True",
+      "Password display text: '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' (expected: masked dots)",
+      "Sign In button clickable: True",
+      "Keyboard after password typing (mIsInputViewShown): True",
+      "\u2705 No JS errors in logcat during login sequence"
+    ],
+    "screenshots": [
+      "R004_01_before_email.png",
+      "R004_02_after_email.png",
+      "R004_03_before_pass.png"
+    ],
+    "fail_reason": "",
+    "root_cause": "",
+    "source": ""
+  }
+]

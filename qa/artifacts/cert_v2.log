@@ -1,0 +1,258 @@
+2026-08-05 18:20:23,590 [INFO] ============================================================
+2026-08-05 18:20:23,590 [INFO] MSLB PRODUCTION CERTIFICATION v1.0
+2026-08-05 18:20:23,590 [INFO] Student: aliasadcivil007@gmail.com | Admin: sumraftm@gmail.com
+2026-08-05 18:20:23,590 [INFO] ============================================================
+2026-08-05 18:20:28,750 [INFO] 
+████████████████████████████████████████████████████
+PHASE A — PRE-AUTH SCREENS
+████████████████████████████████████████████████████
+2026-08-05 18:20:28,750 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A01 — Onboarding Splash
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:21:17,996 [INFO] ============================================================
+2026-08-05 18:21:17,996 [INFO] MSLB PRODUCTION CERTIFICATION v1.0
+2026-08-05 18:21:17,996 [INFO] Student: aliasadcivil007@gmail.com | Admin: sumraftm@gmail.com
+2026-08-05 18:21:17,996 [INFO] ============================================================
+2026-08-05 18:21:23,095 [INFO] 
+████████████████████████████████████████████████████
+PHASE A — PRE-AUTH SCREENS
+████████████████████████████████████████████████████
+2026-08-05 18:21:23,096 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A01 — Onboarding Splash
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:21:43,229 [INFO]   📷 ✓ A01_splash.png
+2026-08-05 18:21:46,141 [INFO]     Texts: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\uf434', 'Enter your email address', 'Password']
+2026-08-05 18:21:46,142 [INFO]     CTA present: True | Institution name: False
+2026-08-05 18:21:47,389 [INFO]     ✅ No logcat errors
+2026-08-05 18:21:47,718 [INFO]     Memory RSS: 190877 KB
+2026-08-05 18:21:47,807 [INFO]     ✅ Cold boot 969 ms
+2026-08-05 18:21:47,807 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A02 — Login Screen UI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:21:59,955 [INFO]   📷 ✓ A02_login_screen.png
+2026-08-05 18:22:02,753 [INFO]     ✓ Email field
+2026-08-05 18:22:02,753 [INFO]     ✓ Password field
+2026-08-05 18:22:02,753 [INFO]     ✓ Sign In btn
+2026-08-05 18:22:02,753 [INFO]     ✓ Sign Up link
+2026-08-05 18:22:02,753 [INFO]     ✓ Forgot PW
+2026-08-05 18:22:05,451 [INFO]   📷 ✓ A02_empty_submit_validation.png
+2026-08-05 18:22:08,152 [INFO]     Validation: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\uf434']
+2026-08-05 18:22:09,332 [INFO]     ✅ No logcat errors
+2026-08-05 18:22:09,332 [INFO]     ✅ All login UI elements present
+2026-08-05 18:22:09,333 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A03 — Sign Up UI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:22:21,443 [INFO]   📷 ✓ A03_signup_top.png
+2026-08-05 18:22:24,243 [INFO]     ✓ Phone field
+2026-08-05 18:22:24,243 [INFO]     ✓ Email field
+2026-08-05 18:22:24,243 [INFO]     ✓ Password
+2026-08-05 18:22:24,243 [INFO]     ✓ Confirm PW
+2026-08-05 18:22:24,243 [INFO]     ✓ User Type
+2026-08-05 18:22:24,243 [INFO]     ✓ Referral Code
+2026-08-05 18:22:24,243 [INFO]     ✓ T&C
+2026-08-05 18:22:24,244 [INFO]     ✓ Create Acct
+2026-08-05 18:22:25,976 [INFO]   📷 ✓ A03_teacher_toggle.png
+2026-08-05 18:22:25,977 [INFO]     ✓ Teacher toggle interactive
+2026-08-05 18:22:28,801 [INFO]   📷 ✓ A03_signup_bottom.png
+2026-08-05 18:22:29,992 [INFO]     ⚠ 1 logcat error(s): 08-05 18:22:37.189 10039 11256 E msys    : E[N MQTT]onReadError(657)=>Read Error
+2026-08-05 18:22:29,992 [INFO]     ✅ 8/8 Sign Up fields verified
+2026-08-05 18:22:29,992 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A04 — Forgot Password
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:23:05,292 [INFO]   📷 ✓ A04_fp_screen.png
+2026-08-05 18:23:08,140 [INFO]     FP texts: ['\uf127', 'Back to Sign In', 'Reset Password', 'Enter your email to receive a reset link.', 'Email', '\uf434', 'Enter your email', 'Send Reset Link']
+2026-08-05 18:23:12,731 [INFO]   📷 ✓ A04_email_typed.png
+2026-08-05 18:23:15,521 [INFO]     FP email read-back: 'Enter your email'
+2026-08-05 18:23:18,850 [INFO]     ✅ No logcat errors
+2026-08-05 18:23:18,850 [INFO]     ✅ Forgot Password flow complete
+2026-08-05 18:23:18,850 [INFO] 
+████████████████████████████████████████████████████
+PHASE B — STUDENT SESSION
+████████████████████████████████████████████████████
+2026-08-05 18:23:18,850 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B01 — Student Login
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:23:19,494 [INFO]   📷 ✓ B01_before_login.png
+2026-08-05 18:23:19,494 [INFO]   🔐 Logging in as: Student
+2026-08-05 18:24:12,612 [WARNING]   ⚠ Email read-back unclear. Typed: aliasadcivil007@gmail.com
+2026-08-05 18:24:39,534 [INFO]   ✅ Login successful — screen: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address']
+2026-08-05 18:24:47,522 [INFO]   📷 ✓ B01_after_login.png
+2026-08-05 18:24:50,349 [INFO]     Post-login state: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\uf434', 'Enter your email address', 'Password', '\uf3c8', 'Enter your password']
+2026-08-05 18:24:51,537 [INFO]     ✅ No logcat errors
+2026-08-05 18:24:51,823 [INFO]     Memory RSS: 195473 KB
+2026-08-05 18:24:52,968 [INFO]     Dashboard: False | Pending: False
+2026-08-05 18:24:52,968 [INFO]     ✅ Login response received, state unclear
+2026-08-05 18:24:52,968 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B02 — Dashboard
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:24:55,882 [INFO]   📷 ✓ B02_dashboard_before.png
+2026-08-05 18:24:58,703 [INFO]     Dashboard texts: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\uf434', 'Enter your email address', 'Password', '\uf3c8', 'Enter your password', '\uf2ea', 'Forgot Password?', 'Sign In', "Don't have an account? "]
+2026-08-05 18:24:59,030 [INFO]     Memory RSS: 197128 KB
+2026-08-05 18:25:00,241 [INFO]     ✅ No logcat errors
+2026-08-05 18:25:02,050 [INFO]   📷 ✓ B02_dashboard_content.png
+2026-08-05 18:25:02,050 [INFO]     Courses widget: False | Progress: False | Schedule: False
+2026-08-05 18:25:02,050 [INFO]     ✅ Dashboard loaded with content
+2026-08-05 18:25:02,050 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B03 — Courses
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:25:07,805 [INFO]   📷 ✓ B03_courses_list.png
+2026-08-05 18:25:10,629 [INFO]     Courses texts: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\uf434', 'Enter your email address', 'Password', '\uf3c8', 'Enter your password', '\uf2ea', 'Forgot Password?']
+2026-08-05 18:25:10,629 [INFO]     ⏭ Courses not accessible
+2026-08-05 18:25:10,629 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B04 — Library
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:25:16,356 [INFO]   📷 ✓ B04_library.png
+2026-08-05 18:25:19,178 [INFO]     Library: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\uf434', 'Enter your email address', 'Password', '\uf3c8', 'Enter your password']
+2026-08-05 18:25:19,539 [INFO]     Memory RSS: 198614 KB
+2026-08-05 18:25:20,719 [INFO]     ✅ No logcat errors
+2026-08-05 18:25:21,995 [INFO]     Opening: 'Enter your email address'
+2026-08-05 18:25:29,654 [INFO]   📷 ✗ B04_book_detail.png
+2026-08-05 18:25:32,372 [INFO]     Book detail: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\uf434', 'Enter your email address', 'Password']
+2026-08-05 18:25:35,649 [INFO]     ✅ Library accessible
+2026-08-05 18:25:35,650 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B05 — Quiz Engine
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:25:49,731 [WARNING]   ⚠ Dump attempt 1/3 failed — waiting 3s
+2026-08-05 18:25:58,188 [INFO]   📷 ✓ B05_quiz_list.png
+2026-08-05 18:26:01,014 [INFO]     Quiz screen: []
+2026-08-05 18:26:01,014 [INFO]     ⏭ Quiz not accessible
+2026-08-05 18:26:01,014 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B06 — Attendance
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:26:08,207 [INFO]   📷 ✓ B06_attendance.png
+2026-08-05 18:26:10,926 [INFO]     Attendance: []
+2026-08-05 18:26:12,116 [INFO]     ✅ No logcat errors
+2026-08-05 18:26:13,462 [INFO]     Memory RSS: 119491 KB
+2026-08-05 18:26:13,462 [INFO]     ⏭ Not accessible
+2026-08-05 18:26:13,462 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B07 — Certificate
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:26:20,926 [INFO]   📷 ✓ B07_certificate.png
+2026-08-05 18:26:23,714 [INFO]     Certificate: []
+2026-08-05 18:26:24,901 [INFO]     ✅ No logcat errors
+2026-08-05 18:26:26,087 [INFO]     ⏭ Certificate not accessible
+2026-08-05 18:26:26,087 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B08 — Live Classes
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:26:33,307 [INFO]   📷 ✓ B08_live.png
+2026-08-05 18:26:36,080 [INFO]     Live: []
+2026-08-05 18:26:37,262 [INFO]     ✅ No logcat errors
+2026-08-05 18:26:38,445 [INFO]     ⏭ Live classes not accessible
+2026-08-05 18:26:38,445 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B09 — Notifications
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:26:45,681 [INFO]   📷 ✓ B09_notifications.png
+2026-08-05 18:26:48,429 [INFO]     Notifications: []
+2026-08-05 18:26:49,642 [INFO]     ✅ No logcat errors
+2026-08-05 18:26:49,802 [INFO]     Memory RSS: 119485 KB
+2026-08-05 18:26:49,802 [INFO]     ⏭ Notifications not accessible
+2026-08-05 18:26:49,802 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B10 — Settings & Profile
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:26:58,747 [INFO]   📷 ✓ B10_settings.png
+2026-08-05 18:27:01,501 [INFO]     Settings texts: []
+2026-08-05 18:27:02,723 [INFO]     ✅ No logcat errors
+2026-08-05 18:27:02,849 [INFO]     Memory RSS: 114292 KB
+2026-08-05 18:27:02,849 [INFO]     ⏭ Settings not accessible
+2026-08-05 18:27:02,849 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B11 — Payment
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:27:08,432 [INFO]   📷 ✓ B11_payment.png
+2026-08-05 18:27:11,173 [INFO]     Payment: []
+2026-08-05 18:27:11,173 [INFO]     ⚠ UI ONLY — no real transaction attempted
+2026-08-05 18:27:12,372 [INFO]     ✅ No logcat errors
+2026-08-05 18:27:13,556 [INFO]     ⏭ Payment not accessible
+2026-08-05 18:27:13,556 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B12 — Search
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:27:23,887 [INFO]     ⏭ Search not found
+2026-08-05 18:27:23,887 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B13 — Prayer Tools
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:27:35,742 [INFO]     ✅ No logcat errors
+2026-08-05 18:27:35,742 [INFO]     ⏭ Prayer tools not directly accessible
+2026-08-05 18:27:35,742 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+B14 — Logout
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:27:43,328 [INFO]   📷 ✓ B14_before_logout.png
+2026-08-05 18:27:43,328 [INFO]     ⏭ Logout button not found (likely on pending screen)
+2026-08-05 18:27:43,328 [INFO] 
+████████████████████████████████████████████████████
+PHASE C — ADMIN SESSION
+████████████████████████████████████████████████████
+2026-08-05 18:27:43,328 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C01 — Admin Login
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:27:45,536 [INFO]   📷 ✓ C01_before_admin_login.png
+2026-08-05 18:27:45,536 [INFO]   🔐 Logging in as: Admin
+2026-08-05 18:28:16,866 [WARNING]   ⚠ Dump attempt 1/3 failed — waiting 3s
+2026-08-05 18:28:31,634 [WARNING]   ⚠ Dump attempt 2/3 failed — waiting 3s
+2026-08-05 18:29:06,728 [WARNING]   ⚠ Email read-back unclear. Typed: sumraftm@gmail.com
+2026-08-05 18:29:34,270 [INFO]   ✅ Login successful — screen: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address']
+2026-08-05 18:29:42,196 [INFO]   📷 ✓ C01_after_admin_login.png
+2026-08-05 18:29:45,030 [INFO]     Admin login state: ['Welcome Back', 'Sign in to continue your Islamic learning journey.', 'Email Address', '\uf434', 'Enter your email address', 'Password', '\uf3c8', 'Enter your password']
+2026-08-05 18:29:46,232 [INFO]     ✅ No logcat errors
+2026-08-05 18:29:46,626 [INFO]     Memory RSS: 196399 KB
+2026-08-05 18:29:47,843 [INFO]     Dashboard: False | Pending: False
+2026-08-05 18:29:47,843 [ERROR]     ✗ Admin login failed
+2026-08-05 18:29:47,843 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C02 — Admin Dashboard
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:29:47,844 [INFO]     ⏭ Blocked
+2026-08-05 18:29:47,844 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C03 — Admin Users
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:29:47,844 [INFO]     ⏭ Blocked
+2026-08-05 18:29:47,844 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C04 — Admin Analytics
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:29:47,844 [INFO]     ⏭ Blocked
+2026-08-05 18:29:47,844 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C05 — Moderation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:29:47,844 [INFO]     ⏭ Blocked
+2026-08-05 18:29:47,844 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C06 — Send Push
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:29:47,844 [INFO]     ⏭ Blocked
+2026-08-05 18:29:47,844 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C07 — Admin Payments
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:29:47,844 [INFO]     ⏭ Blocked
+2026-08-05 18:29:47,844 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C08 — Security
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:29:47,844 [INFO]     ⏭ Blocked
+2026-08-05 18:29:47,844 [INFO] 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C09 — Admin Logout
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-08-05 18:29:53,593 [INFO]   📷 ✓ C09_before_admin_logout.png
+2026-08-05 18:29:53,593 [INFO]     ⏭ Admin logout button not found

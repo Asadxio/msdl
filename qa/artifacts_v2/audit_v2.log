@@ -1,0 +1,186 @@
+2026-08-14 23:36:50,216 [INFO] =================================================================
+2026-08-14 23:36:50,216 [INFO] MSLB FINAL RELEASE GATE RE-VERIFICATION (V2 AUDIT)
+2026-08-14 23:36:50,216 [INFO] Target Device: Vivo Y36 (Android 15) | Serial: 10BD9M0C6L0005H
+2026-08-14 23:36:50,217 [INFO] =================================================================
+2026-08-14 23:36:50,217 [INFO] 
+--- 1. APK Identity Verification ---
+2026-08-14 23:36:50,330 [INFO] APK Path: C:\Users\xioas\.gemini\antigravity\scratch\msdl\frontend\android\app\build\outputs\apk\release\app-release.apk
+2026-08-14 23:36:50,330 [INFO] APK Size: 48028955 bytes
+2026-08-14 23:36:50,330 [INFO] APK SHA256: 4bc1eef8e962a0c88252d5cae901daad9ce10cfdefe58e6f9eafa92c7f4eefdb
+2026-08-14 23:36:57,553 [INFO] Install Output: Performing Streamed Install
+Success
+2026-08-14 23:36:57,865 [INFO] Installed Package Identity: {'package': 'com.madrasatussalikat.lilbanat', 'versionCode': '27', 'versionName': '1.0.2', 'sha256': '4bc1eef8e962a0c88252d5cae901daad9ce10cfdefe58e6f9eafa92c7f4eefdb', 'size_bytes': 48028955}
+2026-08-14 23:36:57,865 [INFO] 
+--- 2. Cold & Warm Launch Benchmarks ---
+2026-08-14 23:37:09,608 [INFO]   📷 ✓ v2_sec5_cold_boot_run1.png (246 KB)
+2026-08-14 23:37:09,608 [INFO]   Cold Boot #1: 7984 ms
+2026-08-14 23:37:17,247 [INFO]   📷 ✓ v2_sec5_cold_boot_run2.png (246 KB)
+2026-08-14 23:37:17,247 [INFO]   Cold Boot #2: 3851 ms
+2026-08-14 23:37:24,854 [INFO]   📷 ✓ v2_sec5_cold_boot_run3.png (246 KB)
+2026-08-14 23:37:24,854 [INFO]   Cold Boot #3: 3776 ms
+2026-08-14 23:37:30,233 [INFO]   Warm Boot #1: 2752 ms
+2026-08-14 23:37:35,593 [INFO]   Warm Boot #2: 2726 ms
+2026-08-14 23:37:41,050 [INFO]   Warm Boot #3: 2765 ms
+2026-08-14 23:37:41,050 [INFO] Cold Boot Avg: 5203 ms | Warm Boot Avg: 2747 ms
+2026-08-14 23:37:41,050 [INFO] 
+--- 3. Onboarding & Navigation ---
+2026-08-14 23:37:58,267 [INFO]   📷 ✓ v2_sec6_onboarding.png (246 KB)
+2026-08-14 23:38:06,104 [INFO]   📷 ✓ v2_sec6_after_begin.png (246 KB)
+2026-08-14 23:38:06,104 [INFO] 
+--- 4. P0 TextInput Timeline & Focus Ownership Matrix ---
+2026-08-14 23:38:06,105 [INFO]   Testing 3-Pass Focus on Sign In Email (login-email-input)...
+2026-08-14 23:38:25,257 [INFO]   📷 ✓ v2_sec8_login-email-input_p1_typed.png (298 KB)
+2026-08-14 23:38:25,257 [WARNING]     Pass #1: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:38:44,489 [INFO]   📷 ✓ v2_sec8_login-email-input_p2_typed.png (298 KB)
+2026-08-14 23:38:44,489 [WARNING]     Pass #2: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:39:04,587 [INFO]   📷 ✓ v2_sec8_login-email-input_p3_typed.png (298 KB)
+2026-08-14 23:39:04,587 [WARNING]     Pass #3: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:39:04,587 [INFO]   Testing 3-Pass Focus on Sign In Password (login-password-input)...
+2026-08-14 23:39:23,006 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p1_typed.png failed
+2026-08-14 23:39:41,733 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p2_typed.png failed
+2026-08-14 23:39:59,722 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p3_typed.png failed
+2026-08-14 23:39:59,722 [INFO] 
+--- 5. P0 Student Authentication & Dashboard Verification ---
+2026-08-14 23:39:59,722 [INFO] Attempting Student Login with 'aliasadcivil007@gmail.com'...
+2026-08-14 23:40:32,578 [INFO]   📷 ✓ v2_sec7_wrong_pass.png (261 KB)
+2026-08-14 23:40:32,580 [INFO]   Wrong Password Rejection: True
+2026-08-14 23:40:45,602 [INFO]   Submitted Student Login credentials. Waiting for session hydration...
+2026-08-14 23:41:02,636 [INFO]   📷 ✓ v2_sec7_student_dashboard.png (266 KB)
+2026-08-14 23:41:02,636 [INFO]   Is Still On Login Screen: False
+2026-08-14 23:41:02,637 [INFO]   Has Genuine Dashboard Elements: False
+2026-08-14 23:41:02,637 [INFO] 
+--- 6. P1 Student Learning Modules ---
+2026-08-14 23:41:05,759 [INFO]   📷 ✓ v2_sec12_courses_list.png (186 KB)
+2026-08-14 23:41:10,130 [INFO]   📷 ✓ v2_sec13_quiz_screen.png (268 KB)
+2026-08-14 23:41:13,099 [INFO]   📷 ✓ v2_sec15_payment_ui.png (268 KB)
+2026-08-14 23:41:16,081 [INFO]   📷 ✓ v2_sec17_notifications.png (268 KB)
+2026-08-14 23:41:16,081 [INFO] 
+--- 7. P0 Admin Login & RBAC Audit ---
+2026-08-14 23:41:16,081 [INFO] Attempting Admin Login with 'sumraftm@gmail.com' and password 'asadasad'...
+2026-08-14 23:42:04,221 [INFO]   Submitted Admin credentials. Waiting for RBAC resolution...
+2026-08-14 23:42:20,987 [INFO]   📷 ✓ v2_sec18_admin_dashboard.png (89 KB)
+2026-08-14 23:42:20,988 [INFO]   Admin Login Error Shown: False
+2026-08-14 23:42:20,988 [INFO]   Has Genuine Admin Controls: False
+2026-08-14 23:42:20,989 [INFO] 
+--- 8. P1 Offline Mode & Session Preservation ---
+2026-08-14 23:42:37,255 [INFO]   📷 ✓ v2_sec20_offline_screen.png (103 KB)
+2026-08-14 23:42:53,257 [INFO]   📷 ✓ v2_sec21_resumed_screen.png (229 KB)
+2026-08-14 23:42:53,500 [INFO] Application Memory PSS: 187060 KB (~182 MB)
+2026-08-14 23:42:54,863 [INFO] Logcat Error Entries: 0
+2026-08-14 23:42:54,865 [INFO] 
+📄 Report generated: C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\FINAL_RELEASE_GATE_AUDIT_v2.md
+2026-08-14 23:44:02,545 [INFO] =================================================================
+2026-08-14 23:44:02,545 [INFO] MSLB FINAL RELEASE GATE RE-VERIFICATION (V2 AUDIT)
+2026-08-14 23:44:02,545 [INFO] Target Device: Vivo Y36 (Android 15) | Serial: 10BD9M0C6L0005H
+2026-08-14 23:44:02,545 [INFO] =================================================================
+2026-08-14 23:44:02,545 [INFO] 
+--- 1. APK Identity Verification ---
+2026-08-14 23:44:02,639 [INFO] APK Path: C:\Users\xioas\.gemini\antigravity\scratch\msdl\frontend\android\app\build\outputs\apk\release\app-release.apk
+2026-08-14 23:44:02,639 [INFO] APK Size: 48028955 bytes
+2026-08-14 23:44:02,639 [INFO] APK SHA256: 4bc1eef8e962a0c88252d5cae901daad9ce10cfdefe58e6f9eafa92c7f4eefdb
+2026-08-14 23:44:10,560 [INFO] Install Output: Performing Streamed Install
+Success
+2026-08-14 23:44:11,028 [INFO] Installed Package Identity: {'package': 'com.madrasatussalikat.lilbanat', 'versionCode': '27', 'versionName': '1.0.2', 'sha256': '4bc1eef8e962a0c88252d5cae901daad9ce10cfdefe58e6f9eafa92c7f4eefdb', 'size_bytes': 48028955}
+2026-08-14 23:44:11,028 [INFO] 
+--- 2. Cold & Warm Launch Benchmarks ---
+2026-08-14 23:44:24,525 [INFO]   📷 ✓ v2_sec5_cold_boot_run1.png (247 KB)
+2026-08-14 23:44:24,525 [INFO]   Cold Boot #1: 6234 ms
+2026-08-14 23:44:35,561 [INFO]   📷 ✓ v2_sec5_cold_boot_run2.png (247 KB)
+2026-08-14 23:44:35,561 [INFO]   Cold Boot #2: 3782 ms
+2026-08-14 23:44:45,616 [INFO]   📷 ✓ v2_sec5_cold_boot_run3.png (247 KB)
+2026-08-14 23:44:45,616 [INFO]   Cold Boot #3: 3679 ms
+2026-08-14 23:44:53,854 [INFO]   Warm Boot #1: 2849 ms
+2026-08-14 23:45:01,803 [INFO]   Warm Boot #2: 2842 ms
+2026-08-14 23:45:09,637 [INFO]   Warm Boot #3: 2790 ms
+2026-08-14 23:45:09,637 [INFO] Cold Boot Avg: 4565 ms | Warm Boot Avg: 2827 ms
+2026-08-14 23:45:09,637 [INFO] 
+--- 3. Onboarding & Navigation ---
+2026-08-14 23:45:29,479 [INFO]   📷 ✓ v2_sec6_onboarding.png (248 KB)
+2026-08-14 23:45:39,896 [INFO]   📷 ✓ v2_sec6_after_begin.png (248 KB)
+2026-08-14 23:45:39,896 [INFO] 
+--- 4. P0 TextInput Timeline & Focus Ownership Matrix ---
+2026-08-14 23:45:39,896 [INFO]   Testing 3-Pass Focus on Sign In Email (login-email-input)...
+2026-08-14 23:45:59,997 [INFO]   📷 ✓ v2_sec8_login-email-input_p1_typed.png (299 KB)
+2026-08-14 23:45:59,997 [WARNING]     Pass #1: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:46:19,891 [INFO]   📷 ✓ v2_sec8_login-email-input_p2_typed.png (299 KB)
+2026-08-14 23:46:19,891 [WARNING]     Pass #2: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:46:39,971 [INFO]   📷 ✓ v2_sec8_login-email-input_p3_typed.png (299 KB)
+2026-08-14 23:46:39,972 [WARNING]     Pass #3: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:46:39,972 [INFO]   Testing 3-Pass Focus on Sign In Password (login-password-input)...
+2026-08-14 23:46:57,627 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p1_typed.png failed
+2026-08-14 23:47:16,414 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p2_typed.png failed
+2026-08-14 23:47:34,737 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p3_typed.png failed
+2026-08-14 23:47:34,737 [INFO] 
+--- 5. P0 Student Authentication & Dashboard Verification ---
+2026-08-14 23:47:34,738 [INFO] Attempting Student Login with 'aliasadcivil007@gmail.com'...
+2026-08-14 23:48:25,399 [INFO] =================================================================
+2026-08-14 23:48:25,399 [INFO] MSLB FINAL RELEASE GATE RE-VERIFICATION (V2 AUDIT)
+2026-08-14 23:48:25,400 [INFO] Target Device: Vivo Y36 (Android 15) | Serial: 10BD9M0C6L0005H
+2026-08-14 23:48:25,400 [INFO] =================================================================
+2026-08-14 23:48:25,400 [INFO] 
+--- 1. APK Identity Verification ---
+2026-08-14 23:48:25,494 [INFO] APK Path: C:\Users\xioas\.gemini\antigravity\scratch\msdl\frontend\android\app\build\outputs\apk\release\app-release.apk
+2026-08-14 23:48:25,495 [INFO] APK Size: 48028955 bytes
+2026-08-14 23:48:25,495 [INFO] APK SHA256: 4bc1eef8e962a0c88252d5cae901daad9ce10cfdefe58e6f9eafa92c7f4eefdb
+2026-08-14 23:48:32,925 [INFO] Install Output: Performing Streamed Install
+Success
+2026-08-14 23:48:33,226 [INFO] Installed Package Identity: {'package': 'com.madrasatussalikat.lilbanat', 'versionCode': '27', 'versionName': '1.0.2', 'sha256': '4bc1eef8e962a0c88252d5cae901daad9ce10cfdefe58e6f9eafa92c7f4eefdb', 'size_bytes': 48028955}
+2026-08-14 23:48:33,227 [INFO] 
+--- 2. Cold & Warm Launch Benchmarks ---
+2026-08-14 23:48:47,564 [INFO]   📷 ✓ v2_sec5_cold_boot_run1.png (248 KB)
+2026-08-14 23:48:47,565 [INFO]   Cold Boot #1: 7071 ms
+2026-08-14 23:48:57,969 [INFO]   📷 ✓ v2_sec5_cold_boot_run2.png (248 KB)
+2026-08-14 23:48:57,969 [INFO]   Cold Boot #2: 3754 ms
+2026-08-14 23:49:07,983 [INFO]   📷 ✓ v2_sec5_cold_boot_run3.png (248 KB)
+2026-08-14 23:49:07,983 [INFO]   Cold Boot #3: 3767 ms
+2026-08-14 23:49:15,990 [INFO]   Warm Boot #1: 2879 ms
+2026-08-14 23:49:23,899 [INFO]   Warm Boot #2: 2821 ms
+2026-08-14 23:49:31,826 [INFO]   Warm Boot #3: 2869 ms
+2026-08-14 23:49:31,826 [INFO] Cold Boot Avg: 4864 ms | Warm Boot Avg: 2856 ms
+2026-08-14 23:49:31,826 [INFO] 
+--- 3. Onboarding & Navigation ---
+2026-08-14 23:50:12,646 [INFO]   📷 ✓ v2_sec6_onboarding.png (248 KB)
+2026-08-14 23:50:23,096 [INFO]   📷 ✓ v2_sec6_after_begin.png (248 KB)
+2026-08-14 23:50:23,097 [INFO] 
+--- 4. P0 TextInput Timeline & Focus Ownership Matrix ---
+2026-08-14 23:50:23,097 [INFO]   Testing 3-Pass Focus on Sign In Email (login-email-input)...
+2026-08-14 23:50:42,927 [INFO]   📷 ✓ v2_sec8_login-email-input_p1_typed.png (299 KB)
+2026-08-14 23:50:42,928 [WARNING]     Pass #1: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:51:02,291 [INFO]   📷 ✓ v2_sec8_login-email-input_p2_typed.png (299 KB)
+2026-08-14 23:51:02,291 [WARNING]     Pass #2: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:51:19,861 [INFO]   📷 ✓ v2_sec8_login-email-input_p3_typed.png (299 KB)
+2026-08-14 23:51:19,861 [WARNING]     Pass #3: readback='qa-student@mslb.app' expected='qa_student@mslb.app'
+2026-08-14 23:51:19,861 [INFO]   Testing 3-Pass Focus on Sign In Password (login-password-input)...
+2026-08-14 23:51:35,578 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p1_typed.png failed
+2026-08-14 23:51:53,908 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p2_typed.png failed
+2026-08-14 23:52:11,922 [WARNING]   📷 ⚠ Screenshot sec8_login-password-input_p3_typed.png failed
+2026-08-14 23:52:11,922 [INFO] 
+--- 5. P0 Student Authentication & Dashboard Verification ---
+2026-08-14 23:52:11,923 [INFO] Attempting Student Login with 'aliasadcivil007@gmail.com'...
+2026-08-14 23:53:15,946 [INFO]   📷 ✓ v2_sec7_wrong_pass.png (264 KB)
+2026-08-14 23:53:15,947 [INFO]   Wrong Password Rejection: True
+2026-08-14 23:53:32,432 [INFO]   Submitted Student Login credentials. Waiting for session hydration...
+2026-08-14 23:53:57,341 [INFO]   📷 ✓ v2_sec7_student_dashboard.png (312 KB)
+2026-08-14 23:53:57,341 [INFO]   Is Still On Login Screen: False
+2026-08-14 23:53:57,341 [INFO]   Has Genuine Dashboard Elements: True
+2026-08-14 23:53:57,341 [INFO] 
+--- 6. P1 Student Learning Modules ---
+2026-08-14 23:54:09,653 [INFO]   📷 ✓ v2_sec12_courses_list.png (1510 KB)
+2026-08-14 23:54:13,605 [INFO]   📷 ✓ v2_sec13_quiz_screen.png (1456 KB)
+2026-08-14 23:54:17,425 [INFO]   📷 ✓ v2_sec15_payment_ui.png (1510 KB)
+2026-08-14 23:54:21,336 [INFO]   📷 ✓ v2_sec17_notifications.png (1510 KB)
+2026-08-14 23:54:21,336 [INFO] 
+--- 7. P0 Admin Login & RBAC Audit ---
+2026-08-14 23:54:21,336 [INFO] Attempting Admin Login with 'sumraftm@gmail.com' and password 'asadasad'...
+2026-08-14 23:55:17,643 [INFO]   Submitted Admin credentials. Waiting for RBAC resolution...
+2026-08-14 23:55:42,461 [INFO]   📷 ✓ v2_sec18_admin_dashboard.png (229 KB)
+2026-08-14 23:55:42,461 [INFO]   Admin Login Error Shown: False
+2026-08-14 23:55:42,461 [INFO]   Has Genuine Admin Controls: True
+2026-08-14 23:55:42,461 [INFO] 
+--- 8. P1 Offline Mode & Session Preservation ---
+2026-08-14 23:56:01,706 [INFO]   📷 ✓ v2_sec20_offline_screen.png (102 KB)
+2026-08-14 23:56:22,526 [INFO]   📷 ✓ v2_sec21_resumed_screen.png (227 KB)
+2026-08-14 23:56:22,833 [INFO] Application Memory PSS: 218257 KB (~213 MB)
+2026-08-14 23:56:24,441 [INFO] Logcat Error Entries: 0
+2026-08-14 23:56:24,444 [INFO] 
+📄 Report generated: C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\FINAL_RELEASE_GATE_AUDIT_v2.md

@@ -43,7 +43,7 @@ type PremiumInputProps = {
   testID?: string;
 };
 
-const PremiumInput = React.memo(function PremiumInput({
+function PremiumInput({
   label,
   leftIcon,
   value,
@@ -60,38 +60,27 @@ const PremiumInput = React.memo(function PremiumInput({
   textContentType = 'none',
   testID,
 }: PremiumInputProps) {
-  const [focused, setFocused] = useState(false);
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
-
-  let borderColor = isDarkMode ? '#2E3D5C' : '#E2E8E5';
-  if (focused) {
-    borderColor = isDarkMode ? '#10B981' : '#0F7660'; 
-  } else if (error) {
-    borderColor = colors.error;
-  } else if (success && value.length > 0) {
-    borderColor = colors.success;
-  }
 
   return (
     <View style={styles.inputContainer}>
       <Text style={[
         styles.inputLabel,
-        { color: error ? colors.error : focused ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted }
+        { color: error ? colors.error : colors.textMuted }
       ]}>
         {label}
       </Text>
       <View style={[
         styles.inputRow,
-        { borderColor, backgroundColor: isDarkMode ? '#102820' : '#FFFFFF' },
-        focused && styles.inputRowFocused,
+        { borderColor: error ? colors.error : (isDarkMode ? '#2E3D5C' : '#E2E8E5'), backgroundColor: isDarkMode ? '#102820' : '#FFFFFF' },
         disabled && styles.inputRowDisabled
       ]}>
         <Ionicons 
           name={leftIcon} 
           size={20} 
-          color={error ? colors.error : focused ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted} 
+          color={error ? colors.error : colors.textMuted} 
           style={styles.leftIcon} 
         />
         <TextInput
@@ -103,8 +92,8 @@ const PremiumInput = React.memo(function PremiumInput({
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          autoCorrect={false}
+          spellCheck={false}
           editable={!disabled}
           autoComplete={autoComplete}
           textContentType={textContentType}
@@ -120,7 +109,7 @@ const PremiumInput = React.memo(function PremiumInput({
       ) : null}
     </View>
   );
-});
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -184,7 +173,7 @@ export default function LoginScreen() {
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
           {/* Hero Section */}
@@ -246,6 +235,7 @@ export default function LoginScreen() {
                       style={styles.eyeBtn} 
                       accessibilityLabel={showPass ? 'Hide password' : 'Show password'}
                       accessibilityRole="button"
+                      focusable={false}
                     >
                       <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
                     </TouchableOpacity>
@@ -300,7 +290,7 @@ export default function LoginScreen() {
 
           {/* Secondary Actions */}
           <View style={styles.footerRow}>
-            <Text style={[styles.footerText, { color: colors.textMuted }]}>Don't have an account? </Text>
+            <Text style={[styles.footerText, { color: colors.textMuted }]}>Don&apos;t have an account? </Text>
             <TouchableOpacity onPress={() => router.replace('/auth/signup')} testID="goto-signup-btn">
               <Text style={[styles.footerLink, { color: isDarkMode ? '#10B981' : '#0F7660' }]}>Sign Up</Text>
             </TouchableOpacity>
@@ -428,10 +418,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   inputRowFocused: {
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 1,
+    // Only border color is updated on focus to prevent Android native elevation focus jump
   },
   inputRowDisabled: {
     opacity: 0.65,

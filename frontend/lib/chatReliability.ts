@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type QueueStatus = 'pending' | 'uploading' | 'retrying' | 'failed' | 'completed';
-export type QueueMessageType = 'text' | 'image' | 'video' | 'audio';
+export type QueueMessageType = 'text' | 'image' | 'video' | 'audio' | 'document';
 
 export type QueueItem = {
   id: string;

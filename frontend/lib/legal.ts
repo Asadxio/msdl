@@ -45,7 +45,19 @@ export type ConsentStatus = {
   needsAcceptance: boolean;
 };
 
+const consentCache = new Map<string, ConsentStatus>();
+
+export function invalidateConsentCache(userId?: string) {
+  if (userId) consentCache.delete(userId);
+  else consentCache.clear();
+}
+
 export async function getConsentStatus(userId: string): Promise<ConsentStatus> {
+  const cached = consentCache.get(userId);
+  if (cached && !cached.needsAcceptance) {
+    return cached;
+  }
+
   const snap = await getDoc(doc(db, 'users', userId, 'compliance', 'legal_acceptance'));
   const accepted = (snap.exists() ? (snap.data().accepted || {}) : {}) as Record<LegalDocKey, { version: string; acceptedAt?: unknown }>;
   const requiredDocs = Object.values(LEGAL_DOCS).filter((d) => d.required);
@@ -55,15 +67,18 @@ export async function getConsentStatus(userId: string): Promise<ConsentStatus> {
     return Boolean(v && v !== d.version);
   });
 
-  return {
+  const result: ConsentStatus = {
     accepted,
     missingRequired,
     outdatedRequired,
     needsAcceptance: missingRequired.length > 0 || outdatedRequired.length > 0,
   };
+  consentCache.set(userId, result);
+  return result;
 }
 
 export async function acceptLegalDocs(userId: string, keys: LegalDocKey[]): Promise<void> {
+  invalidateConsentCache(userId);
   const accepted = keys.reduce<Partial<Record<LegalDocKey, { version: string; acceptedAt: unknown }>>>((acc, key) => {
     acc[key] = { version: LEGAL_DOCS[key].version, acceptedAt: serverTimestamp() };
     return acc;

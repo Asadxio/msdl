@@ -1,0 +1,35 @@
+{
+  "name": "mslb-firebase-functions",
+  "scripts": {
+    "lint": "eslint --ext .js,.ts .",
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "test": "node tests/paymentFunctions.test.js && node tests/phase8_automatic_payment.test.js && node tests/phase8_webview_checkout_security.test.js && node tests/phase9d_teacher_rbac_security.test.js && node tests/phase10_student_complete_audit.test.js && node tests/phase10_1_open_items_resolution.test.js && node tests/phase11_teacher_complete_audit.test.js && node tests/phase12_admin_complete_audit.test.js && node tests/phase13_final_release_audit.test.js && node tests/phase14_final_play_store_pre_submission.test.js && node tests/phase15_production_release_gate.test.js && node tests/phase16_performance_optimization.test.js && node tests/phase17_complete_functional_qa.test.js && node tests/phase18_live_class_e2e_security.test.js && node tests/phase19_play_store_release.test.js && node tests/phase20_interaction_latency.test.js && node tests/phase21_final_release_candidate.test.js && node tests/phase22_institutional_ui.test.js && node tests/phase23_ui_consistency.test.js && node tests/phase24_chat_forensic_audit.test.js && node tests/phase25_profile_premium_ui.test.js && node tests/phase26_chat_complete_forensic.test.js && node tests/phase26_1_chat_reliability_gate.test.js && node tests/phase27_chat_whatsapp.test.js && node tests/phase28_chat_release_gate.test.js && node tests/phase29_universal_chat.test.js && node tests/phase30_chat_engine_reliability.test.js && node tests/phase31_chat_real_world_final_gate.test.js && node tests/phase32_chat_two_device_acceptance.test.js"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@types/pdfkit": "^0.17.6",
+    "chai": "^6.2.2",
+    "firebase-admin": "^14.3.0",
+    "firebase-functions": "^7.3.2",
+    "mocha": "^11.8.0",
+    "pdfkit": "^0.19.1",
+    "razorpay": "^2.9.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-import": "^2.29.1",
+    "typescript": "^5.4.5"
+  },
+  "private": true
+}

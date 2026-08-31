@@ -290,19 +290,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               startupLog('Profile loaded', { exists: true, status: nextProfile.status, role: nextProfile.role, issue, fromCache: snap.metadata.fromCache });
 
               if (nextProfile.status === 'approved' && !firebaseUser.emailVerified) {
-                console.log('[APPROVAL_FIX] Detected approved status but potentially stale claims.');
-                console.log(`[APPROVAL_FIX] profile.status: ${nextProfile.status}`);
-                console.log(`[APPROVAL_FIX] firebaseUser.emailVerified BEFORE reload: ${firebaseUser.emailVerified}`);
-                
                 try {
                   await firebaseUser.reload();
                   await firebaseUser.getIdToken(true);
-                  console.log(`[APPROVAL_FIX] firebaseUser.emailVerified AFTER reload: ${firebaseUser.emailVerified}`);
-                  console.log('[APPROVAL_FIX] token refreshed');
-                  
                   setUser({ ...firebaseUser, emailVerified: firebaseUser.emailVerified } as User);
                 } catch (reloadErr) {
-                  console.error('[APPROVAL_FIX] Failed to reload user token:', reloadErr);
+                  // Non-fatal — cached token will still be used
                 }
               }
 
@@ -359,6 +352,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!safeEmail || !password) return 'Please enter email and password';
     try {
       const cred = await withTimeout(signInWithEmailAndPassword(auth, safeEmail, password));
+      try {
+        await cred.user.reload();
+        await cred.user.getIdToken(true);
+      } catch {}
       await updateDoc(doc(db, 'users', cred.user.uid), { last_login_at: serverTimestamp() }).catch(() => {});
       await fetchProfile(cred.user.uid);
       return null;

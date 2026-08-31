@@ -1,0 +1,357 @@
+{
+  "timestamp": "2026-08-05 04:17:07",
+  "device": {
+    "manufacturer": "vivo",
+    "model": "V2250",
+    "release_version": "15",
+    "sdk_version": "35",
+    "abi": "arm64-v8a",
+    "width": 1260,
+    "height": 2800,
+    "density": 480,
+    "storage_total": "102G",
+    "storage_used": "81G",
+    "storage_avail": "21G",
+    "storage_use_percent": "80%"
+  },
+  "apk": {
+    "file_name": "app.apk",
+    "file_size_mb": 110.23,
+    "min_sdk": "24",
+    "target_sdk": "36",
+    "version_name": "1.0.2",
+    "version_code": "31",
+    "package_name": "com.mslb.app",
+    "permissions": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.ACTIVITY_RECOGNITION",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.CAMERA",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_CAMERA",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+      "android.permission.INTERNET",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_APP_BADGE",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.SYSTEM_ALERT_WINDOW",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "activities": [
+      "com.madrasatussalikat.lilbanat/.MainActivity"
+    ],
+    "services": []
+  },
+  "test_cases": [
+    {
+      "id": "R001",
+      "name": "Splash Screen Rendering",
+      "purpose": "Verify splash screen loads, visual logo scales correctly, and no crash occurs on boot.",
+      "preconditions": "Application is uninstalled or cache cleared.",
+      "steps": [
+        "Launch application MainActivity.",
+        "Observe splash screen loading lifecycle."
+      ],
+      "expected": "Splash screen renders successfully and transitions cleanly to auth options.",
+      "status": "PASS",
+      "screenshot": "R001_splash_screen_rendering.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R002",
+      "name": "Keyboard Focus Viewports",
+      "purpose": "Verify inputs focus cleanly and keyboard does not obscure target text entries.",
+      "preconditions": "App is loaded on the login screen.",
+      "steps": [
+        "Tap email text input field.",
+        "Verify keyboard displays.",
+        "Verify form fields translate upward correctly."
+      ],
+      "expected": "Keyboard slides open without overlapping active form elements.",
+      "status": "PASS",
+      "screenshot": "R002_keyboard_focus_viewports.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R003",
+      "name": "Root Layout Navigation Guard",
+      "purpose": "Verify deep links or layout redirects protect unauthorized users.",
+      "preconditions": "User is not authenticated.",
+      "steps": [
+        "Force-open deep link path: /(tabs)/courses.",
+        "Verify AuthGate interceptor fires."
+      ],
+      "expected": "Application redirects user to unauthorized notification gate or login route.",
+      "status": "PASS",
+      "screenshot": "R003_root_layout_navigation_guard.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R004",
+      "name": "Authentication Login",
+      "purpose": "Verify student and admin user accounts login successfully using standard inputs.",
+      "preconditions": "Target user document status is approved.",
+      "steps": [
+        "Input email and password details.",
+        "Tap login confirmation action."
+      ],
+      "expected": "Authenticates session, loads Firestore user document, and displays courses dashboard.",
+      "status": "PASS",
+      "screenshot": "R004_authentication_login.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R005",
+      "name": "User Registration / Signup",
+      "purpose": "Verify registration saves account records in pending status and stores referral logs.",
+      "preconditions": "Target account email is unregistered.",
+      "steps": [
+        "Input registration fields.",
+        "Enter optional referral code.",
+        "Submit sign-up data."
+      ],
+      "expected": "Stores document in users collection with status pending, and locks route to onboarding check.",
+      "status": "PASS",
+      "screenshot": "R005_user_registration__signup.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R006",
+      "name": "Forgot Password Lifecycle",
+      "purpose": "Verify recovery reset emails are generated and sent successfully to matching inputs.",
+      "preconditions": "User has valid registered email.",
+      "steps": [
+        "Navigate to Forgot Password view.",
+        "Input email address.",
+        "Tap send reset link button."
+      ],
+      "expected": "Fires Firebase Auth sendPasswordResetEmail API and renders check-email message.",
+      "status": "PASS",
+      "screenshot": "R006_forgot_password_lifecycle.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R007",
+      "name": "Dashboard Screen Render",
+      "purpose": "Verify tabs, Islamic status widgets, and quick action components render correctly.",
+      "preconditions": "User is logged in and approved.",
+      "steps": [
+        "Open app dashboard.",
+        "Check bottom tabs navigation.",
+        "Observe Islamic Hadith and Prayer times widgets."
+      ],
+      "expected": "All UI grids, Hadith lines, and Salah widgets load without layout shifting.",
+      "status": "PASS",
+      "screenshot": "R007_dashboard_screen_render.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R008",
+      "name": "Course Lessons List",
+      "purpose": "Verify registered courses display modules, lessons, and progress stats accurately.",
+      "preconditions": "User has active course enrollment.",
+      "steps": [
+        "Open Courses tab.",
+        "Select a registered course item.",
+        "Inspect lesson modules list."
+      ],
+      "expected": "Renders lessons list with correct locks and progress percentages.",
+      "status": "PASS",
+      "screenshot": "R008_course_lessons_list.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R009",
+      "name": "Lesson Detail View & Audio Player",
+      "purpose": "Verify lesson audio files stream, play, pause, and track progress.",
+      "preconditions": "User has active enrollment.",
+      "steps": [
+        "Select lesson audio details view.",
+        "Tap play icon.",
+        "Observe scrub bars and timers."
+      ],
+      "expected": "Audio stream buffers and begins playing; progress updates are recorded locally.",
+      "status": "PASS",
+      "screenshot": "R009_lesson_detail_view__audio_player.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R010",
+      "name": "Quiz Submission",
+      "purpose": "Verify server-side quiz grading evaluates scores and blocks duplicate submissions.",
+      "preconditions": "Active quiz is open with remaining attempts.",
+      "steps": [
+        "Open Course Quiz.",
+        "Input answers.",
+        "Submit quiz answers before attempt lock expires."
+      ],
+      "expected": "Grades quiz authoritatively on server, saves results, and blocks duplicate attempts.",
+      "status": "PASS",
+      "screenshot": "R010_quiz_submission.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R011",
+      "name": "Payment Submission",
+      "purpose": "Verify student transaction submissions transition state to processing and update logs.",
+      "preconditions": "Student has unpaid fees.",
+      "steps": [
+        "Initiate fee payment.",
+        "Upload payment screenshot/receipt.",
+        "Tap confirm submission."
+      ],
+      "expected": "Creates transaction record, shifts state to processing, and enqueues verification task.",
+      "status": "PASS",
+      "screenshot": "R011_payment_submission.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R012",
+      "name": "Certificate Generation",
+      "purpose": "Verify PDF certificate generation loads in web viewer and download link operates.",
+      "preconditions": "Student completed course with passing grades.",
+      "steps": [
+        "Navigate to course rewards screen.",
+        "Tap generate certificate.",
+        "Verify PDF rendering."
+      ],
+      "expected": "Generates personalized certificate document and renders in PDF reader.",
+      "status": "PASS",
+      "screenshot": "R012_certificate_generation.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R013",
+      "name": "Notification Inbox",
+      "purpose": "Verify received push notifications render in notification screen list.",
+      "preconditions": "Notifications have been dispatched to user's registered tokens.",
+      "steps": [
+        "Open Notification center.",
+        "Observe unread list.",
+        "Tap a notification card."
+      ],
+      "expected": "Renders list of updates and redirects user to target deep link path.",
+      "status": "PASS",
+      "screenshot": "R013_notification_inbox.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R014",
+      "name": "Profile Details Update",
+      "purpose": "Verify custom avatars and profiles update without modifying locked attributes.",
+      "preconditions": "User is logged in.",
+      "steps": [
+        "Navigate to Settings Profile.",
+        "Modify avatar image.",
+        "Submit changes."
+      ],
+      "expected": "Firestore profile fields update while role and status variables remain locked.",
+      "status": "PASS",
+      "screenshot": "R014_profile_details_update.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R015",
+      "name": "Settings Configurations",
+      "purpose": "Verify theme changes, diagnostics check, and app settings operate.",
+      "preconditions": "User is logged in.",
+      "steps": [
+        "Navigate to settings.",
+        "Toggle Dark Mode.",
+        "Tap run diagnostics button."
+      ],
+      "expected": "UI switches theme dynamically and diagnostics checks return healthy status.",
+      "status": "PASS",
+      "screenshot": "R015_settings_configurations.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R016",
+      "name": "Account Logout",
+      "purpose": "Verify session tokens are cleared and user is redirected back to login screen.",
+      "preconditions": "User has active session.",
+      "steps": [
+        "Navigate to settings.",
+        "Tap logout button.",
+        "Confirm exit dialog."
+      ],
+      "expected": "Invalidates auth state, clears local caches, and redirects user to login view.",
+      "status": "PASS",
+      "screenshot": "R016_account_logout.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R017",
+      "name": "Offline Mode Caching",
+      "purpose": "Verify offline caching loads profile information and lessons without network access.",
+      "preconditions": "User is authenticated and has cached data.",
+      "steps": [
+        "Turn off internet connection.",
+        "Reopen application.",
+        "Verify cache displays."
+      ],
+      "expected": "Renders profile info and offline-capable lesson contents from local AsyncStorage.",
+      "status": "PASS",
+      "screenshot": "R017_offline_mode_caching.png",
+      "log_notes": ""
+    },
+    {
+      "id": "R018",
+      "name": "Background State Resume",
+      "purpose": "Verify app recovers active session and media playback after background pause.",
+      "preconditions": "Audio lesson is currently playing.",
+      "steps": [
+        "Minimize app to background.",
+        "Wait 5 seconds.",
+        "Restore app to foreground."
+      ],
+      "expected": "Restores audio session and returns screen to the previous interactive state.",
+      "status": "PASS",
+      "screenshot": "R018_background_state_resume.png",
+      "log_notes": ""
+    }
+  ],
+  "logcat_findings": {
+    "crashes": [],
+    "anrs": [],
+    "redboxes": [],
+    "unhandled_promises": [],
+    "native_exceptions": [],
+    "firebase_failures": []
+  },
+  "performance": {
+    "launch_latency_ms": 221,
+    "memory_history": [
+      {
+        "pss_total_kb": 188167,
+        "private_dirty_kb": 145344,
+        "heap_alloc_kb": 58404
+      }
+    ],
+    "cpu_history": [
+      86.6
+    ],
+    "battery_baseline": {
+      "level": "51",
+      "temperature_c": 34.1,
+      "status": "Charging"
+    },
+    "battery_post": {
+      "level": "51",
+      "temperature_c": 35.4,
+      "status": "Charging"
+    }
+  }
+}

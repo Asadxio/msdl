@@ -42,4 +42,8 @@ try {
   startupLog('Firebase Auth initialized', { persistence: 'existing' });
 }
 
-export { db, auth };
+import { getFunctions } from 'firebase/functions';
+
+const functions = getFunctions(app, 'us-central1');
+
+export { db, auth, functions, app };

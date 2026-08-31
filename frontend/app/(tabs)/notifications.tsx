@@ -533,7 +533,7 @@ export default function NotificationsScreen() {
             <View style={styles.center}>
               <Ionicons name="mail-open-outline" size={64} color={COLORS.border} />
               <Text style={styles.emptyTitle}>No Notifications Yet</Text>
-              <Text style={styles.emptyText}>You're all caught up! Important updates, payments, and class reminders will appear here.</Text>
+              <Text style={styles.emptyText}>You&apos;re all caught up! Important updates, payments, and class reminders will appear here.</Text>
               <TouchableOpacity style={styles.emptyRefreshBtn} onPress={onRefresh}>
                 <Ionicons name="refresh" size={16} color={COLORS.primary} />
                 <Text style={styles.emptyRefreshText}>Refresh</Text>

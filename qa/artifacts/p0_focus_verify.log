@@ -1,0 +1,368 @@
+2026-08-14 22:48:55,472 [INFO] =================================================================
+2026-08-14 22:48:55,472 [INFO] P0 TEXTINPUT FOCUS JUMP & TIMELINE DIAGNOSTIC
+2026-08-14 22:48:55,473 [INFO] Device: Vivo Y36 (Android 15) | Package: com.madrasatussalikat.lilbanat
+2026-08-14 22:48:55,473 [INFO] =================================================================
+2026-08-14 22:48:55,473 [INFO] Installing target release APK...
+2026-08-14 22:49:28,050 [INFO] 
+=== TESTING SIGN IN FIELDS ===
+2026-08-14 22:49:28,050 [INFO] 
+--- Testing Field: Sign In Email (login-email-input) ---
+2026-08-14 22:49:44,456 [INFO] =================================================================
+2026-08-14 22:49:44,457 [INFO] P0 TEXTINPUT FOCUS JUMP & TIMELINE DIAGNOSTIC
+2026-08-14 22:49:44,458 [INFO] Device: Vivo Y36 (Android 15) | Package: com.madrasatussalikat.lilbanat
+2026-08-14 22:49:44,458 [INFO] =================================================================
+2026-08-14 22:49:44,458 [INFO] Installing target release APK...
+2026-08-14 22:50:18,867 [INFO] 
+=== TESTING SIGN IN FIELDS ===
+2026-08-14 22:50:18,868 [INFO] 
+--- Testing Field: Sign In Email (login-email-input) ---
+2026-08-14 22:50:25,082 [WARNING]   📷 ⚠ Screenshot login-email-input_01_before_tap.png not captured
+2026-08-14 22:50:25,083 [INFO]   T0: Tapping Sign In Email at (674,1265)
+2026-08-14 22:50:29,576 [WARNING]   📷 ⚠ Screenshot login-email-input_02_100ms.png not captured
+2026-08-14 22:50:33,701 [WARNING]   📷 ⚠ Screenshot login-email-input_03_300ms.png not captured
+2026-08-14 22:50:38,939 [WARNING]   📷 ⚠ Screenshot login-email-input_04_1000ms.png not captured
+2026-08-14 22:50:40,096 [INFO]   T+100ms  focused: None
+2026-08-14 22:50:40,096 [INFO]   T+300ms  focused: None
+2026-08-14 22:50:40,096 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 22:51:22,762 [INFO]   📷 ✓ login-email-input_05_typed.png
+2026-08-14 22:51:25,496 [INFO]   Read-Back Value: 'Enter your email address' (Expected: 'qa_focus@mslb.app')
+2026-08-14 22:51:25,497 [INFO] 
+--- Testing Field: Sign In Password (login-password-input) ---
+2026-08-14 22:51:30,787 [INFO]   📷 ✓ login-password-input_01_before_tap.png
+2026-08-14 22:51:30,787 [INFO]   T0: Tapping Sign In Password at (632,1564)
+2026-08-14 22:51:34,347 [INFO]   📷 ✓ login-password-input_02_100ms.png
+2026-08-14 22:51:37,849 [INFO]   📷 ✓ login-password-input_03_300ms.png
+2026-08-14 22:51:41,783 [INFO]   📷 ✓ login-password-input_04_1000ms.png
+2026-08-14 22:51:42,053 [INFO]   T+100ms  focused: None
+2026-08-14 22:51:42,053 [INFO]   T+300ms  focused: None
+2026-08-14 22:51:42,053 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 22:51:54,172 [INFO]   📷 ✓ login-password-input_05_typed.png
+2026-08-14 22:51:56,737 [INFO]   Read-Back Value: 'Enter your password' (Expected: 'Pass123!')
+2026-08-14 22:51:56,737 [INFO] 
+=== TESTING SIGN UP FIELDS ===
+2026-08-14 22:52:05,210 [INFO] 
+--- Testing Field: Sign Up Full Name (signup-name-input) ---
+2026-08-14 22:52:10,287 [INFO]   📷 ✓ signup-name-input_01_before_tap.png
+2026-08-14 22:52:10,287 [ERROR]   ✗ Element signup-name-input not found on screen!
+2026-08-14 22:52:10,288 [INFO] 
+--- Testing Field: Sign Up Mobile (signup-mobile-input) ---
+2026-08-14 22:52:15,218 [INFO]   📷 ✓ signup-mobile-input_01_before_tap.png
+2026-08-14 22:52:15,218 [INFO]   T0: Tapping Sign Up Mobile at (787,208)
+2026-08-14 22:52:28,288 [INFO]   📷 ✓ signup-mobile-input_02_100ms.png
+2026-08-14 22:52:40,855 [INFO]   📷 ✓ signup-mobile-input_03_300ms.png
+2026-08-14 22:52:53,761 [INFO]   📷 ✓ signup-mobile-input_04_1000ms.png
+2026-08-14 22:52:54,094 [INFO]   T+100ms  focused: None
+2026-08-14 22:52:54,094 [INFO]   T+300ms  focused: None
+2026-08-14 22:52:54,094 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 22:53:06,807 [INFO]   📷 ✓ signup-mobile-input_05_typed.png
+2026-08-14 22:53:18,932 [INFO]   Read-Back Value: 'NOT_FOUND' (Expected: '9876543210')
+2026-08-14 22:53:18,932 [INFO] 
+--- Testing Field: Sign Up Email (signup-email-input) ---
+2026-08-14 22:53:33,375 [WARNING]   📷 ⚠ Screenshot signup-email-input_01_before_tap.png not captured
+2026-08-14 22:53:33,376 [ERROR]   ✗ Element signup-email-input not found on screen!
+2026-08-14 22:53:33,376 [INFO] 
+--- Testing Field: Sign Up Password (signup-password-input) ---
+2026-08-14 22:53:47,672 [WARNING]   📷 ⚠ Screenshot signup-password-input_01_before_tap.png not captured
+2026-08-14 22:53:47,672 [ERROR]   ✗ Element signup-password-input not found on screen!
+2026-08-14 22:53:47,672 [INFO] 
+--- Testing Field: Sign Up Confirm Password (signup-confirm-password-input) ---
+2026-08-14 22:54:02,189 [WARNING]   📷 ⚠ Screenshot signup-confirm-password-input_01_before_tap.png not captured
+2026-08-14 22:54:02,190 [ERROR]   ✗ Element signup-confirm-password-input not found on screen!
+2026-08-14 22:54:02,190 [INFO] 
+--- Testing Field: Sign Up Referral Code (signup-referral-input) ---
+2026-08-14 22:54:16,052 [WARNING]   📷 ⚠ Screenshot signup-referral-input_01_before_tap.png not captured
+2026-08-14 22:54:16,052 [ERROR]   ✗ Element signup-referral-input not found on screen!
+2026-08-14 22:54:16,057 [INFO] 
+📄 Report generated: C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\P0_TEXTINPUT_FOCUS_ROOT_CAUSE_REPORT.md
+2026-08-14 23:01:24,980 [INFO] =================================================================
+2026-08-14 23:01:24,981 [INFO] P0 TEXTINPUT FOCUS JUMP & TIMELINE DIAGNOSTIC
+2026-08-14 23:01:24,981 [INFO] Device: Vivo Y36 (Android 15) | Package: com.madrasatussalikat.lilbanat
+2026-08-14 23:01:24,981 [INFO] =================================================================
+2026-08-14 23:01:24,981 [INFO] Installing target release APK...
+2026-08-14 23:02:08,140 [INFO] 
+=== TESTING SIGN IN FIELDS ===
+2026-08-14 23:02:08,140 [INFO] 
+--- Testing Field: Sign In Email (login-email-input) ---
+2026-08-14 23:02:22,516 [INFO]   📷 ✓ login-email-input_01_before_tap.png
+2026-08-14 23:02:22,517 [INFO]   T0: Tapping Sign In Email at (674,1265)
+2026-08-14 23:02:35,253 [INFO]   📷 ✓ login-email-input_02_100ms.png
+2026-08-14 23:02:47,913 [INFO]   📷 ✓ login-email-input_03_300ms.png
+2026-08-14 23:03:01,032 [INFO]   📷 ✓ login-email-input_04_1000ms.png
+2026-08-14 23:03:01,407 [INFO]   T+100ms  focused: None
+2026-08-14 23:03:01,408 [INFO]   T+300ms  focused: None
+2026-08-14 23:03:01,408 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 23:03:14,864 [INFO]   📷 ✓ login-email-input_05_typed.png
+2026-08-14 23:03:26,460 [INFO]   Read-Back Value: 'Enter your email address' (Expected: 'qa_focus@mslb.app')
+2026-08-14 23:03:26,460 [INFO] 
+--- Testing Field: Sign In Password (login-password-input) ---
+2026-08-14 23:03:40,807 [INFO]   📷 ✓ login-password-input_01_before_tap.png
+2026-08-14 23:03:40,807 [INFO]   T0: Tapping Sign In Password at (632,1564)
+2026-08-14 23:03:53,522 [INFO]   📷 ✓ login-password-input_02_100ms.png
+2026-08-14 23:04:06,210 [INFO]   📷 ✓ login-password-input_03_300ms.png
+2026-08-14 23:04:19,342 [INFO]   📷 ✓ login-password-input_04_1000ms.png
+2026-08-14 23:04:19,621 [INFO]   T+100ms  focused: None
+2026-08-14 23:04:19,621 [INFO]   T+300ms  focused: None
+2026-08-14 23:04:19,621 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 23:04:31,397 [INFO]   📷 ✓ login-password-input_05_typed.png
+2026-08-14 23:04:43,007 [INFO]   Read-Back Value: 'Enter your password' (Expected: 'Pass123!')
+2026-08-14 23:04:43,007 [INFO] 
+=== TESTING SIGN UP FIELDS ===
+2026-08-14 23:05:00,560 [INFO] 
+--- Testing Field: Sign Up Full Name (signup-name-input) ---
+2026-08-14 23:05:14,831 [INFO]   📷 ✓ signup-name-input_01_before_tap.png
+2026-08-14 23:05:14,831 [ERROR]   ✗ Element signup-name-input not found on screen!
+2026-08-14 23:05:14,831 [INFO] 
+--- Testing Field: Sign Up Mobile (signup-mobile-input) ---
+2026-08-14 23:05:29,086 [INFO]   📷 ✓ signup-mobile-input_01_before_tap.png
+2026-08-14 23:05:29,087 [INFO]   T0: Tapping Sign Up Mobile at (787,208)
+2026-08-14 23:05:41,706 [INFO]   📷 ✓ signup-mobile-input_02_100ms.png
+2026-08-14 23:05:54,366 [INFO]   📷 ✓ signup-mobile-input_03_300ms.png
+2026-08-14 23:06:07,444 [INFO]   📷 ✓ signup-mobile-input_04_1000ms.png
+2026-08-14 23:06:07,742 [INFO]   T+100ms  focused: None
+2026-08-14 23:06:07,742 [INFO]   T+300ms  focused: None
+2026-08-14 23:06:07,742 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 23:06:18,933 [INFO]   📷 ✓ signup-mobile-input_05_typed.png
+2026-08-14 23:06:30,528 [INFO]   Read-Back Value: 'NOT_FOUND' (Expected: '9876543210')
+2026-08-14 23:06:30,528 [INFO] 
+--- Testing Field: Sign Up Email (signup-email-input) ---
+2026-08-14 23:06:44,655 [INFO]   📷 ✓ signup-email-input_01_before_tap.png
+2026-08-14 23:06:44,655 [ERROR]   ✗ Element signup-email-input not found on screen!
+2026-08-14 23:06:44,655 [INFO] 
+--- Testing Field: Sign Up Password (signup-password-input) ---
+2026-08-14 23:06:58,734 [INFO]   📷 ✓ signup-password-input_01_before_tap.png
+2026-08-14 23:06:58,734 [ERROR]   ✗ Element signup-password-input not found on screen!
+2026-08-14 23:06:58,734 [INFO] 
+--- Testing Field: Sign Up Confirm Password (signup-confirm-password-input) ---
+2026-08-14 23:07:12,880 [INFO]   📷 ✓ signup-confirm-password-input_01_before_tap.png
+2026-08-14 23:07:12,880 [ERROR]   ✗ Element signup-confirm-password-input not found on screen!
+2026-08-14 23:07:12,880 [INFO] 
+--- Testing Field: Sign Up Referral Code (signup-referral-input) ---
+2026-08-14 23:07:27,144 [INFO]   📷 ✓ signup-referral-input_01_before_tap.png
+2026-08-14 23:07:27,145 [ERROR]   ✗ Element signup-referral-input not found on screen!
+2026-08-14 23:07:27,147 [INFO] 
+📄 Report generated: C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\P0_TEXTINPUT_FOCUS_ROOT_CAUSE_REPORT.md
+2026-08-14 23:10:15,336 [INFO] =================================================================
+2026-08-14 23:10:15,337 [INFO] P0 TEXTINPUT FOCUS JUMP & TIMELINE DIAGNOSTIC
+2026-08-14 23:10:15,337 [INFO] Device: Vivo Y36 (Android 15) | Package: com.madrasatussalikat.lilbanat
+2026-08-14 23:10:15,337 [INFO] =================================================================
+2026-08-14 23:10:15,337 [INFO] Installing target release APK...
+2026-08-14 23:10:57,089 [INFO] 
+=== TESTING SIGN IN FIELDS ===
+2026-08-14 23:10:57,089 [INFO] 
+--- Testing Field: Sign In Email (login-email-input) ---
+2026-08-14 23:11:11,361 [INFO]   📷 ✓ login-email-input_01_before_tap.png
+2026-08-14 23:11:11,361 [INFO]   T0: Tapping Sign In Email at (674,1265)
+2026-08-14 23:11:24,000 [INFO]   📷 ✓ login-email-input_02_100ms.png
+2026-08-14 23:11:36,724 [INFO]   📷 ✓ login-email-input_03_300ms.png
+2026-08-14 23:11:50,028 [INFO]   📷 ✓ login-email-input_04_1000ms.png
+2026-08-14 23:11:50,360 [INFO]   T+100ms  focused: None
+2026-08-14 23:11:50,360 [INFO]   T+300ms  focused: None
+2026-08-14 23:11:50,360 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 23:12:02,084 [INFO]   📷 ✓ login-email-input_05_typed.png
+2026-08-14 23:12:13,625 [INFO]   Read-Back Value: 'Enter your email address' (Expected: 'qa_focus@mslb.app')
+2026-08-14 23:12:13,625 [INFO] 
+--- Testing Field: Sign In Password (login-password-input) ---
+2026-08-14 23:12:27,874 [INFO]   📷 ✓ login-password-input_01_before_tap.png
+2026-08-14 23:12:27,874 [INFO]   T0: Tapping Sign In Password at (632,1564)
+2026-08-14 23:12:40,591 [INFO]   📷 ✓ login-password-input_02_100ms.png
+2026-08-14 23:12:53,218 [INFO]   📷 ✓ login-password-input_03_300ms.png
+2026-08-14 23:13:06,337 [INFO]   📷 ✓ login-password-input_04_1000ms.png
+2026-08-14 23:13:06,605 [INFO]   T+100ms  focused: None
+2026-08-14 23:13:06,605 [INFO]   T+300ms  focused: None
+2026-08-14 23:13:06,606 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 23:13:18,049 [INFO]   📷 ✓ login-password-input_05_typed.png
+2026-08-14 23:13:29,680 [INFO]   Read-Back Value: 'Enter your password' (Expected: 'Pass123!')
+2026-08-14 23:13:29,680 [INFO] 
+=== TESTING SIGN UP FIELDS ===
+2026-08-14 23:13:47,191 [INFO] 
+--- Testing Field: Sign Up Full Name (signup-name-input) ---
+2026-08-14 23:14:01,430 [INFO]   📷 ✓ signup-name-input_01_before_tap.png
+2026-08-14 23:14:01,430 [ERROR]   ✗ Element signup-name-input not found on screen!
+2026-08-14 23:14:01,430 [INFO] 
+--- Testing Field: Sign Up Mobile (signup-mobile-input) ---
+2026-08-14 23:14:15,594 [INFO]   📷 ✓ signup-mobile-input_01_before_tap.png
+2026-08-14 23:14:15,595 [INFO]   T0: Tapping Sign Up Mobile at (787,208)
+2026-08-14 23:14:28,292 [INFO]   📷 ✓ signup-mobile-input_02_100ms.png
+2026-08-14 23:14:40,926 [INFO]   📷 ✓ signup-mobile-input_03_300ms.png
+2026-08-14 23:14:54,015 [INFO]   📷 ✓ signup-mobile-input_04_1000ms.png
+2026-08-14 23:14:54,296 [INFO]   T+100ms  focused: None
+2026-08-14 23:14:54,296 [INFO]   T+300ms  focused: None
+2026-08-14 23:14:54,296 [INFO]   T+1000ms focused: None | KB open: True
+2026-08-14 23:15:05,314 [INFO]   📷 ✓ signup-mobile-input_05_typed.png
+2026-08-14 23:15:07,860 [INFO]   Read-Back Value: 'NOT_FOUND' (Expected: '9876543210')
+2026-08-14 23:15:07,860 [INFO] 
+--- Testing Field: Sign Up Email (signup-email-input) ---
+2026-08-14 23:15:12,612 [INFO]   📷 ✓ signup-email-input_01_before_tap.png
+2026-08-14 23:15:12,612 [ERROR]   ✗ Element signup-email-input not found on screen!
+2026-08-14 23:15:12,612 [INFO] 
+--- Testing Field: Sign Up Password (signup-password-input) ---
+2026-08-14 23:15:17,467 [INFO]   📷 ✓ signup-password-input_01_before_tap.png
+2026-08-14 23:15:17,467 [ERROR]   ✗ Element signup-password-input not found on screen!
+2026-08-14 23:15:17,467 [INFO] 
+--- Testing Field: Sign Up Confirm Password (signup-confirm-password-input) ---
+2026-08-14 23:15:22,417 [INFO]   📷 ✓ signup-confirm-password-input_01_before_tap.png
+2026-08-14 23:15:22,417 [ERROR]   ✗ Element signup-confirm-password-input not found on screen!
+2026-08-14 23:15:22,417 [INFO] 
+--- Testing Field: Sign Up Referral Code (signup-referral-input) ---
+2026-08-14 23:15:27,318 [INFO]   📷 ✓ signup-referral-input_01_before_tap.png
+2026-08-14 23:15:27,318 [ERROR]   ✗ Element signup-referral-input not found on screen!
+2026-08-14 23:15:27,319 [INFO] 
+📄 Report generated: C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\P0_TEXTINPUT_FOCUS_ROOT_CAUSE_REPORT.md
+2026-08-14 23:18:41,227 [INFO] =================================================================
+2026-08-14 23:18:41,228 [INFO] P0 TEXTINPUT FOCUS JUMP & TIMELINE DIAGNOSTIC
+2026-08-14 23:18:41,228 [INFO] Device: Vivo Y36 (Android 15) | Package: com.madrasatussalikat.lilbanat
+2026-08-14 23:18:41,228 [INFO] =================================================================
+2026-08-14 23:18:41,228 [INFO] Installing target release APK...
+2026-08-14 23:19:14,432 [INFO] 
+=== TESTING SIGN IN FIELDS ===
+2026-08-14 23:19:14,432 [INFO] 
+--- Testing Field: Sign In Email (login-email-input) ---
+2026-08-14 23:19:19,440 [INFO]   📷 ✓ login-email-input_01_before_tap.png
+2026-08-14 23:19:19,440 [INFO]   T0: Tapping Sign In Email at (674,1265)
+2026-08-14 23:19:22,862 [INFO]   📷 ✓ login-email-input_02_100ms.png
+2026-08-14 23:19:26,330 [INFO]   📷 ✓ login-email-input_03_300ms.png
+2026-08-14 23:19:30,337 [INFO]   📷 ✓ login-email-input_04_1000ms.png
+2026-08-14 23:19:30,653 [INFO]   T+100ms  focused: login-email-input
+2026-08-14 23:19:30,653 [INFO]   T+300ms  focused: login-email-input
+2026-08-14 23:19:30,653 [INFO]   T+1000ms focused: login-email-input | KB open: True
+2026-08-14 23:19:42,650 [INFO]   📷 ✓ login-email-input_05_typed.png
+2026-08-14 23:19:45,254 [INFO]   Read-Back Value: 'qa-focus@mslb.app' (Expected: 'qa_focus@mslb.app')
+2026-08-14 23:19:45,254 [INFO] 
+--- Testing Field: Sign In Password (login-password-input) ---
+2026-08-14 23:19:50,371 [INFO]   📷 ✓ login-password-input_01_before_tap.png
+2026-08-14 23:19:50,371 [INFO]   T0: Tapping Sign In Password at (632,1564)
+2026-08-14 23:19:53,465 [INFO]   📷 ✓ login-password-input_02_100ms.png
+2026-08-14 23:19:56,590 [INFO]   📷 ✓ login-password-input_03_300ms.png
+2026-08-14 23:20:00,200 [INFO]   📷 ✓ login-password-input_04_1000ms.png
+2026-08-14 23:20:00,497 [INFO]   T+100ms  focused: login-password-input
+2026-08-14 23:20:00,497 [INFO]   T+300ms  focused: login-password-input
+2026-08-14 23:20:00,497 [INFO]   T+1000ms focused: login-password-input | KB open: True
+2026-08-14 23:20:11,217 [INFO]   📷 ✓ login-password-input_05_typed.png
+2026-08-14 23:20:13,795 [INFO]   Read-Back Value: '•••••••' (Expected: 'Pass123!')
+2026-08-14 23:20:13,795 [INFO] 
+=== TESTING SIGN UP FIELDS ===
+2026-08-14 23:20:22,419 [INFO] 
+--- Testing Field: Sign Up Full Name (signup-name-input) ---
+2026-08-14 23:20:27,092 [INFO]   📷 ✓ signup-name-input_01_before_tap.png
+2026-08-14 23:20:27,092 [ERROR]   ✗ Element signup-name-input not found on screen!
+2026-08-14 23:20:27,092 [INFO] 
+--- Testing Field: Sign Up Mobile (signup-mobile-input) ---
+2026-08-14 23:20:31,952 [INFO]   📷 ✓ signup-mobile-input_01_before_tap.png
+2026-08-14 23:20:31,952 [ERROR]   ✗ Element signup-mobile-input not found on screen!
+2026-08-14 23:20:31,952 [INFO] 
+--- Testing Field: Sign Up Email (signup-email-input) ---
+2026-08-14 23:20:36,708 [INFO]   📷 ✓ signup-email-input_01_before_tap.png
+2026-08-14 23:20:36,709 [ERROR]   ✗ Element signup-email-input not found on screen!
+2026-08-14 23:20:36,709 [INFO] 
+--- Testing Field: Sign Up Password (signup-password-input) ---
+2026-08-14 23:20:41,410 [INFO]   📷 ✓ signup-password-input_01_before_tap.png
+2026-08-14 23:20:41,411 [ERROR]   ✗ Element signup-password-input not found on screen!
+2026-08-14 23:20:41,411 [INFO] 
+--- Testing Field: Sign Up Confirm Password (signup-confirm-password-input) ---
+2026-08-14 23:20:46,093 [INFO]   📷 ✓ signup-confirm-password-input_01_before_tap.png
+2026-08-14 23:20:46,093 [ERROR]   ✗ Element signup-confirm-password-input not found on screen!
+2026-08-14 23:20:46,093 [INFO] 
+--- Testing Field: Sign Up Referral Code (signup-referral-input) ---
+2026-08-14 23:20:50,855 [INFO]   📷 ✓ signup-referral-input_01_before_tap.png
+2026-08-14 23:20:50,855 [ERROR]   ✗ Element signup-referral-input not found on screen!
+2026-08-14 23:20:50,856 [INFO] 
+📄 Report generated: C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\P0_TEXTINPUT_FOCUS_ROOT_CAUSE_REPORT.md
+2026-08-14 23:20:59,124 [INFO] =================================================================
+2026-08-14 23:20:59,124 [INFO] P0 TEXTINPUT FOCUS JUMP & TIMELINE DIAGNOSTIC
+2026-08-14 23:20:59,124 [INFO] Device: Vivo Y36 (Android 15) | Package: com.madrasatussalikat.lilbanat
+2026-08-14 23:20:59,125 [INFO] =================================================================
+2026-08-14 23:20:59,125 [INFO] Installing target release APK...
+2026-08-14 23:21:31,497 [INFO] 
+=== TESTING SIGN IN FIELDS ===
+2026-08-14 23:21:31,497 [INFO] 
+--- Testing Field: Sign In Email (login-email-input) ---
+2026-08-14 23:21:36,532 [INFO]   📷 ✓ login-email-input_01_before_tap.png
+2026-08-14 23:21:36,532 [INFO]   T0: Tapping Sign In Email at (674,1265)
+2026-08-14 23:21:40,108 [INFO]   📷 ✓ login-email-input_02_100ms.png
+2026-08-14 23:21:43,616 [INFO]   📷 ✓ login-email-input_03_300ms.png
+2026-08-14 23:21:47,599 [INFO]   📷 ✓ login-email-input_04_1000ms.png
+2026-08-14 23:21:47,927 [INFO]   T+100ms  focused: login-email-input
+2026-08-14 23:21:47,928 [INFO]   T+300ms  focused: login-email-input
+2026-08-14 23:21:47,928 [INFO]   T+1000ms focused: login-email-input | KB open: True
+2026-08-14 23:22:01,489 [INFO]   📷 ✓ login-email-input_05_typed.png
+2026-08-14 23:22:04,125 [INFO]   Read-Back Value: 'qa-focus@mslb.app' (Expected: 'qa_focus@mslb.app')
+2026-08-14 23:22:04,125 [INFO] 
+--- Testing Field: Sign In Password (login-password-input) ---
+2026-08-14 23:22:09,218 [INFO]   📷 ✓ login-password-input_01_before_tap.png
+2026-08-14 23:22:09,218 [INFO]   T0: Tapping Sign In Password at (632,1564)
+2026-08-14 23:22:12,269 [INFO]   📷 ✓ login-password-input_02_100ms.png
+2026-08-14 23:22:15,445 [INFO]   📷 ✓ login-password-input_03_300ms.png
+2026-08-14 23:22:19,006 [INFO]   📷 ✓ login-password-input_04_1000ms.png
+2026-08-14 23:22:19,250 [INFO]   T+100ms  focused: login-password-input
+2026-08-14 23:22:19,250 [INFO]   T+300ms  focused: login-password-input
+2026-08-14 23:22:19,250 [INFO]   T+1000ms focused: login-password-input | KB open: True
+2026-08-14 23:22:30,360 [INFO]   📷 ✓ login-password-input_05_typed.png
+2026-08-14 23:22:33,015 [INFO]   Read-Back Value: '•••••••' (Expected: 'Pass123!')
+2026-08-14 23:22:33,015 [INFO] 
+=== TESTING SIGN UP FIELDS ===
+2026-08-14 23:22:44,519 [INFO] 
+--- Testing Field: Sign Up Full Name (signup-name-input) ---
+2026-08-14 23:22:49,210 [INFO]   📷 ✓ signup-name-input_01_before_tap.png
+2026-08-14 23:22:49,210 [ERROR]   ✗ Element signup-name-input not found on screen!
+2026-08-14 23:22:49,210 [INFO] 
+--- Testing Field: Sign Up Mobile (signup-mobile-input) ---
+2026-08-14 23:22:53,996 [INFO]   📷 ✓ signup-mobile-input_01_before_tap.png
+2026-08-14 23:22:53,996 [INFO]   T0: Tapping Sign Up Mobile at (787,208)
+2026-08-14 23:22:57,555 [INFO]   📷 ✓ signup-mobile-input_02_100ms.png
+2026-08-14 23:23:01,052 [INFO]   📷 ✓ signup-mobile-input_03_300ms.png
+2026-08-14 23:23:05,095 [INFO]   📷 ✓ signup-mobile-input_04_1000ms.png
+2026-08-14 23:23:05,377 [INFO]   T+100ms  focused: signup-mobile-input
+2026-08-14 23:23:05,378 [INFO]   T+300ms  focused: signup-mobile-input
+2026-08-14 23:23:05,378 [INFO]   T+1000ms focused: signup-mobile-input | KB open: True
+2026-08-14 23:23:17,483 [INFO]   📷 ✓ signup-mobile-input_05_typed.png
+2026-08-14 23:23:20,080 [INFO]   Read-Back Value: '9876543210' (Expected: '9876543210')
+2026-08-14 23:23:20,080 [INFO] 
+--- Testing Field: Sign Up Email (signup-email-input) ---
+2026-08-14 23:23:25,152 [INFO]   📷 ✓ signup-email-input_01_before_tap.png
+2026-08-14 23:23:25,152 [INFO]   T0: Tapping Sign Up Email at (674,507)
+2026-08-14 23:23:28,568 [INFO]   📷 ✓ signup-email-input_02_100ms.png
+2026-08-14 23:23:32,023 [INFO]   📷 ✓ signup-email-input_03_300ms.png
+2026-08-14 23:23:36,013 [INFO]   📷 ✓ signup-email-input_04_1000ms.png
+2026-08-14 23:23:36,285 [INFO]   T+100ms  focused: signup-email-input
+2026-08-14 23:23:36,286 [INFO]   T+300ms  focused: signup-email-input
+2026-08-14 23:23:36,286 [INFO]   T+1000ms focused: signup-email-input | KB open: True
+2026-08-14 23:23:48,830 [INFO]   📷 ✓ signup-email-input_05_typed.png
+2026-08-14 23:23:51,389 [INFO]   Read-Back Value: 'qa-newuser@mslb.app' (Expected: 'qa_newuser@mslb.app')
+2026-08-14 23:23:51,389 [INFO] 
+--- Testing Field: Sign Up Password (signup-password-input) ---
+2026-08-14 23:23:56,367 [INFO]   📷 ✓ signup-password-input_01_before_tap.png
+2026-08-14 23:23:56,367 [INFO]   T0: Tapping Sign Up Password at (632,806)
+2026-08-14 23:23:59,366 [WARNING]   📷 ⚠ Screenshot signup-password-input_02_100ms.png not captured
+2026-08-14 23:24:02,465 [WARNING]   📷 ⚠ Screenshot signup-password-input_03_300ms.png not captured
+2026-08-14 23:24:06,010 [WARNING]   📷 ⚠ Screenshot signup-password-input_04_1000ms.png not captured
+2026-08-14 23:24:06,265 [INFO]   T+100ms  focused: signup-password-input
+2026-08-14 23:24:06,265 [INFO]   T+300ms  focused: signup-password-input
+2026-08-14 23:24:06,265 [INFO]   T+1000ms focused: signup-password-input | KB open: True
+2026-08-14 23:24:17,538 [WARNING]   📷 ⚠ Screenshot signup-password-input_05_typed.png not captured
+2026-08-14 23:24:20,175 [INFO]   Read-Back Value: '••••••••••' (Expected: 'NewPass123!')
+2026-08-14 23:24:20,175 [INFO] 
+--- Testing Field: Sign Up Confirm Password (signup-confirm-password-input) ---
+2026-08-14 23:24:24,918 [INFO]   📷 ✓ signup-confirm-password-input_01_before_tap.png
+2026-08-14 23:24:24,918 [INFO]   T0: Tapping Sign Up Confirm Password at (632,1105)
+2026-08-14 23:24:28,115 [WARNING]   📷 ⚠ Screenshot signup-confirm-password-input_02_100ms.png not captured
+2026-08-14 23:24:31,267 [WARNING]   📷 ⚠ Screenshot signup-confirm-password-input_03_300ms.png not captured
+2026-08-14 23:24:34,875 [WARNING]   📷 ⚠ Screenshot signup-confirm-password-input_04_1000ms.png not captured
+2026-08-14 23:24:35,165 [INFO]   T+100ms  focused: signup-confirm-password-input
+2026-08-14 23:24:35,166 [INFO]   T+300ms  focused: signup-confirm-password-input
+2026-08-14 23:24:35,166 [INFO]   T+1000ms focused: signup-confirm-password-input | KB open: True
+2026-08-14 23:24:46,632 [WARNING]   📷 ⚠ Screenshot signup-confirm-password-input_05_typed.png not captured
+2026-08-14 23:24:49,279 [INFO]   Read-Back Value: '••••••••••' (Expected: 'NewPass123!')
+2026-08-14 23:24:49,279 [INFO] 
+--- Testing Field: Sign Up Referral Code (signup-referral-input) ---
+2026-08-14 23:24:54,061 [INFO]   📷 ✓ signup-referral-input_01_before_tap.png
+2026-08-14 23:24:54,062 [INFO]   T0: Tapping Sign Up Referral Code at (674,1691)
+2026-08-14 23:24:57,753 [INFO]   📷 ✓ signup-referral-input_02_100ms.png
+2026-08-14 23:25:01,128 [INFO]   📷 ✓ signup-referral-input_03_300ms.png
+2026-08-14 23:25:04,974 [INFO]   📷 ✓ signup-referral-input_04_1000ms.png
+2026-08-14 23:25:05,233 [INFO]   T+100ms  focused: signup-referral-input
+2026-08-14 23:25:05,233 [INFO]   T+300ms  focused: signup-referral-input
+2026-08-14 23:25:05,233 [INFO]   T+1000ms focused: signup-referral-input | KB open: True
+2026-08-14 23:25:16,517 [INFO]   📷 ✓ signup-referral-input_05_typed.png
+2026-08-14 23:25:19,118 [INFO]   Read-Back Value: 'REF123' (Expected: 'REF123')
+2026-08-14 23:25:19,119 [INFO] 
+📄 Report generated: C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\P0_TEXTINPUT_FOCUS_ROOT_CAUSE_REPORT.md

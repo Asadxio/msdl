@@ -25,9 +25,14 @@ export function canManageUsers(role: AppRole): boolean {
   return role === 'super_admin' || role === 'admin';
 }
 
+export function isStaffRole(role: string): boolean {
+  return role === 'teacher' || role === 'assistant_teacher' || role === 'moderator' || role === 'admin' || role === 'super_admin';
+}
+
 export function canAssignRole(actor: AppRole, targetRole: AppRole, targetUserId?: string, actorUserId?: string): boolean {
   if (targetUserId && actorUserId && targetUserId === actorUserId) return false;
   if (actor === 'super_admin') return true;
   if (actor === 'admin') return !RESTRICTED_ASSIGNMENT_ROLES.includes(targetRole) && targetRole !== 'moderator';
   return false;
 }
+

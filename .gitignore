@@ -101,6 +101,13 @@ serviceAccountKey.json
 *serviceAccountKey.json
 
 *serviceAccountKey.json
-serviceAccountKey.json
-
 *serviceAccountKey*
+
+# Android / APK Binaries
+*.apk
+**/*.apk
+*.aab
+**/*.aab
+qa/artifacts/**/*.apk
+qa/artifacts_final/**/*.apk
+

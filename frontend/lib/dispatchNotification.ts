@@ -100,7 +100,7 @@ export async function dispatchNotification(input: DispatchNotificationInput): Pr
         recipients: allowed,
         priority: 5,
       }),
-    }), 15000);
+    }), 4000);
     if (!res.ok) throw new Error(`queue enqueue failed (${res.status})`);
     await Promise.all(allowed.map(async (uid) => {
       const createdAt = await getTelemetryCreatedAtMs(dedupeId, uid).catch(() => 0);

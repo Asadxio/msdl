@@ -52,7 +52,7 @@ function TeacherCard({ teacher, isOnly }: { teacher: Teacher; isOnly: boolean })
 }
 
 export default function TeachersScreen() {
-  const { teachers, loading, refetch } = useData();
+  const { teachers, loading, error, refetch } = useData();
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     if (refetch) await refetch();
   });
@@ -75,6 +75,8 @@ export default function TeachersScreen() {
       </FadeInView>
       {loading ? (
         <EmptyState icon="hourglass-outline" title="Loading" message="Loading teachers..." />
+      ) : error && teachers.length === 0 ? (
+        <EmptyState icon="alert-circle-outline" title="Unable to Load Teachers" message={error} action={{ label: 'Retry', onPress: refetch }} />
       ) : teachers.length === 0 ? (
         <EmptyState icon="people-outline" title="No Teachers Yet" message="Teachers will appear here once added." />
       ) : (
@@ -104,8 +106,8 @@ const styles = StyleSheet.create({
     ...SHADOWS.header,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
-  headerSubtitle: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.textMain },
+  headerSubtitle: { fontSize: 13, fontWeight: '500', color: COLORS.textSecondary, marginTop: 2 },
   refreshBtn: {
     width: 36, height: 36, borderRadius: RADIUS.xxl,
     borderWidth: 1, borderColor: COLORS.border,

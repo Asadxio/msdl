@@ -2,7 +2,7 @@ import { ScreenRefreshControl, ScalePressable } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View, Linking, Share, Platform } from 'react-native';
-import { WHATSAPP_HELP_URL } from '@/lib/links';
+import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL } from '@/lib/links';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,12 +46,12 @@ type QuickAction = {
 
 const QUICK_ACTIONS: QuickAction[] = [
   { label: 'Courses', icon: 'school-outline', route: '/(tabs)/courses', bg: '#EEF2FF', fg: '#4F46E5' },
+  { label: 'Pay Fees', icon: 'card-outline', route: '/payment', bg: '#FEF3C7', fg: '#D97706' },
   { label: 'Library', icon: 'library-outline', route: '/more/library', bg: '#F0FDF4', fg: '#16A34A' },
   { label: 'Quiz', icon: 'help-circle-outline', route: '/more/quiz', bg: '#FFF7ED', fg: '#EA580C' },
   { label: 'Prayer', icon: 'time-outline', route: '/prayer-times', bg: '#ECFDF5', fg: '#059669' },
   { label: 'Qibla', icon: 'compass-outline', route: '/qibla', bg: '#FEF3C7', fg: '#D97706' },
   { label: 'Calendar', icon: 'calendar-number-outline', route: '/islamic-calendar', bg: '#F5F3FF', fg: '#7C3AED' },
-  { label: 'Alerts', icon: 'notifications-outline', route: '/(tabs)/notifications', bg: '#FEE2E2', fg: '#DC2626' },
   { label: 'Settings', icon: 'settings-outline', route: '/settings', bg: '#F1F5F9', fg: '#475569' },
 ];
 
@@ -78,7 +78,7 @@ const MENU_SECTIONS: MenuSection[] = [
     colorBg: '#ECFDF5',
     colorIcon: '#10B981',
     items: [
-      { label: 'About & Donations', subtitle: 'App info and support', icon: 'heart-outline', route: '/payment', colorBg: '#FEF3C7', colorIcon: '#D97706' },
+      { label: 'Pay Fees & Payments', subtitle: 'Course fees and platform support', icon: 'card-outline', route: '/payment', colorBg: '#FEF3C7', colorIcon: '#D97706' },
       { label: 'Certificates', subtitle: 'View your certificates', icon: 'ribbon-outline', route: '/(tabs)/certificate', colorBg: '#F5F3FF', colorIcon: '#7C3AED' },
       { label: 'Quiz Analytics', subtitle: 'Track your quiz performance', icon: 'stats-chart-outline', route: '/(tabs)/progress', colorBg: '#EEF2FF', colorIcon: '#4F46E5' },
     ]
@@ -126,6 +126,7 @@ type SocialLink = {
 };
 
 const SOCIAL_LINKS: SocialLink[] = [
+  { label: 'Website', icon: 'globe-outline', url: MADRASA_WEBSITE_URL, bg: '#EEF2FF', fg: '#4F46E5' },
   { label: 'WhatsApp', icon: 'logo-whatsapp', url: WHATSAPP_HELP_URL, bg: '#DCFCE7', fg: '#16A34A' },
   { label: 'YouTube', icon: 'logo-youtube', url: null, bg: '#FEE2E2', fg: '#DC2626' },
   { label: 'Instagram', icon: 'logo-instagram', url: null, bg: '#FCE7F3', fg: '#DB2777' },
@@ -338,6 +339,17 @@ export default function MoreLandingScreen() {
               <Text style={styles.aboutMetaText}>Islamic Education for Girls</Text>
             </View>
           </View>
+
+          <ScalePressable
+            style={styles.websiteBtn}
+            onPress={() => Linking.openURL(MADRASA_WEBSITE_URL)}
+            accessibilityRole="button"
+            accessibilityLabel="Visit Official Madrasa Website"
+          >
+            <Ionicons name="globe-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.websiteBtnText}>Visit Official Website</Text>
+            <Ionicons name="open-outline" size={16} color="#FFFFFF" />
+          </ScalePressable>
         </View>
       </View>
 
@@ -365,6 +377,24 @@ export default function MoreLandingScreen() {
 
           {/* Action rows */}
           <View style={styles.supportList}>
+            <ScalePressable
+              style={styles.supportRow}
+              onPress={() => Linking.openURL(MADRASA_WEBSITE_URL)}
+              accessibilityRole="button"
+              accessibilityLabel="Official Website"
+            >
+              <View style={[styles.supportIcon, { backgroundColor: '#EEF2FF' }]}>
+                <Ionicons name="globe-outline" size={22} color="#4F46E5" />
+              </View>
+              <View style={styles.supportRowContent}>
+                <Text style={styles.supportLabel}>Official Website</Text>
+                <Text style={styles.supportRowSub}>madrasa-website-299.netlify.app</Text>
+              </View>
+              <View style={styles.rowChevronContainer}>
+                <Ionicons name="open-outline" size={18} color="#4F46E5" />
+              </View>
+            </ScalePressable>
+
             <ScalePressable style={styles.supportRow} onPress={handleShareApp} accessibilityRole="button" accessibilityLabel="Share App">
               <View style={[styles.supportIcon, { backgroundColor: '#DBEAFE' }]}>
                 <Ionicons name="share-social-outline" size={22} color="#2563EB" />
@@ -695,6 +725,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#334155',
     fontWeight: '600',
+  },
+  websiteBtn: {
+    marginTop: 18,
+    backgroundColor: '#0FA958',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    ...SHADOWS.card,
+  },
+  websiteBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 
   /* Support Card */

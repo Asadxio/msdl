@@ -327,16 +327,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const t0 = perfStart('data.fetchData');
-      const cachedCourses = await cacheGet<Course[]>(COURSES_CACHE_KEY);
-      const cachedTeachers = await cacheGet<Teacher[]>(TEACHERS_CACHE_KEY);
+      const [cachedCourses, cachedTeachers] = await Promise.all([
+        cacheGet<Course[]>(COURSES_CACHE_KEY),
+        cacheGet<Teacher[]>(TEACHERS_CACHE_KEY),
+      ]);
       if (cachedCourses?.length) setCourses(cachedCourses);
       if (cachedTeachers?.length) setTeachers(cachedTeachers);
 
-      const coursesSnap = await withTimeout(getDocs(collection(db, 'courses')));
-      const courseDocs = coursesSnap.docs;
+      const [coursesSnap, teachersSnap] = await Promise.all([
+        withTimeout(getDocs(collection(db, 'courses'))),
+        withTimeout(getDocs(collection(db, 'teachers'))),
+      ]);
       const coursesData: Course[] = [];
       const courseIdsSeen = new Set<string>();
-      courseDocs.forEach((doc) => {
+      coursesSnap.forEach((doc) => {
         if (courseIdsSeen.has(doc.id)) return;
         courseIdsSeen.add(doc.id);
         const data = doc.data();
@@ -352,8 +356,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           meet_link: data.meet_link || data.class_link || data.classLink || '',
         });
       });
-
-      const teachersSnap = await withTimeout(getDocs(collection(db, 'teachers')));
       const teachersData: Teacher[] = [];
       teachersSnap.forEach((doc) => {
         const data = doc.data();

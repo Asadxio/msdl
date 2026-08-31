@@ -54,8 +54,6 @@ export default function AdminSendPushScreen() {
     }
   }, [profile, isAdmin, router]);
 
-  if (profile && !isAdmin) return null;
-
   // Form state
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -251,6 +249,8 @@ export default function AdminSendPushScreen() {
       setSending(false);
     }
   };
+
+  if (profile && !isAdmin) return null;
 
   return (
     <View style={[styles.mainContainer, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + SPACING.sm }]}>
@@ -517,7 +517,7 @@ export default function AdminSendPushScreen() {
             </View>
 
             <Text style={styles.previewHelpText}>
-              This is how your broadcast will appear on students' mobile lockscreens:
+              This is how your broadcast will appear on students&apos; mobile lockscreens:
             </Text>
 
             {/* Simulated Banner */}

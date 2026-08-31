@@ -7,10 +7,26 @@ import { ScalePressable } from '@/components/ui';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { auth, db } from '@/lib/firebase';
 import { apiUrl } from '@/lib/api';
+import { getCertificate } from '@/lib/certificateFunctions';
 import { useAuth } from '@/context/AuthContext';
-import { useData } from '@/context/DataContext';
+import { useData, type Course } from '@/context/DataContext';
+import { IslamicCertificateModal } from '@/components/IslamicCertificateModal';
+import type { QuizCertificateData } from '@/lib/quizCertificate';
 
-type Certificate = { id: string; user_name: string; course_name: string; completion_date: string };
+type Certificate = {
+  id: string;
+  certificate_id?: string;
+  user_name: string;
+  course_name: string;
+  completion_date: string;
+  hijri_date?: string;
+  quiz_category?: string;
+  score?: number;
+  total_questions?: number;
+  percentage?: number;
+  grade_label?: string;
+  type?: string;
+};
 type AttendanceRow = { status?: string };
 
 export default function CertificateScreen() {
@@ -20,6 +36,8 @@ export default function CertificateScreen() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [certs, setCerts] = useState<Certificate[]>([]);
+  const [previewCert, setPreviewCert] = useState<QuizCertificateData | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [quizAttempts, setQuizAttempts] = useState(0);
   const [attendancePct, setAttendancePct] = useState(0);
@@ -57,9 +75,17 @@ export default function CertificateScreen() {
         const data = d.data() as Partial<Certificate>;
         arr.push({
           id: d.id,
+          certificate_id: String(data.certificate_id || d.id),
           user_name: String(data.user_name || ''),
           course_name: String(data.course_name || ''),
           completion_date: String(data.completion_date || ''),
+          hijri_date: String(data.hijri_date || ''),
+          quiz_category: String(data.quiz_category || ''),
+          score: Number(data.score || 0),
+          total_questions: Number(data.total_questions || 0),
+          percentage: Number(data.percentage || 0),
+          grade_label: String(data.grade_label || ''),
+          type: String(data.type || 'course_completion'),
         });
       });
       setCerts(arr);
@@ -78,21 +104,35 @@ export default function CertificateScreen() {
 
   const eligible = useMemo(() => quizAttempts > 0 && attendancePct >= 75, [quizAttempts, attendancePct]);
 
+  const handleOpenCertPreview = (cert: Certificate) => {
+    const certData: QuizCertificateData = {
+      certificateId: cert.certificate_id || cert.id,
+      userId: user?.uid || '',
+      studentName: cert.user_name || profile?.name || 'Student',
+      quizCategory: cert.quiz_category || cert.course_name || 'Islamic Knowledge',
+      score: cert.score || 10,
+      totalQuestions: cert.total_questions || 10,
+      percentage: cert.percentage || 100,
+      issueDateGregorian: cert.completion_date || new Date().toLocaleDateString('en-GB'),
+      issueDateHijri: cert.hijri_date || '1447 AH',
+      gradeLabel: cert.grade_label || 'Certified (Mumtaz - ممتاز)',
+      createdAtMs: Date.now(),
+    };
+    setPreviewCert(certData);
+    setPreviewVisible(true);
+  };
+
   const generateCertificate = async () => {
     if (!user?.uid || !profile?.name || !selectedCourseId) return;
     if (!eligible || generating) return;
-    const course = courses.find((c) => c.id === selectedCourseId);
+    const course = courses.find((c: Course) => c.id === selectedCourseId);
     if (!course) return;
     try {
       setGenerating(true);
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(apiUrl('/certificates/generate'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
-        body: JSON.stringify({ course_id: selectedCourseId }),
-      });
-      if (!res.ok) throw new Error(`certificate_generate_failed_${res.status}`);
-      const certText = `Certificate of Completion\n\nAwarded to: ${profile.name}\nCourse: ${course.name}\nDate: ${new Date().toDateString()}`;
+      // Stage E: switched from FastAPI fetch to Firebase callable
+      // FastAPI route /certificates/generate remains active for rollback
+      const certData = await getCertificate(selectedCourseId);
+      const certText = `Certificate of Completion\n\nAwarded to: ${profile.name}\nCourse: ${course.name}\nCertificate ID: ${certData.certificateId}\nDate: ${new Date().toDateString()}`;
       await Share.share({ message: certText });
     } catch {
       Alert.alert('Failed', 'Could not generate certificate right now.');
@@ -200,7 +240,7 @@ export default function CertificateScreen() {
                 <Text style={styles.empty}>No courses available right now.</Text>
               ) : (
                 <View style={styles.courseList}>
-                  {courses.map((course) => {
+                  {courses.map((course: Course) => {
                     const isSelected = selectedCourseId === course.id;
                     return (
                       <ScalePressable
@@ -274,7 +314,14 @@ export default function CertificateScreen() {
             ) : (
               <View style={styles.certList}>
                 {certs.map((cert) => (
-                  <View key={cert.id} style={styles.certCard}>
+                  <TouchableOpacity
+                    key={cert.id}
+                    style={styles.certCard}
+                    onPress={() => handleOpenCertPreview(cert)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View certificate for ${cert.course_name}`}
+                  >
                     <View style={[styles.certIconBadge, { backgroundColor: '#FEF3C7' }]}>
                       <Ionicons name="trophy" size={24} color="#D97706" />
                     </View>
@@ -288,13 +335,13 @@ export default function CertificateScreen() {
                     </View>
                     <TouchableOpacity
                       style={styles.certShareBtn}
-                      onPress={() => handleShareExistingCert(cert)}
+                      onPress={() => handleOpenCertPreview(cert)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Share certificate for ${cert.course_name}`}
+                      accessibilityLabel={`View and Share certificate for ${cert.course_name}`}
                     >
-                      <Ionicons name="share-social-outline" size={20} color="#4F46E5" />
+                      <Ionicons name="eye-outline" size={20} color="#0FA958" />
                     </TouchableOpacity>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
@@ -302,6 +349,12 @@ export default function CertificateScreen() {
 
         </ScrollView>
       )}
+
+      <IslamicCertificateModal
+        visible={previewVisible}
+        certificate={previewCert}
+        onClose={() => setPreviewVisible(false)}
+      />
     </View>
   );
 }

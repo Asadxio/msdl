@@ -26,6 +26,7 @@ import { InAppTutorialOverlay } from '@/components/ui/InAppTutorialOverlay';
 import { isTutorialCompleted } from '@/lib/tutorialStorage';
 import { markUserEnteredApp } from '@/lib/emailVerificationAnalytics';
 import { trackEvent, type AnalyticsEventName } from '@/lib/analytics';
+import { usePresence } from '@/hooks/usePresence';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -43,6 +44,7 @@ function formatErrorMessage(error: unknown, fallback = 'An unexpected error occu
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, profile, profileIssue, authLoading, emailVerified, profileOffline, signupVerificationFlowActive } = useAuth();
+  usePresence();
   const profileStatus = profile?.status;
   const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
@@ -176,7 +178,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
     getConsentStatus(user.uid).then((state) => setNeedsLegalAcceptance(state.needsAcceptance)).catch(() => setNeedsLegalAcceptance(true));
-  }, [user?.uid, profileStatus, segmentKey]);
+  }, [user?.uid, profileStatus]);
 
   useEffect(() => {
     if (!navigationReady || authLoading || onboardingStatus === 'checking') {

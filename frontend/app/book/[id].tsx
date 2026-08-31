@@ -179,7 +179,7 @@ export default function BookViewerScreen() {
           {webViewError ? (
             <View style={styles.centerContainer}>
               <Ionicons name="document-outline" size={56} color={COLORS.border} />
-              <Text style={styles.errorTitle}>Couldn't preview this file</Text>
+              <Text style={styles.errorTitle}>Couldn&apos;t preview this file</Text>
               <Text style={styles.errorDesc}>{webViewErrorMessage}</Text>
               <View style={styles.errorActions}>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleViewExternal}>

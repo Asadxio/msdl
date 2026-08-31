@@ -17,6 +17,7 @@ import { createAdminLog } from '@/lib/adminLogs';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { actionNonce, apiUrl } from '@/lib/api';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { adminPaymentAction, adminRefundPayment } from '@/lib/paymentAdminFunctions';
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 
@@ -25,13 +26,20 @@ type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'reject
 type PaymentItem = {
   id: string;
   user_id: string;
-  user_name: string;
+  user_name?: string;
   amount: number;
   state?: PaymentStatus;
   status?: PaymentStatus;
   provider?: 'razorpay';
+  provider_order_id?: string;
+  provider_payment_id?: string;
+  course_id?: string;
+  payment_type?: string;
   type?: 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
+  refund_id?: string;
+  refund_reason?: string;
   created_at?: { toDate?: () => Date };
+  finalized_at?: { toDate?: () => Date };
 };
 
 function paymentState(payment: Pick<PaymentItem, 'state' | 'status'>): PaymentStatus {
@@ -110,61 +118,56 @@ export default function AdminPaymentsScreen() {
     loadPayments('reset');
   }, [isAdmin, statusFilter]);
 
-  const setStatus = async (id: string, status: 'succeeded' | 'rejected' | 'refunded' | 'disputed') => {
-    const currentUser = auth.currentUser;
-    const currentPayment = payments.find((payment) => payment.id === id);
-    if (!id || !currentPayment) {
-      Alert.alert('Update Failed', 'Payment document was not found in the current list. Refresh and try again.');
+  const handleRefund = async (payment: PaymentItem) => {
+    if (!adminNote || adminNote.trim().length < 4) {
+      Alert.alert('Reason Required', 'Please enter an admin reason/note (at least 4 characters) before issuing a refund.');
       return;
     }
-    if (!['pending', 'submitted', 'verified', 'processing'].includes(paymentState(currentPayment))) {
-      Alert.alert('Already Finalized', `Payment ${id} is already ${paymentState(currentPayment)}.`);
-      return;
-    }
-    setUpdatingId(id);
+
+    Alert.alert(
+      'Issue Real Razorpay Refund',
+      `Are you sure you want to refund ₹${(Number(payment.amount || 0)).toFixed(2)} to ${payment.user_id} via Razorpay API?\n\nReason: "${adminNote.trim()}"`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Issue Refund',
+          style: 'destructive',
+          onPress: async () => {
+            setUpdatingId(payment.id);
+            try {
+              const res = await adminRefundPayment({
+                paymentId: payment.id,
+                reason: adminNote.trim(),
+              });
+              Alert.alert('Refund Completed', `Refund ID: ${res.refundId}\nPayment has been refunded.`);
+              setAdminNote('');
+              await loadPayments('reset');
+            } catch (err: any) {
+              Alert.alert('Refund Failed', err?.message || 'Could not process refund via Razorpay.');
+            } finally {
+              setUpdatingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLegacyReject = async (paymentId: string) => {
+    setUpdatingId(paymentId);
     try {
-      const token = await currentUser?.getIdToken();
-      const requestBody = { payment_id: id, next_state: status, note: adminNote || `admin_${status}`, evidence: { panel: 'admin_payments', previous_status: paymentState(currentPayment) } };
-      console.log('[AdminPayments] updating payment status', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', next_state: status });
-      const res = await fetch(apiUrl('/payments/admin/action'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '', 'x-action-nonce': actionNonce('payment_admin') },
-        body: JSON.stringify(requestBody),
+      await adminPaymentAction({
+        paymentId,
+        action: 'reject',
+        note: adminNote || 'admin_rejected',
       });
-      const responseText = await res.text();
-      let responseJson: any = null;
-      try { responseJson = responseText ? JSON.parse(responseText) : null; } catch {}
-      console.log('[AdminPayments] payment status response', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', http_status: res.status, ok: res.ok, response: responseJson || responseText });
-      if (!res.ok) {
-        const detail = String(responseJson?.detail || responseText || `HTTP ${res.status}`);
-        if (res.status === 403 || detail.toLowerCase().includes('permission')) {
-          console.log('[AdminPayments] permission denied updating payment', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', detail });
-        }
-        throw new Error(detail);
-      }
-      setPayments((prev) => prev.map((payment) => (payment.id === id ? { ...payment, status } : payment)));
-      await createAdminLog(profile, {
-        action: `payment_${status}`,
-        performed_by: profile?.email || profile?.name || 'admin',
-        target_id: id,
-      }).catch(() => {});
+      Alert.alert('Payment Rejected', 'Payment state updated to rejected.');
       await loadPayments('reset');
-      Alert.alert('Payment Updated', `Payment marked ${status}.`);
     } catch (err: any) {
-      console.log('[AdminPayments] update payment status failed', { payment_id: id, uid: currentUser?.uid || '', admin_role: profile?.role || '', error: err });
-      const reason = String(err?.message || err || 'Could not update payment status. Please try again.');
-      Alert.alert('Update Failed', __DEV__ ? reason : 'Could not update payment status. Please try again.');
+      Alert.alert('Action Failed', err?.message || 'Failed to reject payment.');
     } finally {
       setUpdatingId(null);
     }
-  };
-
-  const confirmStatusChange = (id: string, status: 'succeeded' | 'rejected' | 'refunded' | 'disputed') => {
-    const label = status === 'succeeded' ? 'Mark Succeeded' : status === 'rejected' ? 'Reject' : status === 'refunded' ? 'Mark Refunded' : 'Mark Disputed';
-    Alert.alert(`${label} Payment`, `Are you sure you want to ${label.toLowerCase()} this payment?`, [
-      { text: 'Cancel' },
-      { text: label, style: status === 'rejected' || status === 'disputed' ? 'destructive' : 'default', onPress: () => setStatus(id, status) },
-    ]);
   };
 
   if (profile && !isAdmin) return null;
@@ -177,56 +180,96 @@ export default function AdminPaymentsScreen() {
           <Ionicons name="close" size={22} color={COLORS.textMain} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Manage Payments</Text>
-        <TouchableOpacity onPress={() => setStatusFilter(statusFilter === 'all' ? 'pending' : 'all')}>
+        <TouchableOpacity onPress={() => setStatusFilter(statusFilter === 'all' ? 'succeeded' : 'all')}>
           <Ionicons name="funnel" size={20} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      
       <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-        <TextInput style={styles.noteInput} placeholder="Admin reason / evidence note" value={adminNote} onChangeText={setAdminNote} />
+        <TextInput
+          style={styles.noteInput}
+          placeholder="Admin reason note (required for refunds)"
+          value={adminNote}
+          onChangeText={setAdminNote}
+        />
       </View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
         <>
-        <Text style={{ paddingHorizontal: 16, color: COLORS.textMuted }}>Filter status: {statusFilter}</Text>
-        <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
-          data={payments}
-          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <View style={styles.card} testID={`payment-${item.id}`}>
-              <Text style={styles.name}>{item.user_name}</Text>
-              <Text style={styles.meta}>User ID: {item.user_id}</Text>
-              <Text style={styles.meta}>Amount: ₹{Number(item.amount || 0).toFixed(2)}</Text>
-              <Text style={styles.meta}>Type: {item.type || 'fees'}</Text>
-              <Text style={styles.meta}>Provider: {item.provider || 'razorpay'}</Text>
-              <Text style={styles.meta}>Status: {paymentState(item)}</Text>
-              <Text style={styles.time}>{formatDate(item)}</Text>
-              <Text style={styles.meta}>Reconciliation: {(item as any).reconciliation?.finalized ? 'finalized' : ((item as any).reconciliation ? 'pending' : 'n/a')}</Text>
-              <Text style={styles.meta}>Replay detected: {(item as any).replay_detected ? 'yes' : 'no'}</Text>
+          <Text style={{ paddingHorizontal: 16, color: COLORS.textMuted, fontSize: 12 }}>Filter: {statusFilter.toUpperCase()}</Text>
+          <FlatList
+            removeClippedSubviews
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            data={payments}
+            refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.list}
+            renderItem={({ item }) => {
+              const state = paymentState(item);
+              const isSucceeded = state === 'succeeded';
+              const isRefunded = state === 'refunded';
+              const isPending = ['pending', 'processing', 'submitted'].includes(state);
 
-              {(['submitted', 'pending', 'verified', 'processing'] as PaymentStatus[]).includes(paymentState(item)) && (
-                <View style={styles.actions}>
-                  <TouchableOpacity style={[styles.verifyBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'succeeded')} disabled={updatingId === item.id}>
-                    {updatingId === item.id ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.verifyText}>Succeed</Text>}
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]} onPress={() => confirmStatusChange(item.id, 'rejected')} disabled={updatingId === item.id}>
-                    {updatingId === item.id ? <ActivityIndicator size="small" color={COLORS.error} /> : <Text style={styles.rejectText}>Reject</Text>}
-                  </TouchableOpacity>
+              return (
+                <View style={styles.card} testID={`payment-${item.id}`}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.name}>{item.user_name || item.user_id}</Text>
+                    <View style={[styles.badge, isSucceeded ? styles.badgeSuccess : isRefunded ? styles.badgeRefunded : styles.badgePending]}>
+                      <Text style={[styles.badgeText, isSucceeded ? styles.badgeTextSuccess : isRefunded ? styles.badgeTextRefunded : styles.badgeTextPending]}>
+                        {state.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.amount}>₹{Number(item.amount || 0).toFixed(2)}</Text>
+                  <Text style={styles.meta}>Type: {(item.payment_type || item.type || 'fees').toUpperCase()}</Text>
+                  {item.course_id ? <Text style={styles.meta}>Course: {item.course_id}</Text> : null}
+                  {item.provider_order_id ? <Text style={styles.meta}>Order ID: {item.provider_order_id}</Text> : null}
+                  {item.provider_payment_id ? <Text style={styles.meta}>Payment ID: {item.provider_payment_id}</Text> : null}
+                  {item.refund_id ? <Text style={styles.meta}>Refund ID: {item.refund_id}</Text> : null}
+                  <Text style={styles.time}>Created: {formatDate(item)}</Text>
+
+                  {/* Actions based on payment state */}
+                  {isSucceeded && item.provider_payment_id ? (
+                    <View style={styles.actions}>
+                      <TouchableOpacity
+                        style={[styles.refundBtn, updatingId === item.id && styles.disabledBtn]}
+                        onPress={() => handleRefund(item)}
+                        disabled={updatingId === item.id}
+                      >
+                        {updatingId === item.id ? (
+                          <ActivityIndicator size="small" color="#DC2626" />
+                        ) : (
+                          <Text style={styles.refundText}>Issue Razorpay Refund</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  ) : isPending ? (
+                    <View style={styles.actions}>
+                      <TouchableOpacity
+                        style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]}
+                        onPress={() => handleLegacyReject(item.id)}
+                        disabled={updatingId === item.id}
+                      >
+                        <Text style={styles.rejectText}>Reject Pending</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
                 </View>
-              )}
-            </View>
-          )}
-          ListEmptyComponent={(
-            <View style={styles.center}>
-              <Ionicons name="card-outline" size={42} color={COLORS.border} />
-              <Text style={styles.empty}>No payments yet</Text>
-            </View>
-          )}
-        />
+              );
+            }}
+            ListEmptyComponent={(
+              <View style={styles.center}>
+                <Ionicons name="card-outline" size={42} color={COLORS.border} />
+                <Text style={styles.empty}>No payment records</Text>
+              </View>
+            )}
+          />
         </>
       )}
     </View>
@@ -240,21 +283,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm, backgroundColor: COLORS.surface,
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  backBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  topBarTitle: { fontSize: 18, fontWeight: '800', color: COLORS.textMain },
   errorText: { color: COLORS.error, fontSize: 12, paddingHorizontal: SPACING.md, paddingTop: 8 },
-  list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 24 },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
-  name: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
-  meta: { fontSize: 13, color: COLORS.textMuted, marginTop: 3, textTransform: 'capitalize' },
+  list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: 32 },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  name: { fontSize: 15, fontWeight: '700', color: COLORS.textMain },
+  amount: { fontSize: 18, fontWeight: '800', color: COLORS.primary, marginVertical: 4 },
+  meta: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   time: { fontSize: 11, color: COLORS.textMuted, marginTop: 6 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  verifyBtn: { flex: 1, backgroundColor: '#DCFCE7', borderRadius: RADIUS.xxl, paddingVertical: 10, alignItems: 'center' },
-  verifyText: { color: '#166534', fontWeight: '700' },
-  rejectBtn: { flex: 1, backgroundColor: '#FEE2E2', borderRadius: RADIUS.xxl, paddingVertical: 10, alignItems: 'center' },
-  disabledBtn: { opacity: 0.7 },
-  rejectText: { color: COLORS.error, fontWeight: '700' },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: RADIUS.full },
+  badgeSuccess: { backgroundColor: '#D1FAE5' },
+  badgePending: { backgroundColor: '#FEF3C7' },
+  badgeRefunded: { backgroundColor: '#FEE2E2' },
+  badgeText: { fontSize: 10, fontWeight: '700' },
+  badgeTextSuccess: { color: '#065F46' },
+  badgeTextPending: { color: '#92400E' },
+  badgeTextRefunded: { color: '#991B1B' },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 8 },
+  refundBtn: { flex: 1, backgroundColor: '#FEE2E2', borderRadius: RADIUS.md, paddingVertical: 8, alignItems: 'center' },
+  refundText: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
+  rejectBtn: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: RADIUS.md, paddingVertical: 8, alignItems: 'center' },
+  rejectText: { color: COLORS.textMuted, fontWeight: '600', fontSize: 13 },
+  disabledBtn: { opacity: 0.6 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
-  empty: { color: COLORS.textMuted, fontSize: 14 },
-  noteInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: COLORS.surface, color: COLORS.textMain },
+  empty: { color: COLORS.textMuted, fontSize: 14, marginTop: 8 },
+  noteInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: COLORS.surface, color: COLORS.textMain, fontSize: 13 },
 });
+

@@ -65,7 +65,7 @@ type PremiumInputProps = {
   testID?: string;
 };
 
-const PremiumInput = React.memo(function PremiumInput({
+function PremiumInput({
   label,
   leftIcon,
   value,
@@ -81,38 +81,27 @@ const PremiumInput = React.memo(function PremiumInput({
   prefix,
   testID,
 }: PremiumInputProps) {
-  const [focused, setFocused] = useState(false);
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
-
-  let borderColor = isDarkMode ? '#2E3D5C' : '#E2E8E5';
-  if (focused) {
-    borderColor = isDarkMode ? '#10B981' : '#0F7660'; 
-  } else if (error) {
-    borderColor = colors.error;
-  } else if (success && value.length > 0) {
-    borderColor = colors.success;
-  }
 
   return (
     <View style={styles.inputContainer}>
       <Text style={[
         styles.inputLabel,
-        { color: error ? colors.error : focused ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted }
+        { color: error ? colors.error : colors.textMuted }
       ]}>
         {label}
       </Text>
       <View style={[
         styles.inputRow,
-        { borderColor, backgroundColor: isDarkMode ? '#102820' : '#FFFFFF' },
-        focused && styles.inputRowFocused,
+        { borderColor: error ? colors.error : (isDarkMode ? '#2E3D5C' : '#E2E8E5'), backgroundColor: isDarkMode ? '#102820' : '#FFFFFF' },
         disabled && styles.inputRowDisabled
       ]}>
         <Ionicons 
           name={leftIcon} 
           size={20} 
-          color={error ? colors.error : focused ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted} 
+          color={error ? colors.error : colors.textMuted} 
           style={styles.leftIcon} 
         />
         {prefix ? <View style={styles.prefixContainer}>{prefix}</View> : null}
@@ -125,8 +114,8 @@ const PremiumInput = React.memo(function PremiumInput({
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          autoCorrect={false}
+          spellCheck={false}
           editable={!disabled}
           testID={testID}
           accessibilityLabel={label}
@@ -140,7 +129,7 @@ const PremiumInput = React.memo(function PremiumInput({
       ) : null}
     </View>
   );
-});
+}
 
 const SegmentedControl = React.memo(function SegmentedControl({
   activeRole,
@@ -380,7 +369,7 @@ export default function SignupScreen() {
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
           <FadeInView style={styles.headerSection}>
@@ -463,6 +452,7 @@ export default function SignupScreen() {
                       style={styles.eyeBtn} 
                       accessibilityLabel={showPass ? 'Hide password' : 'Show password'}
                       accessibilityRole="button"
+                      focusable={false}
                     >
                       <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
                     </TouchableOpacity>
@@ -516,6 +506,7 @@ export default function SignupScreen() {
                       style={styles.eyeBtn} 
                       accessibilityLabel={showConfirmPass ? 'Hide confirm password' : 'Show confirm password'}
                       accessibilityRole="button"
+                      focusable={false}
                     >
                       <Ionicons name={showConfirmPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
                     </TouchableOpacity>
@@ -549,9 +540,10 @@ export default function SignupScreen() {
                 onChangeText={setReferralCode}
                 disabled={loading}
                 autoCapitalize="characters"
+                testID="signup-referral-input"
               />
               <Text style={[styles.helperText, { color: colors.textMuted }]}>
-                Leave empty if you don't have a referral code.
+                Leave empty if you don&apos;t have a referral code.
               </Text>
 
               {/* 8. Required Consent checkbox */}
@@ -563,6 +555,7 @@ export default function SignupScreen() {
                   accessibilityLabel="Accept Terms and Conditions and Privacy Policy"
                   accessibilityState={{ checked: termsAccepted }}
                   disabled={loading}
+                  testID="signup-terms-checkbox"
                 >
                   <Ionicons 
                     name={termsAccepted ? 'checkbox' : 'square-outline'} 
@@ -665,7 +658,7 @@ export default function SignupScreen() {
             <View style={[styles.modalBulletBox, { backgroundColor: isDarkMode ? '#132C23' : '#F8FAFC', borderColor: colors.border }]}>
               <Text style={[styles.modalBulletText, { color: colors.text }]}>• Please verify your email.</Text>
               <Text style={[styles.modalBulletText, { color: colors.text }]}>• Your account will be reviewed by the Administrator.</Text>
-              <Text style={[styles.modalBulletText, { color: colors.text }]}>• You'll receive access after approval.</Text>
+              <Text style={[styles.modalBulletText, { color: colors.text }]}>• You&apos;ll receive access after approval.</Text>
             </View>
 
             <ScalePressable style={[styles.modalButton, { backgroundColor: isDarkMode ? '#10B981' : '#0F7660' }]} onPress={handleContinueToVerification} testID="signup-verification-continue-btn">
@@ -767,10 +760,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   inputRowFocused: {
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 1,
+    // Only border color is updated on focus to prevent Android native elevation focus jump
   },
   inputRowDisabled: {
     opacity: 0.65,

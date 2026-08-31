@@ -239,7 +239,7 @@ export default function OnboardingEntryScreen() {
 
         {/* Swipe CTA */}
         <GestureDetector gesture={panGesture}>
-          <Animated.View style={[styles.swipeZone, { bottom: insets.bottom + 30 }, handleContainerStyle]}>
+          <Animated.View style={[styles.swipeZone, { bottom: insets.bottom + 30 }, handleContainerStyle]} testID="goto-begin-journey-btn">
             <Animated.View style={[styles.swipePill, handlePillStyle]}>
               <View style={styles.swipeGlow} />
               <View style={styles.swipeHandleIndicator} />

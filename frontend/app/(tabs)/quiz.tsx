@@ -5,25 +5,37 @@ import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, deleteDoc, doc, getDocs, getCountFromServer, query, serverTimestamp, setDoc, updateDoc, where, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getCountFromServer, query, serverTimestamp, setDoc, updateDoc, where, Timestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/lib/firebase';
 import { useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { QUIZ_SESSION_TTL_MS, clearQuizSession, loadQuizSession, saveQuizSession } from '@/lib/lmsHardening';
+import { QUIZ_SESSION_TTL_MS, clearQuizSession, loadQuizSession, saveQuizSession, saveQuizCounts, loadQuizCounts } from '@/lib/lmsHardening';
 import { FeedbackBanner, SkeletonCard } from '@/components/ui';
 import { UIButton } from '@/components/ui/Button';
 import { SectionCard } from '@/components/ui/SectionCard';
 import { trackSecurity } from '@/lib/securityMonitor';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { QUIZ_CATEGORIES } from '@/constants/quizCategories';
+import { Ionicons } from '@expo/vector-icons';
+import { IslamicCertificateModal } from '@/components/IslamicCertificateModal';
+import { saveQuizCertificate, type QuizCertificateData } from '@/lib/quizCertificate';
+
 
 type QuizQuestion = {
   id: string;
   question: string;
   options: string[];
-  correct_answer: string;
   category?: string;
+};
+
+type ScoreBreakdownItem = {
+  id: string;
+  question: string;
+  selected: string;
+  ok: boolean;
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -52,8 +64,11 @@ export default function QuizScreen() {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
+  const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdownItem[]>([]);
   const [error, setError] = useState('');
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [generatedCert, setGeneratedCert] = useState<QuizCertificateData | null>(null);
+  const [certModalVisible, setCertModalVisible] = useState(false);
   const submissionLockRef = useRef(false);
   const currentAttemptIdRef = useRef<string | null>(null);
 
@@ -70,30 +85,44 @@ export default function QuizScreen() {
     let mounted = true;
     const fetchCounts = async () => {
       setLoadingCounts(true);
-      const counts: Record<string, number> = {};
-      
-      const batchSize = 10;
-      for (let i = 0; i < QUIZ_CATEGORIES.length; i += batchSize) {
-        const chunk = QUIZ_CATEGORIES.slice(i, i + batchSize);
-        await Promise.all(chunk.map(async (cat) => {
-          try {
-            const q = query(collection(db, 'quizzes'), where('category', '==', cat));
-            const snap = await getCountFromServer(q);
-            counts[cat] = snap.data().count;
-          } catch (e) {
-            console.log(`Failed to fetch count for ${cat}`);
-            counts[cat] = 0;
-          }
-        }));
-      }
-      if (mounted) {
-        setCategoryCounts(counts);
+
+      // 1️⃣ Check AsyncStorage cache first — avoids any network call for 1 hour
+      const cached = await loadQuizCounts();
+      if (cached && mounted) {
+        setCategoryCounts(cached);
         setLoadingCounts(false);
+        return;
+      }
+
+      // 2️⃣ Cache miss — single Cloud Function call instead of 44 Firestore calls
+      try {
+        const getCountsFn = httpsCallable<Record<string, never>, { counts: Record<string, number>; fetchedAt: number }>(
+          functions,
+          'getQuizCategoryCounts'
+        );
+        const res = await getCountsFn({});
+        const counts = res.data.counts ?? {};
+        if (mounted) {
+          setCategoryCounts(counts);
+          // Save to AsyncStorage for next 1 hour
+          await saveQuizCounts(counts).catch(() => {});
+          setLoadingCounts(false);
+        }
+      } catch (e) {
+        // Fallback: show categories without counts (better than 8-second loading)
+        console.warn('[QuizScreen] getQuizCategoryCounts failed, using empty counts', e);
+        const emptyCounts: Record<string, number> = {};
+        QUIZ_CATEGORIES.forEach((cat) => { emptyCounts[cat] = 0; });
+        if (mounted) {
+          setCategoryCounts(emptyCounts);
+          setLoadingCounts(false);
+        }
       }
     };
     fetchCounts();
     return () => { mounted = false; };
   }, []);
+
 
   const loadQuiz = useCallback(async (category: string) => {
     setLoading(true);
@@ -104,28 +133,10 @@ export default function QuizScreen() {
     setSessionExpired(false);
     
     try {
-      const q = query(collection(db, 'quizzes'), where('category', '==', category));
-      const snap = await getDocs(q);
-      
-      const all: QuizQuestion[] = [];
-      snap.forEach((d) => {
-        const data = d.data() as any;
-        const question = data.question;
-        const options = Array.isArray(data.options) 
-          ? data.options 
-          : [data.option1, data.option2, data.option3, data.option4].filter(Boolean);
-        const correct_answer = data.correct_answer || data.correctAnswer;
-        
-        if (question && Array.isArray(options) && options.length >= 2 && correct_answer) {
-          all.push({
-            id: d.id,
-            question,
-            options,
-            correct_answer,
-            category: data.category || '',
-          });
-        }
-      });
+      const getQuizQuestionsFn = httpsCallable(functions, 'getQuizQuestions');
+      const res = await getQuizQuestionsFn({ category });
+      const data = res.data as { questions: QuizQuestion[] };
+      const all: QuizQuestion[] = data.questions;
       
       if (all.length === 0) {
         setQuestions([]);
@@ -174,13 +185,7 @@ export default function QuizScreen() {
   const isLast = index === questions.length - 1;
   const picked = current ? answers[current.id] : '';
 
-  const scoreBreakdown = useMemo(() => questions.map((q) => ({
-    id: q.id,
-    question: q.question,
-    selected: answers[q.id] || '',
-    correct: q.correct_answer,
-    ok: (answers[q.id] || '') === q.correct_answer,
-  })), [questions, answers]);
+
 
   const submitQuiz = async () => {
     console.info('[QuizSubmission] 1. Button pressed - starting submitQuiz pipeline');
@@ -212,31 +217,25 @@ export default function QuizScreen() {
     const attemptDocId = currentAttemptIdRef.current;
 
     try {
-      const score = questions.reduce((sum, q) => (answers[q.id] === q.correct_answer ? sum + 1 : sum), 0);
-      console.info(`[QuizSubmission] 3. Score calculation complete: ${score}/${questions.length}`);
-      
       const cleanCat = selectedCategory && typeof selectedCategory === 'string' && selectedCategory.trim().length > 0
         ? selectedCategory.trim().slice(0, 100)
         : 'Uncategorized';
 
-      const payload = {
-        user_id: user.uid,
-        score,
-        total_questions: questions.length,
-        category: cleanCat,
-        created_at: Timestamp.now(),
-      };
-      console.info('[QuizSubmission] 4. Payload creation complete:', { user_id: user.uid, score, total_questions: questions.length, category: cleanCat, attemptDocId });
+      console.info('[QuizSubmission] 3. Payload creation complete:', { user_id: user.uid, category: cleanCat, attemptDocId });
 
-      const docRef = doc(collection(db, 'quiz_results'), attemptDocId);
-
-      // Save with exponential backoff retry logic (up to 3 attempts, 30s timeout per attempt)
       let lastErr: any = null;
-      console.info('[QuizSubmission] 5. API/Firestore request start - writing to quiz_results collection');
+      let submitResult: any = null;
+      const submitQuizFn = httpsCallable(functions, 'submitQuiz');
+
+      console.info('[QuizSubmission] 4. API request start - calling submitQuiz Cloud Function');
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          await Promise.race([
-            setDoc(docRef, payload, { merge: true }),
+          submitResult = await Promise.race([
+            submitQuizFn({
+              category: cleanCat,
+              answers: answers,
+              nonce: attemptDocId,
+            }),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_ERROR')), 30000))
           ]);
           lastErr = null;
@@ -251,8 +250,40 @@ export default function QuizScreen() {
       }
       if (lastErr) throw lastErr;
 
-      console.info('[QuizSubmission] 6. API/Firestore request success - quiz result saved');
-      setResult({ score, total: questions.length });
+      const serverResult = submitResult.data as any;
+
+      console.info('[QuizSubmission] 5. API request success - quiz result saved');
+      setResult({ score: serverResult.score, total: serverResult.total });
+      
+      const serverBreakdown = serverResult.breakdown || [];
+      setScoreBreakdown(
+        questions.map((q) => {
+          const breakdownItem = serverBreakdown.find((b: any) => b.id === q.id);
+          return {
+            id: q.id,
+            question: q.question,
+            selected: answers[q.id] || '',
+            ok: breakdownItem ? breakdownItem.wasCorrect : false,
+          };
+        })
+      );
+
+      // Trigger Official Certificate generation if passed (>= 60%)
+      const percentage = serverResult.total > 0 ? Math.round((serverResult.score / serverResult.total) * 100) : 0;
+      if (percentage >= 60 && user?.uid) {
+        saveQuizCertificate(
+          user.uid,
+          profile?.name || user.displayName || 'Student',
+          selectedCategory || 'Islamic Assessment',
+          serverResult.score,
+          serverResult.total,
+        ).then((cert) => {
+          setGeneratedCert(cert);
+          setCertModalVisible(true);
+        }).catch((certErr) => {
+          console.warn('[Quiz] Certificate generation notice:', certErr);
+        });
+      }
 
       // Secondary cleanups (session clear) should never discard or fail the saved result
       const quizKey = String(questions.map((q) => q.id).join('-')).slice(0, 180);
@@ -358,12 +389,27 @@ export default function QuizScreen() {
     }
   };
 
-  const editQuestion = (q: QuizQuestion) => {
+  const editQuestion = async (q: QuizQuestion) => {
     setEditingId(q.id);
     setQuestionInput(q.question);
+    
+    // For the correct answer, fetch the full document server-side
+    // (admin has direct Firestore read access per security rules)
+    // This is intentionally NOT done via getQuizQuestions (which strips answer keys for students)
+    try {
+      const fullDoc = await getDoc(doc(db, 'quizzes', q.id));
+      if (fullDoc.exists()) {
+        const data = fullDoc.data() as any;
+        const correctAnswerValue = String(data.correctAnswer ?? data.correct_answer ?? '');
+        setCorrectAnswer(correctAnswerValue);
+      }
+    } catch (e) {
+      // Fallback: correct answer field will be empty — admin must re-enter it
+      setCorrectAnswer('');
+    }
+    
     const opts = [...q.options, '', '', '', ''].slice(0, 4);
     setOptionInputs(opts);
-    setCorrectAnswer(q.correct_answer);
     setCategoryInput(q.category || selectedCategory || '');
   };
 
@@ -498,7 +544,7 @@ export default function QuizScreen() {
             <View key={q.id} style={styles.adminQuestionChip}>
               <Text style={styles.adminQuestionText} numberOfLines={2}>{q.question}</Text>
               <View style={styles.row}>
-                <TouchableOpacity style={styles.compactBtn} onPress={() => editQuestion(q)}>
+                <TouchableOpacity style={styles.compactBtn} onPress={() => { editQuestion(q).catch(() => {}); }}>
                   <Text style={styles.compactBtnText}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.compactBtn, styles.compactDeleteBtn]} onPress={() => removeQuestion(q.id)}>
@@ -545,6 +591,17 @@ export default function QuizScreen() {
                   <Text style={styles.resultMessage}>
                     {passed ? 'Great job! You have a solid understanding of this topic.' : 'Keep learning and try again. You can do this!'}
                   </Text>
+                  {passed && generatedCert ? (
+                    <TouchableOpacity
+                      style={styles.claimCertBtn}
+                      onPress={() => setCertModalVisible(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="ribbon" size={20} color="#FFFFFF" />
+                      <Text style={styles.claimCertBtnText}>View & Share Official Certificate</Text>
+                      <Ionicons name="sparkles" size={16} color="#FDE68A" />
+                    </TouchableOpacity>
+                  ) : null}
                 </>
               );
             })()}
@@ -553,7 +610,7 @@ export default function QuizScreen() {
             <View key={item.id} style={styles.answerCard}>
               <Text style={styles.answerQ}>{i + 1}. {item.question}</Text>
               <Text style={[styles.answerLine, !item.ok && { color: COLORS.error }]}>Your answer: {item.selected || 'Not answered'}</Text>
-              {!item.ok ? <Text style={styles.answerLine}>Correct: {item.correct}</Text> : null}
+              {!item.ok ? <Text style={styles.answerLine}>Correct Answer Hidden</Text> : null}
               {isAdmin ? (
                 <View style={styles.row}>
                   <TouchableOpacity
@@ -561,7 +618,7 @@ export default function QuizScreen() {
                     onPress={() => {
                       const q = questions.find((question) => question.id === item.id);
                       if (!q) return;
-                      editQuestion(q);
+                      editQuestion(q).catch(() => {});
                     }}
                   >
                     <Text style={styles.secondaryBtnText}>Edit</Text>
@@ -634,11 +691,35 @@ export default function QuizScreen() {
           </View>
         </View>
       )}
+
+      <IslamicCertificateModal
+        visible={certModalVisible}
+        certificate={generatedCert}
+        onClose={() => setCertModalVisible(false)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  claimCertBtn: {
+    marginTop: 14,
+    backgroundColor: '#0FA958',
+    borderRadius: RADIUS.full,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    ...SHADOWS.card,
+  },
+  claimCertBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
   resultBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, marginBottom: 8 },
   resultBadgePass: { backgroundColor: '#E8F5EE' },
   resultBadgeFail: { backgroundColor: '#FDECEC' },

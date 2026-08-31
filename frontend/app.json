@@ -7,6 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "madars-tus-salikat-lilbanat",
     "userInterfaceStyle": "automatic",
+    "jsEngine": "hermes",
     "androidStatusBar": {
       "backgroundColor": "#F7F2E9",
       "barStyle": "dark-content"
@@ -96,9 +97,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "50ba9cd3-1704-43e8-89cb-3970421f0bb2"
+        "projectId": "408ebb1a-6a8c-467e-b941-44b658fe7977"
       }
     },
-    "owner": "mslb"
+    "owner": "sumraftm"
   }
 }

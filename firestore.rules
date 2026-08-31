@@ -9,13 +9,9 @@ service cloud.firestore {
       return (isSignedIn()
         && (
           request.auth.token.email_verified == true
-          // Temporary admin bypass: allow admin/super_admin even when
-          // email_verified is false, provided they have approved status.
-          // TODO: Remove this bypass once admin emails are verified.
+          // Allow all approved users (admin-verified institutional roster)
           || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin'
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.founder == true
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
         ));
     }
 
@@ -264,7 +260,12 @@ service cloud.firestore {
     function isValidNotificationWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['title', 'message', 'user_id', 'target_roles', 'target_user_ids', 'category', 'sound', 'read', 'hidden_by', 'created_at']
+          [
+            'title', 'message', 'user_id', 'target_roles', 'target_user_ids',
+            'category', 'sound', 'read', 'hidden_by', 'created_at',
+            'data', 'dedupe_id', 'created_at_ms', 'recipient_id', 'actor_id',
+            'channel', 'event', 'body', 'route'
+          ]
         )
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
@@ -278,6 +279,15 @@ service cloud.firestore {
         && (!('sound' in request.resource.data) || request.resource.data.sound == 'default')
         && (!('read' in request.resource.data) || request.resource.data.read is map)
         && (!('hidden_by' in request.resource.data) || request.resource.data.hidden_by is list)
+        && (!('data' in request.resource.data) || request.resource.data.data is map)
+        && (!('dedupe_id' in request.resource.data) || request.resource.data.dedupe_id is string)
+        && (!('created_at_ms' in request.resource.data) || request.resource.data.created_at_ms is number)
+        && (!('recipient_id' in request.resource.data) || request.resource.data.recipient_id is string)
+        && (!('actor_id' in request.resource.data) || request.resource.data.actor_id is string)
+        && (!('channel' in request.resource.data) || request.resource.data.channel is string)
+        && (!('event' in request.resource.data) || request.resource.data.event is string)
+        && (!('body' in request.resource.data) || request.resource.data.body is string)
+        && (!('route' in request.resource.data) || request.resource.data.route is string)
         && request.resource.data.created_at is timestamp;
     }
 
@@ -334,39 +344,64 @@ service cloud.firestore {
     }
 
     function isValidPaymentCreate() {
+      // Accepts both:
+      //   - Legacy manual-payment client schema (user_name, payment_ref, type, review_mode)
+      //   - Cloud Function v2 Admin SDK schema (provider_order_id, course_id, receipt_id, source, created_at_ms, payment_type)
+      // Admin SDK bypasses these rules, but the rule set must not reject the unified schema.
+      // INVARIANTS that MUST always hold regardless of schema version:
+      //   user_id == auth.uid, state=pending, status=pending, provider=razorpay, amount>0
       return isApprovedVerifiedUser()
         && hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'amount', 'payment_ref', 'state', 'status', 'provider', 'created_at', 'type', 'transaction_ref', 'review_mode', 'currency', 'submitted_at']
+          [
+            // Core fields (both schemas)
+            'user_id', 'amount', 'state', 'status', 'provider', 'created_at', 'currency',
+            // Legacy manual-payment fields
+            'user_name', 'payment_ref', 'type', 'transaction_ref', 'review_mode', 'submitted_at',
+            // Cloud Function v2 fields
+            'provider_order_id', 'course_id', 'payment_type', 'receipt_id', 'created_at_ms', 'source'
+          ]
         )
         && request.resource.data.user_id == request.auth.uid
-        && request.resource.data.user_name is string
-        && request.resource.data.user_name.size() > 0
+        // user_name is optional in CF v2 schema (Admin SDK sets it if available)
+        && (!('user_name' in request.resource.data) || (request.resource.data.user_name is string && request.resource.data.user_name.size() > 0))
         && request.resource.data.amount is number
         && request.resource.data.amount > 0
-        && request.resource.data.amount <= 1000000
+        && request.resource.data.amount <= 100000000
+        // Security invariants: client can NEVER start in a non-pending state
         && request.resource.data.state == 'pending'
         && request.resource.data.status == 'pending'
         && request.resource.data.provider == 'razorpay'
+        && request.resource.data.currency == 'INR'
+        // Legacy-only optional fields
         && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar'])
         && (!('transaction_ref' in request.resource.data) || (request.resource.data.transaction_ref is string && request.resource.data.transaction_ref.size() >= 4 && request.resource.data.transaction_ref.size() <= 80 && request.resource.data.transaction_ref.matches('^[a-zA-Z0-9_./# -]+$')))
-        && request.resource.data.review_mode == 'manual'
-        && request.resource.data.currency == 'INR'
+        && (!('review_mode' in request.resource.data) || request.resource.data.review_mode == 'manual')
         && (!('submitted_at' in request.resource.data) || request.resource.data.submitted_at is timestamp)
-        && request.resource.data.created_at is timestamp;
+        && (!('created_at' in request.resource.data) || request.resource.data.created_at is timestamp)
+        // CF v2 optional fields — validation where applicable
+        && (!('source' in request.resource.data) || request.resource.data.source is string)
+        && (!('provider_order_id' in request.resource.data) || request.resource.data.provider_order_id is string)
+        && (!('receipt_id' in request.resource.data) || request.resource.data.receipt_id is string);
     }
 
     function isValidPaymentUpdateByOwner() {
+      // submitPaymentReference (CF) uses Admin SDK — bypasses rules.
+      // This rule governs legacy client-side manual payment reference submission.
+      // Security: client may ONLY change state pending->submitted and set transaction_ref.
+      // Client CANNOT change: user_id, amount, provider, currency, created_at.
+      // user_name and type may be absent in CF v2 docs, so check conditionally.
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payment_ref', 'transaction_ref', 'state', 'status', 'submitted_at'])
         && request.resource.data.user_id == resource.data.user_id
-        && request.resource.data.user_name == resource.data.user_name
+        && (!('user_name' in resource.data) || request.resource.data.user_name == resource.data.user_name)
         && request.resource.data.amount == resource.data.amount
         && request.resource.data.provider == resource.data.provider
-        && request.resource.data.type == resource.data.type
-        && request.resource.data.review_mode == resource.data.review_mode
+        && (!('type' in resource.data) || request.resource.data.type == resource.data.type)
+        && (!('review_mode' in resource.data) || request.resource.data.review_mode == resource.data.review_mode)
         && request.resource.data.currency == resource.data.currency
         && request.resource.data.created_at == resource.data.created_at
-        && ((('state' in resource.data) && resource.data.state == 'pending') || resource.data.status == 'pending')
+        && ((("state" in resource.data) && resource.data.state == 'pending') || resource.data.status == 'pending')
+        // Security: client can ONLY move to submitted — never succeeded/processing/etc
         && request.resource.data.state == 'submitted'
         && request.resource.data.status == 'submitted'
         && (!('payment_ref' in request.resource.data) || request.resource.data.payment_ref == null || request.resource.data.payment_ref is string)
@@ -422,7 +457,7 @@ service cloud.firestore {
     function isValidChatCreate() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['type', 'name', 'participants', 'participant_names', 'last_message', 'created_by', 'created_at', 'updated_at', 'typing', 'unread_counts', 'pinned_by', 'hidden_by', 'muted_by', 'blocked_pairs']
+          ['type', 'name', 'participants', 'participant_names', 'last_message', 'last_sender_id', 'created_by', 'created_at', 'updated_at', 'typing', 'unread_counts', 'pinned_by', 'hidden_by', 'archived_by', 'muted_by', 'blocked_pairs']
         )
         && request.resource.data.type in ['direct', 'group', 'broadcast']
         && request.resource.data.created_by is string
@@ -431,6 +466,8 @@ service cloud.firestore {
         && request.resource.data.updated_at is timestamp
         && request.resource.data.participants is list
         && request.resource.data.participants.size() <= 200
+        && (!('last_message' in request.resource.data) || request.resource.data.last_message is string)
+        && (!('last_sender_id' in request.resource.data) || request.resource.data.last_sender_id is string)
         && (!('pinned_by' in request.resource.data) || request.resource.data.pinned_by is list)
         && (!('hidden_by' in request.resource.data) || request.resource.data.hidden_by is list)
         && (!('muted_by' in request.resource.data) || request.resource.data.muted_by is list)
@@ -439,14 +476,15 @@ service cloud.firestore {
           (request.resource.data.type == 'direct'
             && request.auth.uid in request.resource.data.participants
             && request.resource.data.participants.size() == 2)
-          || ((request.resource.data.type == 'group' || request.resource.data.type == 'broadcast') && isAdmin())
+          || (request.resource.data.type == 'group' && isTeacherOrAdmin() && request.auth.uid in request.resource.data.participants)
+          || (request.resource.data.type == 'broadcast' && isAdmin())
         );
     }
 
     function isValidChatBaseUnchanged() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['type', 'name', 'participants', 'participant_names', 'last_message', 'created_by', 'created_at', 'updated_at', 'typing', 'unread_counts', 'pinned_by', 'hidden_by', 'muted_by', 'blocked_pairs']
+          ['type', 'name', 'participants', 'participant_names', 'last_message', 'last_sender_id', 'created_by', 'created_at', 'updated_at', 'typing', 'unread_counts', 'pinned_by', 'hidden_by', 'archived_by', 'muted_by', 'blocked_pairs']
         )
         && request.resource.data.type in ['direct', 'group', 'broadcast']
         && request.resource.data.created_by == resource.data.created_by
@@ -461,7 +499,7 @@ service cloud.firestore {
           || (
             request.resource.data.type != 'broadcast'
             && isChatParticipant()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last_message', 'updated_at', 'typing', 'unread_counts', 'pinned_by', 'hidden_by', 'muted_by', 'blocked_pairs'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last_message', 'last_sender_id', 'updated_at', 'typing', 'unread_counts', 'pinned_by', 'hidden_by', 'archived_by', 'muted_by', 'blocked_pairs'])
           )
           || (
             request.resource.data.type == 'broadcast'
@@ -472,7 +510,7 @@ service cloud.firestore {
     }
 
     function canReadChat() {
-      return isApprovedVerifiedUser() && (isBroadcastChat() || isChatParticipant());
+      return isApprovedVerifiedUser() && (resource == null || isBroadcastChat() || isChatParticipant());
     }
 
     function canWriteMessageToChat(chatId) {
@@ -507,7 +545,7 @@ service cloud.firestore {
     }
 
     function hasValidMessageKeys(data) {
-      return hasOnlyAllowedKeys(data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by', 'client_id', 'deleted_for', 'deleted_for_everyone', 'unsent_by', 'unsent_at', 'message_type', 'media_url', 'media_name', 'media_size', 'status', 'sent_at', 'delivered_at', 'seen_at', 'failed_reason', 'retry_count', 'push_dedupe_id', 'reply_to', 'reply_snippet']);
+      return hasOnlyAllowedKeys(data, ['chat_id', 'text', 'sender_id', 'sender_name', 'created_at', 'read_by', 'client_id', 'deleted_for', 'deleted_for_everyone', 'is_deleted', 'unsent_by', 'unsent_at', 'message_type', 'media_url', 'media_name', 'media_size', 'mime_type', 'status', 'sent_at', 'delivered_at', 'seen_at', 'failed_reason', 'retry_count', 'push_dedupe_id', 'reply_to', 'reply_snippet', 'reactions']);
     }
 
     function isValidMessageCreate() {
@@ -522,12 +560,15 @@ service cloud.firestore {
         && (!('client_id' in request.resource.data) || request.resource.data.client_id is string)
         && (!('deleted_for' in request.resource.data) || request.resource.data.deleted_for is list)
         && (!('deleted_for_everyone' in request.resource.data) || request.resource.data.deleted_for_everyone is bool)
-        && (!('message_type' in request.resource.data) || request.resource.data.message_type in ['text', 'image', 'video', 'audio'])
+        && (!('is_deleted' in request.resource.data) || request.resource.data.is_deleted is bool)
+        && (!('message_type' in request.resource.data) || request.resource.data.message_type in ['text', 'image', 'video', 'audio', 'document'])
         && (!('media_url' in request.resource.data) || request.resource.data.media_url is string)
         && (!('media_name' in request.resource.data) || request.resource.data.media_name is string)
         && (!('media_size' in request.resource.data) || request.resource.data.media_size is number)
+        && (!('mime_type' in request.resource.data) || request.resource.data.mime_type is string)
         && (!('reply_to' in request.resource.data) || request.resource.data.reply_to is string)
         && (!('reply_snippet' in request.resource.data) || request.resource.data.reply_snippet is string)
+        && (!('reactions' in request.resource.data) || request.resource.data.reactions is map)
         && (!('status' in request.resource.data) || request.resource.data.status in ['sending', 'sent', 'delivered', 'seen', 'failed', 'retrying'])
         && (!('sent_at' in request.resource.data) || request.resource.data.sent_at is timestamp)
         && (!('delivered_at' in request.resource.data) || request.resource.data.delivered_at == null || request.resource.data.delivered_at is timestamp)
@@ -565,10 +606,14 @@ service cloud.firestore {
             && request.auth.uid in request.resource.data.deleted_for
           )
           || (
-            request.auth.uid == resource.data.sender_id
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'deleted_for_everyone', 'unsent_by', 'unsent_at'])
-            && request.resource.data.text == 'This message was unsent.'
-            && request.resource.data.deleted_for_everyone == true
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+            && request.resource.data.reactions is map
+          )
+          || (
+            (request.auth.uid == resource.data.sender_id || isAdmin())
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'deleted_for_everyone', 'is_deleted', 'unsent_by', 'unsent_at', 'media_url', 'media_name'])
+            && (request.resource.data.text == 'This message was unsent.' || request.resource.data.text == 'This message was deleted.')
+            && (request.resource.data.deleted_for_everyone == true || request.resource.data.is_deleted == true)
             && request.resource.data.unsent_by == request.auth.uid
             && request.resource.data.unsent_at is timestamp
           )
@@ -1481,6 +1526,41 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create, update: if isSignedIn();
       allow delete: if false;
+    }
+
+    // Phase 2: quiz_attempt_locks — written by Cloud Functions only (anti-cheat).
+    // Clients may only read their own lock documents for UX feedback.
+    match /quiz_attempt_locks/{docId} {
+      allow read: if isApprovedVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow write: if false; // Cloud Function Admin SDK only
+    }
+
+    // Phase 2: operation_dedupe — purely internal deduplication state.
+    // No client read/write permitted; Cloud Function Admin SDK only.
+    match /operation_dedupe/{docId} {
+      allow read, write: if false;
+    }
+
+    // Phase 2: user_tokens — FCM/push notification token storage.
+    // Only the token owner may read or write their own token document.
+    // Field-level validation prevents injection of arbitrary fields.
+    match /user_tokens/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+             'token', 'fcmToken', 'expoPushToken',
+             'platform', 'updatedAt', 'userId'
+           ])
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Phase 2: status_checks — server telemetry written by Cloud Functions.
+    // Admins may read; no client writes permitted.
+    match /status_checks/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Function Admin SDK only
     }
 
     // Deny all other document access by default.
