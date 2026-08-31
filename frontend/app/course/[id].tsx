@@ -178,6 +178,7 @@ export default function CourseDetailScreen() {
   const meetLink = normalizeMeetUrl(
     course?.meet_link || course?.class_link || "",
   );
+  const [activeTab, setActiveTab] = useState<'overview' | 'live' | 'audio' | 'curriculum'>('overview');
   const isReviewer = profile?.role === "admin" || profile?.role === "teacher";
 
 
@@ -716,690 +717,767 @@ export default function CourseDetailScreen() {
         </View>
 
         
-        <View style={styles.body}>
-          {showJoinNow || activeLiveClass ? (
-            <View style={styles.liveClassBanner}>
-              <View style={styles.liveClassBannerHeader}>
-                <View style={styles.pulseDot} />
-                <Text style={styles.liveClassBannerTitle}>{activeLiveClass ? "Live Session in Progress" : "Class Starting Soon"}</Text>
-              </View>
-              <Text style={styles.liveClassBannerSub}>{activeLiveClass ? "Your instructor is currently live. Tap below to join the classroom." : "The live class session is scheduled to begin shortly."}</Text>
-              <View style={styles.liveClassActions}>
-                {isReviewer ? (
-                  <TouchableOpacity
-                    style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
-                    activeOpacity={0.8}
-                    disabled={startingLiveClass}
-                    onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : openStartClassModal}
-                  >
-                    {startingLiveClass ? (
-                      <ActivityIndicator size="small" color={COLORS.primary} />
-                    ) : (
-                      <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
-                    )}
-                    <Text style={styles.joinBtnText}>{activeLiveClass ? "Open Live Class" : "Start Live Class"}</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity
-                  style={[styles.joinBtn, activeLiveClass && styles.liveNowBtn]}
-                  testID="banner-join-class-btn"
-                  activeOpacity={0.8}
-                  onPress={handleJoinClass}
-                >
-                  <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
-                  <Text style={styles.joinBtnText}>{activeLiveClass ? "Join Live Class" : "Join Class"}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-          {safeProgress && (
-            <View style={styles.progressSummaryCard}>
-              <View style={styles.progressSummaryHeader}>
-                <Text style={styles.progressSummaryTitle}>Your Progress</Text>
-                {(() => {
-                  const total = safeModules.reduce((acc, m) => acc + (Array.isArray(getLessonsForModule(m.id)) ? getLessonsForModule(m.id).length : 0), 0);
-                  const completed = Object.values(safeProgress).filter(p => p?.completed).length;
-                  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-                  return (
-                    <View style={{ width: '100%' }}>
-                      {pct === 100 && (
-                        <View style={styles.completedBadgeLarge}>
-                          <Ionicons name="trophy" size={14} color="#FFFFFF" />
-                          <Text style={styles.completedBadgeLargeText}>Completed</Text>
-                        </View>
-                      )}
-                      <View style={{ width: '100%', marginTop: SPACING.sm }}>
-                        <View style={styles.progressSummaryTrack}>
-                          <View style={[styles.progressSummaryFill, { width: `${Math.min(100, pct)}%` }]} />
-                        </View>
-                        <View style={styles.progressSummaryStats}>
-                          <Text style={styles.progressSummaryStatText}>{completed} completed</Text>
-                          <Text style={styles.progressSummaryStatText}>{pct}%</Text>
-                          <Text style={styles.progressSummaryStatText}>{Math.max(0, total - completed)} remaining</Text>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })()}
-              </View>
-            </View>
-          )}
+        {/* ─── Segmented Navigation Tabs ─── */}
+        <View style={styles.tabBarContainer}>
           <TouchableOpacity
-            style={styles.teacherCard}
-            testID="course-detail-teacher-link"
+            style={[styles.tabItem, activeTab === 'overview' && styles.tabItemActive]}
+            onPress={() => setActiveTab('overview')}
             activeOpacity={0.8}
-            onPress={() => {
-              if (teacher?.id) safePush(`/teacher/${teacher.id}`);
-            }}
           >
-            {teacher && (
-              <Image
-                source={{ uri: getTeacherAvatar(teacher.id) }}
-                style={styles.teacherAvatar}
-              />
-            )}
-            <View style={styles.teacherInfo}>
-              <Text style={styles.teacherLabel}>Instructor</Text>
-              <Text style={styles.teacherNameText}>{course.teacher_name}</Text>
-            </View>
-            {teacher && (
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={COLORS.textMuted}
-              />
-            )}
+            <Ionicons name="book-outline" size={15} color={activeTab === 'overview' ? '#FFF' : '#C8A84E'} />
+            <Text style={[styles.tabItemText, activeTab === 'overview' && styles.tabItemTextActive]}>Overview</Text>
           </TouchableOpacity>
 
-          <View style={styles.infoCard} testID="course-detail-schedule">
-            <View style={styles.infoCardHeader}>
-              <View style={styles.iconCircle}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={20}
-                  color={COLORS.primary}
-                />
-              </View>
-              <Text style={styles.infoCardTitle}>Schedule</Text>
-            </View>
-            <Text style={styles.infoCardValue}>
-              {course.schedule || "Schedule to be announced"}
-            </Text>
-            <Text style={styles.infoCardSubValue}>
-              {classTimeLabel || "Time to be announced"}
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'live' && styles.tabItemActive]}
+            onPress={() => setActiveTab('live')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="videocam-outline" size={15} color={activeTab === 'live' ? '#FFF' : '#C8A84E'} />
+            <Text style={[styles.tabItemText, activeTab === 'live' && styles.tabItemTextActive]}>Live & Rec</Text>
+          </TouchableOpacity>
 
-          <View style={styles.infoCard} testID="course-detail-meet-link">
-            <View style={styles.infoCardHeader}>
-              <View style={styles.iconCircle}>
-                <Ionicons
-                  name="videocam-outline"
-                  size={20}
-                  color={COLORS.primary}
-                />
-              </View>
-              <Text style={styles.infoCardTitle}>Google Meet Live Class</Text>
-            </View>
-            <Text style={styles.infoCardValue} numberOfLines={2}>
-              {meetLink || "Meet link will be shared by teacher"}
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'audio' && styles.tabItemActive]}
+            onPress={() => setActiveTab('audio')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="headset-outline" size={15} color={activeTab === 'audio' ? '#FFF' : '#C8A84E'} />
+            <Text style={[styles.tabItemText, activeTab === 'audio' && styles.tabItemTextActive]}>Audio Dars</Text>
+          </TouchableOpacity>
 
-          <View style={styles.infoCard}>
-            <View style={styles.infoCardHeader}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="mic-outline" size={20} color={COLORS.primary} />
-              </View>
-              <Text style={styles.infoCardTitle}>Recordings</Text>
-            </View>
-            {generalRecordings.length === 0 ? (
-              <EmptyState
-                icon="videocam-outline"
-                title="No Recordings Available"
-                message="Past live session recordings and lecture archives will be published here once available."
-              />
-            ) : (
-              generalRecordings.map((rec) => (
-                <TouchableOpacity
-                  key={rec.id}
-                  style={styles.recordingRow}
-                  onPress={() => openRecordingPlayer(rec.file_url)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.recordingTitle}>
-                      {rec.title || "Recording"}
-                    </Text>
-                    <Text style={styles.recordingDesc}>
-                      {rec.description || "Tap to play"}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="play-circle-outline"
-                    size={22}
-                    color={COLORS.primary}
-                  />
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'curriculum' && styles.tabItemActive]}
+            onPress={() => setActiveTab('curriculum')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="layers-outline" size={15} color={activeTab === 'curriculum' ? '#FFF' : '#C8A84E'} />
+            <Text style={[styles.tabItemText, activeTab === 'curriculum' && styles.tabItemTextActive]}>Curriculum</Text>
+          </TouchableOpacity>
+        </View>
 
-          <View style={styles.infoCard} testID="course-audio-lessons">
-            <View style={styles.infoCardHeader}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="headset-outline" size={20} color={COLORS.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.infoCardTitle}>Audio Lessons</Text>
-                <Text style={styles.infoCardSubValue}>Teacher-uploaded lectures for revision</Text>
-              </View>
-              {isReviewer ? (
-                <View style={styles.audioHeaderActions}>
-                  <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioUploadModal}>
-                    <Ionicons name="link-outline" size={16} color={COLORS.goldText} />
-                    <Text style={styles.audioUploadBtnText}>Add Link</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-            </View>
-            <TextInput
-              value={audioSearch}
-              onChangeText={setAudioSearch}
-              placeholder="Search audio lessons by title"
-              placeholderTextColor={COLORS.textMuted}
-              style={styles.audioSearchInput}
-            />
-            {activeAudioLesson ? (
-              <View style={styles.audioPlayerCard}>
-                <Text style={styles.audioPlayerTitle} numberOfLines={1}>{activeAudioLesson.title}</Text>
-                <Text style={styles.audioPlayerMeta}>{formatAudioDuration(audioPosition)} / {formatAudioDuration(audioDuration || activeAudioLesson.duration)}</Text>
-                <View style={styles.audioProgressTrack}>
-                  <View style={[styles.audioProgressFill, { width: `${Math.min(100, Math.max(0, (audioPosition / Math.max(1, audioDuration || activeAudioLesson.duration)) * 100))}%` }]} />
-                </View>
-                <View style={styles.audioControlRow}>
-                  <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(-15)}>
-                    <Ionicons name="play-back" size={18} color={COLORS.primary} />
-                    <Text style={styles.audioControlText}>15s</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.audioMainControlBtn} onPress={audioPlaying ? pauseAudioLesson : () => playAudioLesson(activeAudioLesson)}>
-                    <Ionicons name={audioPlaying ? "pause" : "play"} size={20} color="#fff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(15)}>
-                    <Text style={styles.audioControlText}>15s</Text>
-                    <Ionicons name="play-forward" size={18} color={COLORS.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.audioControlBtn} onPress={() => downloadAudioLesson(activeAudioLesson)}>
-                    <Ionicons name="download-outline" size={18} color={COLORS.primary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null}
-            {loadingAudioLessons && audioLessons.length === 0 ? (
-              <ActivityIndicator size="small" color={COLORS.primary} />
-            ) : audioLessons.length === 0 ? (
-              <EmptyState
-                icon="headset-outline"
-                title="No Audio Lectures"
-                message="Revision podcasts and audio summaries will be shared here by your instructor."
-              />
-            ) : (
-              audioLessons.map((lesson) => (
-                <View key={lesson.id} style={styles.audioLessonRow}>
-                  <TouchableOpacity style={styles.audioLessonPlayArea} onPress={() => playAudioLesson(lesson)}>
-                    <Ionicons name={activeAudioLesson?.id === lesson.id && audioPlaying ? "pause-circle" : "play-circle-outline"} size={28} color={COLORS.primary} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.recordingTitle}>{lesson.title}</Text>
-                      <Text style={styles.recordingDesc}>By {getAudioLessonTeacherName(lesson.teacher_id)} • {formatAudioUploadDate(lesson.upload_date)}</Text>
-                      <Text style={styles.recordingDesc}>{formatAudioDuration(lesson.duration)} • {formatFileSize(lesson.file_size)}</Text>
-                      {lesson.description ? <Text style={styles.recordingDesc} numberOfLines={2}>{lesson.description}</Text> : null}
-                    </View>
-                  </TouchableOpacity>
-                  <View style={styles.audioLessonActions}>
-                    <TouchableOpacity style={styles.audioIconBtn} onPress={() => downloadAudioLesson(lesson)}>
-                      <Ionicons name="download-outline" size={18} color={COLORS.primary} />
-                    </TouchableOpacity>
-                    {isReviewer ? (
-                      <>
-                        <TouchableOpacity style={styles.audioIconBtn} onPress={() => openAudioEditModal(lesson)}>
-                          <Ionicons name="create-outline" size={18} color={COLORS.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.audioIconBtn} onPress={() => confirmDeleteAudioLesson(lesson)}>
-                          <Ionicons name="trash-outline" size={18} color={COLORS.error} />
-                        </TouchableOpacity>
-                      </>
-                    ) : null}
-                  </View>
-                </View>
-              ))
-            )}
-            {audioHasMore ? (
-              <TouchableOpacity style={styles.loadMoreBtn} disabled={loadingAudioLessons} onPress={() => { void loadAudioLessons(false); }}>
-                {loadingAudioLessons ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.loadMoreText}>Load more audio lessons</Text>}
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          <View style={styles.infoCard} testID="course-learning-structure">
-            <View style={styles.infoCardHeader}>
-              <View style={styles.iconCircle}>
-                <Ionicons
-                  name="layers-outline"
-                  size={20}
-                  color={COLORS.primary}
-                />
-              </View>
-              <Text style={styles.infoCardTitle}>Learning Path</Text>
-            </View>
-            {safeModules.length === 0 ? (
-              <EmptyState
-                icon="layers-outline"
-                title="Curriculum Under Development"
-                message="The course modules, lessons, and assignments are currently being structured by the instructor."
-              />
-            ) : (
-              safeModules.map((module) => {
-                const moduleLessonsRaw = getLessonsForModule(module.id);
-                const moduleLessons = Array.isArray(moduleLessonsRaw)
-                  ? moduleLessonsRaw
-                  : [];
-                const completedCount = moduleLessons.filter(
-                  (lesson) => safeProgress[lesson.id]?.completed,
-                ).length;
-                return (
-                  <View key={module.id} style={styles.moduleBlock}>
-                    <Text style={styles.moduleTitle}>{module.title}</Text>
-                    <Text style={styles.moduleMeta}>
-                      {completedCount}/{moduleLessons.length} completed
-                    </Text>
-                    {moduleLessons.map((lesson) => {
-                      const done = !!safeProgress[lesson.id]?.completed;
-                      const lessonAssignmentsRaw = getAssignmentsForLesson(
-                        lesson.id,
-                      );
-                      const lessonAssignments = Array.isArray(
-                        lessonAssignmentsRaw,
-                      )
-                        ? lessonAssignmentsRaw
-                        : [];
-                      const isExpanded = expandedLessonId === lesson.id;
-                      const lessonRecordings = (
-                        Array.isArray(recordings) ? recordings : []
-                      ).filter((rec) => rec.lesson_id === lesson.id);
+        <View style={styles.body}>
+          {/* ══════════════════ TAB 1: OVERVIEW ══════════════════ */}
+          {activeTab === 'overview' && (
+            <>
+              {/* Progress Summary Card */}
+              {safeProgress && (
+                <View style={styles.progressSummaryCard}>
+                  <View style={styles.progressSummaryHeader}>
+                    <Text style={styles.progressSummaryTitle}>Your Learning Progress</Text>
+                    {(() => {
+                      const total = safeModules.reduce((acc, m) => acc + (Array.isArray(getLessonsForModule(m.id)) ? getLessonsForModule(m.id).length : 0), 0);
+                      const completed = Object.values(safeProgress).filter(p => p?.completed).length;
+                      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
                       return (
-                        <View key={lesson.id}>
-                          <ScalePressable
-                            style={[
-                              styles.lessonRow,
-                              done && styles.lessonRowDone,
-                            ]}
-                            onPress={async () => {
-                              try {
-                                await markLessonOpened(lesson);
-                              } catch (e) {
-                                console.log(
-                                  "[CourseDetail] markLessonOpened ERROR:",
-                                  e,
-                                );
-                                Alert.alert("Error", "Something went wrong");
-                              } finally {
-                                setExpandedLessonId((prev) =>
-                                  prev === lesson.id ? null : lesson.id,
-                                );
-                              }
-                            }}
-                            testID={`lesson-${lesson.id}`}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.lessonTitle}>
-                                {lesson.title}
-                              </Text>
-                              <Text style={styles.lessonMeta}>
-                                {lesson.duration_minutes
-                                  ? `${lesson.duration_minutes} min`
-                                  : "Tap to open lesson"}
-                              </Text>
+                        <View style={{ width: '100%' }}>
+                          {pct === 100 && (
+                            <View style={styles.completedBadgeLarge}>
+                              <Ionicons name="trophy" size={14} color="#FFFFFF" />
+                              <Text style={styles.completedBadgeLargeText}>Completed</Text>
                             </View>
-                            <Ionicons
-                              name={isExpanded ? "chevron-up" : "chevron-down"}
-                              size={18}
-                              color={COLORS.textMuted}
-                            />
-                            <Ionicons
-                              name={
-                                done ? "checkmark-circle" : "ellipse-outline"
-                              }
-                              size={20}
-                              color={done ? COLORS.primary : COLORS.textMuted}
-                            />
-                          </ScalePressable>
-                          {isExpanded ? (
-                            <View style={styles.lessonDetailCard}>
-                              <TouchableOpacity
-                                style={styles.completeBtn}
-                                onPress={async () => {
-                                  try {
-                                    await markLessonComplete(lesson);
-                                  } catch (e) {
-                                    console.log(
-                                      "[CourseDetail] markLessonComplete ERROR:",
-                                      e,
-                                    );
-                                    Alert.alert(
-                                      "Error",
-                                      "Something went wrong",
-                                    );
-                                  }
-                                }}
-                              >
-                                <Ionicons
-                                  name="checkmark-done"
-                                  size={16}
-                                  color="#fff"
-                                />
-                                <Text style={styles.completeBtnText}>
-                                  {done ? "Completed" : "Mark lesson complete"}
-                                </Text>
-                              </TouchableOpacity>
-                              <View style={styles.lessonRecordingBlock}>
-                                <Text style={styles.lessonRecordingTitle}>
-                                  Class Recordings
-                                </Text>
-                                {lessonRecordings.length === 0 ? (
-                                  <Text style={styles.infoCardSubValue}>
-                                    No recording attached to this lesson yet.
-                                  </Text>
-                                ) : (
-                                  lessonRecordings.map((rec) => (
-                                    <TouchableOpacity
-                                      key={rec.id}
-                                      style={styles.recordingRow}
-                                      onPress={() =>
-                                        openRecordingPlayer(rec.file_url)
-                                      }
-                                    >
-                                      <View style={{ flex: 1 }}>
-                                        <Text style={styles.recordingTitle}>
-                                          {rec.title || "Recording"}
-                                        </Text>
-                                        <Text style={styles.recordingDesc}>
-                                          {rec.description || "Tap to play"}
-                                        </Text>
-                                      </View>
-                                      <Ionicons
-                                        name="play-circle-outline"
-                                        size={22}
-                                        color={COLORS.primary}
-                                      />
-                                    </TouchableOpacity>
-                                  ))
-                                )}
-                              </View>
-                              {lessonAssignments.length === 0 ? (
-                                <Text style={styles.infoCardSubValue}>
-                                  No assignments in this lesson yet.
-                                </Text>
-                              ) : (
-                                lessonAssignments.map((assignment) => {
-                                  const mySubmission =
-                                    getSubmissionForAssignment(assignment.id);
-                                  const assignmentSubmissionsRaw = isReviewer
-                                    ? getSubmissionsForAssignment(assignment.id)
-                                    : [];
-                                  const assignmentSubmissions = Array.isArray(
-                                    assignmentSubmissionsRaw,
-                                  )
-                                    ? assignmentSubmissionsRaw
-                                    : [];
-                                
-                                  return (
-                                    <View
-                                      key={assignment.id}
-                                      style={styles.assignmentCard}
-                                    >
-                                      <Text style={styles.assignmentTitle}>
-                                        {assignment.title}
-                                      </Text>
-                                      <Text style={styles.assignmentDesc}>
-                                        {assignment.description ||
-                                          "No description provided."}
-                                      </Text>
-                                      {assignment.due_date ? (
-                                        <Text style={styles.assignmentDue}>
-                                          Due: {assignment.due_date}
-                                        </Text>
-                                      ) : null}
-                                      {assignment.file_url ? (
-                                        <TouchableOpacity
-                                          onPress={() => {
-                                            void openExternalLink(
-                                              assignment.file_url || "",
-                                            );
-                                          }}
-                                        >
-                                          <Text style={styles.assignmentLink}>
-                                            Open assignment file
-                                          </Text>
-                                        </TouchableOpacity>
-                                      ) : null}
-                                      {!isReviewer ? (
-                                        <View
-                                          style={styles.studentSubmissionBlock}
-                                        >
-                                          <Text style={styles.assignmentStatus}>
-                                            Status:{" "}
-                                            {mySubmission?.status ||
-                                              "not_submitted"}
-                                          </Text>
-                                          {mySubmission?.feedback ? (
-                                            <Text
-                                              style={styles.assignmentFeedback}
-                                            >
-                                              Feedback: {mySubmission.feedback}
-                                            </Text>
-                                          ) : null}
-                                          {mySubmission?.grade ? (
-                                            <Text
-                                              style={styles.assignmentGrade}
-                                            >
-                                              Marks: {mySubmission.grade}
-                                            </Text>
-                                          ) : null}
-                                          <TouchableOpacity
-                                            style={styles.assignmentActionBtn}
-                                            onPress={() => { void openSubmissionModal(assignment.id); }}
-                                          >
-                                            <Text
-                                              style={
-                                                styles.assignmentActionText
-                                              }
-                                            >
-                                              {mySubmission
-                                                ? "Update submission"
-                                                : "Submit assignment"}
-                                            </Text>
-                                          </TouchableOpacity>
-                                        </View>
-                                      ) : (
-                                        <View style={styles.reviewerBlock}>
-                                          <Text style={styles.assignmentStatus}>
-                                            Submissions:{" "}
-                                            {assignmentSubmissions.length}
-                                          </Text>
-                                          {assignmentSubmissions.length ===
-                                          0 ? (
-                                            <Text
-                                              style={styles.infoCardSubValue}
-                                            >
-                                              No student submissions yet.
-                                            </Text>
-                                          ) : null}
-                                          {assignmentSubmissions
-                                            .slice(0, 6)
-                                            .map((submission) => (
-                                              <View
-                                                key={submission.id}
-                                                style={
-                                                  styles.reviewerSubmissionRow
-                                                }
-                                              >
-                                                <View style={{ flex: 1 }}>
-                                                  <Text
-                                                    style={
-                                                      styles.reviewerSubmissionMeta
-                                                    }
-                                                  >
-                                                    Student:{" "}
-                                                    {submission.user_id}
-                                                  </Text>
-                                                  <Text
-                                                    style={
-                                                      styles.reviewerSubmissionMeta
-                                                    }
-                                                  >
-                                                    Status: {submission.status}
-                                                  </Text>
-                                                  {submission.text_answer ? (
-                                                    <Text
-                                                      style={
-                                                        styles.reviewerSubmissionText
-                                                      }
-                                                      numberOfLines={2}
-                                                    >
-                                                      {submission.text_answer}
-                                                    </Text>
-                                                  ) : null}
-                                                  {submission.file_url ? (
-                                                    <TouchableOpacity
-                                                      onPress={() => {
-                                                        void openExternalLink(
-                                                          submission.file_url ||
-                                                            "",
-                                                        );
-                                                      }}
-                                                    >
-                                                      <Text
-                                                        style={
-                                                          styles.assignmentLink
-                                                        }
-                                                      >
-                                                        Open submitted file
-                                                      </Text>
-                                                    </TouchableOpacity>
-                                                  ) : null}
-                                                  {submission.feedback ? (
-                                                    <Text
-                                                      style={
-                                                        styles.assignmentFeedback
-                                                      }
-                                                    >
-                                                      Feedback:{" "}
-                                                      {submission.feedback}
-                                                    </Text>
-                                                  ) : null}
-                                                  {submission.grade ? (
-                                                    <Text
-                                                      style={
-                                                        styles.assignmentGrade
-                                                      }
-                                                    >
-                                                      Marks: {submission.grade}
-                                                    </Text>
-                                                  ) : null}
-                                                </View>
-                                                <TouchableOpacity
-                                                  style={styles.reviewBtn}
-                                                  onPress={() =>
-                                                    openReviewModal(
-                                                      submission.id,
-                                                      submission.feedback,
-                                                      submission.grade,
-                                                    )
-                                                  }
-                                                >
-                                                  <Text
-                                                    style={styles.reviewBtnText}
-                                                  >
-                                                    {submission.status ===
-                                                    "reviewed"
-                                                      ? "Edit Review"
-                                                      : "Review"}
-                                                  </Text>
-                                                </TouchableOpacity>
-                                              </View>
-                                            ))}
-                                        </View>
-                                      )}
-                                    </View>
-                                  );
-                                })
-                              )}
+                          )}
+                          <View style={{ width: '100%', marginTop: SPACING.sm }}>
+                            <View style={styles.progressSummaryTrack}>
+                              <View style={[styles.progressSummaryFill, { width: `${Math.min(100, pct)}%` }]} />
                             </View>
-                          ) : null}
+                            <View style={styles.progressSummaryStats}>
+                              <Text style={styles.progressSummaryStatText}>{completed} completed</Text>
+                              <Text style={styles.progressSummaryStatText}>{pct}%</Text>
+                              <Text style={styles.progressSummaryStatText}>{Math.max(0, total - completed)} remaining</Text>
+                            </View>
+                          </View>
                         </View>
                       );
-                    })}
+                    })()}
                   </View>
-                );
-              })
-            )}
-          </View>
+                </View>
+              )}
 
-          <View style={styles.infoCard} testID="course-detail-description">
-            <View style={styles.infoCardHeader}>
-              <View style={styles.iconCircle}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={20}
-                  color={COLORS.primary}
-                />
-              </View>
-              <Text style={styles.infoCardTitle}>About this Course</Text>
-            </View>
-            <Text style={styles.descriptionText}>
-              {course.description || "Course details coming soon."}
-            </Text>
-          </View>
-
-          {showJoinNow || activeLiveClass ? (
-            <View style={styles.liveClassActions}>
-              {isReviewer ? (
-                <TouchableOpacity
-                  style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
-                  activeOpacity={0.8}
-                  disabled={startingLiveClass}
-                  onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : openStartClassModal}
-                >
-                  {startingLiveClass ? (
-                    <ActivityIndicator size="small" color={COLORS.primary} />
-                  ) : (
-                    <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
-                  )}
-                  <Text style={styles.joinBtnText}>{activeLiveClass ? "Open Live Class" : "Start Live Class"}</Text>
-                </TouchableOpacity>
-              ) : null}
+              {/* Teacher Card */}
               <TouchableOpacity
-                style={[styles.joinBtn, activeLiveClass && styles.liveNowBtn]}
-                testID="join-class-btn"
+                style={styles.teacherCard}
+                testID="course-detail-teacher-link"
                 activeOpacity={0.8}
-                onPress={handleJoinClass}
+                onPress={() => {
+                  if (teacher?.id) safePush(`/teacher/${teacher.id}`);
+                }}
               >
-                <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
-                <Text style={styles.joinBtnText}>{activeLiveClass ? "Join Live Class" : "Join Class"}</Text>
+                {teacher && (
+                  <Image
+                    source={{ uri: getTeacherAvatar(teacher.id) }}
+                    style={styles.teacherAvatar}
+                  />
+                )}
+                <View style={styles.teacherInfo}>
+                  <Text style={styles.teacherLabel}>Instructor / Ustaadha</Text>
+                  <Text style={styles.teacherNameText}>{course.teacher_name}</Text>
+                </View>
+                {teacher && (
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={COLORS.textMuted}
+                  />
+                )}
               </TouchableOpacity>
-              {meetLink ? (
-                <TouchableOpacity style={styles.meetFallbackBtn} onPress={() => { void openExternalLink(meetLink); }}>
-                  <Text style={styles.meetFallbackText}>Join via Google Meet</Text>
+
+              {/* Schedule Card */}
+              <View style={styles.infoCard} testID="course-detail-schedule">
+                <View style={styles.infoCardHeader}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoCardTitle}>Class Schedule & Timings</Text>
+                    <Text style={styles.infoCardSubValue}>Weekly regular recitation sessions</Text>
+                  </View>
+                </View>
+                <View style={styles.scheduleDetailRow}>
+                  <View style={styles.scheduleBadge}>
+                    <Ionicons name="time-outline" size={14} color="#005F46" />
+                    <Text style={styles.scheduleBadgeText}>{classTimeLabel || "Schedule to be announced"}</Text>
+                  </View>
+                  {course.schedule ? (
+                    <View style={[styles.scheduleBadge, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+                      <Ionicons name="calendar" size={14} color="#92400E" />
+                      <Text style={[styles.scheduleBadgeText, { color: '#92400E' }]}>{course.schedule}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* Google Meet Live Class Launcher Card */}
+              <View style={styles.infoCard} testID="course-detail-meet-link">
+                <View style={styles.infoCardHeader}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
+                    <Ionicons
+                      name="videocam"
+                      size={20}
+                      color="#EF4444"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoCardTitle}>Online Interactive Classroom</Text>
+                    <Text style={styles.infoCardSubValue}>Live video and audio conferencing</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.launchMeetBtn}
+                  onPress={() => {
+                    if (meetLink) {
+                      void openExternalLink(meetLink);
+                    } else {
+                      Alert.alert("Class Link", "Live link will be activated when class starts.");
+                    }
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="open-outline" size={18} color="#FFF" />
+                  <Text style={styles.launchMeetBtnText}>Launch Live Class Room</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* About this Course Card */}
+              <View style={styles.infoCard} testID="course-detail-description">
+                <View style={styles.infoCardHeader}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons
+                      name="document-text-outline"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <Text style={styles.infoCardTitle}>About this Course</Text>
+                </View>
+                <Text style={styles.descriptionText}>
+                  {course.description || "Course syllabus and educational details are being structured."}
+                </Text>
+              </View>
+            </>
+          )}
+
+          {/* ══════════════════ TAB 2: LIVE & RECORDINGS ══════════════════ */}
+          {activeTab === 'live' && (
+            <>
+              {/* Live Session Banner */}
+              <View style={styles.liveClassBanner}>
+                <View style={styles.liveClassBannerHeader}>
+                  <View style={styles.pulseDot} />
+                  <Text style={styles.liveClassBannerTitle}>{activeLiveClass ? "Live Session in Progress" : "Class Starting Soon"}</Text>
+                </View>
+                <Text style={styles.liveClassBannerSub}>
+                  {activeLiveClass
+                    ? "Your Ustaadha is currently live in the classroom. Tap below to join now."
+                    : "The live class session is scheduled to begin shortly."}
+                </Text>
+                <View style={styles.liveClassActions}>
+                  {isReviewer ? (
+                    <TouchableOpacity
+                      style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
+                      activeOpacity={0.8}
+                      disabled={startingLiveClass}
+                      onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : openStartClassModal}
+                    >
+                      {startingLiveClass ? (
+                        <ActivityIndicator size="small" color={COLORS.primary} />
+                      ) : (
+                        <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
+                      )}
+                      <Text style={styles.joinBtnText}>{activeLiveClass ? "Open Live Class" : "Start Live Class"}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[styles.joinBtn, activeLiveClass && styles.liveNowBtn]}
+                    testID="banner-join-class-btn"
+                    activeOpacity={0.8}
+                    onPress={handleJoinClass}
+                  >
+                    <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
+                    <Text style={styles.joinBtnText}>{activeLiveClass ? "Join Live Class" : "Join Class"}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Class Recordings Archive */}
+              <View style={styles.infoCard}>
+                <View style={styles.infoCardHeader}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="mic-outline" size={20} color={COLORS.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoCardTitle}>Class Recordings Archive</Text>
+                    <Text style={styles.infoCardSubValue}>Recorded live sessions for revision</Text>
+                  </View>
+                </View>
+                {generalRecordings.length === 0 ? (
+                  <EmptyState
+                    icon="videocam-outline"
+                    title="No Recordings Available"
+                    message="Past live session recordings and lecture archives will be published here once available."
+                  />
+                ) : (
+                  generalRecordings.map((rec) => (
+                    <TouchableOpacity
+                      key={rec.id}
+                      style={styles.recordingRow}
+                      onPress={() => openRecordingPlayer(rec.file_url)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.recordingTitle}>
+                          {rec.title || "Recording"}
+                        </Text>
+                        <Text style={styles.recordingDesc}>
+                          {rec.description || "Tap to play recording"}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="play-circle-outline"
+                        size={24}
+                        color={COLORS.primary}
+                      />
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            </>
+          )}
+
+          {/* ══════════════════ TAB 3: AUDIO DARS ══════════════════ */}
+          {activeTab === 'audio' && (
+            <View style={styles.infoCard} testID="course-audio-lessons">
+              <View style={styles.infoCardHeader}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="headset-outline" size={20} color={COLORS.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.infoCardTitle}>Audio Lessons & Lectures</Text>
+                  <Text style={styles.infoCardSubValue}>Teacher-uploaded Dars summaries for revision</Text>
+                </View>
+                {isReviewer ? (
+                  <View style={styles.audioHeaderActions}>
+                    <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioUploadModal}>
+                      <Ionicons name="link-outline" size={16} color={COLORS.goldText} />
+                      <Text style={styles.audioUploadBtnText}>Add Link</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+              <TextInput
+                value={audioSearch}
+                onChangeText={setAudioSearch}
+                placeholder="Search audio lessons by title..."
+                placeholderTextColor={COLORS.textMuted}
+                style={styles.audioSearchInput}
+              />
+              {activeAudioLesson ? (
+                <View style={styles.audioPlayerCard}>
+                  <Text style={styles.audioPlayerTitle} numberOfLines={1}>{activeAudioLesson.title}</Text>
+                  <Text style={styles.audioPlayerMeta}>{formatAudioDuration(audioPosition)} / {formatAudioDuration(audioDuration || activeAudioLesson.duration)}</Text>
+                  <View style={styles.audioProgressTrack}>
+                    <View style={[styles.audioProgressFill, { width: `${Math.min(100, Math.max(0, (audioPosition / Math.max(1, audioDuration || activeAudioLesson.duration)) * 100))}%` }]} />
+                  </View>
+                  <View style={styles.audioControlRow}>
+                    <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(-15)}>
+                      <Ionicons name="play-back" size={18} color={COLORS.primary} />
+                      <Text style={styles.audioControlText}>15s</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.audioMainControlBtn} onPress={audioPlaying ? pauseAudioLesson : () => playAudioLesson(activeAudioLesson)}>
+                      <Ionicons name={audioPlaying ? "pause" : "play"} size={20} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(15)}>
+                      <Text style={styles.audioControlText}>15s</Text>
+                      <Ionicons name="play-forward" size={18} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.audioControlBtn} onPress={() => downloadAudioLesson(activeAudioLesson)}>
+                      <Ionicons name="download-outline" size={18} color={COLORS.primary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
+              {loadingAudioLessons && audioLessons.length === 0 ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : audioLessons.length === 0 ? (
+                <EmptyState
+                  icon="headset-outline"
+                  title="No Audio Lectures"
+                  message="Revision podcasts and audio summaries will be shared here by your instructor."
+                />
+              ) : (
+                audioLessons.map((lesson) => (
+                  <View key={lesson.id} style={styles.audioLessonRow}>
+                    <TouchableOpacity style={styles.audioLessonPlayArea} onPress={() => playAudioLesson(lesson)}>
+                      <Ionicons name={activeAudioLesson?.id === lesson.id && audioPlaying ? "pause-circle" : "play-circle-outline"} size={28} color={COLORS.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.recordingTitle}>{lesson.title}</Text>
+                        <Text style={styles.recordingDesc}>By {getAudioLessonTeacherName(lesson.teacher_id)} • {formatAudioUploadDate(lesson.upload_date)}</Text>
+                        <Text style={styles.recordingDesc}>{formatAudioDuration(lesson.duration)} • {formatFileSize(lesson.file_size)}</Text>
+                        {lesson.description ? <Text style={styles.recordingDesc} numberOfLines={2}>{lesson.description}</Text> : null}
+                      </View>
+                    </TouchableOpacity>
+                    <View style={styles.audioLessonActions}>
+                      <TouchableOpacity style={styles.audioIconBtn} onPress={() => downloadAudioLesson(lesson)}>
+                        <Ionicons name="download-outline" size={18} color={COLORS.primary} />
+                      </TouchableOpacity>
+                      {isReviewer ? (
+                        <>
+                          <TouchableOpacity style={styles.audioIconBtn} onPress={() => openAudioEditModal(lesson)}>
+                            <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.audioIconBtn} onPress={() => confirmDeleteAudioLesson(lesson)}>
+                            <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+                          </TouchableOpacity>
+                        </>
+                      ) : null}
+                    </View>
+                  </View>
+                ))
+              )}
+              {audioHasMore ? (
+                <TouchableOpacity style={styles.loadMoreBtn} disabled={loadingAudioLessons} onPress={() => { void loadAudioLessons(false); }}>
+                  {loadingAudioLessons ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.loadMoreText}>Load more audio lessons</Text>}
                 </TouchableOpacity>
               ) : null}
-            </View>
-          ) : (
-            <View style={styles.joinLaterCard}>
-              <Text style={styles.infoCardSubValue}>
-                Next class at {classTimeLabel}. Join button appears 1 hour
-                before class.
-              </Text>
             </View>
           )}
+
+          {/* ══════════════════ TAB 4: CURRICULUM ══════════════════ */}
+          {activeTab === 'curriculum' && (
+            <View style={styles.infoCard} testID="course-learning-structure">
+              <View style={styles.infoCardHeader}>
+                <View style={styles.iconCircle}>
+                  <Ionicons
+                    name="layers-outline"
+                    size={20}
+                    color={COLORS.primary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.infoCardTitle}>Syllabus & Sabaq Lessons</Text>
+                  <Text style={styles.infoCardSubValue}>Structured course modules and assignments</Text>
+                </View>
+              </View>
+              {safeModules.length === 0 ? (
+                <EmptyState
+                  icon="layers-outline"
+                  title="Curriculum Under Development"
+                  message="The course modules, lessons, and assignments are currently being structured by the instructor."
+                />
+              ) : (
+                safeModules.map((module) => {
+                  const moduleLessonsRaw = getLessonsForModule(module.id);
+                  const moduleLessons = Array.isArray(moduleLessonsRaw)
+                    ? moduleLessonsRaw
+                    : [];
+                  const completedCount = moduleLessons.filter(
+                    (lesson) => safeProgress[lesson.id]?.completed,
+                  ).length;
+                  return (
+                    <View key={module.id} style={styles.moduleBlock}>
+                      <Text style={styles.moduleTitle}>{module.title}</Text>
+                      <Text style={styles.moduleMeta}>
+                        {completedCount}/{moduleLessons.length} completed
+                      </Text>
+                      {moduleLessons.map((lesson) => {
+                        const done = !!safeProgress[lesson.id]?.completed;
+                        const lessonAssignmentsRaw = getAssignmentsForLesson(
+                          lesson.id,
+                        );
+                        const lessonAssignments = Array.isArray(
+                          lessonAssignmentsRaw,
+                        )
+                          ? lessonAssignmentsRaw
+                          : [];
+                        const isExpanded = expandedLessonId === lesson.id;
+                        const lessonRecordings = (
+                          Array.isArray(recordings) ? recordings : []
+                        ).filter((rec) => rec.lesson_id === lesson.id);
+                        return (
+                          <View key={lesson.id}>
+                            <ScalePressable
+                              style={[
+                                styles.lessonRow,
+                                done && styles.lessonRowDone,
+                              ]}
+                              onPress={async () => {
+                                try {
+                                  await markLessonOpened(lesson);
+                                } catch (e) {
+                                  console.log(
+                                    "[CourseDetail] markLessonOpened ERROR:",
+                                    e,
+                                  );
+                                  Alert.alert("Error", "Something went wrong");
+                                } finally {
+                                  setExpandedLessonId((prev) =>
+                                    prev === lesson.id ? null : lesson.id,
+                                  );
+                                }
+                              }}
+                              testID={`lesson-${lesson.id}`}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.lessonTitle}>
+                                  {lesson.title}
+                                </Text>
+                                <Text style={styles.lessonMeta}>
+                                  {lesson.duration_minutes
+                                    ? `${lesson.duration_minutes} min`
+                                    : "Tap to open lesson"}
+                                </Text>
+                              </View>
+                              <Ionicons
+                                name={isExpanded ? "chevron-up" : "chevron-down"}
+                                size={18}
+                                color={COLORS.textMuted}
+                              />
+                              <Ionicons
+                                name={
+                                  done ? "checkmark-circle" : "ellipse-outline"
+                                }
+                                size={20}
+                                color={done ? COLORS.primary : COLORS.textMuted}
+                              />
+                            </ScalePressable>
+                            {isExpanded ? (
+                              <View style={styles.lessonDetailCard}>
+                                <TouchableOpacity
+                                  style={styles.completeBtn}
+                                  onPress={async () => {
+                                    try {
+                                      await markLessonComplete(lesson);
+                                    } catch (e) {
+                                      console.log(
+                                        "[CourseDetail] markLessonComplete ERROR:",
+                                        e,
+                                      );
+                                      Alert.alert(
+                                        "Error",
+                                        "Something went wrong",
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <Ionicons
+                                    name="checkmark-done"
+                                    size={16}
+                                    color="#fff"
+                                  />
+                                  <Text style={styles.completeBtnText}>
+                                    {done ? "Completed" : "Mark lesson complete"}
+                                  </Text>
+                                </TouchableOpacity>
+                                <View style={styles.lessonRecordingBlock}>
+                                  <Text style={styles.lessonRecordingTitle}>
+                                    Class Recordings
+                                  </Text>
+                                  {lessonRecordings.length === 0 ? (
+                                    <Text style={styles.infoCardSubValue}>
+                                      No recording attached to this lesson yet.
+                                    </Text>
+                                  ) : (
+                                    lessonRecordings.map((rec) => (
+                                      <TouchableOpacity
+                                        key={rec.id}
+                                        style={styles.recordingRow}
+                                        onPress={() =>
+                                          openRecordingPlayer(rec.file_url)
+                                        }
+                                      >
+                                        <View style={{ flex: 1 }}>
+                                          <Text style={styles.recordingTitle}>
+                                            {rec.title || "Recording"}
+                                          </Text>
+                                          <Text style={styles.recordingDesc}>
+                                            {rec.description || "Tap to play"}
+                                          </Text>
+                                        </View>
+                                        <Ionicons
+                                          name="play-circle-outline"
+                                          size={22}
+                                          color={COLORS.primary}
+                                        />
+                                      </TouchableOpacity>
+                                    ))
+                                  )}
+                                </View>
+                                {lessonAssignments.length === 0 ? (
+                                  <Text style={styles.infoCardSubValue}>
+                                    No assignments in this lesson yet.
+                                  </Text>
+                                ) : (
+                                  lessonAssignments.map((assignment) => {
+                                    const mySubmission =
+                                      getSubmissionForAssignment(assignment.id);
+                                    const assignmentSubmissionsRaw = isReviewer
+                                      ? getSubmissionsForAssignment(assignment.id)
+                                      : [];
+                                    const assignmentSubmissions = Array.isArray(
+                                      assignmentSubmissionsRaw,
+                                    )
+                                      ? assignmentSubmissionsRaw
+                                      : [];
+                                  
+                                    return (
+                                      <View
+                                        key={assignment.id}
+                                        style={styles.assignmentCard}
+                                      >
+                                        <Text style={styles.assignmentTitle}>
+                                          {assignment.title}
+                                        </Text>
+                                        <Text style={styles.assignmentDesc}>
+                                          {assignment.description ||
+                                            "No description provided."}
+                                        </Text>
+                                        {assignment.due_date ? (
+                                          <Text style={styles.assignmentDue}>
+                                            Due: {assignment.due_date}
+                                          </Text>
+                                        ) : null}
+                                        {assignment.file_url ? (
+                                          <TouchableOpacity
+                                            onPress={() => {
+                                              void openExternalLink(
+                                                assignment.file_url || "",
+                                              );
+                                            }}
+                                          >
+                                            <Text style={styles.assignmentLink}>
+                                              Open assignment file
+                                            </Text>
+                                          </TouchableOpacity>
+                                        ) : null}
+                                        {!isReviewer ? (
+                                          <View
+                                            style={styles.studentSubmissionBlock}
+                                          >
+                                            <Text style={styles.assignmentStatus}>
+                                              Status:{" "}
+                                              {mySubmission?.status ||
+                                                "not_submitted"}
+                                            </Text>
+                                            {mySubmission?.feedback ? (
+                                              <Text
+                                                style={styles.assignmentFeedback}
+                                              >
+                                                Feedback: {mySubmission.feedback}
+                                              </Text>
+                                            ) : null}
+                                            {mySubmission?.grade ? (
+                                              <Text
+                                                style={styles.assignmentGrade}
+                                              >
+                                                Marks: {mySubmission.grade}
+                                              </Text>
+                                            ) : null}
+                                            <TouchableOpacity
+                                              style={styles.assignmentActionBtn}
+                                              onPress={() => { void openSubmissionModal(assignment.id); }}
+                                            >
+                                              <Text
+                                                style={
+                                                  styles.assignmentActionText
+                                                }
+                                              >
+                                                {mySubmission
+                                                  ? "Update submission"
+                                                  : "Submit assignment"}
+                                              </Text>
+                                            </TouchableOpacity>
+                                          </View>
+                                        ) : (
+                                          <View style={styles.reviewerBlock}>
+                                            <Text style={styles.assignmentStatus}>
+                                              Submissions:{" "}
+                                              {assignmentSubmissions.length}
+                                            </Text>
+                                            {assignmentSubmissions.length ===
+                                            0 ? (
+                                              <Text
+                                                style={styles.infoCardSubValue}
+                                              >
+                                                No student submissions yet.
+                                              </Text>
+                                            ) : null}
+                                            {assignmentSubmissions
+                                              .slice(0, 6)
+                                              .map((submission) => (
+                                                <View
+                                                  key={submission.id}
+                                                  style={
+                                                    styles.reviewerSubmissionRow
+                                                  }
+                                                >
+                                                  <View style={{ flex: 1 }}>
+                                                    <Text
+                                                      style={
+                                                        styles.reviewerSubmissionMeta
+                                                      }
+                                                    >
+                                                      Student:{" "}
+                                                      {submission.user_id}
+                                                    </Text>
+                                                    <Text
+                                                      style={
+                                                        styles.reviewerSubmissionMeta
+                                                      }
+                                                    >
+                                                      Status: {submission.status}
+                                                    </Text>
+                                                    {submission.text_answer ? (
+                                                      <Text
+                                                        style={
+                                                          styles.reviewerSubmissionText
+                                                        }
+                                                        numberOfLines={2}
+                                                      >
+                                                        {submission.text_answer}
+                                                      </Text>
+                                                    ) : null}
+                                                    {submission.file_url ? (
+                                                      <TouchableOpacity
+                                                        onPress={() => {
+                                                          void openExternalLink(
+                                                            submission.file_url ||
+                                                              "",
+                                                          );
+                                                        }}
+                                                      >
+                                                        <Text
+                                                          style={
+                                                            styles.assignmentLink
+                                                          }
+                                                        >
+                                                          Open submitted file
+                                                        </Text>
+                                                      </TouchableOpacity>
+                                                    ) : null}
+                                                    {submission.feedback ? (
+                                                      <Text
+                                                        style={
+                                                          styles.assignmentFeedback
+                                                        }
+                                                      >
+                                                        Feedback:{" "}
+                                                        {submission.feedback}
+                                                      </Text>
+                                                    ) : null}
+                                                    {submission.grade ? (
+                                                      <Text
+                                                        style={
+                                                          styles.assignmentGrade
+                                                        }
+                                                      >
+                                                        Marks: {submission.grade}
+                                                      </Text>
+                                                    ) : null}
+                                                  </View>
+                                                  <TouchableOpacity
+                                                    style={styles.reviewBtn}
+                                                    onPress={() =>
+                                                      openReviewModal(
+                                                        submission.id,
+                                                        submission.feedback,
+                                                        submission.grade,
+                                                      )
+                                                    }
+                                                  >
+                                                    <Text
+                                                      style={styles.reviewBtnText}
+                                                    >
+                                                      {submission.status ===
+                                                      "reviewed"
+                                                        ? "Edit Review"
+                                                        : "Review"}
+                                                    </Text>
+                                                  </TouchableOpacity>
+                                                </View>
+                                              ))}
+                                          </View>
+                                        )}
+                                      </View>
+                                    );
+                                  })
+                                )}
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
+
+          {/* Floating Bottom Quick Action */}
+          <View style={styles.floatingActionRow}>
+            {meetLink ? (
+              <TouchableOpacity
+                style={styles.meetQuickActionBtn}
+                onPress={() => { void openExternalLink(meetLink); }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="logo-google" size={16} color="#FFF" />
+                <Text style={styles.meetQuickActionText}>Join Google Meet</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.mainJoinActionBtn, activeLiveClass && styles.liveNowBtn]}
+              testID="join-class-btn"
+              activeOpacity={0.88}
+              onPress={handleJoinClass}
+            >
+              <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={18} color="#FFFFFF" />
+              <Text style={styles.mainJoinActionText}>{activeLiveClass ? "Join Live Class Now" : "Enter Classroom"}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
 
@@ -1709,6 +1787,118 @@ const styles = StyleSheet.create({
   },
   heroContent: { position: "absolute", left: 20, right: 20, bottom: 24 },
   heroTitle: { color: "#fff", fontSize: 28, fontWeight: "900", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: {width: 0, height: 2}, textShadowRadius: 4 },
+
+  tabBarContainer: {
+    flexDirection: "row",
+    backgroundColor: "#003D2E",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: "#C8A84E",
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: RADIUS.md,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  tabItemActive: {
+    backgroundColor: "#005F46",
+    borderWidth: 1,
+    borderColor: "#C8A84E",
+  },
+  tabItemText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#C8A84E",
+  },
+  tabItemTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
+
+  scheduleDetailRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  scheduleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#E8F5EE",
+    borderWidth: 1,
+    borderColor: "#C6E8D4",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.md,
+  },
+  scheduleBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#005F46",
+  },
+
+  launchMeetBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#DC2626",
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    marginTop: 6,
+  },
+  launchMeetBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+
+  floatingActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+  },
+  meetQuickActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#4285F4",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+  },
+  meetQuickActionText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  mainJoinActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#005F46",
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+    ...SHADOWS.card,
+  },
+  mainJoinActionText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
 
   body: { padding: SPACING.lg, gap: SPACING.md },
 
