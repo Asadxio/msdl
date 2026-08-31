@@ -141,13 +141,8 @@ export default function CertificateScreen() {
     }
   };
 
-  const handleShareExistingCert = async (cert: Certificate) => {
-    try {
-      const certText = `Certificate of Completion\n\nAwarded to: ${cert.user_name || profile?.name || 'Student'}\nCourse: ${cert.course_name}\nDate: ${cert.completion_date || new Date().toDateString()}`;
-      await Share.share({ message: certText });
-    } catch {
-      // User cancelled share
-    }
+  const handleShareExistingCert = (cert: Certificate) => {
+    handleOpenCertPreview(cert);
   };
 
   return (
