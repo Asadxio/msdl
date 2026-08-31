@@ -365,22 +365,51 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Section 7: Islamic Calendar */}
+        {/* Section 7: Islamic Utilities (Calendar, Digital Tasbeeh & Recordings) */}
         <View style={styles.sectionContainer}>
-          <TouchableOpacity 
-             style={styles.calendarCard}
-             onPress={() => router.push('/islamic-calendar')}
-             accessible={true}
-             accessibilityRole="button"
-             accessibilityLabel={`Islamic Calendar: ${hijriDate}`}
-          >
-            <Ionicons name="calendar" size={24} color={COLORS.secondary} />
-            <View style={styles.calendarTextCol}>
-               <Text style={styles.hijriTitle}>{hijriDate}</Text>
-               <Text style={styles.gregorianSubtitle}>{now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
-          </TouchableOpacity>
+          <View style={styles.islamicGridRow}>
+            <TouchableOpacity 
+               style={styles.islamicGridCard}
+               onPress={() => router.push('/islamic-calendar')}
+               accessible={true}
+               accessibilityRole="button"
+               accessibilityLabel={`Islamic Calendar: ${hijriDate}`}
+            >
+              <View style={[styles.islamicIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="calendar" size={20} color="#D97706" />
+              </View>
+              <Text style={styles.islamicGridTitle}>Hijri Calendar</Text>
+              <Text style={styles.islamicGridSub} numberOfLines={1}>{hijriDate}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+               style={styles.islamicGridCard}
+               onPress={() => router.push('/tasbeeh' as any)}
+               accessible={true}
+               accessibilityRole="button"
+               accessibilityLabel="Digital Smart Tasbeeh"
+            >
+              <View style={[styles.islamicIconWrap, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="finger-print" size={20} color={COLORS.primary} />
+              </View>
+              <Text style={styles.islamicGridTitle}>Smart Tasbeeh</Text>
+              <Text style={styles.islamicGridSub} numberOfLines={1}>Daily Dhikr Counter</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+               style={styles.islamicGridCard}
+               onPress={() => router.push('/recordings' as any)}
+               accessible={true}
+               accessibilityRole="button"
+               accessibilityLabel="Class Audio Recordings"
+            >
+              <View style={[styles.islamicIconWrap, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="mic" size={20} color="#2563EB" />
+              </View>
+              <Text style={styles.islamicGridTitle}>Dars Audio</Text>
+              <Text style={styles.islamicGridSub} numberOfLines={1}>Class Recordings</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Section 8: Phase 3 — Continue Learning */}
@@ -935,6 +964,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     textAlign: 'center',
+  },
+  islamicGridRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  islamicGridCard: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  islamicIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  islamicGridTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    textAlign: 'center',
+  },
+  islamicGridSub: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 2,
   },
   calendarCard: {
     flexDirection: 'row',
