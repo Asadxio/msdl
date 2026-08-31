@@ -1,11 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, StyleSheet, SafeAreaView, Linking, Platform } from 'react-native';
+import React, { useEffect, useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  SafeAreaView,
+  Linking,
+  ScrollView,
+  Animated,
+} from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
-import { subscribeLiveClass, endLiveClass, canCurrentUserJoinLiveClass, type LiveClass } from '@/lib/liveClasses';
-import { COLORS, SPACING, RADIUS } from '@/constants/theme';
+import {
+  subscribeLiveClass,
+  endLiveClass,
+  canCurrentUserJoinLiveClass,
+  updatePurdahBoardState,
+  raiseHandForRecitation,
+  grantMicrophone,
+  lowerHandRecitation,
+  type LiveClass,
+} from '@/lib/liveClasses';
+import { TajweedBoard, type TajweedBoardView } from '@/components/classroom/TajweedBoard';
+import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { goBackOrReplace } from '@/lib/navigation';
 
 export default function LiveClassroomScreen() {
@@ -13,10 +34,12 @@ export default function LiveClassroomScreen() {
   const classId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const { user, profile } = useAuth();
-  
+
   const [liveClass, setLiveClass] = useState<LiveClass | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+  const [micMuted, setMicMuted] = useState(true);
+  const [waveAnim] = useState(new Animated.Value(1));
 
   useEffect(() => {
     if (!classId) {
@@ -34,9 +57,22 @@ export default function LiveClassroomScreen() {
     return () => unsub();
   }, [classId, router]);
 
-  const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
+  // Audio wave animation pulse
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(waveAnim, { toValue: 1.3, duration: 600, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [waveAnim]);
 
-  const handleJoinClass = async () => {
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
+  const isSpeaking = liveClass?.active_speaker_uid === user?.uid || (isTeacher && !liveClass?.active_speaker_uid);
+
+  const handleJoinExternalMeet = async () => {
     if (!liveClass || !user || !profile) return;
     setJoining(true);
     try {
@@ -45,20 +81,20 @@ export default function LiveClassroomScreen() {
         Alert.alert('Access denied', 'You are not enrolled in this course.');
         return;
       }
-      
+
       const meetUrl = liveClass.meet_url;
       if (!meetUrl) {
         Alert.alert('Error', 'No Google Meet URL was provided for this class.');
         return;
       }
 
-      // Try to open the URL directly using Linking (this will open the Google Meet app if installed)
       const canOpen = await Linking.canOpenURL(meetUrl).catch(() => false);
       if (canOpen) {
         await Linking.openURL(meetUrl);
       } else {
-        // Fallback to in-app browser
-        await WebBrowser.openBrowserAsync(meetUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+        await WebBrowser.openBrowserAsync(meetUrl, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        });
       }
     } catch (e: any) {
       Alert.alert('Error joining class', e?.message || 'Could not launch Google Meet.');
@@ -71,9 +107,9 @@ export default function LiveClassroomScreen() {
     if (!classId || !isTeacher) return;
     Alert.alert('End Class', 'Are you sure you want to end this live class for everyone?', [
       { text: 'Cancel', style: 'cancel' },
-      { 
-        text: 'End Class', 
-        style: 'destructive', 
+      {
+        text: 'End Class',
+        style: 'destructive',
         onPress: async () => {
           try {
             await endLiveClass(classId, profile);
@@ -81,13 +117,59 @@ export default function LiveClassroomScreen() {
           } catch (e: any) {
             Alert.alert('Error', e?.message || 'Could not end class.');
           }
-        }
-      }
+        },
+      },
     ]);
   };
 
+  // Board state change handlers
+  const handleViewModeChange = async (mode: TajweedBoardView) => {
+    if (!classId || !isTeacher) return;
+    await updatePurdahBoardState(classId, { active_board_view: mode }).catch(() => {});
+  };
+
+  const handleToggleHighlight = async (word: string) => {
+    if (!classId || !isTeacher) return;
+    const current = liveClass?.highlighted_words || [];
+    const updated = current.includes(word) ? current.filter((w) => w !== word) : [...current, word];
+    await updatePurdahBoardState(classId, { highlighted_words: updated }).catch(() => {});
+  };
+
+  // Student Recitation Queue handlers
+  const handleRaiseHand = async () => {
+    if (!classId || !user || !profile) return;
+    try {
+      await raiseHandForRecitation(classId, {
+        uid: user.uid,
+        name: profile.name || 'Taliba',
+      });
+      Alert.alert('Hand Raised', 'You have been added to the Tilawat queue. The Ustaadha will grant your turn.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not raise hand');
+    }
+  };
+
+  const handleGrantMic = async (studentUid: string, studentName: string) => {
+    if (!classId || !isTeacher) return;
+    await grantMicrophone(classId, studentUid, studentName).catch(() => {});
+  };
+
+  const handleLowerHand = async (studentUid: string) => {
+    if (!classId || !isTeacher) return;
+    await lowerHandRecitation(classId, studentUid).catch(() => {});
+  };
+
+  const isStudentWaitingInQueue = useMemo(() => {
+    if (!user?.uid || !liveClass?.recitation_queue) return false;
+    return liveClass.recitation_queue.some((q) => q.uid === user.uid && q.status === 'waiting');
+  }, [user?.uid, liveClass?.recitation_queue]);
+
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator color={COLORS.primary} size="large" /></View>;
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={COLORS.primary} size="large" />
+      </View>
+    );
   }
 
   if (!liveClass) {
@@ -101,67 +183,178 @@ export default function LiveClassroomScreen() {
     );
   }
 
+  const currentBoardView: TajweedBoardView = liveClass.active_board_view || 'mushaf';
+  const highlightedWords = liveClass.highlighted_words || [];
+  const currentAyah = liveClass.current_ayah_or_page || 1;
+  const activeSpeakerName = liveClass.active_speaker_name || liveClass.teacher_name;
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBackOrReplace(router, '/(tabs)/courses')} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#fff" />
+          <Ionicons name="chevron-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.title} numberOfLines={1}>{liveClass.title}</Text>
-          <Text style={styles.subtitle}>{liveClass.teacher_name}</Text>
+          <Text style={styles.title} numberOfLines={1}>
+            {liveClass.title}
+          </Text>
+          <Text style={styles.subtitle}>Ustaadha: {liveClass.teacher_name}</Text>
+        </View>
+        <View style={styles.livePill}>
+          <View style={styles.liveDot} />
+          <Text style={styles.livePillText}>LIVE</Text>
         </View>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.card}>
-          {isTeacher && (
-            <View style={styles.hostBanner}>
-              <View style={styles.hostBannerIcon}>
-                <Ionicons name="shield-checkmark" size={18} color={COLORS.goldText} />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Purdah Protection Banner */}
+        <View style={styles.purdahBanner}>
+          <View style={styles.purdahIconBox}>
+            <Ionicons name="shield-checkmark" size={18} color="#92400E" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={styles.purdahRow}>
+              <Text style={styles.purdahTitle}>Purdah Mode Active</Text>
+              <View style={styles.cameraOffBadge}>
+                <Ionicons name="videocam-off" size={11} color="#92400E" />
+                <Text style={styles.cameraOffText}>Camera Locked OFF</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.hostBannerTitle}>Enterprise Host Mode</Text>
-                <Text style={styles.hostBannerSub}>Executive override & monitoring enabled</Text>
-              </View>
-              <View style={styles.hostBadge}>
-                <Text style={styles.hostBadgeText}>{profile?.role?.toUpperCase()}</Text>
-              </View>
+            </View>
+            <Text style={styles.purdahSub}>Audio-first Quranic recitation & modesty protection enabled for all sisters.</Text>
+          </View>
+        </View>
+
+        {/* Audio Wave & Active Reciter Bar */}
+        <View style={styles.speakerCard}>
+          <View style={styles.speakerAvatar}>
+            <Ionicons name="person" size={20} color={COLORS.primary} />
+            <Animated.View style={[styles.pulseRing, { transform: [{ scale: waveAnim }] }]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.speakerLabel}>Current Reciter / Speaker:</Text>
+            <Text style={styles.speakerName} numberOfLines={1}>
+              {activeSpeakerName} {isSpeaking && '(Speaking)'}
+            </Text>
+          </View>
+          <View style={styles.audioWaveIndicator}>
+            <Ionicons name="volume-high" size={18} color={COLORS.primary} />
+            <Text style={styles.waveText}>HD Audio</Text>
+          </View>
+        </View>
+
+        {/* Interactive Tajweed & Makharij Board */}
+        <View style={styles.boardSection}>
+          <TajweedBoard
+            viewMode={currentBoardView}
+            isTeacher={isTeacher}
+            highlightedWords={highlightedWords}
+            currentAyahOrPage={currentAyah}
+            onViewModeChange={handleViewModeChange}
+            onToggleHighlight={handleToggleHighlight}
+          />
+        </View>
+
+        {/* Tilawat / Recitation Queue */}
+        <View style={styles.queueCard}>
+          <View style={styles.queueHeader}>
+            <View style={styles.queueTitleRow}>
+              <Ionicons name="people-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.queueTitle}>Tilawat Recitation Queue ({liveClass.recitation_queue?.length || 0})</Text>
+            </View>
+            {!isTeacher && (
+              <TouchableOpacity
+                style={[styles.raiseHandBtn, isStudentWaitingInQueue && styles.raiseHandBtnActive]}
+                onPress={handleRaiseHand}
+                disabled={isStudentWaitingInQueue}
+              >
+                <Ionicons name="hand-right" size={14} color="#fff" />
+                <Text style={styles.raiseHandBtnText}>
+                  {isStudentWaitingInQueue ? 'In Recitation Queue' : 'Raise Hand for Tilawat'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {(!liveClass.recitation_queue || liveClass.recitation_queue.length === 0) ? (
+            <Text style={styles.emptyQueueText}>No students in recitation queue. Tap "Raise Hand" to recite for Ustaadha.</Text>
+          ) : (
+            <View style={styles.queueList}>
+              {liveClass.recitation_queue.map((q, idx) => (
+                <View key={idx} style={styles.queueItem}>
+                  <View style={styles.queueItemLeft}>
+                    <Text style={styles.queueNum}>#{idx + 1}</Text>
+                    <Text style={styles.queueItemName}>{q.name}</Text>
+                    {q.status === 'speaking' && (
+                      <View style={styles.speakingBadge}>
+                        <Text style={styles.speakingBadgeText}>RECITE NOW</Text>
+                      </View>
+                    )}
+                  </View>
+                  {isTeacher && (
+                    <View style={styles.queueItemActions}>
+                      {q.status !== 'speaking' ? (
+                        <TouchableOpacity
+                          style={styles.grantBtn}
+                          onPress={() => handleGrantMic(q.uid, q.name)}
+                        >
+                          <Ionicons name="mic" size={12} color="#fff" />
+                          <Text style={styles.grantBtnText}>Grant Mic</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.lowerBtn}
+                          onPress={() => handleLowerHand(q.uid)}
+                        >
+                          <Ionicons name="checkmark" size={12} color="#fff" />
+                          <Text style={styles.lowerBtnText}>Done</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </View>
+              ))}
             </View>
           )}
+        </View>
 
-          <View style={styles.statusBadge}>
-            <View style={styles.pulseDot} />
-            <Text style={styles.statusBadgeText}>LIVE NOW</Text>
-          </View>
-          <Text style={styles.cardTitle}>{liveClass.title}</Text>
-          
-          <View style={styles.instructorCard}>
-            <View style={styles.instructorAvatar}>
-              <Ionicons name="person" size={20} color={COLORS.primary} />
-            </View>
-            <View>
-              <Text style={styles.instructorLabel}>Instructor</Text>
-              <Text style={styles.instructorName}>{liveClass.teacher_name}</Text>
-            </View>
-          </View>
+        {/* Audio Controls & External Bridge */}
+        <View style={styles.controlsCard}>
+          <TouchableOpacity
+            style={[styles.micBtn, !micMuted && styles.micBtnActive]}
+            onPress={() => setMicMuted(!micMuted)}
+          >
+            <Ionicons name={micMuted ? 'mic-off' : 'mic'} size={20} color={micMuted ? COLORS.textSecondary : '#fff'} />
+            <Text style={[styles.micBtnText, !micMuted && styles.micBtnTextActive]}>
+              {micMuted ? 'Microphone Muted' : 'Microphone Active'}
+            </Text>
+          </TouchableOpacity>
 
-          <Text style={styles.cardDesc}>
-            The class is currently in session. Tap below to launch Google Meet and join the ongoing discussion.
-          </Text>
-
-          <TouchableOpacity style={[styles.primaryBtn, joining && { opacity: 0.7 }]} onPress={handleJoinClass} disabled={joining}>
-            {joining ? <ActivityIndicator color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>Join Google Meet</Text>}
+          <TouchableOpacity
+            style={[styles.meetBridgeBtn, joining && { opacity: 0.7 }]}
+            onPress={handleJoinExternalMeet}
+            disabled={joining}
+          >
+            {joining ? (
+              <ActivityIndicator color={COLORS.primary} size="small" />
+            ) : (
+              <>
+                <Ionicons name="share-social-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.meetBridgeBtnText}>Open Screen Share / Google Meet Bridge</Text>
+              </>
+            )}
           </TouchableOpacity>
 
           {isTeacher && (
             <TouchableOpacity style={styles.dangerBtn} onPress={handleEndClass}>
-              <Text style={styles.dangerBtnText}>End Class for Everyone</Text>
+              <Ionicons name="stop-circle-outline" size={16} color={COLORS.error} />
+              <Text style={styles.dangerBtnText}>End Live Class Session</Text>
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -169,94 +362,321 @@ export default function LiveClassroomScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-  errorTitle: { color: COLORS.text, fontSize: 18, fontWeight: 'bold', marginBottom: SPACING.md },
+  errorTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700', marginBottom: SPACING.md },
   secondaryBtn: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.lg,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: SPACING.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
   },
-  secondaryBtnText: { color: COLORS.text, fontSize: 16, fontWeight: '600' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  secondaryBtnText: { color: COLORS.text, fontSize: 15, fontWeight: '500' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
   backBtn: { padding: SPACING.xs },
   headerTitleContainer: { flex: 1, marginLeft: SPACING.sm },
-  title: { color: COLORS.text, fontSize: 18, fontWeight: 'bold' },
-  subtitle: { color: COLORS.textMuted, fontSize: 14 },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.md },
-  card: { backgroundColor: COLORS.surface, width: '100%', maxWidth: 400, borderRadius: RADIUS.lg, padding: SPACING.lg, alignItems: 'center' },
-  icon: { marginBottom: SPACING.sm },
-  cardTitle: { color: COLORS.textMain, fontSize: 24, fontWeight: '900', marginBottom: SPACING.md, textAlign: 'center', lineHeight: 28 },
-  cardDesc: { color: COLORS.textMuted, fontSize: 14, textAlign: 'center', marginBottom: SPACING.lg, lineHeight: 20 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FDECEC', paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, marginBottom: SPACING.md, gap: 6 },
-  statusBadgeText: { color: COLORS.error, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
-  pulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.error },
-  instructorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surfaceAlt, padding: SPACING.md, borderRadius: RADIUS.lg, width: '100%', marginBottom: SPACING.md, gap: 12 },
-  instructorAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5EE', alignItems: 'center', justifyContent: 'center' },
-  instructorLabel: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
-  instructorName: { fontSize: 16, color: COLORS.textMain, fontWeight: '800' },
-  primaryBtn: {
-    backgroundColor: COLORS.primary,
+  title: { color: COLORS.text, fontSize: 16, fontWeight: '700' },
+  subtitle: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '400' },
+  livePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FDECEC',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: RADIUS.full,
-    paddingVertical: 14,
-    paddingHorizontal: SPACING.xl,
+    gap: 4,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.error },
+  livePillText: { fontSize: 10, fontWeight: '700', color: COLORS.error },
+  scroll: { flex: 1 },
+  scrollContent: { padding: SPACING.md, gap: SPACING.md },
+  purdahBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    gap: 10,
+  },
+  purdahIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FDE68A',
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  dangerBtn: { backgroundColor: 'transparent', width: '100%', padding: 12, borderRadius: RADIUS.full, alignItems: 'center', borderWidth: 1, borderColor: COLORS.error, marginTop: SPACING.md },
-  dangerBtnText: { color: COLORS.error, fontSize: 14, fontWeight: 'bold' },
-  hostBanner: {
+  purdahRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF8E1',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  purdahTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  cameraOffBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FDE68A',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    gap: 3,
+  },
+  cameraOffText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  purdahSub: {
+    fontSize: 10,
+    color: '#B45309',
+    lineHeight: 14,
+  },
+  speakerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
+    ...SHADOWS.card,
+  },
+  speakerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E8F5EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    opacity: 0.5,
+  },
+  speakerLabel: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  speakerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  audioWaveIndicator: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  waveText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  boardSection: {
     width: '100%',
-    padding: SPACING.sm,
+  },
+  queueCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  queueHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  queueTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  queueTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  raiseHandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  raiseHandBtnActive: {
+    backgroundColor: COLORS.secondary,
+  },
+  raiseHandBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  emptyQueueText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    paddingVertical: 4,
+  },
+  queueList: {
+    gap: 6,
+  },
+  queueItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.background,
+    padding: 8,
     borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: '#FFE082',
-    gap: 10,
-    marginBottom: SPACING.md,
+    borderColor: COLORS.border,
   },
-  hostBannerIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFF3E0',
+  queueItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  queueNum: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+  },
+  queueItemName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  speakingBadge: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+  },
+  speakingBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  queueItemActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  grantBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 3,
+  },
+  grantBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  lowerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 3,
+  },
+  lowerBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  controlsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.sm,
+    ...SHADOWS.card,
+  },
+  micBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  hostBannerTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#E65100',
-  },
-  hostBannerSub: {
-    fontSize: 10,
-    color: '#EF6C00',
-  },
-  hostBadge: {
-    backgroundColor: '#FFE082',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    backgroundColor: COLORS.background,
     borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 8,
   },
-  hostBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#E65100',
+  micBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  micBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+  },
+  micBtnTextActive: {
+    color: '#fff',
+  },
+  meetBridgeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5EE',
+    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+    gap: 8,
+  },
+  meetBridgeBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  dangerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FDECEC',
+    borderRadius: RADIUS.full,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    gap: 6,
+  },
+  dangerBtnText: {
+    color: COLORS.error,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

@@ -20,6 +20,13 @@ import { ENROLLMENT_DOC_ID_SEPARATOR, allowsLegacyCourseAccessWhenEnrollmentMiss
 
 export type LiveClassStatus = 'scheduled' | 'waiting_room' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'cancelled';
 
+export type RecitationQueueItem = {
+  uid: string;
+  name: string;
+  status: 'waiting' | 'speaking' | 'done';
+  requested_at_ms: number;
+};
+
 export type LiveClass = {
   id: string;
   course_id: string;
@@ -29,6 +36,13 @@ export type LiveClass = {
   title: string;
   status: LiveClassStatus;
   meet_url: string;
+  purdah_mode_enabled?: boolean;
+  active_board_view?: 'mushaf' | 'makharij' | 'whiteboard' | 'notes';
+  current_ayah_or_page?: string | number;
+  highlighted_words?: string[];
+  active_speaker_name?: string;
+  active_speaker_uid?: string;
+  recitation_queue?: RecitationQueueItem[];
   started_at?: { toDate?: () => Date } | null;
   ended_at?: { toDate?: () => Date } | null;
   created_at?: { toDate?: () => Date } | null;
@@ -43,6 +57,7 @@ export type LiveClassCreateInput = {
   teacherName: string;
   meetUrl: string;
   profile: UserProfile | null;
+  purdahModeEnabled?: boolean;
 };
 
 export function normalizeLiveClass(id: string, data: any): LiveClass {
@@ -90,6 +105,11 @@ export async function startLiveClass(input: LiveClassCreateInput): Promise<strin
     title: input.title,
     status: 'live',
     meet_url: input.meetUrl.trim(),
+    purdah_mode_enabled: input.purdahModeEnabled !== false,
+    active_board_view: 'mushaf',
+    current_ayah_or_page: 1,
+    highlighted_words: [],
+    recitation_queue: [],
     started_at: serverTimestamp(),
     created_at: serverTimestamp(),
     updated_at: serverTimestamp(),
@@ -118,6 +138,91 @@ export async function startLiveClass(input: LiveClassCreateInput): Promise<strin
   }
 
   return docRef.id;
+}
+
+export async function updatePurdahBoardState(
+  classId: string,
+  updates: {
+    active_board_view?: 'mushaf' | 'makharij' | 'whiteboard' | 'notes';
+    current_ayah_or_page?: string | number;
+    highlighted_words?: string[];
+    active_speaker_name?: string;
+    active_speaker_uid?: string;
+  }
+): Promise<void> {
+  const ref = doc(db, 'live_classes', classId);
+  await updateDoc(ref, {
+    ...updates,
+    updated_at: serverTimestamp(),
+  });
+}
+
+export async function raiseHandForRecitation(
+  classId: string,
+  student: { uid: string; name: string }
+): Promise<void> {
+  const ref = doc(db, 'live_classes', classId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const currentQueue: RecitationQueueItem[] = snap.data().recitation_queue || [];
+  if (currentQueue.some((q) => q.uid === student.uid)) return;
+
+  const newQueue = [
+    ...currentQueue,
+    {
+      uid: student.uid,
+      name: student.name,
+      status: 'waiting' as const,
+      requested_at_ms: Date.now(),
+    },
+  ];
+
+  await updateDoc(ref, {
+    recitation_queue: newQueue,
+    updated_at: serverTimestamp(),
+  });
+}
+
+export async function grantMicrophone(
+  classId: string,
+  targetUid: string,
+  targetName: string
+): Promise<void> {
+  const ref = doc(db, 'live_classes', classId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const currentQueue: RecitationQueueItem[] = snap.data().recitation_queue || [];
+  const updatedQueue = currentQueue.map((item) => ({
+    ...item,
+    status: item.uid === targetUid ? ('speaking' as const) : item.status === 'speaking' ? ('waiting' as const) : item.status,
+  }));
+
+  await updateDoc(ref, {
+    recitation_queue: updatedQueue,
+    active_speaker_name: targetName,
+    active_speaker_uid: targetUid,
+    updated_at: serverTimestamp(),
+  });
+}
+
+export async function lowerHandRecitation(
+  classId: string,
+  targetUid: string
+): Promise<void> {
+  const ref = doc(db, 'live_classes', classId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const currentQueue: RecitationQueueItem[] = snap.data().recitation_queue || [];
+  const updatedQueue = currentQueue.filter((item) => item.uid !== targetUid);
+
+  const activeUid = snap.data().active_speaker_uid;
+  const isTargetActive = activeUid === targetUid;
+
+  await updateDoc(ref, {
+    recitation_queue: updatedQueue,
+    ...(isTargetActive ? { active_speaker_name: '', active_speaker_uid: '' } : {}),
+    updated_at: serverTimestamp(),
+  });
 }
 
 export async function endLiveClass(classId: string, profile: UserProfile | null): Promise<void> {
