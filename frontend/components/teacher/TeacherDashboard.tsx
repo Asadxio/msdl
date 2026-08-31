@@ -20,6 +20,7 @@ import { db } from '@/lib/firebase';
 import { DAILY_WISDOM, HADITHS } from '@/constants/wisdomData';
 import { MADRASA_WEBSITE_URL } from '@/lib/links';
 import * as Linking from 'expo-linking';
+import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 
 interface TeacherDashboardProps {
   profile: UserProfile | null;
@@ -60,7 +61,7 @@ export function TeacherDashboard({
 }: TeacherDashboardProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { courses } = useData();
+  const { courses, teachers, enrolledCourses } = useData();
 
   const [liveClasses, setLiveClasses] = useState<LiveClassSummary[]>([]);
   const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
@@ -70,18 +71,18 @@ export function TeacherDashboard({
     new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
   );
 
-  // Filter courses assigned to this teacher
+  // Filter courses strictly assigned to this teacher
   const myAssignedCourses = useMemo(() => {
-    if (!courses) return [];
-    if (!profile?.name) return courses;
-    const teacherNameNorm = profile.name.trim().toLowerCase();
-    const assigned = courses.filter(
-      (c) =>
-        (c.teacher_name && c.teacher_name.toLowerCase().includes(teacherNameNorm)) ||
-        (user?.uid && (c as any).teacher_id === user.uid)
+    if (Array.isArray(enrolledCourses) && enrolledCourses.length > 0) {
+      return enrolledCourses;
+    }
+    const currentTeacher = teachers.find(
+      (t) =>
+        t.id === user?.uid ||
+        (profile?.name && t.name?.toLowerCase().includes(profile.name.toLowerCase()))
     );
-    return assigned.length > 0 ? assigned : courses;
-  }, [courses, profile?.name, user?.uid]);
+    return filterTeacherAssignedCourses(courses, currentTeacher, user?.uid);
+  }, [enrolledCourses, courses, teachers, user?.uid, profile?.name]);
 
   // Real-time live classes listener
   useEffect(() => {

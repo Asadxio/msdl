@@ -43,6 +43,7 @@ export default function HomeScreen() {
     getResumeLearning, 
     getCourseProgress,
     lessonProgress,
+    isEnrolledInCourse,
     refetch,
     refetchLearning,
   } = useData();
@@ -110,7 +111,7 @@ export default function HomeScreen() {
     return getCourseProgress(resume.courseId);
   }, [resume, getCourseProgress]);
   
-  // Calculate existing verified statistics (no fake numbers or placeholders)
+  // Calculate verified academic statistics scoped to enrolled courses
   const { completedLessonsCount, quizAttemptsCount, coursesCompletedCount } = useMemo(() => {
     let lCount = 0;
     let qCount = 0;
@@ -122,7 +123,10 @@ export default function HomeScreen() {
     }
     let cCount = 0;
     if (courses && courses.length > 0) {
-      courses.forEach(c => {
+      const candidateCourses = profile?.role === 'student'
+        ? courses.filter(c => isEnrolledInCourse(c.id))
+        : courses;
+      candidateCourses.forEach(c => {
         const prog = getCourseProgress(c.id);
         if (prog && prog.totalLessons > 0 && prog.completionPercent === 100) {
           cCount += 1;
@@ -130,7 +134,7 @@ export default function HomeScreen() {
       });
     }
     return { completedLessonsCount: lCount, quizAttemptsCount: qCount, coursesCompletedCount: cCount };
-  }, [lessonProgress, courses, getCourseProgress]);
+  }, [lessonProgress, courses, getCourseProgress, profile?.role, isEnrolledInCourse]);
 
   // Generate dynamic Today's Goal checklist from existing activity
   const checklistItems = useMemo(() => {

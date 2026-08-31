@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import {
-  addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc, getCountFromServer, query, where,
+  addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc, setDoc, getCountFromServer, query, where,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
@@ -19,15 +19,26 @@ import { isValidHttpsUrl, normalizeMeetUrl } from '@/lib/links';
 import { createAdminLog } from '@/lib/adminLogs';
 import { hasPermission } from '@/lib/rbac';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { getEnrollmentDocId } from '@/lib/enrollments';
+
+export type CourseSubject = {
+  id: string;
+  name: string;
+  teacher_id?: string;
+  teacher_name?: string;
+  schedule?: string;
+};
 
 type CourseItem = {
   id: string;
   name: string;
   teacher_name: string;
+  teacher_id?: string;
   schedule: string;
   class_time?: string;
   meet_link: string;
   description: string;
+  subjects?: CourseSubject[];
 };
 
 type TeacherItem = {
@@ -54,13 +65,30 @@ type RecordingItem = {
   lesson_id?: string;
 };
 
+type StudentOption = {
+  uid: string;
+  name: string;
+  email: string;
+};
+
+type RosterItem = {
+  id: string;
+  user_id: string;
+  course_id: string;
+  status: string;
+  student_name?: string;
+  student_email?: string;
+};
+
 const INITIAL_COURSE: Omit<CourseItem, 'id'> = {
   name: '',
   teacher_name: '',
+  teacher_id: '',
   schedule: '',
   class_time: '',
   meet_link: '',
   description: '',
+  subjects: [],
 };
 
 export default function ManageAcademicsScreen() {
@@ -74,11 +102,20 @@ export default function ManageAcademicsScreen() {
   const [loading, setLoading] = useState(true);
   const [courseForm, setCourseForm] = useState(INITIAL_COURSE);
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  
+  // Subject drafting in course form
+  const [subjectDraftName, setSubjectDraftName] = useState('');
+  const [subjectDraftTeacherId, setSubjectDraftTeacherId] = useState('');
+  const [subjectDraftSchedule, setSubjectDraftSchedule] = useState('');
+
+  // Teacher management state
   const [teacherName, setTeacherName] = useState('');
   const [teacherTitle, setTeacherTitle] = useState('');
   const [teacherPhoto, setTeacherPhoto] = useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
+  
+  // Recording state
   const [recordingTitle, setRecordingTitle] = useState('');
   const [recordingDescription, setRecordingDescription] = useState('');
   const [recordingUrl, setRecordingUrl] = useState('');
@@ -90,6 +127,13 @@ export default function ManageAcademicsScreen() {
   const [actionLoading, setActionLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [studentCount, setStudentCount] = useState<number>(0);
+
+  // Student Roster and Class Enrollment State
+  const [selectedRosterCourseId, setSelectedRosterCourseId] = useState<string>('');
+  const [rosterList, setRosterList] = useState<RosterItem[]>([]);
+  const [availableStudents, setAvailableStudents] = useState<StudentOption[]>([]);
+  const [selectedStudentToEnroll, setSelectedStudentToEnroll] = useState<string>('');
+  const [rosterLoading, setRosterLoading] = useState(false);
 
   const courseNames = useMemo(() => courses.map((c) => c.name).filter(Boolean), [courses]);
   const lessonOptions = useMemo(
@@ -105,25 +149,29 @@ export default function ManageAcademicsScreen() {
   const fetchData = useCallback(async () => {
     if (courses.length === 0) setLoading(true);
     try {
-      const [courseSnap, teacherSnap, lessonSnap, recordingSnap, studentsSnap] = await Promise.all([
+      const [courseSnap, teacherSnap, lessonSnap, recordingSnap, studentsCountSnap, usersSnap] = await Promise.all([
         getDocs(collection(db, 'courses')),
         getDocs(collection(db, 'teachers')),
         getDocs(collection(db, 'lessons')),
         getDocs(collection(db, 'recordings')),
         getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => ({ data: () => ({ count: 0 }) })),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => null),
       ]);
 
       const nextCourses: CourseItem[] = [];
       courseSnap.forEach((d) => {
         const data = d.data();
+        const rawSubjects = Array.isArray(data.subjects) ? data.subjects : undefined;
         nextCourses.push({
           id: d.id,
           name: data.name || '',
           teacher_name: data.teacher_name || data.teacherName || '',
+          teacher_id: data.teacher_id ? String(data.teacher_id) : undefined,
           schedule: data.schedule || '',
           class_time: data.class_time || data.time || '',
           meet_link: data.meet_link || data.class_link || data.classLink || '',
           description: data.description || '',
+          subjects: rawSubjects,
         });
       });
 
@@ -163,11 +211,24 @@ export default function ManageAcademicsScreen() {
         });
       });
 
+      const studentOpts: StudentOption[] = [];
+      if (usersSnap) {
+        usersSnap.forEach((d) => {
+          const u = d.data();
+          studentOpts.push({
+            uid: d.id,
+            name: u.name || u.displayName || u.email || 'Student',
+            email: u.email || '',
+          });
+        });
+      }
+
       setCourses(nextCourses);
       setTeachers(nextTeachers);
       setLessons(nextLessons);
       setRecordings(nextRecordings);
-      setStudentCount(studentsSnap.data().count || 0);
+      setStudentCount(studentsCountSnap.data().count || 0);
+      setAvailableStudents(studentOpts);
       setLoadError('');
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'courses/teachers/lessons/recordings', operation: 'get', query: 'get all courses, teachers, lessons, recordings', role: profile?.role, status: profile?.status }, error);
@@ -176,6 +237,163 @@ export default function ManageAcademicsScreen() {
       setLoading(false);
     }
   }, [courses.length, profile?.role, profile?.status]);
+
+  // Fetch student roster for a course
+  const fetchRoster = useCallback(async (courseId: string) => {
+    if (!courseId) {
+      setRosterList([]);
+      return;
+    }
+    setRosterLoading(true);
+    try {
+      const q = query(
+        collection(db, 'enrollments'),
+        where('course_id', '==', courseId),
+        where('status', '==', 'active')
+      );
+      const snap = await getDocs(q);
+      const list: RosterItem[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        const studentInfo = availableStudents.find((s) => s.uid === data.user_id);
+        list.push({
+          id: d.id,
+          user_id: data.user_id,
+          course_id: data.course_id,
+          status: data.status,
+          student_name: studentInfo?.name || data.user_name || 'Enrolled Student',
+          student_email: studentInfo?.email || data.user_email || '',
+        });
+      });
+      setRosterList(list);
+    } catch (err) {
+      console.warn('Failed to load roster:', err);
+      setRosterList([]);
+    } finally {
+      setRosterLoading(false);
+    }
+  }, [availableStudents]);
+
+  useEffect(() => {
+    if (selectedRosterCourseId) {
+      fetchRoster(selectedRosterCourseId);
+    }
+  }, [selectedRosterCourseId, fetchRoster]);
+
+  const enrollStudentInCourse = async () => {
+    if (!selectedRosterCourseId) {
+      Alert.alert('Select Class', 'Please choose a class/course first.');
+      return;
+    }
+    if (!selectedStudentToEnroll) {
+      Alert.alert('Select Student', 'Please select a student to enroll.');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const enrollmentDocId = getEnrollmentDocId(selectedStudentToEnroll, selectedRosterCourseId);
+      const studentObj = availableStudents.find((s) => s.uid === selectedStudentToEnroll);
+      const courseObj = courses.find((c) => c.id === selectedRosterCourseId);
+      
+      await setDoc(doc(db, 'enrollments', enrollmentDocId), {
+        user_id: selectedStudentToEnroll,
+        course_id: selectedRosterCourseId,
+        status: 'active',
+        user_name: studentObj?.name || '',
+        user_email: studentObj?.email || '',
+        course_name: courseObj?.name || '',
+        enrolled_at: serverTimestamp(),
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      }, { merge: true });
+
+      await createAdminLog(profile, {
+        action: 'course_enroll_student',
+        performed_by: profile?.email || profile?.name || 'admin',
+        target_id: selectedStudentToEnroll,
+        details: `Enrolled ${studentObj?.name || selectedStudentToEnroll} into ${courseObj?.name || selectedRosterCourseId}`,
+      }).catch(() => {});
+
+      await createNotificationAsAdmin(profile, {
+        title: 'Class Enrollment Activated',
+        message: `You have been officially enrolled in ${courseObj?.name || 'your class'}. Open Courses to begin learning.`,
+        user_id: selectedStudentToEnroll,
+      }).catch(() => {});
+
+      setSelectedStudentToEnroll('');
+      await fetchRoster(selectedRosterCourseId);
+      Alert.alert('Student Enrolled', `${studentObj?.name || 'Student'} is now enrolled in this class.`);
+    } catch (error: unknown) {
+      logFirestoreFailure({ collection: 'enrollments', operation: 'set', path: `enrollments/${selectedStudentToEnroll}:${selectedRosterCourseId}`, query: 'enroll student', role: profile?.role, status: profile?.status }, error);
+      Alert.alert('Enrollment Failed', 'Could not complete student enrollment.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const unenrollStudentFromCourse = (rosterItem: RosterItem) => {
+    Alert.alert(
+      'Remove Enrollment',
+      `Unenroll ${rosterItem.student_name || 'this student'} from this class?`,
+      [
+        { text: 'Cancel' },
+        {
+          text: 'Unenroll',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              await updateDoc(doc(db, 'enrollments', rosterItem.id), {
+                status: 'cancelled',
+                updated_at: serverTimestamp(),
+              });
+              await createAdminLog(profile, {
+                action: 'course_unenroll_student',
+                performed_by: profile?.email || profile?.name || 'admin',
+                target_id: rosterItem.user_id,
+                details: `Cancelled enrollment for ${rosterItem.student_name} in ${rosterItem.course_id}`,
+              }).catch(() => {});
+              await fetchRoster(selectedRosterCourseId);
+              Alert.alert('Enrollment Cancelled', 'Student has been removed from this class roster.');
+            } catch (error) {
+              Alert.alert('Action Failed', 'Could not cancel enrollment.');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const addSubjectToDraft = () => {
+    if (!subjectDraftName.trim()) {
+      Alert.alert('Subject Name', 'Please enter a subject name (e.g. Tajweed, Fiqh, Hadith).');
+      return;
+    }
+    const assignedTeacher = teachers.find((t) => t.id === subjectDraftTeacherId);
+    const newSubject: CourseSubject = {
+      id: `sub_${Date.now()}`,
+      name: subjectDraftName.trim(),
+      teacher_id: subjectDraftTeacherId || undefined,
+      teacher_name: assignedTeacher?.name || undefined,
+      schedule: subjectDraftSchedule.trim() || undefined,
+    };
+    setCourseForm((prev) => ({
+      ...prev,
+      subjects: [...(prev.subjects || []), newSubject],
+    }));
+    setSubjectDraftName('');
+    setSubjectDraftTeacherId('');
+    setSubjectDraftSchedule('');
+  };
+
+  const removeSubjectFromDraft = (index: number) => {
+    setCourseForm((prev) => ({
+      ...prev,
+      subjects: (prev.subjects || []).filter((_, i) => i !== index),
+    }));
+  };
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -229,10 +447,12 @@ export default function ManageAcademicsScreen() {
     const payload = {
       name: courseForm.name.trim(),
       teacher_name: courseForm.teacher_name.trim(),
+      teacher_id: courseForm.teacher_id || '',
       schedule: courseForm.schedule.trim(),
       class_time: (courseForm.class_time || '').trim(),
       meet_link: normalizedMeetLink,
       description: courseForm.description.trim(),
+      subjects: Array.isArray(courseForm.subjects) ? courseForm.subjects : [],
       updated_at: serverTimestamp(),
     };
 
@@ -278,10 +498,12 @@ export default function ManageAcademicsScreen() {
     setCourseForm({
       name: course.name,
       teacher_name: course.teacher_name,
+      teacher_id: course.teacher_id || '',
       schedule: course.schedule,
       class_time: course.class_time || '',
       meet_link: course.meet_link,
       description: course.description,
+      subjects: Array.isArray(course.subjects) ? course.subjects : [],
     });
   };
 
@@ -586,13 +808,80 @@ export default function ManageAcademicsScreen() {
         )}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Courses</Text>
-          <TextInput style={styles.input} placeholder="Course name" placeholderTextColor={COLORS.textMuted} value={courseForm.name} onChangeText={(v) => setCourseForm((p) => ({ ...p, name: v }))} />
-          <TextInput style={styles.input} placeholder="Teacher name" placeholderTextColor={COLORS.textMuted} value={courseForm.teacher_name} onChangeText={(v) => setCourseForm((p) => ({ ...p, teacher_name: v }))} />
-          <TextInput style={styles.input} placeholder="Schedule (days)" placeholderTextColor={COLORS.textMuted} value={courseForm.schedule} onChangeText={(v) => setCourseForm((p) => ({ ...p, schedule: v }))} />
-          <TextInput style={styles.input} placeholder="Class time (HH:mm)" placeholderTextColor={COLORS.textMuted} value={courseForm.class_time} onChangeText={(v) => setCourseForm((p) => ({ ...p, class_time: v }))} />
+          <Text style={styles.sectionTitle}>Courses & Institutional Classes</Text>
+          <TextInput style={styles.input} placeholder="Course / Class Name (e.g. Dars-e-Nizami Year 1)" placeholderTextColor={COLORS.textMuted} value={courseForm.name} onChangeText={(v) => setCourseForm((p) => ({ ...p, name: v }))} />
+          <TextInput style={styles.input} placeholder="Lead Teacher Name" placeholderTextColor={COLORS.textMuted} value={courseForm.teacher_name} onChangeText={(v) => setCourseForm((p) => ({ ...p, teacher_name: v }))} />
+          <TextInput style={styles.input} placeholder="Schedule (e.g. Mon-Thu)" placeholderTextColor={COLORS.textMuted} value={courseForm.schedule} onChangeText={(v) => setCourseForm((p) => ({ ...p, schedule: v }))} />
+          <TextInput style={styles.input} placeholder="Class time (e.g. 10:00 AM / 14:30)" placeholderTextColor={COLORS.textMuted} value={courseForm.class_time} onChangeText={(v) => setCourseForm((p) => ({ ...p, class_time: v }))} />
           <TextInput style={styles.input} placeholder="Google Meet link" placeholderTextColor={COLORS.textMuted} value={courseForm.meet_link} onChangeText={(v) => setCourseForm((p) => ({ ...p, meet_link: v }))} autoCapitalize="none" />
-          <TextInput style={[styles.input, styles.textArea]} placeholder="Description" placeholderTextColor={COLORS.textMuted} value={courseForm.description} onChangeText={(v) => setCourseForm((p) => ({ ...p, description: v }))} multiline />
+          <TextInput style={[styles.input, styles.textArea]} placeholder="Course Description / Syllabus Overview" placeholderTextColor={COLORS.textMuted} value={courseForm.description} onChangeText={(v) => setCourseForm((p) => ({ ...p, description: v }))} multiline />
+
+          {/* Academic Subjects Builder */}
+          <View style={styles.subSectionBox}>
+            <View style={styles.subSectionHeader}>
+              <Ionicons name="library-outline" size={18} color="#059669" />
+              <Text style={styles.subSectionTitle}>Academic Subjects & Faculty (Optional)</Text>
+            </View>
+            <Text style={styles.helper}>Add individual subjects belonging to this class with specific assigned teachers (e.g. Tajweed → Ustaadha Sumra, Fiqh → Ustaadha Sumra, Hadith → Ustaadha Fatima).</Text>
+            
+            {Array.isArray(courseForm.subjects) && courseForm.subjects.length > 0 ? (
+              <View style={{ gap: 6, marginVertical: 8 }}>
+                {courseForm.subjects.map((sub, sIdx) => (
+                  <View key={sub.id || sIdx} style={styles.subjectDraftItem}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subjectDraftName}>{sub.name}</Text>
+                      <Text style={styles.subjectDraftMeta}>Faculty: {sub.teacher_name || 'Unassigned'} {sub.schedule ? `• ${sub.schedule}` : ''}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => removeSubjectFromDraft(sIdx)} style={styles.subjectDraftRemoveBtn}>
+                      <Ionicons name="trash-outline" size={16} color={COLORS.error} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={[styles.helper, { fontStyle: 'italic', marginVertical: 4 }]}>No additional subjects defined for this course.</Text>
+            )}
+
+            <View style={styles.subjectAddRow}>
+              <TextInput
+                style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                placeholder="Subject Name (e.g. Tajweed)"
+                placeholderTextColor={COLORS.textMuted}
+                value={subjectDraftName}
+                onChangeText={setSubjectDraftName}
+              />
+              <TextInput
+                style={[styles.input, { width: 110, marginBottom: 0 }]}
+                placeholder="Schedule"
+                placeholderTextColor={COLORS.textMuted}
+                value={subjectDraftSchedule}
+                onChangeText={setSubjectDraftSchedule}
+              />
+            </View>
+
+            {teachers.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginVertical: 6 }}>
+                {teachers.map((t) => {
+                  const sel = subjectDraftTeacherId === t.id;
+                  return (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={[styles.teacherChipSmall, sel && styles.teacherChipSmallSelected]}
+                      onPress={() => setSubjectDraftTeacherId((prev) => (prev === t.id ? '' : t.id))}
+                    >
+                      <Ionicons name={sel ? "checkmark-circle" : "person-outline"} size={13} color={sel ? "#FFF" : COLORS.textMuted} />
+                      <Text style={[styles.teacherChipSmallText, sel && styles.teacherChipSmallTextSelected]}>{t.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+
+            <TouchableOpacity style={styles.addSubjectBtn} onPress={addSubjectToDraft}>
+              <Ionicons name="add-circle-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.addSubjectBtnText}>+ Add Subject to Class</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={saveCourse} disabled={actionLoading}>
             {actionLoading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>{editingCourseId ? 'Update Course' : 'Add Course'}</Text>}
@@ -608,11 +897,124 @@ export default function ManageAcademicsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.itemTitle}>{course.name}</Text>
                 <Text style={styles.itemMeta}>{course.schedule} {course.class_time ? `• ${course.class_time}` : ''}</Text>
+                {Array.isArray(course.subjects) && course.subjects.length > 0 ? (
+                  <Text style={[styles.itemMeta, { color: '#059669', fontWeight: '700' }]}>
+                    {course.subjects.length} Subjects: {course.subjects.map(s => s.name).join(', ')}
+                  </Text>
+                ) : null}
               </View>
               <TouchableOpacity onPress={() => editCourse(course)} style={styles.smallBtn}><Text style={styles.smallBtnText}>Edit</Text></TouchableOpacity>
               <TouchableOpacity onPress={() => removeCourse(course)} style={[styles.smallBtn, styles.deleteSmallBtn]}><Text style={[styles.smallBtnText, { color: COLORS.error }]}>Delete</Text></TouchableOpacity>
             </View>
           ))}
+        </View>
+
+        {/* ══════════════════ STUDENT CLASS ENROLLMENT & ROSTER MANAGER ══════════════════ */}
+        <View style={styles.section}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <Ionicons name="people" size={22} color={COLORS.primary} />
+            <Text style={styles.sectionTitle}>Student Class Enrollment & Roster</Text>
+          </View>
+          <Text style={styles.helper}>
+            Select a class below to view its enrolled student roster or enroll registered students.
+          </Text>
+
+          {/* Select Course for Roster */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginVertical: 10 }}>
+            {courses.map((course) => {
+              const isSelected = selectedRosterCourseId === course.id;
+              return (
+                <TouchableOpacity
+                  key={course.id}
+                  style={[styles.courseChip, isSelected && styles.courseChipSelected]}
+                  onPress={() => setSelectedRosterCourseId(course.id)}
+                >
+                  <Ionicons name={isSelected ? 'school' : 'school-outline'} size={16} color={isSelected ? COLORS.surface : COLORS.primary} />
+                  <Text style={[styles.courseChipText, isSelected && styles.courseChipTextSelected]}>{course.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {selectedRosterCourseId ? (
+            <View style={styles.rosterCard}>
+              <View style={styles.rosterHeader}>
+                <Text style={styles.rosterTitle}>
+                  Enrolled Students ({rosterList.length})
+                </Text>
+                {rosterLoading ? <ActivityIndicator size="small" color={COLORS.primary} /> : null}
+              </View>
+
+              {rosterList.length === 0 ? (
+                <Text style={[styles.helper, { fontStyle: 'italic', marginVertical: 8 }]}>
+                  No students are currently enrolled in this class.
+                </Text>
+              ) : (
+                rosterList.map((rosterItem) => (
+                  <View key={rosterItem.id} style={styles.rosterRow}>
+                    <Ionicons name="person-circle-outline" size={24} color={COLORS.secondary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rosterStudentName}>{rosterItem.student_name}</Text>
+                      {rosterItem.student_email ? (
+                        <Text style={styles.rosterStudentEmail}>{rosterItem.student_email}</Text>
+                      ) : null}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.unenrollBtn}
+                      onPress={() => unenrollStudentFromCourse(rosterItem)}
+                    >
+                      <Ionicons name="remove-circle-outline" size={14} color={COLORS.error} />
+                      <Text style={styles.unenrollBtnText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+
+              {/* 1-Tap Enroll Student Dropdown / Picker */}
+              <View style={styles.enrollBox}>
+                <Text style={styles.enrollBoxTitle}>Enroll a Student into this Class:</Text>
+                {availableStudents.length === 0 ? (
+                  <Text style={styles.helper}>No registered student accounts found.</Text>
+                ) : (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginVertical: 8 }}>
+                    {availableStudents.map((st) => {
+                      const isEnrolledAlready = rosterList.some((r) => r.user_id === st.uid);
+                      const isSelected = selectedStudentToEnroll === st.uid;
+                      if (isEnrolledAlready) return null;
+                      return (
+                        <TouchableOpacity
+                          key={st.uid}
+                          style={[styles.studentChip, isSelected && styles.studentChipSelected]}
+                          onPress={() => setSelectedStudentToEnroll(st.uid)}
+                        >
+                          <Ionicons name={isSelected ? "checkmark" : "add"} size={14} color={isSelected ? "#FFF" : COLORS.primary} />
+                          <Text style={[styles.studentChipText, isSelected && styles.studentChipTextSelected]}>
+                            {st.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.primaryBtn, (!selectedStudentToEnroll || actionLoading) && styles.disabledBtn]}
+                  onPress={enrollStudentInCourse}
+                  disabled={!selectedStudentToEnroll || actionLoading}
+                >
+                  {actionLoading ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>✓ Confirm Student Enrollment</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <Text style={[styles.helper, { fontStyle: 'italic', marginVertical: 6 }]}>
+              Please select a course above to view or manage its student roster.
+            </Text>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -655,7 +1057,7 @@ export default function ManageAcademicsScreen() {
           {courseNames.length === 0 ? <Text style={styles.helper}>No courses available for assignment.</Text> : courseNames.map((name) => {
             const selected = selectedCourses.includes(name);
           
-  return (
+            return (
               <TouchableOpacity
                 key={name}
                 style={[styles.courseChip, selected && styles.courseChipSelected]}
@@ -889,5 +1291,183 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: COLORS.primary,
+  },
+  subSectionBox: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  subSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  subSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  subjectDraftItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.surface,
+    padding: 8,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  subjectDraftName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  subjectDraftMeta: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  subjectDraftRemoveBtn: {
+    padding: 6,
+  },
+  subjectAddRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  teacherChipSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  teacherChipSmallSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  teacherChipSmallText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  teacherChipSmallTextSelected: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  addSubjectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(15,169,88,0.4)',
+    backgroundColor: 'rgba(15,169,88,0.08)',
+    borderRadius: RADIUS.md,
+    paddingVertical: 8,
+    marginTop: 6,
+  },
+  addSubjectBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  rosterCard: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginTop: 6,
+  },
+  rosterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  rosterTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.textMain,
+  },
+  rosterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    padding: 8,
+    marginBottom: 6,
+  },
+  rosterStudentName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  rosterStudentEmail: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+  },
+  unenrollBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(239,68,68,0.1)',
+  },
+  unenrollBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.error,
+  },
+  enrollBox: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 10,
+  },
+  enrollBoxTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    marginBottom: 4,
+  },
+  studentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(15,169,88,0.4)',
+    backgroundColor: COLORS.surface,
+  },
+  studentChipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  studentChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  studentChipTextSelected: {
+    color: '#FFF',
+    fontWeight: '700',
   },
 });

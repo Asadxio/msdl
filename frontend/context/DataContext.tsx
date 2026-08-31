@@ -17,6 +17,7 @@ import {
   orderBy,
   startAfter,
   documentId,
+  onSnapshot,
   type DocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -27,19 +28,30 @@ import { dispatchNotification } from '@/lib/dispatchNotification';
 import { createRoleNotification } from '@/lib/notifications';
 import { cacheGet, cacheSet } from '@/lib/cacheManager';
 import { perfStart, perfEnd } from '@/lib/performanceMonitor';
+import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 
 const QUERY_CHUNK = 25;
+
+export type CourseSubject = {
+  id: string;
+  name: string;
+  teacher_id?: string;
+  teacher_name?: string;
+  schedule?: string;
+};
 
 export type Course = {
   id: string;
   name: string;
   teacher_name: string;
+  teacher_id?: string;
   schedule: string;
   time?: string;
   class_time?: string;
   description: string;
   class_link: string;
   meet_link?: string;
+  subjects?: CourseSubject[];
 };
 
 export type Teacher = {
@@ -182,6 +194,11 @@ type DataContextType = {
   }) => Promise<boolean>;
   getResumeLearning: () => ResumeLearning | null;
   getCourseProgress: (courseId: string) => CourseProgressSummary;
+  userEnrollments: Record<string, boolean>;
+  enrolledCourses: Course[];
+  isEnrolledInCourse: (courseId: string) => boolean;
+  enrollStudent: (userId: string, courseId: string) => Promise<boolean>;
+  unenrollStudent: (userId: string, courseId: string) => Promise<boolean>;
   addBook: (
     title: string,
     file_url: string,
@@ -262,6 +279,11 @@ const DataContext = createContext<DataContextType>({
   reviewSubmission: async () => false,
   getResumeLearning: () => null,
   getCourseProgress: () => ({ totalLessons: 0, lessonsDone: 0, quizzesDone: 0, completionPercent: 0 }),
+  userEnrollments: {},
+  enrolledCourses: [],
+  isEnrolledInCourse: () => false,
+  enrollStudent: async () => false,
+  unenrollStudent: async () => false,
   addBook: async () => false,
   deleteBook: async () => false,
 });
@@ -281,6 +303,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [lessonProgress, setLessonProgress] = useState<Record<string, LessonProgressState>>({});
   const [lastOpenedLessonId, setLastOpenedLessonId] = useState<string | null>(null);
+  const [userEnrollments, setUserEnrollments] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [booksLoading, setBooksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -292,6 +315,118 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [moduleCursorByCourse, setModuleCursorByCourse] = useState<Record<string, QueryCursor>>({});
   const [lessonCursorByModule, setLessonCursorByModule] = useState<Record<string, QueryCursor>>({});
   const [assignmentCursorByLesson, setAssignmentCursorByLesson] = useState<Record<string, QueryCursor>>({});
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setUserEnrollments({});
+      return;
+    }
+    const q = query(
+      collection(db, 'enrollments'),
+      where('user_id', '==', user.uid),
+      where('status', '==', 'active'),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const map: Record<string, boolean> = {};
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data.course_id) {
+            map[String(data.course_id)] = true;
+          }
+        });
+        setUserEnrollments(map);
+      },
+      (err) => {
+        logger.warn('User enrollments listener failed:', err);
+      },
+    );
+    return () => unsub();
+  }, [user?.uid]);
+
+  const isEnrolledInCourse = useCallback(
+    (courseId: string): boolean => {
+      if (!courseId) return false;
+      if (
+        profile?.role === 'admin' ||
+        profile?.role === 'super_admin' ||
+        profile?.role === 'teacher' ||
+        profile?.role === 'assistant_teacher'
+      ) {
+        return true;
+      }
+      return Boolean(userEnrollments[courseId]);
+    },
+    [profile?.role, userEnrollments],
+  );
+
+  const enrolledCourses = useMemo(() => {
+    if (profile?.role === 'admin' || profile?.role === 'super_admin') return courses;
+    if (profile?.role === 'teacher' || profile?.role === 'assistant_teacher') {
+      const currentTeacher = teachers.find(
+        (t) =>
+          t.id === user?.uid ||
+          (profile?.name && t.name?.toLowerCase().includes(profile.name.toLowerCase())),
+      );
+      return filterTeacherAssignedCourses(courses, currentTeacher, user?.uid);
+    }
+    return courses.filter((c) => Boolean(userEnrollments[c.id]));
+  }, [courses, profile?.role, profile?.name, userEnrollments, teachers, user?.uid]);
+
+  const enrollStudent = useCallback(
+    async (studentUid: string, courseId: string): Promise<boolean> => {
+      if (!studentUid || !courseId) return false;
+      try {
+        const enrollmentDocId = `${studentUid}:${courseId}`;
+        await setDoc(
+          doc(db, 'enrollments', enrollmentDocId),
+          {
+            user_id: studentUid,
+            course_id: courseId,
+            status: 'active',
+            enrolled_at: serverTimestamp(),
+            created_at: serverTimestamp(),
+            updated_at: serverTimestamp(),
+          },
+          { merge: true },
+        );
+        if (studentUid === user?.uid) {
+          setUserEnrollments((prev) => ({ ...prev, [courseId]: true }));
+        }
+        return true;
+      } catch (err: unknown) {
+        logger.warn('Failed to enroll student:', normalizeFirebaseError(err, 'Failed to enroll student'));
+        return false;
+      }
+    },
+    [user?.uid],
+  );
+
+  const unenrollStudent = useCallback(
+    async (studentUid: string, courseId: string): Promise<boolean> => {
+      if (!studentUid || !courseId) return false;
+      try {
+        const enrollmentDocId = `${studentUid}:${courseId}`;
+        await updateDoc(doc(db, 'enrollments', enrollmentDocId), {
+          status: 'cancelled',
+          updated_at: serverTimestamp(),
+        });
+        if (studentUid === user?.uid) {
+          setUserEnrollments((prev) => {
+            const next = { ...prev };
+            delete next[courseId];
+            return next;
+          });
+        }
+        return true;
+      } catch (err: unknown) {
+        logger.warn('Failed to unenroll student:', normalizeFirebaseError(err, 'Failed to unenroll student'));
+        return false;
+      }
+    },
+    [user?.uid],
+  );
 
   const fetchBooks = useCallback(async (): Promise<boolean> => {
     setBooksLoading(true);
@@ -344,16 +479,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (courseIdsSeen.has(doc.id)) return;
         courseIdsSeen.add(doc.id);
         const data = doc.data();
+        const rawSubjects = Array.isArray(data.subjects) ? data.subjects : undefined;
         coursesData.push({
           id: doc.id,
           name: data.name || '',
           teacher_name: data.teacherName || data.teacher_name || '',
+          teacher_id: data.teacher_id ? String(data.teacher_id) : undefined,
           schedule: data.schedule || '',
           time: data.time || '',
           class_time: data.class_time || data.time || '',
           description: data.description || '',
           class_link: data.classLink || data.class_link || data.meet_link || '',
           meet_link: data.meet_link || data.class_link || data.classLink || '',
+          subjects: rawSubjects,
         });
       });
       const teachersData: Teacher[] = [];
@@ -933,21 +1071,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (lastOpenedLessonId) {
         const lastLesson = lessons.find((lesson) => lesson.id === lastOpenedLessonId);
         if (lastLesson && !lessonProgress[lastLesson.id]?.completed) {
-          const module = modules.find((m) => m.id === lastLesson.module_id);
-          const course = courses.find((c) => c.id === lastLesson.course_id);
-          if (module && course && course.id) {
-            return {
-              courseId: String(course.id),
-              courseName: String(course.name || 'Course'),
-              moduleId: String(module.id || ''),
-              moduleTitle: String(module.title || 'Module'),
-              lessonId: String(lastLesson.id || ''),
-              lessonTitle: String(lastLesson.title || 'Lesson'),
-            };
+          // Scoping check for student role
+          if (profile?.role === 'student' && !userEnrollments[lastLesson.course_id]) {
+            // Not enrolled in this course; skip
+          } else {
+            const module = modules.find((m) => m.id === lastLesson.module_id);
+            const course = courses.find((c) => c.id === lastLesson.course_id);
+            if (module && course && course.id) {
+              return {
+                courseId: String(course.id),
+                courseName: String(course.name || 'Course'),
+                moduleId: String(module.id || ''),
+                moduleTitle: String(module.title || 'Module'),
+                lessonId: String(lastLesson.id || ''),
+                lessonTitle: String(lastLesson.title || 'Lesson'),
+              };
+            }
           }
         }
       }
-      for (const course of courses) {
+      const candidateCourses = profile?.role === 'student'
+        ? courses.filter((c) => Boolean(userEnrollments[c.id]))
+        : courses;
+
+      for (const course of candidateCourses) {
         if (!course?.id) continue;
         const cModules = getModulesForCourse(course.id);
         for (const module of cModules) {
@@ -970,7 +1117,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } catch {
       return null;
     }
-  }, [courses, getLessonsForModule, getModulesForCourse, lastOpenedLessonId, lessonProgress, lessons, modules]);
+  }, [courses, getLessonsForModule, getModulesForCourse, lastOpenedLessonId, lessonProgress, lessons, modules, profile?.role, userEnrollments]);
 
   const getCourseProgress = useCallback((courseId: string): CourseProgressSummary => {
     const courseLessons = lessons.filter((lesson) => lesson.course_id === courseId);
@@ -996,6 +1143,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     modules, lessons, assignments, submissions, lessonProgress,
     courseContentLoading, courseContentError,
     hasMoreModulesByCourse, hasMoreLessonsByModule, hasMoreAssignmentsByLesson,
+    userEnrollments, enrolledCourses, isEnrolledInCourse, enrollStudent, unenrollStudent,
     refetch: fetchData, refetchBooks: fetchBooks, refetchLearning: fetchLearning,
     fetchCourseModules, fetchMoreCourseModules,
     fetchLessonsForModule, fetchMoreLessonsForModule,
@@ -1011,6 +1159,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     modules, lessons, assignments, submissions, lessonProgress,
     courseContentLoading, courseContentError,
     hasMoreModulesByCourse, hasMoreLessonsByModule, hasMoreAssignmentsByLesson,
+    userEnrollments, enrolledCourses, isEnrolledInCourse, enrollStudent, unenrollStudent,
     fetchData, fetchBooks, fetchLearning,
     fetchCourseModules, fetchMoreCourseModules,
     fetchLessonsForModule, fetchMoreLessonsForModule,

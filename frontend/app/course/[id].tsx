@@ -122,6 +122,7 @@ export default function CourseDetailScreen() {
     getSubmissionsForAssignment,
     submitAssignment,
     reviewSubmission,
+    isEnrolledInCourse,
   } = useData();
   const { user, profile } = useAuth();
   const [recordings, setRecordings] = useState<
@@ -180,6 +181,9 @@ export default function CourseDetailScreen() {
   );
   const [activeTab, setActiveTab] = useState<'overview' | 'live' | 'audio' | 'curriculum'>('overview');
   const isReviewer = profile?.role === "admin" || profile?.role === "teacher";
+  const isEnrolled = courseId ? isEnrolledInCourse(courseId) : false;
+  const isStudent = profile?.role === "student";
+  const isLockedForStudent = isStudent && !isEnrolled;
 
 
   useEffect(() => {
@@ -869,6 +873,10 @@ export default function CourseDetailScreen() {
                 <TouchableOpacity
                   style={styles.launchMeetBtn}
                   onPress={() => {
+                    if (isLockedForStudent) {
+                      Alert.alert("Class Enrollment Required", "Please enroll in this class to attend live conferencing sessions.");
+                      return;
+                    }
                     if (meetLink) {
                       void openExternalLink(meetLink);
                     } else {
@@ -881,6 +889,38 @@ export default function CourseDetailScreen() {
                   <Text style={styles.launchMeetBtnText}>Launch Live Class Room</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Academic Subjects & Faculty Assigned Card */}
+              {Array.isArray(course.subjects) && course.subjects.length > 0 ? (
+                <View style={styles.infoCard}>
+                  <View style={styles.infoCardHeader}>
+                    <View style={[styles.iconCircle, { backgroundColor: '#ECFDF5' }]}>
+                      <Ionicons name="library" size={20} color="#059669" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.infoCardTitle}>Academic Subjects & Faculty</Text>
+                      <Text style={styles.infoCardSubValue}>Course syllabus subjects and assigned ustaadhas</Text>
+                    </View>
+                  </View>
+                  <View style={{ gap: 8, marginTop: 4 }}>
+                    {course.subjects.map((sub, idx) => (
+                      <View key={sub.id || idx} style={styles.subjectRow}>
+                        <View style={styles.subjectIconBox}>
+                          <Ionicons name="book-outline" size={16} color="#059669" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.subjectTitle}>{sub.name}</Text>
+                          {sub.schedule ? <Text style={styles.subjectSchedule}>{sub.schedule}</Text> : null}
+                        </View>
+                        <View style={styles.subjectTeacherBadge}>
+                          <Ionicons name="person-outline" size={12} color={COLORS.primary} />
+                          <Text style={styles.subjectTeacherText}>{sub.teacher_name || 'Assigned Ustaadha'}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
 
               {/* About this Course Card */}
               <View style={styles.infoCard} testID="course-detail-description">
@@ -898,209 +938,324 @@ export default function CourseDetailScreen() {
                   {course.description || "Course syllabus and educational details are being structured."}
                 </Text>
               </View>
+
+              {/* Enrollment Required Notice for Unenrolled Students */}
+              {isLockedForStudent ? (
+                <View style={styles.enrollPromptCard}>
+                  <View style={styles.enrollPromptIconCircle}>
+                    <Ionicons name="lock-closed" size={22} color="#D97706" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.enrollPromptTitle}>Enrollment Required for Full Access</Text>
+                    <Text style={styles.enrollPromptSub}>
+                      You are currently viewing the course overview. To attend live purdah classrooms, listen to audio dars lectures, and submit assignments, please enroll in this class.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.enrollPromptBtn}
+                    onPress={() => router.push('/payment')}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.enrollPromptBtnText}>Pay Fee & Enroll</Text>
+                    <Ionicons name="arrow-forward" size={14} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </>
           )}
 
           {/* ══════════════════ TAB 2: LIVE & RECORDINGS ══════════════════ */}
           {activeTab === 'live' && (
-            <>
-              {/* Live Session Banner */}
-              <View style={styles.liveClassBanner}>
-                <View style={styles.liveClassBannerHeader}>
-                  <View style={styles.pulseDot} />
-                  <Text style={styles.liveClassBannerTitle}>{activeLiveClass ? "Live Session in Progress" : "Class Starting Soon"}</Text>
+            isLockedForStudent ? (
+              <View style={styles.lockedGateCard}>
+                <View style={styles.lockedGateIconCircle}>
+                  <Ionicons name="lock-closed" size={32} color="#D97706" />
                 </View>
-                <Text style={styles.liveClassBannerSub}>
-                  {activeLiveClass
-                    ? "Your Ustaadha is currently live in the classroom. Tap below to join now."
-                    : "The live class session is scheduled to begin shortly."}
+                <Text style={styles.lockedGateTitle}>Live Classroom Locked</Text>
+                <Text style={styles.lockedGateArabic}>داخلہ لازمی ہے</Text>
+                <Text style={styles.lockedGateDesc}>
+                  Live interactive purdah classrooms and recordings archive are restricted to officially enrolled students of this class.
                 </Text>
-                <View style={styles.liveClassActions}>
-                  {isReviewer ? (
-                    <TouchableOpacity
-                      style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
-                      activeOpacity={0.8}
-                      disabled={startingLiveClass}
-                      onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : openStartClassModal}
-                    >
-                      {startingLiveClass ? (
-                        <ActivityIndicator size="small" color={COLORS.primary} />
-                      ) : (
-                        <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
-                      )}
-                      <Text style={styles.joinBtnText}>{activeLiveClass ? "Open Live Class" : "Start Live Class"}</Text>
-                    </TouchableOpacity>
-                  ) : null}
+                <View style={styles.lockedGateActionRow}>
                   <TouchableOpacity
-                    style={[styles.joinBtn, activeLiveClass && styles.liveNowBtn]}
-                    testID="banner-join-class-btn"
-                    activeOpacity={0.8}
-                    onPress={handleJoinClass}
+                    style={styles.lockedGatePrimaryBtn}
+                    onPress={() => router.push('/payment')}
+                    activeOpacity={0.85}
                   >
-                    <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
-                    <Text style={styles.joinBtnText}>{activeLiveClass ? "Join Live Class" : "Join Class"}</Text>
+                    <Ionicons name="card-outline" size={16} color="#FFF" />
+                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fees & Request Enrollment</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.lockedGateSecondaryBtn}
+                    onPress={() => router.push('/(tabs)/chats')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="chatbubbles-outline" size={16} color={COLORS.primary} />
+                    <Text style={styles.lockedGateSecondaryBtnText}>Contact Administration</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-
-              {/* Class Recordings Archive */}
-              <View style={styles.infoCard}>
-                <View style={styles.infoCardHeader}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="mic-outline" size={20} color={COLORS.primary} />
+            ) : (
+              <>
+                {/* Live Session Banner */}
+                <View style={styles.liveClassBanner}>
+                  <View style={styles.liveClassBannerHeader}>
+                    <View style={styles.pulseDot} />
+                    <Text style={styles.liveClassBannerTitle}>{activeLiveClass ? "Live Session in Progress" : "Class Starting Soon"}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.infoCardTitle}>Class Recordings Archive</Text>
-                    <Text style={styles.infoCardSubValue}>Recorded live sessions for revision</Text>
+                  <Text style={styles.liveClassBannerSub}>
+                    {activeLiveClass
+                      ? "Your Ustaadha is currently live in the classroom. Tap below to join now."
+                      : "The live class session is scheduled to begin shortly."}
+                  </Text>
+                  <View style={styles.liveClassActions}>
+                    {isReviewer ? (
+                      <TouchableOpacity
+                        style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
+                        activeOpacity={0.8}
+                        disabled={startingLiveClass}
+                        onPress={activeLiveClass ? () => safePushLiveClass(activeLiveClass.id) : openStartClassModal}
+                      >
+                        {startingLiveClass ? (
+                          <ActivityIndicator size="small" color={COLORS.primary} />
+                        ) : (
+                          <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
+                        )}
+                        <Text style={styles.joinBtnText}>{activeLiveClass ? "Open Live Class" : "Start Live Class"}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[styles.joinBtn, activeLiveClass && styles.liveNowBtn]}
+                      testID="banner-join-class-btn"
+                      activeOpacity={0.8}
+                      onPress={handleJoinClass}
+                    >
+                      <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
+                      <Text style={styles.joinBtnText}>{activeLiveClass ? "Join Live Class" : "Join Class"}</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-                {generalRecordings.length === 0 ? (
-                  <EmptyState
-                    icon="videocam-outline"
-                    title="No Recordings Available"
-                    message="Past live session recordings and lecture archives will be published here once available."
-                  />
-                ) : (
-                  generalRecordings.map((rec) => (
-                    <TouchableOpacity
-                      key={rec.id}
-                      style={styles.recordingRow}
-                      onPress={() => openRecordingPlayer(rec.file_url)}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.recordingTitle}>
-                          {rec.title || "Recording"}
-                        </Text>
-                        <Text style={styles.recordingDesc}>
-                          {rec.description || "Tap to play recording"}
-                        </Text>
-                      </View>
-                      <Ionicons
-                        name="play-circle-outline"
-                        size={24}
-                        color={COLORS.primary}
-                      />
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
-            </>
+
+                {/* Class Recordings Archive */}
+                <View style={styles.infoCard}>
+                  <View style={styles.infoCardHeader}>
+                    <View style={styles.iconCircle}>
+                      <Ionicons name="mic-outline" size={20} color={COLORS.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.infoCardTitle}>Class Recordings Archive</Text>
+                      <Text style={styles.infoCardSubValue}>Recorded live sessions for revision</Text>
+                    </View>
+                  </View>
+                  {generalRecordings.length === 0 ? (
+                    <EmptyState
+                      icon="videocam-outline"
+                      title="No Recordings Available"
+                      message="Past live session recordings and lecture archives will be published here once available."
+                    />
+                  ) : (
+                    generalRecordings.map((rec) => (
+                      <TouchableOpacity
+                        key={rec.id}
+                        style={styles.recordingRow}
+                        onPress={() => openRecordingPlayer(rec.file_url)}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.recordingTitle}>
+                            {rec.title || "Recording"}
+                          </Text>
+                          <Text style={styles.recordingDesc}>
+                            {rec.description || "Tap to play recording"}
+                          </Text>
+                        </View>
+                        <Ionicons
+                          name="play-circle-outline"
+                          size={24}
+                          color={COLORS.primary}
+                        />
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
+              </>
+            )
           )}
 
           {/* ══════════════════ TAB 3: AUDIO DARS ══════════════════ */}
           {activeTab === 'audio' && (
-            <View style={styles.infoCard} testID="course-audio-lessons">
-              <View style={styles.infoCardHeader}>
-                <View style={styles.iconCircle}>
-                  <Ionicons name="headset-outline" size={20} color={COLORS.primary} />
+            isLockedForStudent ? (
+              <View style={styles.lockedGateCard}>
+                <View style={styles.lockedGateIconCircle}>
+                  <Ionicons name="lock-closed" size={32} color="#D97706" />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.infoCardTitle}>Audio Lessons & Lectures</Text>
-                  <Text style={styles.infoCardSubValue}>Teacher-uploaded Dars summaries for revision</Text>
+                <Text style={styles.lockedGateTitle}>Audio Dars Lectures Locked</Text>
+                <Text style={styles.lockedGateArabic}>داخلہ لازمی ہے</Text>
+                <Text style={styles.lockedGateDesc}>
+                  Audio recordings and summary dars lectures uploaded by ustaadhas are restricted to enrolled students.
+                </Text>
+                <View style={styles.lockedGateActionRow}>
+                  <TouchableOpacity
+                    style={styles.lockedGatePrimaryBtn}
+                    onPress={() => router.push('/payment')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="card-outline" size={16} color="#FFF" />
+                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fees & Request Enrollment</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.lockedGateSecondaryBtn}
+                    onPress={() => router.push('/(tabs)/chats')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="chatbubbles-outline" size={16} color={COLORS.primary} />
+                    <Text style={styles.lockedGateSecondaryBtnText}>Contact Administration</Text>
+                  </TouchableOpacity>
                 </View>
-                {isReviewer ? (
-                  <View style={styles.audioHeaderActions}>
-                    <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioUploadModal}>
-                      <Ionicons name="link-outline" size={16} color={COLORS.goldText} />
-                      <Text style={styles.audioUploadBtnText}>Add Link</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
               </View>
-              <TextInput
-                value={audioSearch}
-                onChangeText={setAudioSearch}
-                placeholder="Search audio lessons by title..."
-                placeholderTextColor={COLORS.textMuted}
-                style={styles.audioSearchInput}
-              />
-              {activeAudioLesson ? (
-                <View style={styles.audioPlayerCard}>
-                  <Text style={styles.audioPlayerTitle} numberOfLines={1}>{activeAudioLesson.title}</Text>
-                  <Text style={styles.audioPlayerMeta}>{formatAudioDuration(audioPosition)} / {formatAudioDuration(audioDuration || activeAudioLesson.duration)}</Text>
-                  <View style={styles.audioProgressTrack}>
-                    <View style={[styles.audioProgressFill, { width: `${Math.min(100, Math.max(0, (audioPosition / Math.max(1, audioDuration || activeAudioLesson.duration)) * 100))}%` }]} />
+            ) : (
+              <View style={styles.infoCard} testID="course-audio-lessons">
+                <View style={styles.infoCardHeader}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="headset-outline" size={20} color={COLORS.primary} />
                   </View>
-                  <View style={styles.audioControlRow}>
-                    <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(-15)}>
-                      <Ionicons name="play-back" size={18} color={COLORS.primary} />
-                      <Text style={styles.audioControlText}>15s</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.audioMainControlBtn} onPress={audioPlaying ? pauseAudioLesson : () => playAudioLesson(activeAudioLesson)}>
-                      <Ionicons name={audioPlaying ? "pause" : "play"} size={20} color="#fff" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(15)}>
-                      <Text style={styles.audioControlText}>15s</Text>
-                      <Ionicons name="play-forward" size={18} color={COLORS.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.audioControlBtn} onPress={() => downloadAudioLesson(activeAudioLesson)}>
-                      <Ionicons name="download-outline" size={18} color={COLORS.primary} />
-                    </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoCardTitle}>Audio Lessons & Lectures</Text>
+                    <Text style={styles.infoCardSubValue}>Teacher-uploaded Dars summaries for revision</Text>
                   </View>
+                  {isReviewer ? (
+                    <View style={styles.audioHeaderActions}>
+                      <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioUploadModal}>
+                        <Ionicons name="link-outline" size={16} color={COLORS.goldText} />
+                        <Text style={styles.audioUploadBtnText}>Add Link</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
                 </View>
-              ) : null}
-              {loadingAudioLessons && audioLessons.length === 0 ? (
-                <ActivityIndicator size="small" color={COLORS.primary} />
-              ) : audioLessons.length === 0 ? (
-                <EmptyState
-                  icon="headset-outline"
-                  title="No Audio Lectures"
-                  message="Revision podcasts and audio summaries will be shared here by your instructor."
+                <TextInput
+                  value={audioSearch}
+                  onChangeText={setAudioSearch}
+                  placeholder="Search audio lessons by title..."
+                  placeholderTextColor={COLORS.textMuted}
+                  style={styles.audioSearchInput}
                 />
-              ) : (
-                audioLessons.map((lesson) => (
-                  <View key={lesson.id} style={styles.audioLessonRow}>
-                    <TouchableOpacity style={styles.audioLessonPlayArea} onPress={() => playAudioLesson(lesson)}>
-                      <Ionicons name={activeAudioLesson?.id === lesson.id && audioPlaying ? "pause-circle" : "play-circle-outline"} size={28} color={COLORS.primary} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.recordingTitle}>{lesson.title}</Text>
-                        <Text style={styles.recordingDesc}>By {getAudioLessonTeacherName(lesson.teacher_id)} • {formatAudioUploadDate(lesson.upload_date)}</Text>
-                        <Text style={styles.recordingDesc}>{formatAudioDuration(lesson.duration)} • {formatFileSize(lesson.file_size)}</Text>
-                        {lesson.description ? <Text style={styles.recordingDesc} numberOfLines={2}>{lesson.description}</Text> : null}
-                      </View>
-                    </TouchableOpacity>
-                    <View style={styles.audioLessonActions}>
-                      <TouchableOpacity style={styles.audioIconBtn} onPress={() => downloadAudioLesson(lesson)}>
+                {activeAudioLesson ? (
+                  <View style={styles.audioPlayerCard}>
+                    <Text style={styles.audioPlayerTitle} numberOfLines={1}>{activeAudioLesson.title}</Text>
+                    <Text style={styles.audioPlayerMeta}>{formatAudioDuration(audioPosition)} / {formatAudioDuration(audioDuration || activeAudioLesson.duration)}</Text>
+                    <View style={styles.audioProgressTrack}>
+                      <View style={[styles.audioProgressFill, { width: `${Math.min(100, Math.max(0, (audioPosition / Math.max(1, audioDuration || activeAudioLesson.duration)) * 100))}%` }]} />
+                    </View>
+                    <View style={styles.audioControlRow}>
+                      <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(-15)}>
+                        <Ionicons name="play-back" size={18} color={COLORS.primary} />
+                        <Text style={styles.audioControlText}>15s</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.audioMainControlBtn} onPress={audioPlaying ? pauseAudioLesson : () => playAudioLesson(activeAudioLesson)}>
+                        <Ionicons name={audioPlaying ? "pause" : "play"} size={20} color="#fff" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(15)}>
+                        <Text style={styles.audioControlText}>15s</Text>
+                        <Ionicons name="play-forward" size={18} color={COLORS.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.audioControlBtn} onPress={() => downloadAudioLesson(activeAudioLesson)}>
                         <Ionicons name="download-outline" size={18} color={COLORS.primary} />
                       </TouchableOpacity>
-                      {isReviewer ? (
-                        <>
-                          <TouchableOpacity style={styles.audioIconBtn} onPress={() => openAudioEditModal(lesson)}>
-                            <Ionicons name="create-outline" size={18} color={COLORS.primary} />
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.audioIconBtn} onPress={() => confirmDeleteAudioLesson(lesson)}>
-                            <Ionicons name="trash-outline" size={18} color={COLORS.error} />
-                          </TouchableOpacity>
-                        </>
-                      ) : null}
                     </View>
                   </View>
-                ))
-              )}
-              {audioHasMore ? (
-                <TouchableOpacity style={styles.loadMoreBtn} disabled={loadingAudioLessons} onPress={() => { void loadAudioLessons(false); }}>
-                  {loadingAudioLessons ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.loadMoreText}>Load more audio lessons</Text>}
-                </TouchableOpacity>
-              ) : null}
-            </View>
+                ) : null}
+                {loadingAudioLessons && audioLessons.length === 0 ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : audioLessons.length === 0 ? (
+                  <EmptyState
+                    icon="headset-outline"
+                    title="No Audio Lectures"
+                    message="Revision podcasts and audio summaries will be shared here by your instructor."
+                  />
+                ) : (
+                  audioLessons.map((lesson) => (
+                    <View key={lesson.id} style={styles.audioLessonRow}>
+                      <TouchableOpacity style={styles.audioLessonPlayArea} onPress={() => playAudioLesson(lesson)}>
+                        <Ionicons name={activeAudioLesson?.id === lesson.id && audioPlaying ? "pause-circle" : "play-circle-outline"} size={28} color={COLORS.primary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.recordingTitle}>{lesson.title}</Text>
+                          <Text style={styles.recordingDesc}>By {getAudioLessonTeacherName(lesson.teacher_id)} • {formatAudioUploadDate(lesson.upload_date)}</Text>
+                          <Text style={styles.recordingDesc}>{formatAudioDuration(lesson.duration)} • {formatFileSize(lesson.file_size)}</Text>
+                          {lesson.description ? <Text style={styles.recordingDesc} numberOfLines={2}>{lesson.description}</Text> : null}
+                        </View>
+                      </TouchableOpacity>
+                      <View style={styles.audioLessonActions}>
+                        <TouchableOpacity style={styles.audioIconBtn} onPress={() => downloadAudioLesson(lesson)}>
+                          <Ionicons name="download-outline" size={18} color={COLORS.primary} />
+                        </TouchableOpacity>
+                        {isReviewer ? (
+                          <>
+                            <TouchableOpacity style={styles.audioIconBtn} onPress={() => openAudioEditModal(lesson)}>
+                              <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.audioIconBtn} onPress={() => confirmDeleteAudioLesson(lesson)}>
+                              <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+                            </TouchableOpacity>
+                          </>
+                        ) : null}
+                      </View>
+                    </View>
+                  ))
+                )}
+                {audioHasMore ? (
+                  <TouchableOpacity style={styles.loadMoreBtn} disabled={loadingAudioLessons} onPress={() => { void loadAudioLessons(false); }}>
+                    {loadingAudioLessons ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.loadMoreText}>Load more audio lessons</Text>}
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )
           )}
 
           {/* ══════════════════ TAB 4: CURRICULUM ══════════════════ */}
           {activeTab === 'curriculum' && (
-            <View style={styles.infoCard} testID="course-learning-structure">
-              <View style={styles.infoCardHeader}>
-                <View style={styles.iconCircle}>
-                  <Ionicons
-                    name="layers-outline"
-                    size={20}
-                    color={COLORS.primary}
-                  />
+            isLockedForStudent ? (
+              <View style={styles.lockedGateCard}>
+                <View style={styles.lockedGateIconCircle}>
+                  <Ionicons name="lock-closed" size={32} color="#D97706" />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.infoCardTitle}>Syllabus & Sabaq Lessons</Text>
-                  <Text style={styles.infoCardSubValue}>Structured course modules and assignments</Text>
+                <Text style={styles.lockedGateTitle}>Sabaq Curriculum Locked</Text>
+                <Text style={styles.lockedGateArabic}>داخلہ لازمی ہے</Text>
+                <Text style={styles.lockedGateDesc}>
+                  Structured sabaq lessons, recitation notes, and assignment submissions are reserved for enrolled students.
+                </Text>
+                <View style={styles.lockedGateActionRow}>
+                  <TouchableOpacity
+                    style={styles.lockedGatePrimaryBtn}
+                    onPress={() => router.push('/payment')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="card-outline" size={16} color="#FFF" />
+                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fees & Request Enrollment</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.lockedGateSecondaryBtn}
+                    onPress={() => router.push('/(tabs)/chats')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="chatbubbles-outline" size={16} color={COLORS.primary} />
+                    <Text style={styles.lockedGateSecondaryBtnText}>Contact Administration</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
+            ) : (
+              <View style={styles.infoCard} testID="course-learning-structure">
+                <View style={styles.infoCardHeader}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons
+                      name="layers-outline"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoCardTitle}>Syllabus & Sabaq Lessons</Text>
+                    <Text style={styles.infoCardSubValue}>Structured course modules and assignments</Text>
+                  </View>
+                </View>
               {safeModules.length === 0 ? (
                 <EmptyState
                   icon="layers-outline"
@@ -1454,7 +1609,8 @@ export default function CourseDetailScreen() {
                 })
               )}
             </View>
-          )}
+          )
+        )}
 
           {/* Floating Bottom Quick Action */}
           <View style={styles.floatingActionRow}>
@@ -2355,5 +2511,173 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginBottom: 12,
     lineHeight: 18,
+  },
+  subjectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    padding: 10,
+  },
+  subjectIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    backgroundColor: "#ECFDF5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  subjectTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.textMain,
+  },
+  subjectSchedule: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  subjectTeacherBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(15, 169, 88, 0.1)",
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  subjectTeacherText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  enrollPromptCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1.5,
+    borderColor: "#F59E0B",
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    flexWrap: "wrap",
+  },
+  enrollPromptIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  enrollPromptTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#92400E",
+  },
+  enrollPromptSub: {
+    fontSize: 12,
+    color: "#B45309",
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  enrollPromptBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#D97706",
+    borderRadius: RADIUS.full,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    alignSelf: "flex-start",
+    marginTop: 6,
+  },
+  enrollPromptBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  lockedGateCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#FDE68A",
+    marginBottom: SPACING.lg,
+    ...SHADOWS.card,
+  },
+  lockedGateIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.md,
+  },
+  lockedGateTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.textMain,
+    textAlign: "center",
+  },
+  lockedGateArabic: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#92400E",
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  lockedGateDesc: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    lineHeight: 19,
+    marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.sm,
+  },
+  lockedGateActionRow: {
+    width: "100%",
+    gap: 10,
+  },
+  lockedGatePrimaryBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 46,
+    ...SHADOWS.card,
+  },
+  lockedGatePrimaryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  lockedGateSecondaryBtn: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 46,
+  },
+  lockedGateSecondaryBtnText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

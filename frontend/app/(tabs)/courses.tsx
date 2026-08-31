@@ -15,8 +15,10 @@ import { getPerformanceState, registerPerformanceSurface, trackPerformanceMetric
 
 const CourseCard = memo(function CourseCard({ course, index }: { course: Course; index: number }) {
   const router = useRouter();
-  const { getCourseProgress } = useData();
+  const { getCourseProgress, isEnrolledInCourse } = useData();
+  const { profile } = useAuth();
   const progress = getCourseProgress(course.id);
+  const enrolled = isEnrolledInCourse(course.id);
   
   const handlePress = () => {
     try {
@@ -30,9 +32,19 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
   const isCompleted = progress.completionPercent === 100 && (progress.totalLessons || 0) > 0;
   const isInProgress = !isCompleted && (progress.completionPercent > 0 || (progress.lessonsDone || 0) > 0);
   
-  const statusText = isCompleted ? 'COMPLETED' : (isInProgress ? 'IN PROGRESS' : 'NEW');
-  const statusBg = isCompleted ? 'rgba(16, 185, 129, 0.15)' : (isInProgress ? 'rgba(245, 158, 11, 0.15)' : 'rgba(15, 169, 88, 0.15)');
-  const statusColor = isCompleted ? '#059669' : (isInProgress ? '#D97706' : COLORS.primary);
+  let statusText = isCompleted ? 'COMPLETED' : (isInProgress ? 'IN PROGRESS' : 'NEW');
+  let statusBg = isCompleted ? 'rgba(16, 185, 129, 0.15)' : (isInProgress ? 'rgba(245, 158, 11, 0.15)' : 'rgba(15, 169, 88, 0.15)');
+  let statusColor = isCompleted ? '#059669' : (isInProgress ? '#D97706' : COLORS.primary);
+
+  if (profile?.role === 'student' && !enrolled) {
+    statusText = 'ENROLLMENT REQUIRED';
+    statusBg = 'rgba(217, 119, 6, 0.12)';
+    statusColor = '#D97706';
+  } else if (profile?.role === 'student' && enrolled) {
+    statusText = isCompleted ? 'COMPLETED' : (isInProgress ? 'ENROLLED • IN PROGRESS' : 'ENROLLED • ACTIVE');
+  }
+
+  const subjectsCount = Array.isArray(course.subjects) ? course.subjects.length : 0;
 
   return (
     <ScalePressable
@@ -53,8 +65,14 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
         <Text style={styles.courseName} numberOfLines={2}>{course.name}</Text>
         <View style={styles.teacherRow}>
           <Ionicons name="person-circle-outline" size={16} color={COLORS.secondary} />
-          <Text style={styles.teacherName} numberOfLines={1}>{course.teacher_name}</Text>
+          <Text style={styles.teacherName} numberOfLines={1}>{course.teacher_name || 'Ustaadha'}</Text>
         </View>
+        {subjectsCount > 0 ? (
+          <View style={styles.subjectsBadgeRow}>
+            <Ionicons name="book-outline" size={13} color="#059669" />
+            <Text style={styles.subjectsBadgeText}>{subjectsCount} Academic Subjects</Text>
+          </View>
+        ) : null}
         <View style={styles.progressSection}>
           <View style={styles.progressRow}>
             <Text style={styles.progressLabel}>Progress</Text>
@@ -72,14 +90,14 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
           </View>
         </View>
         <View style={styles.actionBtnRow}>
-          <View style={[styles.attendBtn, isInProgress && styles.attendBtnActive]}>
-            <Text style={[styles.attendBtnText, isInProgress && styles.attendBtnTextActive]}>
-              {isInProgress ? 'Continue Learning' : 'Open Course'}
+          <View style={[styles.attendBtn, (enrolled || isInProgress) && styles.attendBtnActive]}>
+            <Text style={[styles.attendBtnText, (enrolled || isInProgress) && styles.attendBtnTextActive]}>
+              {enrolled ? (isInProgress ? 'Continue Sabaq' : 'Enter Class') : 'View Syllabus & Overview'}
             </Text>
             <Ionicons 
-              name={isInProgress ? "play" : "arrow-forward"} 
+              name={enrolled ? (isInProgress ? "play" : "arrow-forward") : "information-circle-outline"} 
               size={14} 
-              color={isInProgress ? COLORS.surface : COLORS.primary} 
+              color={(enrolled || isInProgress) ? COLORS.surface : COLORS.primary} 
             />
           </View>
         </View>
@@ -93,25 +111,46 @@ export default function CoursesScreen() {
     if (refetch) await refetch();
   });
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { profile } = useAuth();
-  const { courses, loading, refetch, getCourseProgress } = useData();
+  const { courses, loading, refetch, getCourseProgress, isEnrolledInCourse, enrolledCourses } = useData();
   const safeCourses = useMemo(() => (Array.isArray(courses) ? courses : []), [courses]);
+  const [academicTab, setAcademicTab] = useState<'enrolled' | 'catalog'>('enrolled');
   const [search, setSearch] = useState('');
   const [teacherFilter, setTeacherFilter] = useState('all');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   const perfRef = useRef(registerPerformanceSurface({ surface: 'courses_feed', maxRendersPerMinute: 90, lowEndSafe: true }));
   
+  const isStudent = profile?.role === 'student';
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
+
+  const baseCourses = useMemo(() => {
+    if (isStudent) {
+      return academicTab === 'enrolled'
+        ? safeCourses.filter((c) => isEnrolledInCourse(c.id))
+        : safeCourses;
+    }
+    if (isTeacher) {
+      return enrolledCourses;
+    }
+    return safeCourses;
+  }, [isStudent, isTeacher, academicTab, safeCourses, isEnrolledInCourse, enrolledCourses]);
+
   const teacherOptions = useMemo(
-    () => ['all', ...Array.from(new Set(safeCourses.map((course) => String(course?.teacher_name || '').trim()).filter(Boolean)))],
-    [safeCourses],
+    () => ['all', ...Array.from(new Set(baseCourses.map((course) => String(course?.teacher_name || '').trim()).filter(Boolean)))],
+    [baseCourses],
   );
 
+  const myEnrolledCount = useMemo(() => {
+    return safeCourses.filter((c) => isEnrolledInCourse(c.id)).length;
+  }, [safeCourses, isEnrolledInCourse]);
+
   const stats = useMemo(() => {
-    let total = safeCourses.length;
+    let total = baseCourses.length;
     let active = 0;
     let completed = 0;
-    safeCourses.forEach(c => {
+    baseCourses.forEach(c => {
       const prog = getCourseProgress(c.id);
       if (prog) {
         if (prog.completionPercent === 100 && prog.totalLessons > 0) {
@@ -122,12 +161,12 @@ export default function CoursesScreen() {
       }
     });
     return { total, active, completed };
-  }, [safeCourses, getCourseProgress]);
+  }, [baseCourses, getCourseProgress]);
 
   const filteredCourses = useMemo(() => {
     perfRef.current.touch();
     const q = search.trim().toLowerCase();
-    return safeCourses.filter((course) => {
+    return baseCourses.filter((course) => {
       const safeName = String(course?.name || '').toLowerCase();
       const safeTeacher = String(course?.teacher_name || '').toLowerCase();
       const safeDescription = String(course?.description || '').toLowerCase();
@@ -135,16 +174,16 @@ export default function CoursesScreen() {
       const matchesTeacher = teacherFilter === 'all' || String(course?.teacher_name || '') === teacherFilter;
       return matchesSearch && matchesTeacher;
     });
-  }, [safeCourses, search, teacherFilter]);
+  }, [baseCourses, search, teacherFilter]);
 
   const perfState = getPerformanceState();
   if (perfState.lowEndMode && filteredCourses.length > 100) trackPerformanceMetric('courses_low_end_large_list', filteredCourses.length);
 
   const headerTitleText = useMemo(() => {
-    if (profile?.role === 'teacher') return 'Teaching Catalog';
-    if (profile?.role === 'super_admin' || profile?.founder) return 'Course Catalog';
-    return 'My Courses';
-  }, [profile?.role, profile?.founder]);
+    if (isTeacher) return 'My Teaching Classes & Subjects';
+    if (profile?.role === 'super_admin' || profile?.founder) return 'Madrasa Academic LMS';
+    return academicTab === 'enrolled' ? 'My Enrolled Classes' : 'Madrasa Course Catalog';
+  }, [isTeacher, profile?.role, profile?.founder, academicTab]);
 
   const handleClearSearch = useCallback(() => {
     setSearch('');
@@ -169,6 +208,45 @@ export default function CoursesScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Student Academic Scoping Segmented Tabs */}
+        {isStudent ? (
+          <View style={styles.segmentedTabBar}>
+            <TouchableOpacity
+              style={[styles.segmentedTab, academicTab === 'enrolled' && styles.segmentedTabActive]}
+              onPress={() => setAcademicTab('enrolled')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="school"
+                size={14}
+                color={academicTab === 'enrolled' ? COLORS.primary : COLORS.textMuted}
+              />
+              <Text
+                style={[styles.segmentedTabText, academicTab === 'enrolled' && styles.segmentedTabTextActive]}
+              >
+                My Enrolled Classes ({myEnrolledCount})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.segmentedTab, academicTab === 'catalog' && styles.segmentedTabActive]}
+              onPress={() => setAcademicTab('catalog')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="library-outline"
+                size={14}
+                color={academicTab === 'catalog' ? COLORS.primary : COLORS.textMuted}
+              />
+              <Text
+                style={[styles.segmentedTabText, academicTab === 'catalog' && styles.segmentedTabTextActive]}
+              >
+                Course Catalog ({safeCourses.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {/* Premium Statistic Chips */}
         <View style={styles.statsRow}>
           <View style={styles.statChip}>
@@ -190,7 +268,7 @@ export default function CoursesScreen() {
           <Ionicons name="search-outline" size={18} color={isSearchFocused ? COLORS.primary : COLORS.textMuted} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search courses, instructors, or subjects..."
+            placeholder="Search classes, ustaadha, or subjects..."
             placeholderTextColor={COLORS.textMuted}
             value={search}
             onChangeText={setSearch}
@@ -207,40 +285,42 @@ export default function CoursesScreen() {
         </View>
 
         {/* Improved Teacher Filter Chips */}
-        <FlatList
-          data={teacherOptions}
-          horizontal
-          keyExtractor={(item) => item}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.teacherFilterList}
-          renderItem={({ item }) => {
-            const selected = teacherFilter === item;
-            return (
-              <TouchableOpacity
-                style={[styles.teacherChip, selected && styles.teacherChipSelected]}
-                onPress={() => setTeacherFilter(item)}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel={item === 'all' ? 'Filter: All Teachers' : `Filter: ${item}`}
-              >
-                {selected && <Ionicons name="checkmark" size={12} color={COLORS.surface} style={{ marginRight: 4 }} />}
-                <Text style={[styles.teacherChipText, selected && styles.teacherChipTextSelected]}>
-                  {item === 'all' ? 'All Teachers' : item}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
+        {teacherOptions.length > 2 ? (
+          <FlatList
+            data={teacherOptions}
+            horizontal
+            keyExtractor={(item) => item}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.teacherFilterList}
+            renderItem={({ item }) => {
+              const selected = teacherFilter === item;
+              return (
+                <TouchableOpacity
+                  style={[styles.teacherChip, selected && styles.teacherChipSelected]}
+                  onPress={() => setTeacherFilter(item)}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={item === 'all' ? 'Filter: All Teachers' : `Filter: ${item}`}
+                >
+                  {selected && <Ionicons name="checkmark" size={12} color={COLORS.surface} style={{ marginRight: 4 }} />}
+                  <Text style={[styles.teacherChipText, selected && styles.teacherChipTextSelected]}>
+                    {item === 'all' ? 'All Teachers' : item}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        ) : null}
       </FadeInView>
 
       {loading ? (
-        <EmptyState icon="hourglass-outline" title="Loading Catalog" message="Please wait while we fetch the learning curriculum..." />
+        <EmptyState icon="hourglass-outline" title="Loading Classes" message="Please wait while we fetch your academic curriculum..." />
       ) : filteredCourses.length === 0 ? (
         <EmptyState 
-          icon="search-outline" 
-          title={safeCourses.length === 0 ? "Curriculum Empty" : "No Matching Courses"} 
-          message={safeCourses.length === 0 ? "No courses have been published yet. Please check back later." : "We couldn't find any courses matching your search keyword or selected filter."}
-          action={safeCourses.length > 0 ? { label: "Reset Filters", onPress: handleResetFilters } : undefined}
+          icon={isStudent && academicTab === 'enrolled' ? "school-outline" : "search-outline"} 
+          title={isStudent && academicTab === 'enrolled' ? "No Enrolled Classes" : (safeCourses.length === 0 ? "Curriculum Empty" : "No Matching Courses")} 
+          message={isStudent && academicTab === 'enrolled' ? "You are not enrolled in any classes yet. Browse our Madrasa catalog or contact Administration to get enrolled." : "We couldn't find any courses matching your search keyword or selected filter."}
+          action={isStudent && academicTab === 'enrolled' ? { label: "Browse Course Catalog", onPress: () => setAcademicTab('catalog') } : (safeCourses.length > 0 ? { label: "Reset Filters", onPress: handleResetFilters } : undefined)}
         />
       ) : (
         <FlatList
@@ -423,4 +503,52 @@ const styles = StyleSheet.create({
   },
   attendBtnText: { color: COLORS.primary, fontSize: 13, fontWeight: '800' },
   attendBtnTextActive: { color: COLORS.surface },
+  segmentedTabBar: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.full,
+    padding: 4,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 4,
+  },
+  segmentedTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: RADIUS.full,
+    gap: 6,
+  },
+  segmentedTabActive: {
+    backgroundColor: COLORS.surface,
+    ...SHADOWS.card,
+  },
+  segmentedTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  segmentedTabTextActive: {
+    color: COLORS.primary,
+    fontWeight: '800',
+  },
+  subjectsBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+  },
+  subjectsBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
 });
