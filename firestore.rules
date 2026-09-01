@@ -232,14 +232,19 @@ service cloud.firestore {
     function isValidTeacherWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'title', 'courses', 'assigned_courses', 'photo_url', 'created_at', 'updated_at']
+          ['name', 'title', 'courses', 'assigned_courses', 'photo_url', 'bio', 'qualifications', 'specializations', 'experience_years', 'languages', 'created_at', 'updated_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && (!('title' in request.resource.data) || request.resource.data.title is string)
         && (!('courses' in request.resource.data) || request.resource.data.courses is list)
         && (!('assigned_courses' in request.resource.data) || request.resource.data.assigned_courses is list)
-        && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string);
+        && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string)
+        && (!('bio' in request.resource.data) || request.resource.data.bio is string)
+        && (!('experience_years' in request.resource.data) || request.resource.data.experience_years is string || request.resource.data.experience_years is number)
+        && (!('qualifications' in request.resource.data) || request.resource.data.qualifications is list || request.resource.data.qualifications is string)
+        && (!('specializations' in request.resource.data) || request.resource.data.specializations is list || request.resource.data.specializations is string)
+        && (!('languages' in request.resource.data) || request.resource.data.languages is list || request.resource.data.languages is string);
     }
 
     function isValidLibraryWrite() {

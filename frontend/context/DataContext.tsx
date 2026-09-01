@@ -59,7 +59,13 @@ export type Teacher = {
   name: string;
   title: string;
   courses: string[];
+  assigned_courses?: string[];
   photo_url?: string;
+  bio?: string;
+  qualifications?: string[] | string;
+  specializations?: string[] | string;
+  experience_years?: string | number;
+  languages?: string[] | string;
 };
 
 export type Book = {
@@ -502,7 +508,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           name: data.name || '',
           title: data.title || '',
           courses: Array.isArray(data.courses) ? data.courses : [],
+          assigned_courses: Array.isArray(data.assigned_courses) ? data.assigned_courses : undefined,
           photo_url: data.photo_url || '',
+          bio: data.bio || '',
+          qualifications: data.qualifications || undefined,
+          specializations: data.specializations || undefined,
+          experience_years: data.experience_years != null ? data.experience_years : undefined,
+          languages: data.languages || undefined,
         });
       });
 
