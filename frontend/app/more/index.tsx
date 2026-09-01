@@ -66,6 +66,7 @@ const MENU_SECTIONS: MenuSection[] = [
     items: [
       { label: 'Dar-ul-Iftaa (دار الافتاء)', subtitle: 'Private Islamic questions & official fatwa library', icon: 'ribbon-outline', route: '/fatawa', colorBg: '#FEF3C7', colorIcon: '#D97706' },
       { label: 'Islamic Flashcards (علمی فلیش کارڈز)', subtitle: 'Memorize Duas, Hadiths & Fiqh rules', icon: 'card-outline', route: '/flashcards', colorBg: '#ECFDF5', colorIcon: '#059669' },
+      { label: 'قرآن کریم (Quran with Roman Urdu)', subtitle: 'Read, Khatam & Hifz tracker — exclusive Roman Urdu!', icon: 'book-outline', route: '/quran', colorBg: '#FFF7ED', colorIcon: '#C8A84E' },
       { label: 'Applications', subtitle: 'Islamic tools and features', icon: 'apps-outline', route: '/more/applications' },
       { label: 'Attendance', subtitle: 'Track your attendance', icon: 'calendar-outline', route: '/more/attendance', colorBg: '#ECFDF5', colorIcon: '#10B981' },
       { label: 'Recordings', subtitle: 'Watch lesson recordings', icon: 'play-circle-outline', route: '/recordings' },

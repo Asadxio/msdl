@@ -490,6 +490,8 @@ export default function RootLayout() {
               <Stack.Screen name="tasbeeh" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="flashcards" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="taharat-tracker" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="quran" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="quran-reader" options={{ animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="ai-assistant" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="referral/index" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="verify-sanad" options={{ animation: 'slide_from_right' }} />
