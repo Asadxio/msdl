@@ -12,6 +12,10 @@ jest.mock('firebase/firestore', () => {
     ...actual,
     collection: jest.fn(() => ({ id: 'fatawa_questions' })),
     doc: jest.fn((col, id) => ({ id: id || 'test_doc_id', path: 'fatawa_questions/' + (id || 'test_doc_id') })),
+    getDoc: jest.fn().mockResolvedValue({
+      exists: () => true,
+      data: () => ({ student_id: 'u123', title: 'Test Question' }),
+    }),
     setDoc: jest.fn().mockResolvedValue(undefined),
     updateDoc: jest.fn().mockResolvedValue(undefined),
     query: jest.fn(),

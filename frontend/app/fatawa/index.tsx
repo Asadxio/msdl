@@ -38,6 +38,7 @@ export default function DarUlIftaaScreen() {
 
   const [activeTab, setActiveTab] = useState<'my_questions' | 'public_library'>('my_questions');
   const [selectedCategory, setSelectedCategory] = useState<FatawaCategoryKey | 'all'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [myQuestions, setMyQuestions] = useState<FatawaQuestion[]>([]);
   const [publicFatawa, setPublicFatawa] = useState<FatawaQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,6 +112,29 @@ export default function DarUlIftaaScreen() {
 
   const categoriesList = useMemo(() => Object.values(FATAWA_CATEGORIES), []);
 
+  const filteredMyQuestions = useMemo(() => {
+    if (!searchQuery.trim()) return myQuestions;
+    const q = searchQuery.toLowerCase().trim();
+    return myQuestions.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        item.question.toLowerCase().includes(q) ||
+        (item.answer && item.answer.toLowerCase().includes(q))
+    );
+  }, [myQuestions, searchQuery]);
+
+  const filteredPublicFatawa = useMemo(() => {
+    if (!searchQuery.trim()) return publicFatawa;
+    const q = searchQuery.toLowerCase().trim();
+    return publicFatawa.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        item.question.toLowerCase().includes(q) ||
+        (item.answer && item.answer.toLowerCase().includes(q)) ||
+        (item.reference_kitab && item.reference_kitab.toLowerCase().includes(q))
+    );
+  }, [publicFatawa, searchQuery]);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -120,7 +144,7 @@ export default function DarUlIftaaScreen() {
           onPress={() => goBackOrReplace(router, '/(tabs)')}
           accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={22} color={'#FFFFFF'} />
+          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.arabicHeader}>دَارُ الإِفْتَاءِ وَالإِرْشَاد</Text>
@@ -146,6 +170,24 @@ export default function DarUlIftaaScreen() {
         <Text style={styles.purdahBannerText}>
           ۱۰۰٪ مکمل پردہ اور رازداری — آپ کا سوال صرف معتمد اساتذہ تک محدود رہے گا۔
         </Text>
+      </View>
+
+      {/* Search Input Bar */}
+      <View style={styles.searchBarWrap}>
+        <Ionicons name="search-outline" size={18} color="#64748B" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="مسائل تلاش کریں (مثلاً: وضو، روزہ، نماز)..."
+          placeholderTextColor="#94A3B8"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="while-editing"
+        />
+        {searchQuery ? (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Tabs */}
@@ -220,23 +262,29 @@ export default function DarUlIftaaScreen() {
             <Text style={styles.loadingText}>لوڈ ہو رہا ہے...</Text>
           </View>
         ) : activeTab === 'my_questions' ? (
-          myQuestions.length === 0 ? (
+          filteredMyQuestions.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="chatbubbles-outline" size={48} color="#94A3B8" />
-              <Text style={styles.emptyTitle}>آپ نے ابھی تک کوئی سوال نہیں پوچھا</Text>
-              <Text style={styles.emptySubtitle}>
-                اگر آپ کو طہارت، نماز، روزہ، یا روزمرہ زندگی کا کوئی شرعی مسئلہ درپیش ہو تو نیچے دیے گئے بٹن سے بلا جھجھک پوچھیں۔
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? 'کوئی سوال نہیں ملا' : 'آپ نے ابھی تک کوئی سوال نہیں پوچھا'}
               </Text>
-              <TouchableOpacity
-                style={styles.emptyActionBtn}
-                onPress={() => setModalVisible(true)}
-              >
-                <Ionicons name="add-circle-outline" size={18} color={'#FFFFFF'} />
-                <Text style={styles.emptyActionText}>نیا مسئلہ پوچھیں</Text>
-              </TouchableOpacity>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery
+                  ? 'تلاش کے الفاظ بدل کر دوبارہ کوشش فرمائیں۔'
+                  : 'اگر آپ کو طہارت، نماز، روزہ، یا روزمرہ زندگی کا کوئی شرعی مسئلہ درپیش ہو تو نیچے دیے گئے بٹن سے بلا جھجھک پوچھیں۔'}
+              </Text>
+              {!searchQuery && (
+                <TouchableOpacity
+                  style={styles.emptyActionBtn}
+                  onPress={() => setModalVisible(true)}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.emptyActionText}>نیا مسئلہ پوچھیں</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
-            myQuestions.map((q) => {
+            filteredMyQuestions.map((q) => {
               const cat = FATAWA_CATEGORIES[q.category] || FATAWA_CATEGORIES.general;
               const isAnswered = q.status === 'answered';
 
@@ -292,16 +340,18 @@ export default function DarUlIftaaScreen() {
             })
           )
         ) : (
-          publicFatawa.length === 0 ? (
+          filteredPublicFatawa.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="book-outline" size={48} color="#94A3B8" />
-              <Text style={styles.emptyTitle}>اس کیٹیگری میں ابھی کوئی فتویٰ موجود نہیں ہے</Text>
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? 'اس تلاش کے مطابق کوئی فتویٰ نہیں ملا' : 'اس کیٹیگری میں ابھی کوئی فتویٰ موجود نہیں ہے'}
+              </Text>
               <Text style={styles.emptySubtitle}>
-                دیگر شعبہ جات منتخب کریں یا بعد میں ملاحظہ فرمائیں۔
+                دیگر شعبہ جات منتخب کریں یا تلاش کے الفاظ تبدیل کریں۔
               </Text>
             </View>
           ) : (
-            publicFatawa.map((q) => {
+            filteredPublicFatawa.map((q) => {
               const cat = FATAWA_CATEGORIES[q.category] || FATAWA_CATEGORIES.general;
 
               return (
@@ -346,7 +396,7 @@ export default function DarUlIftaaScreen() {
         activeOpacity={0.85}
         accessibilityLabel="Ask a question"
       >
-        <Ionicons name="add" size={24} color={'#FFFFFF'} />
+        <Ionicons name="add" size={24} color="#FFFFFF" />
         <Text style={styles.floatingAskText}>مسئلہ پوچھیں</Text>
       </TouchableOpacity>
 
@@ -438,10 +488,10 @@ export default function DarUlIftaaScreen() {
                 disabled={submitting}
               >
                 {submitting ? (
-                  <ActivityIndicator color={'#FFFFFF'} />
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <>
-                    <Ionicons name="paper-plane" size={18} color={'#FFFFFF'} />
+                    <Ionicons name="paper-plane" size={18} color="#FFFFFF" />
                     <Text style={styles.submitBtnText}>دار الافتاء کو ارسال کریں</Text>
                   </>
                 )}
@@ -522,11 +572,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
   },
+  searchBarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: SPACING.md,
+    marginVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: '#0F172A',
+  },
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     marginHorizontal: SPACING.md,
-    marginTop: 8,
+    marginTop: 4,
     borderRadius: RADIUS.lg,
     padding: 4,
   },

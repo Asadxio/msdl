@@ -233,6 +233,8 @@ export async function answerFatawaQuestion(params: {
   }
 
   const docRef = doc(db, 'fatawa_questions', params.questionId);
+  const snap = await getDoc(docRef);
+
   await updateDoc(docRef, {
     answer,
     answered_by_uid: params.teacherUid,
@@ -243,4 +245,26 @@ export async function answerFatawaQuestion(params: {
     status: 'answered',
     updated_at: serverTimestamp(),
   });
+
+  if (snap.exists()) {
+    const qData = snap.data() as FatawaQuestion;
+    if (qData.student_id) {
+      try {
+        const notifRef = doc(collection(db, 'notifications'));
+        await setDoc(notifRef, {
+          id: notifRef.id,
+          recipient_id: qData.student_id,
+          user_id: qData.student_id,
+          type: 'fatwa_answered',
+          title: 'شرعی مسئلہ کا جواب (Fatwa Answered)',
+          body: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
+          route: `/fatawa/${params.questionId}`,
+          read: false,
+          created_at: serverTimestamp(),
+        });
+      } catch (err) {
+        console.warn('[Fatawa] Notification write skipped:', err);
+      }
+    }
+  }
 }

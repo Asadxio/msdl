@@ -6,14 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Share,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 import { FATAWA_CATEGORIES, FatawaQuestion } from '@/lib/fatawa';
+import { isFatwaBookmarked, toggleFatwaBookmark } from '@/lib/fatawaBookmarks';
 import { goBackOrReplace } from '@/lib/navigation';
 
 export default function FatawaDetailScreen() {
@@ -23,9 +27,13 @@ export default function FatawaDetailScreen() {
 
   const [question, setQuestion] = useState<FatawaQuestion | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!id) return;
+    isFatwaBookmarked(id).then(setBookmarked);
+
     const unsub = onSnapshot(doc(db, 'fatawa_questions', id), (docSnap) => {
       if (docSnap.exists()) {
         setQuestion(docSnap.data() as FatawaQuestion);
@@ -35,6 +43,51 @@ export default function FatawaDetailScreen() {
 
     return () => unsub();
   }, [id]);
+
+  const handleBookmarkToggle = async () => {
+    if (!id) return;
+    const newState = await toggleFatwaBookmark(id);
+    setBookmarked(newState);
+    Alert.alert(
+      newState ? 'محفوظ ہوگیا (Bookmarked)' : 'بک مارک ہٹا دیا گیا',
+      newState
+        ? 'یہ فتویٰ آپ کے محفوظ شدہ مسائل میں شامل کر دیا گیا ہے۔'
+        : 'یہ فتویٰ محفوظ شدہ لسٹ سے ہٹا دیا گیا ہے۔'
+    );
+  };
+
+  const handleCopyFatwa = async () => {
+    if (!question) return;
+    const textToCopy =
+      'دار الافتاء و الارشاد — مدرسۃ السالکات للبنات\n\n' +
+      'عنوان: ' + question.title + '\n' +
+      'السؤال: ' + question.question + '\n\n' +
+      'الجواب وباللہ التوفیق:\n' + (question.answer || 'زیرِ غور') + '\n\n' +
+      'حوالہ: ' + (question.reference_kitab || 'کتبِ فقہ') + '\n' +
+      'مصدقہ: ' + (question.answered_by_name || 'استاذہ') + '\n\n' +
+      'واللہ تعالیٰ اعلم بالصواب';
+    await Clipboard.setStringAsync(textToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+    Alert.alert('کاپی ہوگیا (Copied)', 'فتویٰ کا متن کامیابی کے ساتھ کاپی ہو چکا ہے۔');
+  };
+
+  const handleShareFatwa = async () => {
+    if (!question) return;
+    const shareMessage =
+      'دار الافتاء و الارشاد — مدرسۃ السالکات للبنات\n\n' +
+      'مسئلہ: ' + question.title + '\n' +
+      'سوال: ' + question.question + '\n\n' +
+      'الجواب وباللہ التوفیق:\n' + (question.answer || 'زیرِ غور') + '\n\n' +
+      'حوالہ: ' + (question.reference_kitab || 'کتبِ فقہ') + '\n\n' +
+      'واللہ تعالیٰ اعلم بالصواب\nMadrasatu-s-Salikat Lil Banat App';
+    try {
+      await Share.share({
+        message: shareMessage,
+        title: question.title,
+      });
+    } catch {}
+  };
 
   if (loading) {
     return (
@@ -69,13 +122,34 @@ export default function FatawaDetailScreen() {
           onPress={() => goBackOrReplace(router, '/fatawa')}
           accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={22} color={'#FFFFFF'} />
+          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.arabicHeader}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
           <Text style={styles.headerTitle}>Dar-ul-Iftaa Fatwa View</Text>
         </View>
-        <View style={{ width: 40 }} />
+        <View style={styles.headerActionBtns}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={handleBookmarkToggle}
+            accessibilityLabel="Bookmark fatwa"
+          >
+            <Ionicons
+              name={bookmarked ? 'bookmark' : 'bookmark-outline'}
+              size={20}
+              color={bookmarked ? '#C8A84E' : '#FFFFFF'}
+            />
+          </TouchableOpacity>
+          {isAnswered && (
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={handleShareFatwa}
+              accessibilityLabel="Share fatwa"
+            >
+              <Ionicons name="share-social-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -144,6 +218,35 @@ export default function FatawaDetailScreen() {
                 <Text style={styles.referenceValue}>{question.reference_kitab}</Text>
               </View>
             )}
+
+            {/* Action Bar (Copy & Share) */}
+            <View style={styles.actionBtnRow}>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={handleCopyFatwa}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={copied ? 'checkmark' : 'copy-outline'}
+                  size={16}
+                  color={COLORS.primary}
+                />
+                <Text style={styles.actionBtnText}>
+                  {copied ? 'کاپی ہوگیا' : 'متن کاپی کریں'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnShare]}
+                onPress={handleShareFatwa}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="share-social" size={16} color="#FFFFFF" />
+                <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>
+                  شیئر کریں (Share)
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.fatwaFooter}>
               <Text style={styles.wallahuAlam}>وَاللَّهُ تَعَالَى أَعْلَمُ بِالصَّوَاب</Text>
@@ -220,6 +323,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  headerActionBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
     padding: SPACING.md,
@@ -364,6 +480,30 @@ const styles = StyleSheet.create({
     color: '#78350F',
     fontWeight: '600',
     flex: 1,
+  },
+  actionBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5EE',
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    gap: 6,
+  },
+  actionBtnShare: {
+    backgroundColor: '#005F46',
+  },
+  actionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   fatwaFooter: {
     alignItems: 'center',
