@@ -912,10 +912,21 @@ export default function CourseDetailScreen() {
                           <Text style={styles.subjectTitle}>{sub.name}</Text>
                           {sub.schedule ? <Text style={styles.subjectSchedule}>{sub.schedule}</Text> : null}
                         </View>
-                        <View style={styles.subjectTeacherBadge}>
-                          <Ionicons name="person-outline" size={12} color={COLORS.primary} />
+                        <TouchableOpacity
+                          style={styles.subjectTeacherBadge}
+                          onPress={() => {
+                            if (sub.teacher_id) {
+                              router.push(`/chat/${sub.teacher_id}` as any);
+                            } else {
+                              router.push('/(tabs)/chats');
+                            }
+                          }}
+                          activeOpacity={0.8}
+                          accessibilityLabel={`Chat with ${sub.teacher_name || 'Ustaadha'}`}
+                        >
+                          <Ionicons name="chatbubbles-outline" size={12} color={COLORS.primary} />
                           <Text style={styles.subjectTeacherText}>{sub.teacher_name || 'Assigned Ustaadha'}</Text>
-                        </View>
+                        </TouchableOpacity>
                       </View>
                     ))}
                   </View>

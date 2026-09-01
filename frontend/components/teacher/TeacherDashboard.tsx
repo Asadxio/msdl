@@ -44,6 +44,7 @@ interface LiveClassSummary {
 interface PendingSubmission {
   id: string;
   assignment_id: string;
+  course_id?: string;
   user_id: string;
   file_name?: string;
   submitted_at?: any;
@@ -131,6 +132,7 @@ export function TeacherDashboard({
           list.push({
             id: d.id,
             assignment_id: data.assignment_id || 'Assignment',
+            course_id: data.course_id || '',
             user_id: data.user_id || 'Student',
             file_name: data.file_name || 'Submission',
             submitted_at: data.submitted_at || null,
@@ -280,7 +282,7 @@ export function TeacherDashboard({
             <TouchableOpacity
               style={styles.metricCard}
               activeOpacity={0.8}
-              onPress={() => router.push('/(tabs)/quiz' as any)}
+              onPress={() => router.push('/(tabs)/courses' as any)}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: '#FDF2F8' }]}>
                 <Ionicons name="clipboard" size={20} color="#DB2777" />
@@ -637,7 +639,7 @@ export function TeacherDashboard({
                 </View>
                 <TouchableOpacity
                   style={styles.reviewBtn}
-                  onPress={() => router.push('/(tabs)/quiz' as any)}
+                  onPress={() => (sub.course_id ? router.push(`/course/${sub.course_id}` as any) : router.push('/(tabs)/courses' as any))}
                 >
                   <Text style={styles.reviewBtnText}>Review</Text>
                 </TouchableOpacity>
