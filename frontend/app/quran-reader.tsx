@@ -2,18 +2,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, ScrollView, Share, StyleSheet,
+  ActivityIndicator, ScrollView, Share, StyleSheet,
   Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Audio } from 'expo-av';
 import { RADIUS, SPACING } from '@/constants/theme';
-import { fetchSurah, QuranAyat, SurahData } from '@/lib/quranApi';
+import {
+  fetchSurah, QuranAyat, SurahData,
+  getAyatAudioUrl, getFullSurahUrduAudioUrl,
+} from '@/lib/quranApi';
 import {
   addBookmark, incrementKhatamAyats,
-  isBookmarked, loadFontSize, loadShowRoman,
+  loadFontSize, loadShowRoman,
   removeBookmark, saveFontSize, saveLastRead, saveShowRoman,
 } from '@/lib/quranStorage';
-import { getSurahByNumber, QURAN_SURAHS } from '@/constants/quranSurahs';
+import { getSurahByNumber } from '@/constants/quranSurahs';
 
 export default function QuranReaderScreen() {
   const router = useRouter();
@@ -30,6 +34,14 @@ export default function QuranReaderScreen() {
   const [fontSize, setFontSize] = useState(22);
   const [bookmarkedAyats, setBookmarkedAyats] = useState<Set<number>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
+
+  // Audio Player State
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [playingAyatNum, setPlayingAyatNum] = useState<number | null>(null); // null = full surah or none
+  const [isFullSurahPlaying, setIsFullSurahPlaying] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
+
   const scrollRef = useRef<ScrollView>(null);
   const ayatHeights = useRef<Record<number, number>>({});
   const scrolledToInitial = useRef(false);
@@ -39,7 +51,12 @@ export default function QuranReaderScreen() {
       setShowRoman(roman);
       setFontSize(size);
     });
-  }, []);
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(() => {});
+      }
+    };
+  }, [sound]);
 
   const loadSurah = useCallback(async () => {
     setStatus('loading');
@@ -47,12 +64,9 @@ export default function QuranReaderScreen() {
       if (!surahMeta) throw new Error('Invalid surah number');
       const data = await fetchSurah(surahNum, surahMeta.blogSlug, surahMeta.englishName);
       setSurahData(data);
-      // Check if data was from cache (fetchedAt matches cache)
       setIsOffline(Date.now() - data.fetchedAt > 60000);
       setStatus('ready');
-      // Save last read
       await saveLastRead({ surahNumber: surahNum, ayatNumber: initialAyat, surahName: surahMeta.englishName, timestamp: Date.now() });
-      // Increment khatam
       await incrementKhatamAyats(1);
     } catch (err) {
       console.error('loadSurah error:', err);
@@ -76,6 +90,106 @@ export default function QuranReaderScreen() {
     }
   }, [status, surahData, initialAyat]);
 
+  // Audio Playback Handlers
+  const stopCurrentAudio = async () => {
+    if (sound) {
+      try {
+        await sound.stopAsync();
+        await sound.unloadAsync();
+      } catch (e) {
+        // ignore
+      }
+      setSound(null);
+    }
+    setIsPlayingAudio(false);
+    setPlayingAyatNum(null);
+    setIsFullSurahPlaying(false);
+  };
+
+  const playAyatAudio = async (ayatNum: number) => {
+    try {
+      setAudioLoading(true);
+      if (sound && isPlayingAudio && playingAyatNum === ayatNum) {
+        await stopCurrentAudio();
+        setAudioLoading(false);
+        return;
+      }
+      await stopCurrentAudio();
+
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+      });
+
+      const audioUrl = getAyatAudioUrl(surahNum, ayatNum);
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true }
+      );
+
+      setSound(newSound);
+      setIsPlayingAudio(true);
+      setPlayingAyatNum(ayatNum);
+      setIsFullSurahPlaying(false);
+
+      newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
+        if (!playbackStatus.isLoaded) return;
+        if (playbackStatus.didJustFinish) {
+          setIsPlayingAudio(false);
+          setPlayingAyatNum(null);
+          // Auto-play next ayat if available
+          if (surahData && ayatNum < surahData.totalAyat) {
+            playAyatAudio(ayatNum + 1);
+          }
+        }
+      });
+    } catch (error) {
+      console.warn('Audio play error:', error);
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
+  const playFullSurahAudio = async () => {
+    try {
+      setAudioLoading(true);
+      if (sound && isFullSurahPlaying) {
+        await stopCurrentAudio();
+        setAudioLoading(false);
+        return;
+      }
+      await stopCurrentAudio();
+
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+      });
+
+      const audioUrl = getFullSurahUrduAudioUrl(surahNum);
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true }
+      );
+
+      setSound(newSound);
+      setIsPlayingAudio(true);
+      setIsFullSurahPlaying(true);
+      setPlayingAyatNum(null);
+
+      newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
+        if (!playbackStatus.isLoaded) return;
+        if (playbackStatus.didJustFinish) {
+          setIsPlayingAudio(false);
+          setIsFullSurahPlaying(false);
+        }
+      });
+    } catch (error) {
+      console.warn('Full surah audio error:', error);
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
   const handleBookmarkToggle = async (ayat: QuranAyat) => {
     const key = ayat.number;
     const already = bookmarkedAyats.has(key);
@@ -93,7 +207,8 @@ export default function QuranReaderScreen() {
     Share.share({ message: text });
   };
 
-  const navigateSurah = (direction: -1 | 1) => {
+  const navigateSurah = async (direction: -1 | 1) => {
+    await stopCurrentAudio();
     const next = surahNum + direction;
     if (next >= 1 && next <= 114) {
       scrolledToInitial.current = false;
@@ -107,7 +222,7 @@ export default function QuranReaderScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.headerBtn} onPress={async () => { await stopCurrentAudio(); router.back(); }}>
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -119,15 +234,28 @@ export default function QuranReaderScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Status bar */}
+      {/* Top Controls Bar */}
       <View style={styles.statusBar}>
         <TouchableOpacity onPress={() => navigateSurah(-1)} disabled={surahNum <= 1}>
           <Ionicons name="chevron-back" size={18} color={surahNum > 1 ? '#C8A84E' : '#334155'} />
         </TouchableOpacity>
-        <Text style={styles.statusText}>
-          {surahMeta?.totalAyat} آیات • پارہ {surahMeta?.parah} • {surahMeta?.type}
-          {isOffline ? '  📴 Cache' : '  🌐 Live'}
-        </Text>
+
+        {/* Full Surah Audio Button (From user website collection) */}
+        <TouchableOpacity
+          style={[styles.audioPillBtn, isFullSurahPlaying && styles.audioPillBtnActive]}
+          onPress={playFullSurahAudio}
+          activeOpacity={0.8}
+        >
+          {audioLoading && isFullSurahPlaying ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Ionicons name={isFullSurahPlaying ? 'pause' : 'play'} size={14} color={isFullSurahPlaying ? '#FFFFFF' : '#002E23'} />
+          )}
+          <Text style={[styles.audioPillText, isFullSurahPlaying && styles.audioPillTextActive]}>
+            {isFullSurahPlaying ? 'تلاوت جاری ہے' : 'پوری سورہ آڈیو (اردو ترجمہ)'}
+          </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity onPress={() => navigateSurah(1)} disabled={surahNum >= 114}>
           <Ionicons name="chevron-forward" size={18} color={surahNum < 114 ? '#C8A84E' : '#334155'} />
         </TouchableOpacity>
@@ -150,7 +278,7 @@ export default function QuranReaderScreen() {
       ) : (
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Bismillah */}
@@ -164,35 +292,60 @@ export default function QuranReaderScreen() {
           {/* Ayats */}
           {(surahData?.ayats || []).map((ayat) => {
             const isBookmark = bookmarkedAyats.has(ayat.number);
+            const isThisAyatPlaying = isPlayingAudio && playingAyatNum === ayat.number;
+
             return (
               <View
                 key={ayat.number}
-                style={styles.ayatCard}
+                style={[styles.ayatCard, isThisAyatPlaying && styles.ayatCardPlaying]}
                 onLayout={(e) => { ayatHeights.current[ayat.number] = e.nativeEvent.layout.height; }}
               >
                 <View style={styles.ayatHeader}>
                   <View style={styles.ayatNumBadge}>
                     <Text style={styles.ayatNumText}>{ayat.number}</Text>
                   </View>
+
                   <View style={styles.ayatActions}>
-                    <TouchableOpacity onPress={() => handleBookmarkToggle(ayat)} style={styles.actionBtn}>
-                      <Ionicons name={isBookmark ? 'bookmark' : 'bookmark-outline'} size={18} color={isBookmark ? '#C8A84E' : '#94A3B8'} />
+                    {/* Audio Tilawat Play Button for this Ayat */}
+                    <TouchableOpacity
+                      onPress={() => playAyatAudio(ayat.number)}
+                      style={[styles.actionBtn, isThisAyatPlaying && styles.actionBtnActive]}
+                    >
+                      <Ionicons
+                        name={isThisAyatPlaying ? 'volume-high' : 'play-outline'}
+                        size={16}
+                        color={isThisAyatPlaying ? '#005F46' : '#64748B'}
+                      />
                     </TouchableOpacity>
+
+                    {/* Bookmark Button */}
+                    <TouchableOpacity onPress={() => handleBookmarkToggle(ayat)} style={styles.actionBtn}>
+                      <Ionicons
+                        name={isBookmark ? 'bookmark' : 'bookmark-outline'}
+                        size={16}
+                        color={isBookmark ? '#C8A84E' : '#64748B'}
+                      />
+                    </TouchableOpacity>
+
+                    {/* Share Button */}
                     <TouchableOpacity onPress={() => handleShare(ayat)} style={styles.actionBtn}>
-                      <Ionicons name="share-outline" size={18} color="#94A3B8" />
+                      <Ionicons name="share-outline" size={16} color="#64748B" />
                     </TouchableOpacity>
                   </View>
                 </View>
-                {/* Arabic */}
+
+                {/* Arabic Text */}
                 <Text style={[styles.arabicText, { fontSize }]}>{ayat.arabic}</Text>
-                {/* Roman */}
+
+                {/* Roman Urdu Transliteration (from user website) */}
                 {showRoman && ayat.roman ? (
                   <>
                     <View style={styles.divider} />
                     <Text style={styles.romanText}>{ayat.roman}</Text>
                   </>
                 ) : null}
-                {/* Urdu */}
+
+                {/* Urdu Tarjuma */}
                 {ayat.urduMeaning ? (
                   <>
                     <View style={styles.divider} />
@@ -244,28 +397,33 @@ export default function QuranReaderScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#002E23' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingBottom: 8, gap: 12 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingBottom: 6, gap: 12 },
   headerBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerArabic: { fontSize: 18, fontWeight: '900', color: '#C8A84E' },
   headerEn: { fontSize: 11, color: '#FFFFFF', fontWeight: '600' },
-  statusBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.md, paddingBottom: 8 },
-  statusText: { fontSize: 11, color: '#94A3B8', fontWeight: '600', flex: 1, textAlign: 'center' },
+  statusBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.md, paddingBottom: 8, gap: 8 },
+  audioPillBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#C8A84E', paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, gap: 6 },
+  audioPillBtnActive: { backgroundColor: '#005F46', borderWidth: 1, borderColor: '#C8A84E' },
+  audioPillText: { fontSize: 11, fontWeight: '800', color: '#002E23' },
+  audioPillTextActive: { color: '#FFFFFF' },
   centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   loadingText: { color: '#C8A84E', fontSize: 15, fontWeight: '700' },
   errorText: { color: '#EF4444', fontSize: 14, fontWeight: '700' },
   retryBtn: { backgroundColor: '#005F46', paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.lg },
   retryBtnText: { color: '#FFFFFF', fontWeight: '700' },
-  scrollContent: { paddingHorizontal: SPACING.md, gap: 12, paddingTop: 8 },
-  bismillahCard: { backgroundColor: '#003D2E', borderRadius: RADIUS.xl, padding: SPACING.lg, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(200,168,78,0.4)' },
+  scrollContent: { paddingHorizontal: SPACING.md, gap: 12, paddingTop: 4 },
+  bismillahCard: { backgroundColor: '#003D2E', borderRadius: RADIUS.xl, padding: SPACING.lg, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: 'rgba(200,168,78,0.4)' },
   bismillahText: { fontSize: 22, fontWeight: '700', color: '#C8A84E', textAlign: 'center' },
   bismillahRoman: { fontSize: 13, fontStyle: 'italic', color: '#94A3B8', textAlign: 'center' },
-  ayatCard: { backgroundColor: '#FFFFFF', borderRadius: RADIUS.xl, padding: SPACING.md, gap: 10 },
+  ayatCard: { backgroundColor: '#FFFFFF', borderRadius: RADIUS.xl, padding: SPACING.md, gap: 10, borderWidth: 1, borderColor: '#F1F5F9' },
+  ayatCardPlaying: { borderColor: '#C8A84E', backgroundColor: '#FCFBF4' },
   ayatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  ayatNumBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#003D2E', alignItems: 'center', justifyContent: 'center' },
+  ayatNumBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#003D2E', alignItems: 'center', justifyContent: 'center' },
   ayatNumText: { fontSize: 12, fontWeight: '900', color: '#C8A84E' },
-  ayatActions: { flexDirection: 'row', gap: 4 },
+  ayatActions: { flexDirection: 'row', gap: 6 },
   actionBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#F8FAFC' },
+  actionBtnActive: { backgroundColor: '#E8F5EE' },
   arabicText: { color: '#0F172A', textAlign: 'right', lineHeight: 48, fontWeight: '600' },
   divider: { height: 1, backgroundColor: '#F1F5F9' },
   romanText: { fontSize: 13, fontStyle: 'italic', color: '#4F46E5', lineHeight: 22 },

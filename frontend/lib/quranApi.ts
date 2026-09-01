@@ -181,3 +181,23 @@ export async function getDailyAyat() {
   await saveDailyAyat(daily);
   return daily;
 }
+
+// ─── Audio Helpers ───────────────────────────────────────────────────────────
+/**
+ * Returns Ayat-by-Ayat audio URL for Mishary Rashid Alafasy.
+ * Formatted as 001001.mp3 (3 digits surah + 3 digits ayat)
+ */
+export function getAyatAudioUrl(surahNumber: number, ayatNumber: number): string {
+  const sStr = String(surahNumber).padStart(3, '0');
+  const aStr = String(ayatNumber).padStart(3, '0');
+  return 'https://everyayah.com/data/Alafasy_128kbps/' + sStr + aStr + '.mp3';
+}
+
+/**
+ * Returns full surah audio with Urdu translation (from user's website archive.org collection).
+ */
+export function getFullSurahUrduAudioUrl(surahNumber: number): string {
+  const sStr = String(surahNumber).padStart(3, '0');
+  return 'https://archive.org/download/quran-arabic-to-urdu-hindi-verse-by-verse-tarjuma-audio/' + sStr + '.mp3';
+}
+
