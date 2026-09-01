@@ -553,6 +553,7 @@ export default function HomeScreen() {
              {[
                { name: 'My Courses', icon: 'book', route: '/(tabs)/courses' },
                { name: 'AI Sabaq (معاون)', icon: 'sparkles', route: '/ai-assistant' },
+               { name: 'فلیش کارڈز (یادداشت)', icon: 'card-outline', route: '/flashcards' },
                { name: 'دار الافتاء', icon: 'ribbon-outline', route: '/fatawa' },
                { name: 'دعوت و ثواب', icon: 'gift-outline', route: '/referral' },
                { name: 'Smart Tasbeeh', icon: 'finger-print', route: '/tasbeeh' },
