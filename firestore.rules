@@ -1646,5 +1646,11 @@ service cloud.firestore {
       allow update: if (isTeacherOrAdmin() || (isSignedIn() && resource.data.student_id == request.auth.uid));
       allow delete: if isAdmin();
     }
+
+    match /telemetry_errors/{errorId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
   }
 }

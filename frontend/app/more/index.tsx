@@ -110,6 +110,7 @@ const MENU_SECTIONS: MenuSection[] = [
       { label: 'Analytics Dashboard', subtitle: 'Platform-wide metrics and reports', icon: 'bar-chart-outline', route: '/admin/analytics' },
       { label: 'Moderation Queue', subtitle: 'Review flagged content and reports', icon: 'flag-outline', route: '/admin/moderation' },
       { label: 'Security Dashboard', subtitle: 'Monitor security events and access', icon: 'shield-outline', route: '/admin/security' },
+      { label: 'Live Telemetry & Errors', subtitle: 'Real-time crash & error stream', icon: 'pulse-outline', route: '/admin/telemetry', colorBg: '#FEF2F2', colorIcon: '#DC2626' },
       { label: 'Privacy Requests', subtitle: 'Review user data requests', icon: 'document-lock-outline', route: '/admin/privacy-requests' },
       { label: 'Send Push Notifications', subtitle: 'Broadcast messages to users', icon: 'notifications-outline', route: '/admin/send-push' },
     ]

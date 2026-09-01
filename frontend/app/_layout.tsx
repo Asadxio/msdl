@@ -29,6 +29,7 @@ import { isTutorialCompleted } from '@/lib/tutorialStorage';
 import { markUserEnteredApp } from '@/lib/emailVerificationAnalytics';
 import { trackEvent, type AnalyticsEventName } from '@/lib/analytics';
 import { usePresence } from '@/hooks/usePresence';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -449,66 +450,72 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-    <LanguageProvider>
-    <AuthProvider>
-      <DataProvider>
-        <AuthGate>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              animation: 'fade_from_bottom',
-              animationDuration: 220,
-              contentStyle: { backgroundColor: COLORS.background },
-            }}
-          >
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="course/[id]" />
-            <Stack.Screen name="teacher/[id]" />
-            <Stack.Screen name="book/[id]" />
-            <Stack.Screen name="chat/[id]" />
-            <Stack.Screen name="call/[id]" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="live-class/[id]" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="recordings" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="terms" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="community-guidelines" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="data-privacy" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="legal-gate" options={{ animation: 'fade' }} />
-            <Stack.Screen name="unauthorized" options={{ animation: 'fade' }} />
-            <Stack.Screen name="status" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="status-player" options={{ animation: 'fade' }} />
-            <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="qibla" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="islamic-dashboard" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="islamic-calendar" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="prayer-times" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="tasbeeh" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/payments" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/manage-academics" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/analytics" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/privacy-requests" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/moderation" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/security" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="admin/send-push" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="onboarding-entry" options={{ animation: 'fade' }} />
-            <Stack.Screen name="onboarding-first-time" options={{ animation: 'fade' }} />
-            <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
-            <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
-            <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />
-            <Stack.Screen name="auth/change-email" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="auth/forgot-password" options={{ animation: 'slide_from_right' }} />
-          </Stack>
-        </AuthGate>
-      </DataProvider>
-    </AuthProvider>
-    </LanguageProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+      <LanguageProvider>
+      <AuthProvider>
+        <DataProvider>
+          <AuthGate>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                animation: 'fade_from_bottom',
+                animationDuration: 220,
+                contentStyle: { backgroundColor: COLORS.background },
+              }}
+            >
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="course/[id]" />
+              <Stack.Screen name="teacher/[id]" />
+              <Stack.Screen name="book/[id]" />
+              <Stack.Screen name="chat/[id]" />
+              <Stack.Screen name="call/[id]" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="live-class/[id]" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="recordings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="terms" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="community-guidelines" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="data-privacy" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="legal-gate" options={{ animation: 'fade' }} />
+              <Stack.Screen name="unauthorized" options={{ animation: 'fade' }} />
+              <Stack.Screen name="status" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="status-player" options={{ animation: 'fade' }} />
+              <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="more" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="qibla" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="islamic-dashboard" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="islamic-calendar" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="prayer-times" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="tasbeeh" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="fatawa/index" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="fatawa/[id]" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="fatawa/manage" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/payments" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/manage-academics" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/analytics" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/privacy-requests" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/moderation" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/security" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/telemetry" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/send-push" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="onboarding-entry" options={{ animation: 'fade' }} />
+              <Stack.Screen name="onboarding-first-time" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/change-email" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="auth/forgot-password" options={{ animation: 'slide_from_right' }} />
+            </Stack>
+          </AuthGate>
+        </DataProvider>
+      </AuthProvider>
+      </LanguageProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
