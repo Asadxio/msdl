@@ -552,6 +552,7 @@ export default function HomeScreen() {
           <View style={styles.quickAccessGrid}>
              {[
                { name: 'My Courses', icon: 'book', route: '/(tabs)/courses' },
+               { name: 'AI Sabaq (معاون)', icon: 'sparkles', route: '/ai-assistant' },
                { name: 'دار الافتاء', icon: 'ribbon-outline', route: '/fatawa' },
                { name: 'دعوت و ثواب', icon: 'gift-outline', route: '/referral' },
                { name: 'Smart Tasbeeh', icon: 'finger-print', route: '/tasbeeh' },
