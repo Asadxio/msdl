@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getCountFromServer, query, serverTimestamp, setDoc, updateDoc, where, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -49,8 +49,10 @@ function shuffle<T>(arr: T[]): T[] {
 
 export default function QuizScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const isTeacher = profile?.role === 'teacher' || isAdmin;
   
   // App State
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -470,6 +472,26 @@ export default function QuizScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.categoryGrid}>
+            {/* Teacher / Admin AI Auto-Quiz Maker Card */}
+            {isTeacher && (
+              <TouchableOpacity
+                style={styles.aiQuizMakerBanner}
+                onPress={() => router.push('/admin/ai-quiz-maker' as any)}
+                activeOpacity={0.88}
+              >
+                <View style={styles.aiQuizMakerLeft}>
+                  <View style={styles.aiQuizMakerIcon}>
+                    <Ionicons name="sparkles" size={20} color="#C8A84E" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.aiQuizMakerTitle}>AI خودکار پرچہ ساز (AI Quiz Maker)</Text>
+                    <Text style={styles.aiQuizMakerSubtitle}>اساتذہ کے لیے ۵ سیکنڈ میں امتحانی سوالات بنائیں</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#C8A84E" />
+              </TouchableOpacity>
+            )}
+
             {QUIZ_CATEGORIES.map((cat) => {
               const count = categoryCounts[cat] || 0;
               return (
@@ -830,4 +852,41 @@ const styles = StyleSheet.create({
   answerQ: { color: COLORS.textMain, fontWeight: '800', fontSize: 15, marginBottom: 4 },
   answerLine: { color: COLORS.textMuted, fontSize: 13, fontWeight: '600' },
   scrollContent: { padding: SPACING.md, gap: 10, paddingBottom: 24 },
+  aiQuizMakerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#003D2E',
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    marginBottom: 6,
+    borderWidth: 1.5,
+    borderColor: '#C8A84E',
+    ...SHADOWS.card,
+  },
+  aiQuizMakerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  aiQuizMakerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(200, 168, 78, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiQuizMakerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  aiQuizMakerSubtitle: {
+    fontSize: 10,
+    color: '#C8A84E',
+    fontWeight: '600',
+    marginTop: 2,
+  },
 });

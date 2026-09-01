@@ -107,6 +107,7 @@ const MENU_SECTIONS: MenuSection[] = [
     colorIcon: '#E11D48',
     adminOnly: true,
     items: [
+      { label: 'AI Auto-Quiz Maker (خودکار پرچہ ساز)', subtitle: 'Generate Islamic exams in 5 seconds', icon: 'sparkles-outline', route: '/admin/ai-quiz-maker', colorBg: '#FEF3C7', colorIcon: '#D97706' },
       { label: 'Manage Academics', subtitle: 'Admin controls for academics', icon: 'school-outline', route: '/admin/manage-academics' },
       { label: 'Admin Payments', subtitle: 'Admin billing tools', icon: 'card-outline', route: '/admin/payments' },
       { label: 'Admin Users', subtitle: 'Manage registered users', icon: 'people-circle-outline', route: '/admin/users' },
