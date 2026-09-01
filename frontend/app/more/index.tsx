@@ -79,6 +79,7 @@ const MENU_SECTIONS: MenuSection[] = [
     colorBg: '#ECFDF5',
     colorIcon: '#10B981',
     items: [
+      { label: 'Sadqah-e-Jariyah & Dawat (دعوت و ثواب)', subtitle: 'Invite sisters to madrasa & earn rewards', icon: 'gift-outline', route: '/referral', colorBg: '#FDF2F8', colorIcon: '#DB2777' },
       { label: 'Pay Fees & Payments', subtitle: 'Course fees and platform support', icon: 'card-outline', route: '/payment', colorBg: '#FEF3C7', colorIcon: '#D97706' },
       { label: 'Certificates', subtitle: 'View your certificates', icon: 'ribbon-outline', route: '/(tabs)/certificate', colorBg: '#F5F3FF', colorIcon: '#7C3AED' },
       { label: 'Quiz Analytics', subtitle: 'Track your quiz performance', icon: 'stats-chart-outline', route: '/(tabs)/progress', colorBg: '#EEF2FF', colorIcon: '#4F46E5' },

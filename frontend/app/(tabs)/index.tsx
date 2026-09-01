@@ -537,6 +537,7 @@ export default function HomeScreen() {
              {[
                { name: 'My Courses', icon: 'book', route: '/(tabs)/courses' },
                { name: 'دار الافتاء', icon: 'ribbon-outline', route: '/fatawa' },
+               { name: 'دعوت و ثواب', icon: 'gift-outline', route: '/referral' },
                { name: 'Smart Tasbeeh', icon: 'finger-print', route: '/tasbeeh' },
                { name: 'Sanad / Cert', icon: 'ribbon', route: '/(tabs)/certificate' },
                { name: 'Pay Fees', icon: 'card', route: '/payment' },

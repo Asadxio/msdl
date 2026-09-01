@@ -1652,5 +1652,11 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
     }
+
+    match /referral_records/{recordId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.referrer_uid == request.auth.uid || resource.data.referee_uid == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
   }
 }

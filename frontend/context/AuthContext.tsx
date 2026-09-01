@@ -518,7 +518,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             referral_count: increment(1),
             updated_at: serverTimestamp(),
           });
-          debugLog('[SIGNUP_DEBUG] Successfully updated referrer:', referrerId);
+
+          // Write referral record
+          const recordId = 'ref_' + cred.user.uid;
+          const nameParts = safeName.split(/\s+/);
+          const maskedName = (nameParts[0] || 'طالبہ') + ' (محفوظ برائے پردہ)';
+          await setDoc(doc(db, 'referral_records', recordId), {
+            id: recordId,
+            referrer_uid: referrerId,
+            referee_uid: cred.user.uid,
+            referee_name: maskedName,
+            referral_code: normalizedCode,
+            status: 'joined',
+            created_at: serverTimestamp(),
+          });
+
+          // Send congratulations notification
+          const notifRef = doc(collection(db, 'notifications'));
+          await setDoc(notifRef, {
+            id: notifRef.id,
+            recipient_id: referrerId,
+            user_id: referrerId,
+            type: 'referral_success',
+            title: '🌸 صدقہ جاریہ کی مبارکباد (New Sister Joined)',
+            body: 'ماشاءاللہ! آپ کی دعوت سے ایک نئی بہن نے مدرسہ جوائن کر لیا ہے۔ اللہ تعالیٰ اس نیکی کو آپ کے لیے صدقہ جاریہ بنائے۔',
+            route: '/referral',
+            read: false,
+            created_at: serverTimestamp(),
+          });
+          debugLog('[SIGNUP_DEBUG] Successfully updated referrer & recorded referral:', referrerId);
         } catch (refUpErr: any) {
           debugError('[SIGNUP_DEBUG] FAILED update to referrer. Code:', refUpErr?.code, 'Message:', refUpErr?.message);
         }
