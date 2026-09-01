@@ -231,6 +231,12 @@ export default function SignupScreen() {
   const [referralCode, setReferralCode] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Age & Guardian Consent State (Phase 45A Child Safety)
+  const [ageCategory, setAgeCategory] = useState<'adult' | 'minor'>('adult');
+  const [guardianName, setGuardianName] = useState('');
+  const [guardianPhone, setGuardianPhone] = useState('');
+  const [guardianConsent, setGuardianConsent] = useState(false);
+
   // UI State
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
@@ -253,6 +259,23 @@ export default function SignupScreen() {
     if (mobile.length !== 10) return 'Mobile number must be exactly 10 digits';
     return '';
   }, [submitted, mobile]);
+
+  // Guardian Validations (for minors)
+  const guardianNameError = useMemo(() => {
+    if (ageCategory !== 'minor') return '';
+    if (!submitted || guardianName.length === 0) return '';
+    if (guardianName.trim().length < 3) return 'Parent/Guardian name must be at least 3 characters';
+    if (/\d/.test(guardianName)) return 'Guardian name cannot contain numbers';
+    return '';
+  }, [submitted, ageCategory, guardianName]);
+
+  const guardianPhoneError = useMemo(() => {
+    if (ageCategory !== 'minor') return '';
+    if (!submitted || guardianPhone.length === 0) return '';
+    if (!/^\d*$/.test(guardianPhone)) return 'Guardian mobile number must contain digits only';
+    if (guardianPhone.length !== 10) return 'Guardian mobile number must be exactly 10 digits';
+    return '';
+  }, [submitted, ageCategory, guardianPhone]);
 
   // Email Validation derived cleanly
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
@@ -292,7 +315,7 @@ export default function SignupScreen() {
 
   // Determine if form is ready to submit
   const formIsValid = useMemo(() => {
-    return (
+    const basicValid =
       name.trim().length >= 3 &&
       !/\d/.test(name) &&
       /^\d{10}$/.test(mobile) &&
@@ -300,9 +323,34 @@ export default function SignupScreen() {
       passwordValidation.isValid &&
       confirmPassword === password &&
       termsAccepted &&
-      !loading
-    );
-  }, [name, mobile, emailValid, passwordValidation.isValid, confirmPassword, password, termsAccepted, loading]);
+      !loading;
+
+    if (!basicValid) return false;
+
+    if (ageCategory === 'minor') {
+      return (
+        guardianName.trim().length >= 3 &&
+        !/\d/.test(guardianName) &&
+        /^\d{10}$/.test(guardianPhone) &&
+        guardianConsent
+      );
+    }
+
+    return true;
+  }, [
+    name,
+    mobile,
+    emailValid,
+    passwordValidation.isValid,
+    confirmPassword,
+    password,
+    termsAccepted,
+    loading,
+    ageCategory,
+    guardianName,
+    guardianPhone,
+    guardianConsent,
+  ]);
 
   useEffect(() => {
     if (!showSignupVerificationPrompt || modalShownTrackedRef.current) return;
@@ -341,7 +389,25 @@ export default function SignupScreen() {
     }
 
     try {
-      const err = await signUp(name.trim(), email.trim(), password, role, referralCode.trim());
+      const complianceData = {
+        is_minor: ageCategory === 'minor',
+        age_bracket: ageCategory === 'minor' ? 'under_18' : '18_plus',
+        ...(ageCategory === 'minor'
+          ? {
+              guardian_name: guardianName.trim(),
+              guardian_phone: guardianPhone.trim(),
+            }
+          : {}),
+      };
+
+      const err = await signUp(
+        name.trim(),
+        email.trim(),
+        password,
+        role,
+        referralCode.trim(),
+        complianceData
+      );
       if (err) setError(err);
     } catch (e: any) {
       setError(e?.message || 'Signup failed. Please try again.');
@@ -530,6 +596,124 @@ export default function SignupScreen() {
                 onChange={setRole}
                 disabled={loading}
               />
+
+              {/* 6B. Student Age Category & Child Safety (Phase 45A) */}
+              {role === 'student' && (
+                <View style={styles.ageSection}>
+                  <Text style={[styles.inputLabel, { color: colors.textMuted }]}>
+                    Student Age Group (Google Play Child Safety)
+                  </Text>
+                  <View style={styles.ageToggleRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.ageToggleBtn,
+                        ageCategory === 'adult' && styles.ageToggleBtnActive,
+                        { borderColor: colors.border }
+                      ]}
+                      onPress={() => setAgeCategory('adult')}
+                      disabled={loading}
+                    >
+                      <Ionicons
+                        name="person"
+                        size={15}
+                        color={ageCategory === 'adult' ? '#FFFFFF' : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.ageToggleText,
+                          { color: ageCategory === 'adult' ? '#FFFFFF' : colors.textMuted }
+                        ]}
+                      >
+                        18+ Years (Adult)
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.ageToggleBtn,
+                        ageCategory === 'minor' && styles.ageToggleBtnActive,
+                        { borderColor: colors.border }
+                      ]}
+                      onPress={() => setAgeCategory('minor')}
+                      disabled={loading}
+                    >
+                      <Ionicons
+                        name="school"
+                        size={15}
+                        color={ageCategory === 'minor' ? '#FFFFFF' : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.ageToggleText,
+                          { color: ageCategory === 'minor' ? '#FFFFFF' : colors.textMuted }
+                        ]}
+                      >
+                        Under 18 (Minor / Child)
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {ageCategory === 'minor' && (
+                    <View style={[styles.guardianCard, { backgroundColor: isDarkMode ? '#0E231B' : '#F0FDF4', borderColor: isDarkMode ? '#1E4D3A' : '#DCFCE7' }]}>
+                      <View style={styles.guardianCardHeader}>
+                        <Ionicons name="shield-checkmark" size={16} color="#059669" />
+                        <Text style={styles.guardianCardTitle}>Parent / Guardian Consent Required</Text>
+                      </View>
+                      <Text style={[styles.guardianCardDesc, { color: colors.textMuted }]}>
+                        For student safety and institutional supervision, parent or guardian contact details are required.
+                      </Text>
+
+                      <PremiumInput
+                        label="Parent / Guardian Full Name"
+                        leftIcon="person-circle-outline"
+                        placeholder="Enter parent or guardian name"
+                        value={guardianName}
+                        onChangeText={setGuardianName}
+                        error={guardianNameError}
+                        success={guardianName.trim().length >= 3 && !guardianNameError}
+                        disabled={loading}
+                        autoCapitalize="words"
+                        testID="signup-guardian-name-input"
+                      />
+
+                      <PremiumInput
+                        label="Parent / Guardian Mobile Number"
+                        leftIcon="call-outline"
+                        placeholder="10-digit mobile number"
+                        value={guardianPhone}
+                        onChangeText={setGuardianPhone}
+                        prefix={phonePrefix}
+                        keyboardType="numeric"
+                        error={guardianPhoneError}
+                        success={guardianPhone.length === 10 && !guardianPhoneError}
+                        disabled={loading}
+                        testID="signup-guardian-phone-input"
+                      />
+
+                      <View style={styles.consentRow}>
+                        <Pressable
+                          onPress={() => !loading && setGuardianConsent(v => !v)}
+                          style={styles.checkboxTouch}
+                          accessibilityRole="checkbox"
+                          accessibilityLabel="Parental Consent Acceptance"
+                          accessibilityState={{ checked: guardianConsent }}
+                          disabled={loading}
+                          testID="signup-guardian-consent-checkbox"
+                        >
+                          <Ionicons
+                            name={guardianConsent ? 'checkbox' : 'square-outline'}
+                            size={22}
+                            color={guardianConsent ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted}
+                          />
+                        </Pressable>
+                        <Text style={[styles.consentLabel, { color: colors.textMain }]}>
+                          I am the parent/guardian or have parental consent for this student to enroll at Madrasatu-s-Salikat Lil Banat.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
 
               {/* 7. Referral Code (Optional) */}
               <PremiumInput
@@ -1030,5 +1214,57 @@ const styles = StyleSheet.create({
     color: '#FFFFFF', 
     fontSize: 16, 
     fontWeight: '700',
+  },
+
+  // Phase 45A Age & Guardian Consent Styles
+  ageSection: {
+    gap: 8,
+    marginVertical: 4,
+  },
+  ageToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  ageToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
+  },
+  ageToggleBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  ageToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  guardianCard: {
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+    marginTop: 6,
+  },
+  guardianCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  guardianCardTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  guardianCardDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 4,
   },
 });

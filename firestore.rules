@@ -133,7 +133,7 @@ service cloud.firestore {
       return isSelf(uid)
         && hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at']
+          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -146,6 +146,10 @@ service cloud.firestore {
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
         && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
         && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
+        && (!('is_minor' in request.resource.data) || request.resource.data.is_minor is bool)
+        && (!('age_bracket' in request.resource.data) || request.resource.data.age_bracket is string)
+        && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name is string)
+        && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone is string)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
         && ((request.resource.data.role == 'assistant_teacher') ? roleOf(request.auth.uid) in ['admin', 'super_admin'] : true);
     }
@@ -932,9 +936,9 @@ service cloud.firestore {
 
     function isValidLegalAcceptance(uid) {
       return isSelf(uid)
-        && hasOnlyAllowedKeys(request.resource.data, ['accepted', 'acceptance_updated_at', 'policy_bundle_version'])
+        && hasOnlyAllowedKeys(request.resource.data, ['accepted', 'acceptance_updated_at', 'policy_bundle_version', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone'])
         && request.resource.data.accepted is map
-        && request.resource.data.accepted.keys().hasOnly(['terms', 'privacy', 'community'])
+        && request.resource.data.accepted.keys().hasOnly(['terms', 'privacy', 'community', 'minor_guardian_consent'])
         && (!('terms' in request.resource.data.accepted)
           || (request.resource.data.accepted.terms is map
             && request.resource.data.accepted.terms.version is string
@@ -947,6 +951,14 @@ service cloud.firestore {
           || (request.resource.data.accepted.community is map
             && request.resource.data.accepted.community.version is string
             && request.resource.data.accepted.community.acceptedAt is timestamp))
+        && (!('minor_guardian_consent' in request.resource.data.accepted)
+          || (request.resource.data.accepted.minor_guardian_consent is map
+            && request.resource.data.accepted.minor_guardian_consent.version is string
+            && request.resource.data.accepted.minor_guardian_consent.acceptedAt is timestamp))
+        && (!('is_minor' in request.resource.data) || request.resource.data.is_minor is bool)
+        && (!('age_bracket' in request.resource.data) || request.resource.data.age_bracket is string)
+        && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name is string)
+        && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone is string)
         && request.resource.data.acceptance_updated_at is timestamp
         && request.resource.data.policy_bundle_version is string;
     }

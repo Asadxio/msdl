@@ -61,7 +61,19 @@ type AuthContextType = {
   authLoading: boolean;
   emailVerified: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (name: string, email: string, password: string, role: OnboardingRole, referralCode?: string) => Promise<string | null>;
+  signUp: (
+    name: string,
+    email: string,
+    password: string,
+    role: OnboardingRole,
+    referralCode?: string,
+    complianceData?: {
+      is_minor?: boolean;
+      age_bracket?: string;
+      guardian_name?: string;
+      guardian_phone?: string;
+    }
+  ) => Promise<string | null>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   resendVerification: () => Promise<string | null>;
@@ -372,7 +384,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (
-    name: string, email: string, password: string, role: OnboardingRole, referralCode?: string
+    name: string,
+    email: string,
+    password: string,
+    role: OnboardingRole,
+    referralCode?: string,
+    complianceData?: {
+      is_minor?: boolean;
+      age_bracket?: string;
+      guardian_name?: string;
+      guardian_phone?: string;
+    }
   ): Promise<string | null> => {
     // Role protection - only student or teacher allowed
     const safeRole = role === 'teacher' ? 'teacher' : 'student';
@@ -441,8 +463,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           referral_count: 0,
           last_login_at: serverTimestamp(),
           created_at: serverTimestamp(),
+          is_minor: Boolean(complianceData?.is_minor),
+          age_bracket: complianceData?.age_bracket || (complianceData?.is_minor ? 'under_18' : '18_plus'),
+          ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
+          ...(complianceData?.guardian_phone ? { guardian_phone: complianceData.guardian_phone } : {}),
         });
         debugLog('[SIGNUP_DEBUG] Successfully wrote users/', cred.user.uid);
+
+        // Record auditable legal acceptance & parental consent document
+        await setDoc(doc(db, 'users', cred.user.uid, 'compliance', 'legal_acceptance'), {
+          accepted: {
+            terms: { version: '2026.1', acceptedAt: serverTimestamp() },
+            privacy: { version: '2026.1', acceptedAt: serverTimestamp() },
+            community: { version: '2026.1', acceptedAt: serverTimestamp() },
+            ...(complianceData?.is_minor ? {
+              minor_guardian_consent: { version: '2026.1', acceptedAt: serverTimestamp() },
+            } : {}),
+          },
+          acceptance_updated_at: serverTimestamp(),
+          policy_bundle_version: '2026.1',
+          is_minor: Boolean(complianceData?.is_minor),
+          age_bracket: complianceData?.age_bracket || (complianceData?.is_minor ? 'under_18' : '18_plus'),
+          ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
+          ...(complianceData?.guardian_phone ? { guardian_phone: complianceData.guardian_phone } : {}),
+        });
       } catch (userErr: any) {
         debugError('[SIGNUP_DEBUG] FAILED write to users/. Code:', userErr?.code, 'Message:', userErr?.message, 'Full:', userErr);
         throw userErr;
