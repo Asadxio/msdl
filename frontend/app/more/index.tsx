@@ -80,6 +80,7 @@ const MENU_SECTIONS: MenuSection[] = [
     colorBg: '#ECFDF5',
     colorIcon: '#10B981',
     items: [
+      { label: 'Taharat & Purity Tracker (طہارت و شرعی مسائل)', subtitle: '100% Private Islamic purity & habit tracker', icon: 'heart-outline', route: '/taharat-tracker', colorBg: '#FDF2F8', colorIcon: '#DB2777' },
       { label: 'AI Sabaq Assistant (معاونِ مطالعہ)', subtitle: '24/7 Islamic study & vocabulary assistant', icon: 'sparkles-outline', route: '/ai-assistant', colorBg: '#F0FDF4', colorIcon: '#16A34A' },
       { label: 'Sadqah-e-Jariyah & Dawat (دعوت و ثواب)', subtitle: 'Invite sisters to madrasa & earn rewards', icon: 'gift-outline', route: '/referral', colorBg: '#FDF2F8', colorIcon: '#DB2777' },
       { label: 'Pay Fees & Payments', subtitle: 'Course fees and platform support', icon: 'card-outline', route: '/payment', colorBg: '#FEF3C7', colorIcon: '#D97706' },

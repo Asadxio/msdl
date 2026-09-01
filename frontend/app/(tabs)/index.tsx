@@ -552,6 +552,7 @@ export default function HomeScreen() {
           <View style={styles.quickAccessGrid}>
              {[
                { name: 'My Courses', icon: 'book', route: '/(tabs)/courses' },
+               { name: 'طہارت و مسائل', icon: 'heart-outline', route: '/taharat-tracker' },
                { name: 'AI Sabaq (معاون)', icon: 'sparkles', route: '/ai-assistant' },
                { name: 'فلیش کارڈز (یادداشت)', icon: 'card-outline', route: '/flashcards' },
                { name: 'دار الافتاء', icon: 'ribbon-outline', route: '/fatawa' },
