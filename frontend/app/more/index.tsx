@@ -64,6 +64,7 @@ const MENU_SECTIONS: MenuSection[] = [
     colorBg: '#EEF2FF',
     colorIcon: '#4F46E5',
     items: [
+      { label: 'Dar-ul-Iftaa (دار الافتاء)', subtitle: 'Private Islamic questions & official fatwa library', icon: 'ribbon-outline', route: '/fatawa', colorBg: '#FEF3C7', colorIcon: '#D97706' },
       { label: 'Applications', subtitle: 'Islamic tools and features', icon: 'apps-outline', route: '/more/applications' },
       { label: 'Attendance', subtitle: 'Track your attendance', icon: 'calendar-outline', route: '/more/attendance', colorBg: '#ECFDF5', colorIcon: '#10B981' },
       { label: 'Recordings', subtitle: 'Watch lesson recordings', icon: 'play-circle-outline', route: '/recordings' },

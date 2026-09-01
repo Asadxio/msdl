@@ -536,6 +536,7 @@ export default function HomeScreen() {
           <View style={styles.quickAccessGrid}>
              {[
                { name: 'My Courses', icon: 'book', route: '/(tabs)/courses' },
+               { name: 'دار الافتاء', icon: 'ribbon-outline', route: '/fatawa' },
                { name: 'Smart Tasbeeh', icon: 'finger-print', route: '/tasbeeh' },
                { name: 'Sanad / Cert', icon: 'ribbon', route: '/(tabs)/certificate' },
                { name: 'Pay Fees', icon: 'card', route: '/payment' },
