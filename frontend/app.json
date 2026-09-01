@@ -74,6 +74,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-updates",
       [
         "expo-notifications",
         {
@@ -91,6 +92,14 @@
       ],
       "expo-font"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/408ebb1a-6a8c-467e-b941-44b658fe7977",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 1500
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "experiments": {
       "typedRoutes": true
     },

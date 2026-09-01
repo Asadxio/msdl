@@ -7,5 +7,6 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
     '^expo/virtual/env$': '<rootDir>/test/expoVirtualEnv.js',
+    '^expo-updates$': '<rootDir>/test/expoUpdatesMock.js',
   },
 };

@@ -64,7 +64,7 @@ export default function OnboardingFirstTime() {
 
   useEffect(() => { Animated.timing(anim, { toValue: index, duration: 380, useNativeDriver: true }).start(); }, [index]);
 
-  const appVersion = String(Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0');
+  const appVersion = String(Constants.expoConfig?.version || (Constants.manifest as any)?.version || '1.0.0');
   const storageKey = `${STORAGE_KEY_PREFIX}${appVersion}`;
 
   const finish = useCallback(async () => {
