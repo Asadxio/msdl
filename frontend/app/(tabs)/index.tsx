@@ -13,6 +13,8 @@ import { DAILY_WISDOM, MASNOON_DUAS, HADITHS, MOTIVATIONAL_QUOTES } from '@/cons
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
 import { MADRASA_WEBSITE_URL } from '@/lib/links';
+import { useLanguage } from '@/context/LanguageContext';
+import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
 
 const HIJRI_MONTH_NORMALIZATION: Record<string, string> = {
   "Dhuʻl-Qiʻdah": 'Zul Qidah', 'Dhu’l-Qi’dah': 'Zul Qidah',
@@ -48,6 +50,8 @@ export default function HomeScreen() {
     refetchLearning,
   } = useData();
 
+  const { languageName } = useLanguage();
+  const [langSheetVisible, setLangSheetVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [prayerSettings, setPrayerSettings] = useState<PrayerSettings | null>(null);
   const [now, setNow] = useState(new Date());
@@ -218,6 +222,18 @@ export default function HomeScreen() {
         {/* Section 1: Institutional Header Branding */}
         <View style={[styles.heroSection, { paddingTop: insets.top + SPACING.xs }]}>
           <View style={styles.headerActionsRow}>
+            {/* 1-Tap Language Quick Switcher */}
+            <TouchableOpacity
+              onPress={() => setLangSheetVisible(true)}
+              style={styles.langPillBtn}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Change Language"
+              activeOpacity={0.8}
+            >
+              <Ionicons name="globe-outline" size={15} color="#C8A84E" />
+              <Text style={styles.langPillText}>{languageName}</Text>
+            </TouchableOpacity>
             <View style={{ flex: 1 }} />
             <TouchableOpacity 
               onPress={() => router.push('/(tabs)/notifications')} 
@@ -618,6 +634,12 @@ export default function HomeScreen() {
         </Animated.View>
 
       </ScrollView>
+
+      {/* 1-Tap Language Switcher Modal Sheet */}
+      <LanguageSwitcherSheet
+        visible={langSheetVisible}
+        onClose={() => setLangSheetVisible(false)}
+      />
     </View>
   );
 }
@@ -643,6 +665,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
     gap: SPACING.sm,
+  },
+  langPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(200, 168, 78, 0.4)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    gap: 5,
+  },
+  langPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   headerActionBtn: {
     width: 44,

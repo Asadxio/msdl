@@ -16,6 +16,7 @@ import Constants from 'expo-constants';
 import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL } from '@/lib/links';
 import AdminHealthDashboard from '@/components/AdminHealthDashboard';
 import { useLanguage, type Language } from '@/context/LanguageContext';
+import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
 import { BugReportModal, FeatureSuggestModal, FaqModal } from '@/components/SupportModals';
 import * as Notifications from 'expo-notifications';
 import { clearQuizCounts } from '@/lib/lmsHardening';
@@ -360,8 +361,19 @@ export default function SettingsScreen() {
           </View>
         </SettingsSection>
 
-        {/* Section 2: Appearance */}
-        <SettingsSection title="Appearance" icon="color-palette-outline" defaultOpen={false}>
+        {/* Section 2: Appearance & Language */}
+        <SettingsSection title="Appearance & Language (زبان و ظاہری شکل)" icon="color-palette-outline" defaultOpen={false}>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setLangModalVisible(true)}>
+            <View style={styles.linkRowLeft}>
+              <Ionicons name="globe-outline" size={20} color={COLORS.primary} />
+              <View>
+                <Text style={styles.linkText}>App Language (ایپ کی زبان)</Text>
+                <Text style={styles.linkSubtext}>{languageName}</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.linkRow} onPress={() => setThemeModalVisible(true)}>
             <View style={styles.linkRowLeft}>
               <Ionicons name="moon-outline" size={20} color={COLORS.primary} />
@@ -692,55 +704,6 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      <Modal visible={langModalVisible} animationType="fade" transparent onRequestClose={() => setLangModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.langModalContent}>
-            <View style={styles.langModalHeader}>
-              <Text style={styles.langModalTitle}>Select App Language</Text>
-              <TouchableOpacity onPress={() => setLangModalVisible(false)} style={styles.iconBtn}>
-                <Ionicons name="close" size={22} color={COLORS.textMain} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.langModalSub}>Choose your preferred language for navigating the application / اپنی پسندیدہ زبان منتخب کریں:</Text>
-            
-            {(['en', 'ur', 'ar'] as Language[]).map((langCode) => {
-              const isSelected = language === langCode;
-              const names: Record<Language, { main: string; native: string; desc: string }> = {
-                en: { main: 'English', native: 'English', desc: 'Default interface language' },
-                ur: { main: 'Urdu', native: 'اردو', desc: 'اسلامی نصاب اور ہدایات کے لیے' },
-                ar: { main: 'Arabic', native: 'العربية', desc: 'لغة القرآن الكريم والأحاديث' },
-              };
-              const item = names[langCode];
-              return (
-                <TouchableOpacity
-                  key={langCode}
-                  style={[styles.langOptionCard, isSelected && styles.langOptionCardSelected]}
-                  onPress={async () => {
-                    await setLanguage(langCode);
-                    setLangModalVisible(false);
-                    Alert.alert('Language Updated / زبان تبدیل ہوگئی', `App language changed to ${item.native} (${item.main}).`);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.langOptionLeft}>
-                    <View style={[styles.langRadio, isSelected && styles.langRadioSelected]}>
-                      {isSelected && <View style={styles.langRadioInner} />}
-                    </View>
-                    <View>
-                      <Text style={[styles.langOptionTitle, isSelected && { color: COLORS.primary, fontWeight: '700' }]}>
-                        {item.main} — <Text style={{ fontWeight: '800' }}>{item.native}</Text>
-                      </Text>
-                      <Text style={styles.langOptionDesc}>{item.desc}</Text>
-                    </View>
-                  </View>
-                  {isSelected && <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      </Modal>
-
       <Modal visible={themeModalVisible} animationType="fade" transparent onRequestClose={() => setThemeModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.langModalContent}>
@@ -909,6 +872,7 @@ export default function SettingsScreen() {
       <BugReportModal visible={bugModalVisible} onClose={() => setBugModalVisible(false)} />
       <FeatureSuggestModal visible={featureModalVisible} onClose={() => setFeatureModalVisible(false)} />
       <FaqModal visible={faqModalVisible} onClose={() => setFaqModalVisible(false)} />
+      <LanguageSwitcherSheet visible={langModalVisible} onClose={() => setLangModalVisible(false)} />
     </View>
   );
 }
