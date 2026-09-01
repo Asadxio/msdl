@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { UIButton } from '@/components/ui';
@@ -18,6 +18,9 @@ export default function LegalGateScreen() {
     try {
       await acceptLegalDocs(user.uid, docs.map((d) => d.key));
       router.replace('/');
+    } catch (err: any) {
+      console.error('Failed to accept legal docs:', err);
+      Alert.alert('Consent Error', err?.message || 'Could not record policy acceptance. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -70,7 +73,6 @@ export default function LegalGateScreen() {
           loading={busy}
           accessibilityLabel="Accept legal documents and continue"
         />
-        {busy ? <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 8 }} /> : null}
       </View>
     </ScrollView>
   );

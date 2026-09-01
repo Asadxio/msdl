@@ -13,7 +13,9 @@ import { initPushNotifications, registerDevicePushToken } from '@/lib/pushNotifi
 import { validateConfig, getMissingConfigVars } from '@/lib/config';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
-import { getConsentStatus } from '@/lib/legal';
+import { getConsentStatus, LEGAL_DOCS } from '@/lib/legal';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { reportError } from '@/lib/errorReporter';
 import { getReleaseDiagnostics } from '@/lib/releaseDiagnostics';
 import { FullScreenLoader } from '@/components/ui';
@@ -177,7 +179,21 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       setNeedsLegalAcceptance(false);
       return;
     }
-    getConsentStatus(user.uid).then((state) => setNeedsLegalAcceptance(state.needsAcceptance)).catch(() => setNeedsLegalAcceptance(true));
+    const unsub = onSnapshot(
+      doc(db, 'users', user.uid, 'compliance', 'legal_acceptance'),
+      (snap) => {
+        const accepted = (snap.exists() ? (snap.data().accepted || {}) : {}) as Record<string, { version: string }>;
+        const requiredDocs = Object.values(LEGAL_DOCS).filter((d) => d.required);
+        const missing = requiredDocs.filter((d) => !accepted[d.key]?.version);
+        const outdated = requiredDocs.filter((d) => accepted[d.key]?.version && accepted[d.key]?.version !== d.version);
+        const needs = missing.length > 0 || outdated.length > 0;
+        setNeedsLegalAcceptance(needs);
+      },
+      () => {
+        setNeedsLegalAcceptance(false);
+      }
+    );
+    return () => unsub();
   }, [user?.uid, profileStatus]);
 
   useEffect(() => {
