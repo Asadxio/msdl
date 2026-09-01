@@ -268,7 +268,7 @@ export function TeacherDashboard({
             <TouchableOpacity
               style={styles.metricCard}
               activeOpacity={0.8}
-              onPress={() => router.push('/attendance' as any)}
+              onPress={() => router.push('/(tabs)/attendance' as any)}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: '#EFF6FF' }]}>
                 <Ionicons name="people" size={20} color="#2563EB" />
@@ -349,7 +349,7 @@ export function TeacherDashboard({
             <TouchableOpacity
               style={styles.actionCard}
               activeOpacity={0.7}
-              onPress={() => router.push('/attendance' as any)}
+              onPress={() => router.push('/(tabs)/attendance' as any)}
             >
               <View style={[styles.actionIconBox, { backgroundColor: '#F0FDF4' }]}>
                 <Ionicons name="checkbox-outline" size={20} color="#16A34A" />
@@ -527,7 +527,7 @@ export function TeacherDashboard({
                     <View style={styles.timetableActions}>
                       <TouchableOpacity
                         style={styles.timetableAttendanceBtn}
-                        onPress={() => router.push('/attendance' as any)}
+                        onPress={() => router.push('/(tabs)/attendance' as any)}
                       >
                         <Ionicons name="checkbox-outline" size={14} color={COLORS.primary} />
                         <Text style={styles.timetableAttendanceText}>Register</Text>
