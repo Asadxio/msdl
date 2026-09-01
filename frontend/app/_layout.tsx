@@ -489,6 +489,7 @@ export default function RootLayout() {
               <Stack.Screen name="prayer-times" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="tasbeeh" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="referral/index" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="verify-sanad" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="fatawa/index" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="fatawa/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="fatawa/manage" options={{ animation: 'slide_from_right' }} />

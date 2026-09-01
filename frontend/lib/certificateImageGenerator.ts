@@ -298,6 +298,8 @@ export function generateCertificateHtml(cert: QuizCertificateData, themeKey: Cer
             <span>OFFICIAL</span>
             <span>SEAL</span>
           </div>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https%3A%2F%2Fmslb.app%2Fverify-sanad%3Fid%3D${encodeURIComponent(cert.certificateId)}" style="width: 54px; height: 54px; margin-top: 6px; border: 1px solid #CBD5E1; border-radius: 4px; padding: 2px; background: #fff;" alt="Verify QR" />
+          <div style="font-size: 8px; color: #64748B; margin-top: 2px; font-weight: 600;">Scan to Verify Sanad</div>
         </div>
 
         <div class="sign-col">

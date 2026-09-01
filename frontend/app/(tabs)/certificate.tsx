@@ -10,6 +10,7 @@ import { apiUrl } from '@/lib/api';
 import { getCertificate } from '@/lib/certificateFunctions';
 import { useAuth } from '@/context/AuthContext';
 import { useData, type Course } from '@/context/DataContext';
+import { useRouter } from 'expo-router';
 import { IslamicCertificateModal } from '@/components/IslamicCertificateModal';
 import type { QuizCertificateData } from '@/lib/quizCertificate';
 
@@ -31,6 +32,7 @@ type AttendanceRow = { status?: string };
 
 export default function CertificateScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, profile } = useAuth();
   const { courses } = useData();
   const [loading, setLoading] = useState(true);
@@ -284,6 +286,16 @@ export default function CertificateScreen() {
                   {!eligible ? '⚠️ Meet eligibility requirements above to unlock certificate generation.' : '💡 Please select a course above to generate your official certificate.'}
                 </Text>
               )}
+
+              {/* Verify Any Sanad CTA */}
+              <TouchableOpacity
+                style={styles.verifySanadBtn}
+                onPress={() => router.push('/verify-sanad' as any)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="shield-checkmark-outline" size={18} color="#005F46" />
+                <Text style={styles.verifySanadBtnText}>🔍 Verify Any Sanad Online (تصدیقِ اسناد)</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -709,5 +721,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: 12,
+  },
+  verifySanadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5EE',
+    borderWidth: 1.5,
+    borderColor: '#005F46',
+    borderRadius: RADIUS.lg,
+    paddingVertical: 12,
+    gap: 8,
+    marginTop: 10,
+  },
+  verifySanadBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#005F46',
   },
 });

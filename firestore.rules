@@ -1335,9 +1335,9 @@ service cloud.firestore {
     }
 
     match /certificates/{certificateId} {
-      allow get: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow get: if true;
       allow list: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
-      allow create: if false;
+      allow create: if isTeacherOrAdmin();
       allow update, delete: if isAdmin();
     }
 

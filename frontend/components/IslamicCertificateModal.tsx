@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import type { QuizCertificateData } from '@/lib/quizCertificate';
@@ -18,6 +19,7 @@ import {
   type CertificateThemeKey,
   shareCertificatePngFile,
 } from '@/lib/certificateImageGenerator';
+import { getSanadQrCodeUrl } from '@/lib/sanadVerification';
 
 interface IslamicCertificateModalProps {
   visible: boolean;
@@ -30,6 +32,7 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
   certificate,
   onClose,
 }) => {
+  const router = useRouter();
   const [selectedTheme, setSelectedTheme] = useState<CertificateThemeKey>('emerald');
   const [sharing, setSharing] = useState(false);
 
@@ -173,13 +176,19 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
                     <Text style={[styles.certSerial, { color: currentTheme.primaryColor }]}>ID: {certificate.certificateId}</Text>
                   </View>
 
-                  {/* Official Seal Badge */}
+                  {/* Official Seal Badge & QR Code */}
                   <View style={styles.sealBox}>
                     <View style={[styles.sealCircle, { borderColor: currentTheme.secondaryColor }]}>
                       <Text style={[styles.sealStar, { color: currentTheme.secondaryColor }]}>★ MSLB ★</Text>
                       <Text style={[styles.sealText, { color: currentTheme.secondaryColor }]}>OFFICIAL</Text>
                       <Text style={[styles.sealSubText, { color: currentTheme.secondaryColor }]}>SEAL</Text>
                     </View>
+                    <Image
+                      source={{ uri: getSanadQrCodeUrl(certificate.certificateId) }}
+                      style={styles.qrImage}
+                      resizeMode="contain"
+                    />
+                    <Text style={styles.qrLabel}>Scan to Verify</Text>
                   </View>
 
                   <View style={styles.footerRight}>
@@ -191,7 +200,7 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
               </View>
             </View>
 
-            {/* ─── Share / Download Actions ─── */}
+            {/* ─── Share / Download & Verification Actions ─── */}
             <View style={styles.actionsContainer}>
               <TouchableOpacity
                 style={[styles.shareBtn, { backgroundColor: currentTheme.primaryColor }]}
@@ -207,6 +216,18 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
                     <Text style={styles.shareBtnText}>Share / Save Official Sanad</Text>
                   </>
                 )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.verifyOnlineBtn}
+                onPress={() => {
+                  onClose();
+                  router.push(`/verify-sanad?id=${encodeURIComponent(certificate.certificateId)}` as any);
+                }}
+                activeOpacity={0.88}
+              >
+                <Ionicons name="shield-checkmark" size={18} color="#005F46" />
+                <Text style={styles.verifyOnlineBtnText}>Verify Sanad Online (لائیو تصدیق)</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -508,5 +529,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#FFF',
+  },
+  qrImage: {
+    width: 44,
+    height: 44,
+    marginTop: 4,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  qrLabel: {
+    fontSize: 7,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 1,
+  },
+  verifyOnlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5EE',
+    borderWidth: 1.5,
+    borderColor: '#005F46',
+    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    gap: 8,
+    marginTop: 8,
+  },
+  verifyOnlineBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#005F46',
   },
 });
