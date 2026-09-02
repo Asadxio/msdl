@@ -50,15 +50,16 @@ export function getTodayDailyAyat(): typeof DAILY_AYAT_POOL[0] {
 
 // ─── Fetch from alquran.cloud ─────────────────────────────────────────────────
 async function fetchFromAlquranCloud(surahNumber: number): Promise<{ ayats: QuranAyat[]; arabicName: string; totalAyat: number }> {
-  const url = ALQURAN_BASE + '/surah/' + surahNumber + '/editions/quran-uthmani,ur.jalandhri';
+  const url = ALQURAN_BASE + '/surah/' + surahNumber + '/editions/quran-uthmani,ur.kanzuliman,en.transliteration';
   const resp = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!resp.ok) throw new Error('alquran.cloud fetch failed: ' + resp.status);
   const json = await resp.json();
 
-  if (!json.data || json.data.length < 2) throw new Error('Invalid API response structure');
+  if (!json.data || json.data.length < 3) throw new Error('Invalid API response structure');
 
   const arabicEdition = json.data[0];
   const urduEdition = json.data[1];
+  const transliterationEdition = json.data[2];
   const arabicName = arabicEdition.name || '';
   const totalAyat = arabicEdition.numberOfAyahs || 0;
 
@@ -66,7 +67,7 @@ async function fetchFromAlquranCloud(surahNumber: number): Promise<{ ayats: Qura
     number: a.numberInSurah,
     globalNumber: a.number,
     arabic: a.text,
-    roman: '',  // filled in later from blogspot
+    roman: transliterationEdition.ayahs[idx]?.text || '',
     urduMeaning: urduEdition.ayahs[idx]?.text || '',
     surahNumber,
     surahName: arabicEdition.englishName || '',

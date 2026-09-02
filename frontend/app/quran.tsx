@@ -9,7 +9,7 @@ import {
   TextInput, TouchableOpacity, View, ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from "@/constants/theme";
+import { COLORS, RADIUS, SPACING } from "@/constants/theme";
 import { QURAN_SURAHS, searchSurahs, TOTAL_AYAT, TOTAL_PARAHS, SurahMeta } from "@/constants/quranSurahs";
 import {
   loadLastRead, loadKhatamProgress, loadHifzProgress,
@@ -72,22 +72,26 @@ export default function QuranScreen() {
     <TouchableOpacity
       style={styles.surahRow}
       onPress={() => router.push(('/quran-reader?surah=' + item.number) as any)}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
     >
       <View style={styles.surahNumCircle}>
         <Text style={styles.surahNumText}>{item.number}</Text>
       </View>
-      <View style={{ flex: 1 }}>
-        <View style={styles.surahNameRow}>
+      <View style={styles.surahDetailsCol}>
+        <View style={styles.surahTitleRow}>
+          <Text style={styles.surahEnglishName}>{item.englishName}</Text>
           <Text style={styles.surahArabicName}>{item.arabicName}</Text>
+        </View>
+        <View style={styles.surahMetaRow}>
+          <Text style={styles.surahAyatCount}>{item.totalAyat} Verses • Para {item.parah}</Text>
           <View style={[styles.typeBadge, item.type === 'Makki' ? styles.makkiBadge : styles.madaniBadge]}>
-            <Text style={styles.typeBadgeText}>{item.type === 'Makki' ? '🕋 مکی' : '🕌 مدنی'}</Text>
+            <Text style={[styles.typeBadgeText, item.type === 'Makki' ? styles.makkiBadgeText : styles.madaniBadgeText]}>
+              {item.type}
+            </Text>
           </View>
         </View>
-        <Text style={styles.surahEnglishName}>{item.englishName}</Text>
-        <Text style={styles.surahAyatCount}>{item.totalAyat} آیات • پارہ {item.parah}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+      <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
     </TouchableOpacity>
   );
 
@@ -99,8 +103,8 @@ export default function QuranScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>قرآن کریم</Text>
-          <Text style={styles.headerSubtitle}>Roman Urdu Translation — Exclusive!</Text>
+          <Text style={styles.headerTitle}>القرآن الكريم</Text>
+          <Text style={styles.headerSubtitle}>Holy Quran with Roman Urdu & Audio</Text>
         </View>
         <View style={styles.headerBtn} />
       </View>
@@ -108,11 +112,11 @@ export default function QuranScreen() {
       {/* Tab Bar */}
       <View style={styles.tabBar}>
         {([
-          { id: 'surahs', label: 'سورتیں', icon: 'list-outline' },
-          { id: 'reader', label: 'قراءت', icon: 'book-outline' },
-          { id: 'khatam', label: 'ختم', icon: 'checkmark-circle-outline' },
-          { id: 'hifz',   label: 'حفظ',  icon: 'star-outline' },
-          { id: 'daily',  label: 'آج',   icon: 'sunny-outline' },
+          { id: 'surahs', label: 'Surahs', icon: 'list-outline' },
+          { id: 'reader', label: 'Reader', icon: 'book-outline' },
+          { id: 'khatam', label: 'Khatam', icon: 'checkmark-circle-outline' },
+          { id: 'hifz',   label: 'Hifz',  icon: 'star-outline' },
+          { id: 'daily',  label: 'Daily Ayat',   icon: 'sunny-outline' },
         ] as const).map((tab) => {
           const isSelected = activeTab === tab.id;
           return (
@@ -122,8 +126,8 @@ export default function QuranScreen() {
               onPress={() => setActiveTab(tab.id)}
               activeOpacity={0.8}
             >
-              <Ionicons name={tab.icon as any} size={13} color={isSelected ? '#002E23' : '#94A3B8'} />
-              <Text style={[styles.tabBtnText, isSelected && styles.tabBtnTextSelected]}>{tab.label}</Text>
+              <Ionicons name={tab.icon as any} size={14} color={isSelected ? '#002E23' : '#94A3B8'} />
+              <Text style={[styles.tabBtnText, isSelected && styles.tabBtnTextSelected]} numberOfLines={1}>{tab.label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -133,10 +137,10 @@ export default function QuranScreen() {
       {activeTab === 'surahs' && (
         <View style={{ flex: 1 }}>
           <View style={styles.searchBox}>
-            <Ionicons name="search" size={16} color="#94A3B8" />
+            <Ionicons name="search" size={18} color="#64748B" />
             <TextInput
               style={styles.searchInput}
-              placeholder="سورہ تلاش کریں... (Arabic, English, Number)"
+              placeholder="Search Surah (e.g. Yaseen, Baqarah, 36)..."
               placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={handleSearch}
@@ -151,13 +155,13 @@ export default function QuranScreen() {
             data={filteredSurahs}
             keyExtractor={(item) => item.number.toString()}
             renderItem={renderSurahItem}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+            contentContainerStyle={{ paddingHorizontal: SPACING.md, paddingBottom: insets.bottom + 20 }}
             showsVerticalScrollIndicator={false}
             refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             ListEmptyComponent={
               <View style={styles.emptyBox}>
                 <Ionicons name="search-outline" size={40} color="#94A3B8" />
-                <Text style={styles.emptyText}>کوئی سورہ نہیں ملی</Text>
+                <Text style={styles.emptyText}>No Surah found</Text>
               </View>
             }
           />
@@ -170,25 +174,25 @@ export default function QuranScreen() {
             <View style={styles.lastReadCard}>
               <View style={styles.lastReadIcon}><Ionicons name="bookmark" size={24} color="#C8A84E" /></View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.lastReadLabel}>آپ نے آخری بار یہاں پڑھا تھا:</Text>
+                <Text style={styles.lastReadLabel}>Last Read Position:</Text>
                 <Text style={styles.lastReadSurah}>{lastRead.surahName}</Text>
-                <Text style={styles.lastReadAyat}>آیت نمبر {lastRead.ayatNumber}</Text>
+                <Text style={styles.lastReadAyat}>Ayat #{lastRead.ayatNumber}</Text>
               </View>
               <TouchableOpacity
                 style={styles.resumeBtn}
                 onPress={() => router.push(('/quran-reader?surah=' + lastRead.surahNumber + '&ayat=' + lastRead.ayatNumber) as any)}
               >
-                <Text style={styles.resumeBtnText}>وہاں سے شروع کریں ▶</Text>
+                <Text style={styles.resumeBtnText}>Resume ▶</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.noLastReadCard}>
               <Ionicons name="book-outline" size={48} color="#C8A84E" />
-              <Text style={styles.noLastReadTitle}>قرآن شریف پڑھنا شروع کریں</Text>
-              <Text style={styles.noLastReadSubtitle}>سورتیں tab سے کوئی سورہ منتخب کریں</Text>
+              <Text style={styles.noLastReadTitle}>Start Reciting Quran</Text>
+              <Text style={styles.noLastReadSubtitle}>Select a Surah from the Surahs tab to start reading</Text>
             </View>
           )}
-          <Text style={styles.sectionLabel}>مشہور سورتیں</Text>
+          <Text style={styles.sectionLabel}>Frequently Read Surahs</Text>
           {[1, 36, 55, 67, 112, 113, 114].map((num) => {
             const s = QURAN_SURAHS[num - 1];
             return (
@@ -200,7 +204,7 @@ export default function QuranScreen() {
                 <Text style={styles.quickSurahNum}>{num}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.quickSurahArabic}>{s.arabicName}</Text>
-                  <Text style={styles.quickSurahEn}>{s.englishName} • {s.totalAyat} آیات</Text>
+                  <Text style={styles.quickSurahEn}>{s.englishName} • {s.totalAyat} Verses</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
               </TouchableOpacity>
@@ -215,44 +219,44 @@ export default function QuranScreen() {
             <View style={styles.progressRingOuter}>
               <View style={styles.progressRingInner}>
                 <Text style={styles.progressPercent}>{khatamPercent}%</Text>
-                <Text style={styles.progressLabel}>مکمل</Text>
+                <Text style={styles.progressLabel}>Done</Text>
               </View>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.khatamTitle}>ختمِ قرآن</Text>
-              <Text style={styles.khatamStat}>{khatam.ayatsRead % TOTAL_AYAT} / {TOTAL_AYAT} آیات</Text>
-              <Text style={styles.khatamStat}>مکمل ختم: {khatam.completions}x</Text>
+              <Text style={styles.khatamTitle}>Quran Khatam Tracker</Text>
+              <Text style={styles.khatamStat}>{khatam.ayatsRead % TOTAL_AYAT} / {TOTAL_AYAT} Verses Read</Text>
+              <Text style={styles.khatamStat}>Completed Khatams: {khatam.completions}x</Text>
             </View>
           </View>
           <View style={styles.khatamInfoRow}>
             <View style={styles.khatamInfoCard}>
               <Ionicons name="flame-outline" size={20} color="#EA580C" />
               <Text style={styles.khatamInfoNum}>{Math.floor((Date.now() - khatam.startedAt) / 86400000)}</Text>
-              <Text style={styles.khatamInfoLabel}>دن ہوئے</Text>
+              <Text style={styles.khatamInfoLabel}>Days Active</Text>
             </View>
             <View style={styles.khatamInfoCard}>
               <Ionicons name="trophy-outline" size={20} color="#C8A84E" />
               <Text style={styles.khatamInfoNum}>{khatam.completions}</Text>
-              <Text style={styles.khatamInfoLabel}>ختم مکمل</Text>
+              <Text style={styles.khatamInfoLabel}>Khatams</Text>
             </View>
             <View style={styles.khatamInfoCard}>
               <Ionicons name="book-outline" size={20} color="#005F46" />
               <Text style={styles.khatamInfoNum}>{khatam.ayatsRead}</Text>
-              <Text style={styles.khatamInfoLabel}>کل آیات</Text>
+              <Text style={styles.khatamInfoLabel}>Total Verses</Text>
             </View>
           </View>
-          <Text style={styles.khatamTip}>💡 قرآن Reader میں آیات پڑھنے سے یہ counter خودبخود بڑھتا ہے۔</Text>
+          <Text style={styles.khatamTip}>💡 Reading ayats in the Quran Reader automatically increases this tracker.</Text>
         </ScrollView>
       )}
 
       {activeTab === 'hifz' && hifz && (
         <ScrollView contentContainerStyle={[styles.tabContent, { paddingBottom: insets.bottom + 20 }]}>
           <View style={styles.hifzHeader}>
-            <Text style={styles.hifzTitle}>حفظِ قرآن — {hifz.completedParahs.length}/{TOTAL_PARAHS} پارے</Text>
+            <Text style={styles.hifzTitle}>Hifz Tracker — {hifz.completedParahs.length}/{TOTAL_PARAHS} Paras Memorized</Text>
             <View style={styles.hifzProgressBar}>
               <View style={[styles.hifzProgressFill, { width: (hifzPercent + '%') as any }]} />
             </View>
-            <Text style={styles.hifzPercent}>{hifzPercent}% مکمل</Text>
+            <Text style={styles.hifzPercent}>{hifzPercent}% Completed</Text>
           </View>
           {Array.from({ length: 30 }, (_, i) => i + 1).map((paraNum) => {
             const done = hifz.completedParahs.includes(paraNum);
@@ -267,7 +271,7 @@ export default function QuranScreen() {
                   <Text style={[styles.paraNumText, done && { color: '#FFFFFF' }]}>{paraNum}</Text>
                 </View>
                 <Text style={[styles.paraLabel, done && { color: '#005F46', fontWeight: '800' }]}>
-                  پارہ {paraNum}
+                  Para {paraNum} (پارہ {paraNum})
                 </Text>
                 <Ionicons
                   name={done ? 'checkmark-circle' : 'ellipse-outline'}
@@ -285,13 +289,13 @@ export default function QuranScreen() {
           {loadingDailyAyat ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="large" color="#C8A84E" />
-              <Text style={styles.loadingText}>آج کی آیت لوڈ ہو رہی ہے...</Text>
+              <Text style={styles.loadingText}>Loading Daily Ayat...</Text>
             </View>
           ) : dailyAyat ? (
             <>
               <View style={styles.dailyBadge}>
                 <Ionicons name="sunny" size={16} color="#C8A84E" />
-                <Text style={styles.dailyBadgeText}>آج کی آیت — {new Date().toLocaleDateString('ur-PK')}</Text>
+                <Text style={styles.dailyBadgeText}>Daily Ayat — {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
               </View>
               <View style={styles.dailyAyatCard}>
                 <Text style={styles.dailyArabic}>{dailyAyat.arabic}</Text>
@@ -299,27 +303,27 @@ export default function QuranScreen() {
                 <Text style={styles.dailyRoman}>{dailyAyat.roman}</Text>
                 <View style={styles.divider} />
                 <Text style={styles.dailyUrdu}>{dailyAyat.urduMeaning}</Text>
-                <Text style={styles.dailySurahRef}>— {dailyAyat.surahName}, آیت {dailyAyat.ayatNumber}</Text>
+                <Text style={styles.dailySurahRef}>— {dailyAyat.surahName}, Ayat #{dailyAyat.ayatNumber}</Text>
               </View>
               <TouchableOpacity
                 style={styles.shareBtn}
                 onPress={() => Share.share({ message: dailyAyat.arabic + '\n\n' + dailyAyat.roman + '\n\n' + dailyAyat.urduMeaning + '\n\n— ' + dailyAyat.surahName + ' (' + dailyAyat.ayatNumber + ')\n\nMSDL App' })}
               >
                 <Ionicons name="share-social-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.shareBtnText}>WhatsApp / Instagram پر Share کریں</Text>
+                <Text style={styles.shareBtnText}>Share on WhatsApp / Social</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.readFullBtn}
                 onPress={() => router.push(('/quran-reader?surah=' + dailyAyat.surahNumber + '&ayat=' + dailyAyat.ayatNumber) as any)}
               >
                 <Ionicons name="book-outline" size={18} color="#005F46" />
-                <Text style={styles.readFullBtnText}>پوری سورہ پڑھیں</Text>
+                <Text style={styles.readFullBtnText}>Read Full Surah</Text>
               </TouchableOpacity>
             </>
           ) : (
             <View style={styles.loadingBox}>
               <Ionicons name="wifi-outline" size={40} color="#94A3B8" />
-              <Text style={styles.loadingText}>آج کی آیت لوڈ نہیں ہو سکی</Text>
+              <Text style={styles.loadingText}>Could not load daily ayat</Text>
             </View>
           )}
         </ScrollView>
@@ -333,27 +337,31 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingBottom: 10, gap: 12 },
   headerBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '900', color: '#C8A84E' },
-  headerSubtitle: { fontSize: 10, color: '#FFFFFF', fontWeight: '600' },
-  tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.2)', marginHorizontal: SPACING.md, marginBottom: 8, borderRadius: RADIUS.lg, padding: 3, gap: 3 },
-  tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: RADIUS.md, gap: 4 },
+  headerTitle: { fontSize: 18, fontWeight: '900', color: '#C8A84E' },
+  headerSubtitle: { fontSize: 11, color: '#FFFFFF', fontWeight: '500', marginTop: 2 },
+  tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.2)', marginHorizontal: SPACING.md, marginBottom: 12, borderRadius: RADIUS.lg, padding: 4, gap: 4 },
+  tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: RADIUS.md, gap: 4 },
   tabBtnSelected: { backgroundColor: '#C8A84E' },
-  tabBtnText: { fontSize: 10, fontWeight: '700', color: '#94A3B8' },
+  tabBtnText: { fontSize: 11, fontWeight: '700', color: '#94A3B8' },
   tabBtnTextSelected: { color: '#002E23', fontWeight: '900' },
   tabContent: { padding: SPACING.md, gap: 14 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', marginHorizontal: SPACING.md, marginBottom: 8, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 10, gap: 10 },
-  searchInput: { flex: 1, fontSize: 13, color: '#0F172A' },
-  surahRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: SPACING.md, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', gap: 12 },
-  surahNumCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#003D2E', alignItems: 'center', justifyContent: 'center' },
-  surahNumText: { fontSize: 13, fontWeight: '900', color: '#C8A84E' },
-  surahNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  surahArabicName: { fontSize: 16, fontWeight: '800', color: '#0F172A', flex: 1 },
-  surahEnglishName: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  surahAyatCount: { fontSize: 10, color: '#94A3B8', marginTop: 2 },
-  typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADIUS.sm },
-  makkiBadge: { backgroundColor: '#E8F5EE' },
-  madaniBadge: { backgroundColor: '#EFF6FF' },
-  typeBadgeText: { fontSize: 9, fontWeight: '800' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', marginHorizontal: SPACING.md, marginBottom: 12, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
+  searchInput: { flex: 1, fontSize: 14, color: '#0F172A' },
+  surahRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 16, marginBottom: 10, gap: 14, borderWidth: 1, borderColor: '#F1F5F9' },
+  surahNumCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#E8F5EE', alignItems: 'center', justifyContent: 'center' },
+  surahNumText: { fontSize: 14, fontWeight: '900', color: '#005F46' },
+  surahDetailsCol: { flex: 1, gap: 4 },
+  surahTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  surahEnglishName: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  surahArabicName: { fontSize: 18, fontWeight: '800', color: '#005F46' },
+  surahMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  surahAyatCount: { fontSize: 12, color: '#64748B', fontWeight: '500' },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  makkiBadge: { backgroundColor: '#FEF3C7' },
+  madaniBadge: { backgroundColor: '#EEF2FF' },
+  typeBadgeText: { fontSize: 10, fontWeight: '800' },
+  makkiBadgeText: { color: '#B45309' },
+  madaniBadgeText: { color: '#4338CA' },
   emptyBox: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { color: '#94A3B8', fontSize: 14 },
   lastReadCard: { backgroundColor: '#003D2E', borderRadius: RADIUS.xl, padding: SPACING.md, flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1.5, borderColor: '#C8A84E' },
@@ -401,7 +409,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#F1F5F9' },
   dailyRoman: { fontSize: 15, fontStyle: 'italic', color: '#4F46E5', lineHeight: 24 },
   dailyUrdu: { fontSize: 16, color: '#334155', textAlign: 'right', lineHeight: 28 },
-  dailySurahRef: { fontSize: 12, color: '#94A3B8', fontWeight: '600', textAlign: 'right' },
+  dailySurahRef: { fontSize: 12, color: '#64748B', fontWeight: '600', textAlign: 'right' },
   shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#25D366', borderRadius: RADIUS.lg, padding: 14, gap: 8 },
   shareBtnText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   readFullBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F5EE', borderRadius: RADIUS.lg, padding: 14, gap: 8, borderWidth: 1, borderColor: '#005F46' },

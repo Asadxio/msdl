@@ -335,22 +335,28 @@ export default function QuranReaderScreen() {
                 </View>
 
                 {/* Arabic Text */}
-                <Text style={[styles.arabicText, { fontSize }]}>{ayat.arabic}</Text>
+                <Text style={[styles.arabicText, { fontSize, lineHeight: fontSize * 2 }]}>{ayat.arabic}</Text>
 
-                {/* Roman Urdu Transliteration (from user website) */}
+                {/* Roman Urdu Transliteration Section */}
                 {showRoman && ayat.roman ? (
-                  <>
-                    <View style={styles.divider} />
+                  <View style={styles.romanContainer}>
+                    <View style={styles.sectionHeaderBadge}>
+                      <Ionicons name="text-outline" size={12} color="#4F46E5" />
+                      <Text style={styles.sectionBadgeLabel}>Roman</Text>
+                    </View>
                     <Text style={styles.romanText}>{ayat.roman}</Text>
-                  </>
+                  </View>
                 ) : null}
 
-                {/* Urdu Tarjuma */}
+                {/* Urdu Tarjuma Section */}
                 {ayat.urduMeaning ? (
-                  <>
-                    <View style={styles.divider} />
+                  <View style={styles.urduContainer}>
+                    <View style={styles.sectionHeaderBadge}>
+                      <Ionicons name="book-outline" size={12} color="#005F46" />
+                      <Text style={[styles.sectionBadgeLabel, { color: '#005F46' }]}>اردو ترجمہ</Text>
+                    </View>
                     <Text style={styles.urduText}>{ayat.urduMeaning}</Text>
-                  </>
+                  </View>
                 ) : null}
               </View>
             );
@@ -416,18 +422,21 @@ const styles = StyleSheet.create({
   bismillahCard: { backgroundColor: '#003D2E', borderRadius: RADIUS.xl, padding: SPACING.lg, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: 'rgba(200,168,78,0.4)' },
   bismillahText: { fontSize: 22, fontWeight: '700', color: '#C8A84E', textAlign: 'center' },
   bismillahRoman: { fontSize: 13, fontStyle: 'italic', color: '#94A3B8', textAlign: 'center' },
-  ayatCard: { backgroundColor: '#FFFFFF', borderRadius: RADIUS.xl, padding: SPACING.md, gap: 10, borderWidth: 1, borderColor: '#F1F5F9' },
-  ayatCardPlaying: { borderColor: '#C8A84E', backgroundColor: '#FCFBF4' },
-  ayatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  ayatNumBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#003D2E', alignItems: 'center', justifyContent: 'center' },
-  ayatNumText: { fontSize: 12, fontWeight: '900', color: '#C8A84E' },
-  ayatActions: { flexDirection: 'row', gap: 6 },
-  actionBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#F8FAFC' },
-  actionBtnActive: { backgroundColor: '#E8F5EE' },
-  arabicText: { color: '#0F172A', textAlign: 'right', lineHeight: 48, fontWeight: '600' },
-  divider: { height: 1, backgroundColor: '#F1F5F9' },
-  romanText: { fontSize: 13, fontStyle: 'italic', color: '#4F46E5', lineHeight: 22 },
-  urduText: { fontSize: 14, color: '#334155', textAlign: 'right', lineHeight: 26 },
+  ayatCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, gap: 14, borderWidth: 1, borderColor: '#F1F5F9', ...SHADOWS.card, shadowOpacity: 0.05 },
+  ayatCardPlaying: { borderColor: '#C8A84E', backgroundColor: '#FFFDF5', borderWidth: 1.5 },
+  ayatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#F8FAFC', paddingBottom: 10 },
+  ayatNumBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E8F5EE', alignItems: 'center', justifyContent: 'center' },
+  ayatNumText: { fontSize: 13, fontWeight: '900', color: '#005F46' },
+  ayatActions: { flexDirection: 'row', gap: 8 },
+  actionBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#F1F5F9' },
+  actionBtnActive: { backgroundColor: '#C8A84E' },
+  arabicText: { color: '#0F172A', textAlign: 'right', fontWeight: '700', paddingVertical: 4 },
+  romanContainer: { backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, borderLeftWidth: 3, borderLeftColor: '#4F46E5', gap: 6 },
+  urduContainer: { backgroundColor: '#F0FDF4', borderRadius: 12, padding: 12, borderRightWidth: 3, borderRightColor: '#005F46', gap: 6 },
+  sectionHeaderBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  sectionBadgeLabel: { fontSize: 11, fontWeight: '800', color: '#4F46E5', textTransform: 'uppercase' },
+  romanText: { fontSize: 14, color: '#334155', lineHeight: 22, fontWeight: '500' },
+  urduText: { fontSize: 15, color: '#064E3B', textAlign: 'right', lineHeight: 28, fontWeight: '600' },
   settingsOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100 },
   settingsDismiss: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   settingsPanel: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: SPACING.lg, gap: 16 },
