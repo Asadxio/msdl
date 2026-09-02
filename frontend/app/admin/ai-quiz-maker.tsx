@@ -31,6 +31,7 @@ export default function AiQuizMakerScreen() {
   const [category, setCategory] = useState('Wudu');
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
+  const [language, setLanguage] = useState<'both' | 'english' | 'urdu'>('both');
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
@@ -42,6 +43,7 @@ export default function AiQuizMakerScreen() {
         category,
         count: questionCount,
         difficulty,
+        language,
       });
       setQuestions(results);
     } catch {
@@ -99,17 +101,17 @@ export default function AiQuizMakerScreen() {
     try {
       const result = await publishGeneratedQuiz(questions);
       Alert.alert(
-        'کامیابی / Published!',
-        'ماشاءاللہ! ' + result.count + ' سوالات کامیابی سے مدرسہ کے کوئز سیکشن میں لائیو ہو چکے ہیں۔',
+        'Published to Firestore! ✨',
+        `MashaAllah! ${result.count} questions have been saved to Firestore under "${category}" and are now live for all students in the Quiz section.`,
         [
           {
-            text: 'ٹھیک ہے',
+            text: 'Go to Quiz Tab',
             onPress: () => goBackOrReplace(router, '/(tabs)/quiz'),
           },
         ]
       );
     } catch (err: any) {
-      Alert.alert('Publish Error', err?.message || 'Failed to publish quiz.');
+      Alert.alert('Publish Error', err?.message || 'Failed to publish quiz to Firestore.');
     } finally {
       setPublishing(false);
     }
@@ -119,7 +121,7 @@ export default function AiQuizMakerScreen() {
     if (questions.length === 0) return;
     const text = formatQuizAsPrintableExam(questions, category);
     await Clipboard.setStringAsync(text);
-    Alert.alert('پرچہ کاپی ہوگیا', 'امتحانی پرچہ و جوابی کلید کامیابی سے کاپی ہو چکی ہے۔ آپ اسے واٹس ایپ یا پرنٹ کے لیے استعمال کر سکتی ہیں۔');
+    Alert.alert('Paper Copied!', 'Exam paper with Answer Key has been copied to your clipboard. You can paste it in WhatsApp or print it.');
   };
 
   return (
@@ -134,8 +136,8 @@ export default function AiQuizMakerScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>مُؤَلِّفُ الامْتِحَانَاتِ بِالذَّكَاءِ الاصْطِنَاعِي</Text>
-          <Text style={styles.headerSubtitle}>AI Auto-Quiz & Exam Maker</Text>
+          <Text style={styles.headerTitleMain}>AI Auto-Quiz & Exam Maker</Text>
+          <Text style={styles.headerSubtitle}>مُؤَلِّفُ الامْتِحَانَاتِ بِالذَّكَاءِ الاصْطِنَاعِي</Text>
         </View>
         <View style={{ width: 38 }} />
       </View>
@@ -143,10 +145,39 @@ export default function AiQuizMakerScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Step 1: Configuration Card */}
         <View style={styles.configCard}>
-          <Text style={styles.sectionHeading}>۱. کوئز کا موضوع و ترجیحات منتخب کریں:</Text>
+          <View style={styles.stepHeaderRow}>
+            <View style={styles.stepNumCircle}>
+              <Text style={styles.stepNumText}>1</Text>
+            </View>
+            <Text style={styles.sectionHeading}>Configure Quiz Topic & Preferences</Text>
+          </View>
+
+          {/* Language Selection */}
+          <Text style={styles.fieldLabel}>Question Language (زبان):</Text>
+          <View style={styles.countRow}>
+            {[
+              { id: 'both', label: 'Bilingual (Eng + اردو)' },
+              { id: 'english', label: 'English Only' },
+              { id: 'urdu', label: 'اردو (Urdu Only)' },
+            ].map((lang) => {
+              const isSelected = language === lang.id;
+              return (
+                <TouchableOpacity
+                  key={lang.id}
+                  style={[styles.countChip, isSelected && styles.countChipSelected]}
+                  onPress={() => setLanguage(lang.id as any)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.countChipText, isSelected && styles.countChipTextSelected]}>
+                    {lang.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           {/* Category Dropdown/Chips */}
-          <Text style={styles.fieldLabel}>مضمون / کیٹیگری (Islamic Subject):</Text>
+          <Text style={styles.fieldLabel}>Select Islamic Subject / Masail (کیٹیگری):</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryChipsRow}>
             {QUIZ_CATEGORIES.map((cat) => {
               const isSelected = category === cat;
@@ -164,7 +195,7 @@ export default function AiQuizMakerScreen() {
           </ScrollView>
 
           {/* Question Count */}
-          <Text style={styles.fieldLabel}>سوالات کی تعداد (Questions Count):</Text>
+          <Text style={styles.fieldLabel}>Number of Questions (سوالات کی تعداد):</Text>
           <View style={styles.countRow}>
             {[5, 10, 15, 20].map((num) => {
               const isSelected = questionCount === num;
@@ -176,7 +207,7 @@ export default function AiQuizMakerScreen() {
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.countChipText, isSelected && styles.countChipTextSelected]}>
-                    {num} سوالات
+                    {num} Questions
                   </Text>
                 </TouchableOpacity>
               );
@@ -184,12 +215,12 @@ export default function AiQuizMakerScreen() {
           </View>
 
           {/* Difficulty */}
-          <Text style={styles.fieldLabel}>معیار و درجہ (Difficulty):</Text>
+          <Text style={styles.fieldLabel}>Difficulty Level (معیار و درجہ):</Text>
           <View style={styles.countRow}>
             {[
-              { id: 'easy', label: 'ابتدائی (Basic)' },
-              { id: 'medium', label: 'متوسط (Medium)' },
-              { id: 'hard', label: 'اعلیٰ (Advanced)' },
+              { id: 'easy', label: 'Basic / ابتدائی' },
+              { id: 'medium', label: 'Medium / متوسط' },
+              { id: 'hard', label: 'Advanced / اعلیٰ' },
             ].map((diff) => {
               const isSelected = difficulty === diff.id;
               return (
@@ -219,7 +250,7 @@ export default function AiQuizMakerScreen() {
             ) : (
               <>
                 <Ionicons name="sparkles" size={18} color="#002E23" />
-                <Text style={styles.generateBtnText}>AI سے پرچہ تیار کریں (Generate with AI)</Text>
+                <Text style={styles.generateBtnText}>Generate Questions with AI (پرچہ تیار کریں)</Text>
               </>
             )}
           </TouchableOpacity>
@@ -229,17 +260,20 @@ export default function AiQuizMakerScreen() {
         {questions.length > 0 && (
           <View style={styles.reviewSection}>
             <View style={styles.reviewHeader}>
-              <Text style={styles.reviewTitle}>۲. تیار شدہ سوالات کا جائزہ و ایڈیٹنگ ({questions.length}):</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.reviewTitle}>2. Review & Edit Questions ({questions.length}):</Text>
+                <Text style={styles.reviewSubtitle}>Tap the correct option circle to set answer key</Text>
+              </View>
               <TouchableOpacity style={styles.copyPaperBtn} onPress={handleCopyExamPaper} activeOpacity={0.8}>
                 <Ionicons name="copy-outline" size={14} color="#005F46" />
-                <Text style={styles.copyPaperBtnText}>پرچہ کاپی کریں</Text>
+                <Text style={styles.copyPaperBtnText}>Copy Exam Paper</Text>
               </TouchableOpacity>
             </View>
 
             {questions.map((q, qIdx) => (
               <View key={q.id} style={styles.questionCard}>
                 <View style={styles.questionCardHeader}>
-                  <Text style={styles.questionIndexBadge}>سوال {qIdx + 1}</Text>
+                  <Text style={styles.questionIndexBadge}>Question {qIdx + 1}</Text>
                   <TouchableOpacity onPress={() => handleDeleteQuestion(qIdx)} style={styles.deleteBtn}>
                     <Ionicons name="trash-outline" size={16} color="#DC2626" />
                   </TouchableOpacity>
@@ -251,10 +285,11 @@ export default function AiQuizMakerScreen() {
                   value={q.question}
                   onChangeText={(txt) => handleUpdateQuestionText(qIdx, txt)}
                   multiline
+                  placeholder="Enter Question..."
                 />
 
                 {/* Options List */}
-                <Text style={styles.optionsLabel}>جوابات کے اختیارات (صحیح جواب پر کلک کریں):</Text>
+                <Text style={styles.optionsLabel}>Answer Options (Select the correct option):</Text>
                 {q.options.map((opt, oIdx) => {
                   const isCorrect = q.correct_answer === opt;
                   return (
@@ -295,8 +330,8 @@ export default function AiQuizMakerScreen() {
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <Ionicons name="checkmark-done-circle" size={22} color="#FFFFFF" />
-                  <Text style={styles.publishBtnText}>مدرسہ میں لائیو پبلش کریں (Publish to Quiz)</Text>
+                  <Ionicons name="cloud-upload" size={20} color="#FFFFFF" />
+                  <Text style={styles.publishBtnText}>Save to Firestore & Publish Live</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -330,16 +365,17 @@ const styles = StyleSheet.create({
   headerTitleWrap: {
     alignItems: 'center',
   },
-  arabicHeader: {
-    fontSize: 13,
-    color: '#C8A84E',
+  headerTitleMain: {
+    fontSize: 15,
+    color: '#FFFFFF',
     fontWeight: '800',
-    fontFamily: Platform.select({ ios: 'Geeza Pro', default: 'sans-serif' }),
+    letterSpacing: -0.2,
   },
   headerSubtitle: {
     fontSize: 11,
-    color: '#FFFFFF',
+    color: '#C8A84E',
     fontWeight: '600',
+    marginTop: 1,
   },
   scrollContent: {
     padding: SPACING.md,
@@ -352,6 +388,25 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     gap: 10,
     ...SHADOWS.card,
+  },
+  stepHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  stepNumCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#002E23',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   sectionHeading: {
     fontSize: 14,
@@ -401,33 +456,36 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     paddingVertical: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   countChipSelected: {
-    backgroundColor: '#E8F5EE',
-    borderColor: '#005F46',
+    backgroundColor: '#ECFDF5',
+    borderColor: '#059669',
   },
   countChipText: {
     fontSize: 11,
-    color: '#64748B',
-    fontWeight: '700',
+    fontWeight: '600',
+    color: '#475569',
   },
   countChipTextSelected: {
-    color: '#005F46',
+    color: '#047857',
+    fontWeight: '800',
   },
   generateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#C8A84E',
-    borderRadius: RADIUS.lg,
-    paddingVertical: 14,
     gap: 8,
-    marginTop: 10,
+    backgroundColor: '#C8A84E',
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+    marginTop: 8,
+    ...SHADOWS.card,
   },
   generateBtnText: {
-    color: '#002E23',
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '800',
+    color: '#002E23',
   },
   reviewSection: {
     gap: 12,
@@ -436,20 +494,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   reviewTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
     color: '#FFFFFF',
+  },
+  reviewSubtitle: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 2,
   },
   copyPaperBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: RADIUS.md,
     gap: 4,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
   },
   copyPaperBtnText: {
     fontSize: 11,
@@ -458,7 +522,7 @@ const styles = StyleSheet.create({
   },
   questionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
     gap: 8,
     ...SHADOWS.card,
@@ -469,10 +533,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   questionIndexBadge: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     color: '#005F46',
-    backgroundColor: '#E8F5EE',
+    backgroundColor: '#ECFDF5',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: RADIUS.sm,
@@ -481,71 +545,72 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   questionInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+    borderWidth: 1,
     borderColor: '#CBD5E1',
     borderRadius: RADIUS.md,
-    padding: 10,
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
+    padding: 8,
+    minHeight: 48,
+    backgroundColor: '#F8FAFC',
   },
   optionsLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748B',
-    marginTop: 2,
+    color: '#475569',
+    marginTop: 4,
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     backgroundColor: '#F8FAFC',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: RADIUS.md,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 8,
   },
   optionRowCorrect: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: '#F0FDF4',
     borderColor: '#86EFAC',
   },
   radioDot: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#94A3B8',
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioDotCorrect: {
-    backgroundColor: '#007A58',
-    borderColor: '#007A58',
+    backgroundColor: '#059669',
+    borderColor: '#059669',
   },
   optionInput: {
     flex: 1,
-    fontSize: 12,
-    color: '#0F172A',
-    fontWeight: '600',
-    paddingVertical: 6,
+    fontSize: 13,
+    color: '#334155',
+    paddingVertical: 4,
   },
   optionInputCorrect: {
     fontWeight: '700',
-    color: '#007A58',
+    color: '#047857',
   },
   explanationBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFBEB',
-    padding: 8,
-    borderRadius: RADIUS.sm,
+    alignItems: 'flex-start',
     gap: 6,
+    backgroundColor: '#FEF3C7',
+    padding: 8,
+    borderRadius: RADIUS.md,
+    marginTop: 4,
   },
   explanationText: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 11,
     color: '#92400E',
     lineHeight: 15,
   },
@@ -553,16 +618,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#16A34A',
-    borderRadius: RADIUS.xl,
-    paddingVertical: 14,
     gap: 8,
-    marginTop: 6,
+    backgroundColor: '#059669',
+    paddingVertical: 14,
+    borderRadius: RADIUS.lg,
+    marginTop: 8,
     ...SHADOWS.card,
   },
   publishBtnText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
+    color: '#FFFFFF',
   },
 });
