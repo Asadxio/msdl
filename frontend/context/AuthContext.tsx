@@ -28,7 +28,7 @@ import {
   trackEmailVerificationError,
 } from '@/lib/emailVerificationAnalytics';
 import { trackEvent } from '@/lib/analytics';
-import { VERIFICATION_ACTION_CODE_SETTINGS } from '@/lib/emailVerificationSettings';
+import { VERIFICATION_ACTION_CODE_SETTINGS, PASSWORD_RESET_ACTION_CODE_SETTINGS } from '@/lib/emailVerificationSettings';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
@@ -645,7 +645,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const safeEmail = email.trim().toLowerCase();
     if (!safeEmail) return 'Please enter your email';
     try {
-      await withTimeout(sendPasswordResetEmail(auth, safeEmail));
+      await withTimeout(sendPasswordResetEmail(auth, safeEmail, PASSWORD_RESET_ACTION_CODE_SETTINGS));
       return null;
     } catch (err: any) {
       const code = err?.code || '';
