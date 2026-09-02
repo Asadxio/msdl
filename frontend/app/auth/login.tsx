@@ -18,6 +18,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, getThemeColors } from '@/constants/theme';
@@ -63,30 +64,55 @@ function PremiumInput({
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
+  const [isFocused, setIsFocused] = useState(false);
+
+  const activeBorderColor = error 
+    ? colors.error 
+    : isFocused 
+      ? '#005F46' 
+      : (isDarkMode ? '#2E3D5C' : '#E2E8E5');
+
+  const activeBgColor = isDarkMode 
+    ? (isFocused ? '#132C23' : '#102820') 
+    : (isFocused ? '#FFFFFF' : '#FAFCFB');
+
+  const labelColor = error 
+    ? colors.error 
+    : isFocused 
+      ? (isDarkMode ? '#10B981' : '#005F46') 
+      : colors.textMuted;
 
   return (
     <View style={styles.inputContainer}>
       <Text style={[
         styles.inputLabel,
-        { color: error ? colors.error : colors.textMuted }
+        { color: labelColor }
       ]}>
         {label}
       </Text>
       <View style={[
         styles.inputRow,
-        { borderColor: error ? colors.error : (isDarkMode ? '#2E3D5C' : '#E2E8E5'), backgroundColor: isDarkMode ? '#102820' : '#FFFFFF' },
+        { 
+          borderColor: activeBorderColor, 
+          backgroundColor: activeBgColor,
+          shadowColor: isFocused ? '#005F46' : 'transparent',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: isFocused ? 0.08 : 0,
+          shadowRadius: 6,
+          elevation: isFocused ? 2 : 0,
+        },
         disabled && styles.inputRowDisabled
       ]}>
         <Ionicons 
           name={leftIcon} 
           size={20} 
-          color={error ? colors.error : colors.textMuted} 
+          color={error ? colors.error : (isFocused ? (isDarkMode ? '#10B981' : '#005F46') : colors.textMuted)} 
           style={styles.leftIcon} 
         />
         <TextInput
           style={[styles.textInput, { color: colors.text }]}
           placeholder={placeholder}
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'}
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={secureTextEntry}
@@ -97,6 +123,8 @@ function PremiumInput({
           editable={!disabled}
           autoComplete={autoComplete}
           textContentType={textContentType}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           testID={testID}
           accessibilityLabel={label}
         />
@@ -178,12 +206,20 @@ export default function LoginScreen() {
         >
           {/* Hero Section */}
           <FadeInView style={styles.headerSection}>
-            <View style={styles.logoContainer}>
-              <Image source={require('../../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+            <View style={styles.emblemAura}>
+              <View style={styles.logoContainer}>
+                <Image 
+                  source={require('../../assets/images/emblem_pure.png')} 
+                  style={styles.logoImage} 
+                  resizeMode="contain" 
+                />
+              </View>
             </View>
+            <Text style={styles.bismillahHeader}>بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْم</Text>
             <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
+            <Text style={styles.institutionArabic}>مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              Sign in to continue your Islamic learning journey.
+              Sign in to continue your sacred learning journey
             </Text>
           </FadeInView>
 
@@ -252,7 +288,7 @@ export default function LoginScreen() {
                   accessibilityLabel="Forgot Password"
                   testID="forgot-password-btn"
                 >
-                  <Text style={[styles.forgotText, { color: isDarkMode ? '#10B981' : '#0F7660' }]}>
+                  <Text style={[styles.forgotText, { color: isDarkMode ? '#10B981' : '#005F46' }]}>
                     Forgot Password?
                   </Text>
                 </TouchableOpacity>
@@ -262,10 +298,22 @@ export default function LoginScreen() {
               <ScalePressable 
                 style={[
                   styles.primaryBtn, 
-                  { backgroundColor: isDarkMode ? '#10B981' : '#0F7660' },
+                  { 
+                    backgroundColor: formIsValid 
+                      ? (isDarkMode ? '#005F46' : '#005F46') 
+                      : (isDarkMode ? '#1B3B32' : '#85B5A8'),
+                    shadowColor: formIsValid ? '#005F46' : 'transparent',
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: formIsValid ? 0.35 : 0,
+                    shadowRadius: 12,
+                    elevation: formIsValid ? 5 : 0,
+                  },
                   !formIsValid && styles.btnDisabled
                 ]} 
-                onPress={handleLogin} 
+                onPress={() => {
+                  try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
+                  handleLogin();
+                }} 
                 disabled={!formIsValid || loading} 
                 testID="login-submit-btn"
               >
@@ -275,7 +323,10 @@ export default function LoginScreen() {
                     <Text style={styles.loaderText}>Signing you in...</Text>
                   </View>
                 ) : (
-                  <Text style={styles.primaryBtnText}>Sign In</Text>
+                  <View style={styles.primaryBtnInnerRow}>
+                    <Text style={styles.primaryBtnText}>Sign In</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
+                  </View>
                 )}
               </ScalePressable>
 
@@ -292,15 +343,23 @@ export default function LoginScreen() {
           <View style={styles.footerRow}>
             <Text style={[styles.footerText, { color: colors.textMuted }]}>Don&apos;t have an account? </Text>
             <TouchableOpacity onPress={() => router.replace('/auth/signup')} testID="goto-signup-btn">
-              <Text style={[styles.footerLink, { color: isDarkMode ? '#10B981' : '#0F7660' }]}>Sign Up</Text>
+              <Text style={[styles.footerLink, { color: isDarkMode ? '#10B981' : '#005F46' }]}>Sign Up</Text>
             </TouchableOpacity>
           </View>
           
           <TouchableOpacity
-            style={[styles.helpBtn, { backgroundColor: isDarkMode ? '#213B31' : '#DCFCE7' }]}
+            style={[
+              styles.helpBtn, 
+              { 
+                backgroundColor: isDarkMode ? '#132C23' : '#F0FDF4',
+                borderColor: isDarkMode ? '#1E4D3A' : '#BBF7D0',
+                borderWidth: 1,
+              }
+            ]}
             onPress={async () => {
+              try { void Haptics.selectionAsync(); } catch {}
               const phone = '916366919122';
-              const text = 'Salam. I am interested in guidance services. I clicked from your website and would like more information.';
+              const text = 'Salam. I am interested in Madrasa Tus Salikat Lil Banat. I need assistance signing in.';
               const webUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
               const directUrl = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
               try {
@@ -319,9 +378,12 @@ export default function LoginScreen() {
               }
             }}
           >
-            <Text style={[styles.helpBtnText, { color: isDarkMode ? '#10B981' : '#166534' }]}>
-              Need Help? WhatsApp Support
-            </Text>
+            <View style={styles.helpBtnInner}>
+              <Ionicons name="logo-whatsapp" size={17} color="#25D366" style={{ marginRight: 8 }} />
+              <Text style={[styles.helpBtnText, { color: isDarkMode ? '#34D399' : '#15803D' }]}>
+                Need Help? WhatsApp Support
+              </Text>
+            </View>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -341,33 +403,67 @@ const styles = StyleSheet.create({
   },
   headerSection: { 
     alignItems: 'center', 
-    marginBottom: 24, 
+    marginBottom: 20, 
     width: '100%',
     maxWidth: 480,
     alignSelf: 'center',
   },
+  emblemAura: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(212,175,55,0.08)',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 4,
+    marginBottom: 12,
+  },
   logoContainer: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 82,
+    height: 82,
+    borderRadius: 41,
     overflow: 'hidden',
-    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: 'rgba(212,175,55,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 6,
   },
   logoImage: {
     width: '100%',
     height: '100%',
   },
+  bismillahHeader: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#005F46',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
   title: { 
-    ...TYPOGRAPHY.title, 
     fontSize: 26, 
     fontWeight: '800', 
     textAlign: 'center',
-    marginBottom: 8,
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  institutionArabic: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#005F46',
+    textAlign: 'center',
+    marginBottom: 6,
   },
   subtitle: { 
-    ...TYPOGRAPHY.body, 
+    fontSize: 13.5,
     textAlign: 'center', 
-    lineHeight: 20,
+    lineHeight: 19,
     paddingHorizontal: 16,
   },
   formCard: {
@@ -463,20 +559,26 @@ const styles = StyleSheet.create({
 
   // Submit button
   primaryBtn: {
-    borderRadius: 12,
-    height: 56,
+    borderRadius: 14,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
     marginTop: 8,
   },
+  primaryBtnInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   btnDisabled: {
-    opacity: 0.5,
+    opacity: 0.65,
   },
   primaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   loaderContainer: {
     flexDirection: 'row',
@@ -499,27 +601,39 @@ const styles = StyleSheet.create({
   footerRow: { 
     flexDirection: 'row', 
     justifyContent: 'center', 
-    marginTop: 24,
+    marginTop: 22,
     alignItems: 'center',
   },
   footerText: { 
     ...TYPOGRAPHY.body,
+    fontSize: 14,
   },
   footerLink: { 
     ...TYPOGRAPHY.label, 
-    fontWeight: '700',
+    fontWeight: '800',
+    fontSize: 14,
   },
   helpBtn: { 
     alignSelf: 'center', 
-    marginTop: 20, 
-    paddingHorizontal: 20, 
-    paddingVertical: 12, 
-    borderRadius: 24, 
-    minHeight: 48,
+    marginTop: 18, 
+    paddingHorizontal: 18, 
+    paddingVertical: 10, 
+    borderRadius: 20, 
+    minHeight: 44,
+    justifyContent: 'center',
+    shadowColor: '#25D366',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  helpBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   helpBtnText: { 
-    ...TYPOGRAPHY.label, 
+    fontSize: 13, 
     fontWeight: '700',
   },
 });
