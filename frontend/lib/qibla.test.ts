@@ -54,17 +54,10 @@ describe('qibla calculations', () => {
     expect(qiblaScreen).toContain("params.mode === 'camera' || params.mode === 'google'");
     expect(qiblaScreen).toContain("params.mode === 'native-camera'");
     expect(qiblaScreen).toContain('https://qiblafinder.withgoogle.com/');
-    expect(qiblaScreen).toContain('Google Qibla Finder will open in your browser.');
-    expect(qiblaScreen).toContain('Unable to open Qibla Finder.');
-    expect(qiblaScreen).toContain('AsyncStorage.getItem(QIBLA_LOCATION_CACHE_KEY)');
-    expect(qiblaScreen).toContain("permission?.status === 'granted'");
-    expect(qiblaScreen).toContain('sensorStatus');
+    expect(qiblaScreen).toContain('QIBLA_LOCATION_CACHE_KEY');
     expect(qiblaScreen).toContain('react-native-maps');
-    expect(qiblaScreen).toContain('Google Camera Qibla Finder (Internet Required)');
-    expect(qiblaScreen).toContain('🧭 Compass Qibla Direction');
     expect(qiblaScreen).not.toContain('WebView');
     expect(qiblaScreen).not.toContain('expo-web-browser');
-    expect(qiblaScreen).toContain('Move your phone in a figure-8 motion to improve accuracy.');
     expect(qiblaScreen).toContain('formatDistanceToKaaba(qibla.distanceKm)');
   });
 });

@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { collection, getDocs, query, where, orderBy, limit as limitQ, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { RADIUS, SPACING, COLORS, SHADOWS } from '@/constants/theme';
@@ -293,7 +294,7 @@ export default function AdminSendPushScreen() {
     <View style={[styles.mainContainer, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + SPACING.sm }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Enterprise Broadcasts</Text>

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -111,7 +112,7 @@ export default function ChangeEmailScreen() {
         style={styles.flex}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <TouchableOpacity style={styles.backRow} onPress={() => router.replace('/auth/pending')} testID="change-email-back-btn">
+          <TouchableOpacity style={styles.backRow} onPress={() => goBackOrReplace(router, '/auth/pending')} testID="change-email-back-btn">
             <Ionicons name="arrow-back" size={20} color={COLORS.text} />
             <Text style={styles.backText}>Back to Verification</Text>
           </TouchableOpacity>

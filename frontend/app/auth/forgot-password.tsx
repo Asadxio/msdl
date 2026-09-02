@@ -89,7 +89,7 @@ export default function ForgotPasswordScreen() {
             </Text>
           </FadeInView>
 
-          <FadeInView delay={60}>
+          <FadeInView delay={60} style={{ width: '100%', maxWidth: 480, alignSelf: 'center' }}>
             <View style={[styles.formCard, { backgroundColor: isDarkMode ? '#102820' : '#FFFFFF', borderColor: colors.border }]}>
               {error ? (
                 <View style={[styles.errorBox, { backgroundColor: isDarkMode ? '#2D0A0A' : '#FEE4E2' }]} testID="forgot-error">
@@ -143,6 +143,12 @@ export default function ForgotPasswordScreen() {
                     autoCorrect={false}
                     spellCheck={false}
                     keyboardType="email-address"
+                    autoComplete="off"
+                    textContentType="none"
+                    importantForAutofill="no"
+                    returnKeyType="done"
+                    blurOnSubmit={true}
+                    onSubmitEditing={() => {}}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                     editable={!loading}
@@ -198,7 +204,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, 
     paddingTop: 16,
     paddingBottom: 40,
-    alignItems: 'center',
+    justifyContent: 'center',
   },
   backRow: { 
     flexDirection: 'row', 

@@ -39,12 +39,13 @@ type PremiumInputProps = {
   keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   disabled?: boolean;
-  autoComplete?: 'email' | 'password' | 'off';
-  textContentType?: 'emailAddress' | 'password' | 'none';
   testID?: string;
+  onSubmitEditing?: () => void;
+  returnKeyType?: 'next' | 'done' | 'go' | 'search' | 'send';
+  blurOnSubmit?: boolean;
 };
 
-function PremiumInput({
+const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function PremiumInput({
   label,
   leftIcon,
   value,
@@ -57,10 +58,11 @@ function PremiumInput({
   keyboardType = 'default',
   autoCapitalize = 'none',
   disabled = false,
-  autoComplete = 'off',
-  textContentType = 'none',
   testID,
-}: PremiumInputProps) {
+  onSubmitEditing,
+  returnKeyType,
+  blurOnSubmit,
+}: PremiumInputProps, ref) {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
@@ -84,10 +86,7 @@ function PremiumInput({
 
   return (
     <View style={styles.inputContainer}>
-      <Text style={[
-        styles.inputLabel,
-        { color: labelColor }
-      ]}>
+      <Text style={[styles.inputLabel, { color: labelColor }]}>
         {label}
       </Text>
       <View style={[
@@ -110,6 +109,7 @@ function PremiumInput({
           style={styles.leftIcon} 
         />
         <TextInput
+          ref={ref}
           style={[styles.textInput, { color: colors.text }]}
           placeholder={placeholder}
           placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'}
@@ -119,10 +119,14 @@ function PremiumInput({
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
           spellCheck={false}
           editable={!disabled}
-          autoComplete={autoComplete}
-          textContentType={textContentType}
+          returnKeyType={returnKeyType ?? (secureTextEntry ? 'done' : 'next')}
+          blurOnSubmit={blurOnSubmit ?? !!secureTextEntry}
+          onSubmitEditing={onSubmitEditing}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           testID={testID}
@@ -137,7 +141,7 @@ function PremiumInput({
       ) : null}
     </View>
   );
-}
+});
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -146,6 +150,9 @@ export default function LoginScreen() {
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
   const { signIn } = useAuth();
+
+  // Field refs for focus chain (prevents autofill jump)
+  const passwordRef = useRef<TextInput>(null);
 
   // Form State
   const [email, setEmail] = useState('');
@@ -246,14 +253,16 @@ export default function LoginScreen() {
                 success={emailValid}
                 disabled={loading}
                 keyboardType="email-address"
-                autoComplete="email"
-                textContentType="emailAddress"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => passwordRef.current?.focus()}
                 testID="login-email-input"
               />
 
               {/* 2. Password Input */}
               <View style={styles.passwordFieldContainer}>
                 <PremiumInput
+                  ref={passwordRef}
                   label="Password"
                   leftIcon="lock-closed-outline"
                   placeholder="Enter your password"
@@ -263,8 +272,9 @@ export default function LoginScreen() {
                   disabled={loading}
                   success={password.length >= 6}
                   error={passwordError}
-                  autoComplete="password"
-                  textContentType="password"
+                  returnKeyType="done"
+                  blurOnSubmit={true}
+                  onSubmitEditing={handleLogin}
                   rightElement={
                     <TouchableOpacity 
                       onPress={() => setShowPass(v => !v)} 

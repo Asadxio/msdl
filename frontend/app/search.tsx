@@ -163,13 +163,13 @@ export default function GlobalSearchScreen() {
     if (selectedFilter === 'all' || selectedFilter === 'duas') {
       MASNOON_DUAS.forEach((d, idx) => {
         if (
-          d.title.toLowerCase().includes(cleanQuery) ||
+          d.reference.toLowerCase().includes(cleanQuery) ||
           d.translation.toLowerCase().includes(cleanQuery) ||
           d.arabic.includes(cleanQuery)
         ) {
           list.push({
             id: `dua-${idx}`,
-            title: d.title,
+            title: `Dua (${d.reference})`,
             subtitle: `"${d.translation.slice(0, 80)}..."`,
             category: 'dua',
             icon: 'moon',
@@ -293,7 +293,7 @@ export default function GlobalSearchScreen() {
       <View style={styles.searchHeader}>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => goBackOrReplace(router, '/')}
+          onPress={() => goBackOrReplace(router, '/(tabs)')}
           accessibilityLabel="Go back"
         >
           <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />

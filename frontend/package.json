@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "release:check": "node ./scripts/release-readiness-check.mjs",
+    "release:check": "node --env-file=.env ./scripts/release-readiness-check.mjs",
     "test": "jest"
   },
   "dependencies": {

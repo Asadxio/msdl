@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { goBackOrReplace } from '@/lib/navigation';
 import IslamicDashboardWidget from '@/components/IslamicDashboardWidget';
 import { COLORS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { ScalePressable } from '@/components/ui';
@@ -14,7 +15,7 @@ export default function IslamicDashboardScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.sm }]} showsVerticalScrollIndicator={false}>
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.push('/more/applications')} accessibilityLabel="Go back to Applications">
+        <TouchableOpacity style={styles.backButton} onPress={() => goBackOrReplace(router, '/more/applications')} accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>

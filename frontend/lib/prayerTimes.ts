@@ -65,6 +65,8 @@ export interface DailyPrayerRow {
   asr: string;
   maghrib: string;
   isha: string;
+  sunsetStr: string;
+  dayLengthMin: number;
 }
 
 export const PRAYER_METHODS: Record<string, PrayerCalculationSettings> = {
@@ -358,6 +360,11 @@ export function getMonthlyPrayerTimes(
       return t ? formatClockShort(t.time) : '--:--';
     };
     const maghribTime = times.find((p) => p.name === 'Maghrib')?.time;
+    const sunriseT = times.find((p) => p.name === 'Sunrise')?.time;
+    const sunsetDecT = times.find((p) => p.name === 'Maghrib')?.time;
+    const dayLenMin = sunriseT && sunsetDecT
+      ? Math.round((sunsetDecT.getTime() - sunriseT.getTime()) / 60000)
+      : 0;
     rows.push({
       date,
       dateStr: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
@@ -368,6 +375,8 @@ export function getMonthlyPrayerTimes(
       asr: get('Asr'),
       maghrib: get('Maghrib'),
       isha: get('Isha'),
+      sunsetStr: get('Maghrib'),
+      dayLengthMin: dayLenMin,
     });
   }
   return rows;
@@ -402,3 +411,143 @@ export function getPrayerWindow(
   const elapsed = Math.max(0, now.getTime() - prevTime.getTime());
   return { current: previous, next, progress: Math.min(1, elapsed / duration) };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADVANCED ASTRONOMY CALCULATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Format minutes into "Xh Ym" string */
+export function formatDuration(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+
+/** Day length in minutes (from sunrise to sunset) */
+export function getDayLengthMinutes(sunrise: Date, sunset: Date): number {
+  return Math.round((sunset.getTime() - sunrise.getTime()) / 60000);
+}
+
+/**
+ * Solar altitude (elevation) in degrees above the horizon at a given moment.
+ * Positive = above horizon, negative = below.
+ */
+export function getSolarAltitude(date: Date, latitude: number, longitude: number): number {
+  const n = dayOfYear(date);
+  const lngHour = longitude / 15;
+  const t = n + (12 - lngHour) / 24;
+  const m = 0.9856 * t - 3.289;
+  let l = m + 1.916 * Math.sin(toRadians(m)) + 0.02 * Math.sin(toRadians(2 * m)) + 282.634;
+  l = normalizeDeg(l);
+  const sinDec = 0.39782 * Math.sin(toRadians(l));
+  const cosDec = Math.cos(Math.asin(sinDec));
+  // Hour angle from current local time
+  const localHour = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+  const ra = normalizeDeg(toDegrees(Math.atan(0.91764 * Math.tan(toRadians(l)))));
+  const lQuadrant = Math.floor(l / 90) * 90;
+  const raQuadrant = Math.floor(ra / 90) * 90;
+  const raNorm = (ra + (lQuadrant - raQuadrant)) / 15;
+  const equationOfTime = (raNorm - (0.06571 * t) - 6.622);
+  const solarNoonLocal = 12 - lngHour + equationOfTime;
+  const hourAngle = (localHour - solarNoonLocal) * 15;
+  const cosZenith =
+    sinDec * Math.sin(toRadians(latitude)) +
+    cosDec * Math.cos(toRadians(latitude)) * Math.cos(toRadians(hourAngle));
+  const zenith = toDegrees(Math.acos(Math.max(-1, Math.min(1, cosZenith))));
+  return 90 - zenith;
+}
+
+/**
+ * Sun azimuth (compass bearing, 0=N, 90=E, 180=S, 270=W) at a given moment.
+ */
+export function getSunAzimuth(date: Date, latitude: number, longitude: number): number {
+  const n = dayOfYear(date);
+  const lngHour = longitude / 15;
+  const t = n + (12 - lngHour) / 24;
+  const m = 0.9856 * t - 3.289;
+  let l = m + 1.916 * Math.sin(toRadians(m)) + 0.02 * Math.sin(toRadians(2 * m)) + 282.634;
+  l = normalizeDeg(l);
+  const sinDec = 0.39782 * Math.sin(toRadians(l));
+  const cosDec = Math.cos(Math.asin(sinDec));
+  const localHour = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+  const ra = normalizeDeg(toDegrees(Math.atan(0.91764 * Math.tan(toRadians(l)))));
+  const lQuadrant = Math.floor(l / 90) * 90;
+  const raQuadrant = Math.floor(ra / 90) * 90;
+  const raNorm = (ra + (lQuadrant - raQuadrant)) / 15;
+  const equationOfTime = raNorm - (0.06571 * t) - 6.622;
+  const solarNoonLocal = 12 - lngHour + equationOfTime;
+  const hourAngle = (localHour - solarNoonLocal) * 15;
+  const cosZ =
+    sinDec * Math.sin(toRadians(latitude)) +
+    cosDec * Math.cos(toRadians(latitude)) * Math.cos(toRadians(hourAngle));
+  const zenith = toDegrees(Math.acos(Math.max(-1, Math.min(1, cosZ))));
+  let az = toDegrees(
+    Math.acos(
+      (sinDec - Math.cos(toRadians(zenith)) * Math.sin(toRadians(latitude))) /
+      (Math.sin(toRadians(zenith)) * Math.cos(toRadians(latitude)))
+    )
+  );
+  if (hourAngle > 0) az = 360 - az;
+  return normalizeDeg(az);
+}
+
+/**
+ * Civil twilight = sun at -6° below horizon.
+ * Returns { start: morning civil twilight, end: evening civil twilight }
+ */
+export function getCivilTwilightTimes(
+  date: Date, latitude: number, longitude: number
+): { start: Date; end: Date } {
+  const CIVIL_ZENITH = 96; // 90 + 6
+  const start = decimalToDate(date, solarTime(date, latitude, longitude, CIVIL_ZENITH, false));
+  const end = decimalToDate(date, solarTime(date, latitude, longitude, CIVIL_ZENITH, true));
+  return { start, end };
+}
+
+/**
+ * Qibla direction (great circle bearing to Makkah al-Mukarramah).
+ * Makkah: 21.4225° N, 39.8262° E
+ * Returns compass bearing in degrees (0=N, clockwise).
+ */
+export function getQiblaDirection(latitude: number, longitude: number): number {
+  const MAKKAH_LAT = 21.4225;
+  const MAKKAH_LNG = 39.8262;
+  const dLng = toRadians(MAKKAH_LNG - longitude);
+  const lat1 = toRadians(latitude);
+  const lat2 = toRadians(MAKKAH_LAT);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return normalizeDeg(toDegrees(Math.atan2(y, x)));
+}
+
+/**
+ * Golden hour start/end (sun at +/- 6° above horizon — soft warm light).
+ * Returns morning and evening golden hour windows.
+ */
+export function getGoldenHourTimes(date: Date, latitude: number, longitude: number): {
+  morningEnd: Date; eveningStart: Date;
+} {
+  const GOLDEN_ZENITH = 84; // 90 - 6
+  const morningEnd = decimalToDate(date, solarTime(date, latitude, longitude, GOLDEN_ZENITH, false));
+  const eveningStart = decimalToDate(date, solarTime(date, latitude, longitude, GOLDEN_ZENITH, true));
+  return { morningEnd, eveningStart };
+}
+
+/** Get prayer window end time (when next fard starts) for a given fard prayer */
+export function getPrayerWindowProgress(
+  prayer: { name: string; time: Date; kind: string },
+  allPrayers: { name: string; time: Date; kind: string }[],
+  now: Date,
+): number {
+  if (prayer.kind !== 'fard') return 0;
+  const fardList = allPrayers.filter(p => p.kind === 'fard').sort((a, b) => a.time.getTime() - b.time.getTime());
+  const idx = fardList.findIndex(p => p.name === prayer.name);
+  if (idx < 0 || idx >= fardList.length - 1) return 0;
+  const windowStart = prayer.time;
+  const windowEnd = fardList[idx + 1].time;
+  const windowMs = Math.max(1, windowEnd.getTime() - windowStart.getTime());
+  const elapsed = now.getTime() - windowStart.getTime();
+  return Math.min(1, Math.max(0, elapsed / windowMs));
+}
+

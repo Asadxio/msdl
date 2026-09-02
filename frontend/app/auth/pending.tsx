@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator,
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { sendEmailVerification } from 'firebase/auth';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import {

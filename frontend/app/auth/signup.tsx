@@ -64,9 +64,12 @@ type PremiumInputProps = {
   disabled?: boolean;
   prefix?: React.ReactNode;
   testID?: string;
+  onSubmitEditing?: () => void;
+  returnKeyType?: 'next' | 'done' | 'go' | 'search' | 'send';
+  blurOnSubmit?: boolean;
 };
 
-function PremiumInput({
+const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function PremiumInput({
   label,
   leftIcon,
   value,
@@ -81,7 +84,10 @@ function PremiumInput({
   disabled = false,
   prefix,
   testID,
-}: PremiumInputProps) {
+  onSubmitEditing,
+  returnKeyType,
+  blurOnSubmit,
+}: PremiumInputProps, ref) {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
@@ -105,10 +111,7 @@ function PremiumInput({
 
   return (
     <View style={styles.inputContainer}>
-      <Text style={[
-        styles.inputLabel,
-        { color: labelColor }
-      ]}>
+      <Text style={[styles.inputLabel, { color: labelColor }]}>
         {label}
       </Text>
       <View style={[
@@ -132,6 +135,7 @@ function PremiumInput({
         />
         {prefix ? <View style={styles.prefixContainer}>{prefix}</View> : null}
         <TextInput
+          ref={ref}
           style={[styles.textInput, { color: colors.text }]}
           placeholder={placeholder}
           placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'}
@@ -143,6 +147,12 @@ function PremiumInput({
           autoCorrect={false}
           spellCheck={false}
           editable={!disabled}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
+          returnKeyType={returnKeyType ?? (secureTextEntry ? 'done' : 'next')}
+          blurOnSubmit={blurOnSubmit ?? !!secureTextEntry}
+          onSubmitEditing={onSubmitEditing}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           testID={testID}
@@ -157,7 +167,7 @@ function PremiumInput({
       ) : null}
     </View>
   );
-}
+});
 
 const SegmentedControl = React.memo(function SegmentedControl({
   activeRole,
@@ -284,6 +294,13 @@ export default function SignupScreen() {
   
   const { user, signUp, showSignupVerificationPrompt, acknowledgeSignupVerificationPrompt } = useAuth();
   const modalShownTrackedRef = useRef(false);
+
+  // Field refs for focus chain (prevents autofill jump)
+  const mobileRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
+  const referralRef = useRef<TextInput>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -542,11 +559,15 @@ export default function SignupScreen() {
                 success={name.length >= 3 && !nameError}
                 disabled={loading}
                 autoCapitalize="words"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => mobileRef.current?.focus()}
                 testID="signup-name-input"
               />
 
               {/* 2. Mobile Number */}
               <PremiumInput
+                ref={mobileRef}
                 label="Mobile Number"
                 leftIcon="phone-portrait-outline"
                 placeholder="00000 00000"
@@ -557,11 +578,15 @@ export default function SignupScreen() {
                 error={mobileError}
                 success={mobile.length === 10 && !mobileError}
                 disabled={loading}
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => emailRef.current?.focus()}
                 testID="signup-mobile-input"
               />
 
               {/* 3. Email Address */}
               <PremiumInput
+                ref={emailRef}
                 label="Email Address"
                 leftIcon="mail-outline"
                 placeholder="Enter your email address"
@@ -571,12 +596,16 @@ export default function SignupScreen() {
                 success={emailValid}
                 disabled={loading}
                 keyboardType="email-address"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => passwordRef.current?.focus()}
                 testID="signup-email-input"
               />
 
               {/* 4. Password */}
               <View>
                 <PremiumInput
+                  ref={passwordRef}
                   label="Password"
                   leftIcon="lock-closed-outline"
                   placeholder="Create password"
@@ -585,6 +614,9 @@ export default function SignupScreen() {
                   secureTextEntry={!showPass}
                   disabled={loading}
                   success={passwordValidation.isValid}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => confirmPasswordRef.current?.focus()}
                   rightElement={
                     <TouchableOpacity 
                       onPress={() => setShowPass(v => !v)} 
@@ -630,6 +662,7 @@ export default function SignupScreen() {
               {/* 5. Confirm Password */}
               <View>
                 <PremiumInput
+                  ref={confirmPasswordRef}
                   label="Confirm Password"
                   leftIcon="lock-closed-outline"
                   placeholder="Repeat password"
@@ -639,6 +672,8 @@ export default function SignupScreen() {
                   disabled={loading}
                   success={confirmPassword.length > 0 && confirmPassword === password}
                   error={confirmPasswordIsError ? 'Passwords do not match' : undefined}
+                  returnKeyType="done"
+                  blurOnSubmit={true}
                   rightElement={
                     <TouchableOpacity 
                       onPress={() => setShowConfirmPass(v => !v)} 

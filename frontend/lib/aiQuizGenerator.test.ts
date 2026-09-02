@@ -9,6 +9,7 @@ describe('AI Auto-Quiz & Exam Maker Module', () => {
       category: 'Wudu',
       count: 5,
       difficulty: 'easy',
+      language: 'urdu',
     });
 
     expect(questions.length).toBe(5);
@@ -25,6 +26,7 @@ describe('AI Auto-Quiz & Exam Maker Module', () => {
       category: 'Namaz ke Farz',
       count: 3,
       difficulty: 'medium',
+      language: 'urdu',
     });
 
     expect(namazQuiz.length).toBe(3);
@@ -36,6 +38,7 @@ describe('AI Auto-Quiz & Exam Maker Module', () => {
       category: 'Wudu',
       count: 2,
       difficulty: 'easy',
+      language: 'urdu',
     });
 
     const examText = formatQuizAsPrintableExam(questions, 'طہارت و وضو');

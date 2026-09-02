@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOrReplace } from '@/lib/navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, ScrollView, Share, StyleSheet,
@@ -7,7 +8,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
-import { RADIUS, SPACING } from '@/constants/theme';
+import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import {
   fetchSurah, QuranAyat, SurahData,
   getAyatAudioUrl, getFullSurahUrduAudioUrl,
@@ -222,7 +223,7 @@ export default function QuranReaderScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.headerBtn} onPress={async () => { await stopCurrentAudio(); router.back(); }}>
+        <TouchableOpacity style={styles.headerBtn} onPress={async () => { await stopCurrentAudio(); goBackOrReplace(router, '/quran'); }}>
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>

@@ -276,7 +276,7 @@ export async function publishGeneratedQuiz(questions: GeneratedQuestion[]): Prom
 
 export function formatQuizAsPrintableExam(questions: GeneratedQuestion[], title: string): string {
   let output = 'بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم\n';
-  output += '📜 *Madrasatu-s-Salikat Lil Banat — Examination Paper*\n';
+  output += '📜 *Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات) — Examination Paper*\n';
   output += '📚 *Subject / Category:* ' + (title || 'Islamic Quiz') + '\n';
   output += '⏱️ *Total Questions:* ' + questions.length + '\n';
   output += '══════════════════════════════════════\n\n';
@@ -291,7 +291,7 @@ export function formatQuizAsPrintableExam(questions: GeneratedQuestion[], title:
   });
 
   output += '══════════════════════════════════════\n';
-  output += '🔑 *Answer Key (For Faculty & Exam Review):*\n';
+  output += '🔑 *جوابی پرچہ (Answer Key for Teacher)*\n';
   questions.forEach((q, idx) => {
     output += 'Q' + (idx + 1) + ' Answer: ' + q.correct_answer + '\n';
   });
