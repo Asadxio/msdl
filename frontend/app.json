@@ -15,14 +15,14 @@
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F8F4EA"
+      "backgroundColor": "#F8F6F0"
     },
     "ios": {
       "supportsTablet": true,
       "splash": {
         "image": "./assets/images/splash.png",
         "resizeMode": "contain",
-        "backgroundColor": "#F8F4EA"
+        "backgroundColor": "#F8F6F0"
       },
       "infoPlist": {
         "NSCameraUsageDescription": "Allow camera access for profile photos, status media, live classes, and the native Camera Qibla Finder overlay.",
@@ -38,7 +38,7 @@
       "splash": {
         "image": "./assets/images/splash.png",
         "resizeMode": "contain",
-        "backgroundColor": "#F8F4EA"
+        "backgroundColor": "#F8F6F0"
       },
       "permissions": [
         "android.permission.INTERNET",
@@ -87,7 +87,7 @@
         {
           "image": "./assets/images/splash.png",
           "resizeMode": "contain",
-          "backgroundColor": "#F8F4EA"
+          "backgroundColor": "#F8F6F0"
         }
       ],
       "expo-font"

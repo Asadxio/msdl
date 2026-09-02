@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -120,6 +121,21 @@ export default function OnboardingEntryScreen() {
     });
   }, [completeOnboarding, hapticComplete, markEntryCompleteInSession, router, user]);
 
+  const triggerFinish = useCallback(() => {
+    if (completing.value) return;
+    completing.value = true;
+    progress.value = withTiming(1, { duration: 500 }, (finished) => {
+      if (finished) runOnJS(finish)();
+    });
+  }, [finish]);
+
+  const tapGesture = Gesture.Tap()
+    .onEnd(() => {
+      'worklet';
+      if (completing.value) return;
+      runOnJS(triggerFinish)();
+    });
+
   const panGesture = Gesture.Pan()
     .onUpdate((event) => {
       'worklet';
@@ -131,14 +147,13 @@ export default function OnboardingEntryScreen() {
       if (completing.value) return;
       const shouldComplete = progress.value >= COMPLETE_THRESHOLD || event.velocityY < -820;
       if (shouldComplete) {
-        completing.value = true;
-        progress.value = withTiming(1, { duration: 600 }, (finished) => {
-          if (finished) runOnJS(finish)();
-        });
+        runOnJS(triggerFinish)();
       } else {
         progress.value = withSpring(0, { damping: 18, stiffness: 170 });
       }
     });
+
+  const composedGesture = Gesture.Race(panGesture, tapGesture);
 
   // Animated Styles
 
@@ -180,9 +195,9 @@ export default function OnboardingEntryScreen() {
   }));
 
   const handlePillStyle = useAnimatedStyle(() => ({
-    backgroundColor: `rgba(255, 255, 255, ${interpolate(progress.value, [0, 1], [0.85, 0.4])})`,
-    borderColor: `rgba(212, 175, 55, ${interpolate(progress.value, [0, 1], [0.3, 0.8])})`,
-    shadowOpacity: interpolate(progress.value, [0, 1], [0.15, 0.4]),
+    backgroundColor: `rgba(255, 255, 255, ${interpolate(progress.value, [0, 1], [0.92, 0.4])})`,
+    borderColor: `rgba(212, 175, 55, ${interpolate(progress.value, [0, 1], [0.45, 0.9])})`,
+    shadowOpacity: interpolate(progress.value, [0, 1], [0.2, 0.45]),
   }));
 
   const sweepStyle = useAnimatedStyle(() => ({
@@ -207,28 +222,32 @@ export default function OnboardingEntryScreen() {
         </View>
       </Animated.View>
 
-      <View style={[styles.content, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 }]}>
+      <View style={[styles.content, { paddingTop: insets.top + 36, paddingBottom: insets.bottom + 36 }]}>
         
         {/* Top Text Group */}
         <Animated.View style={[styles.topTextGroup, textGroupStyle]}>
           <Text style={styles.bismillah}>بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْم</Text>
         </Animated.View>
 
-        {/* Center Logo */}
+        {/* Center Logo / Pure Emblem */}
         <Animated.View style={[styles.hero, logoStyle]}>
           {/* Noor Glow Layer */}
           <Animated.View style={[styles.noorGlow, noorStyle]} />
           <Animated.View style={[styles.noorGlowCore, noorStyle]} />
           
           <View style={styles.logoRing}>
-            <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+            <Image 
+              source={require('../assets/images/emblem_pure.png')} 
+              style={styles.logoImage} 
+              resizeMode="contain" 
+            />
           </View>
         </Animated.View>
 
         {/* Typography Group */}
         <Animated.View style={[styles.copy, textGroupStyle]}>
-          <Text style={styles.arabicName}>مدرسة السالكات للبنات</Text>
-          <Text style={styles.englishName}>MADARSA TUS SALIKAT LIL BANAT</Text>
+          <Text style={styles.arabicName}>مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</Text>
+          <Text style={styles.englishName}>MADRASA TUS SALIKAT LIL BANAT</Text>
           
           {/* Animated Gold Divider */}
           <Animated.View style={[styles.divider, dividerStyle]} />
@@ -237,14 +256,28 @@ export default function OnboardingEntryScreen() {
           <Text style={styles.secondarySubtitle}>Nurturing Faith, Knowledge & Adab</Text>
         </Animated.View>
 
-        {/* Swipe CTA */}
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={[styles.swipeZone, { bottom: insets.bottom + 30 }, handleContainerStyle]} testID="goto-begin-journey-btn">
+        {/* Intuitive CTA with Tap + Swipe Up */}
+        <GestureDetector gesture={composedGesture}>
+          <Animated.View 
+            style={[styles.swipeZone, { bottom: insets.bottom + 28 }, handleContainerStyle]} 
+            testID="goto-begin-journey-btn"
+            accessibilityRole="button"
+            accessibilityLabel="Begin your journey. Tap or swipe up to enter"
+          >
+            {/* Pulsing guidance indicator above pill */}
+            <View style={styles.hintIndicator}>
+              <Ionicons name="chevron-up" size={18} color="#D4AF37" />
+              <Text style={styles.hintText}>Swipe up or tap to enter</Text>
+            </View>
+
             <Animated.View style={[styles.swipePill, handlePillStyle]}>
               <View style={styles.swipeGlow} />
-              <View style={styles.swipeHandleIndicator} />
               <Text style={styles.swipeArabic}>ابدئي رحلتكِ</Text>
-              <Text style={styles.swipeEnglish}>✦ Begin Your Journey ✦</Text>
+              <View style={styles.swipeEnglishRow}>
+                <Ionicons name="sparkles" size={12} color="#D4AF37" style={{ marginRight: 6 }} />
+                <Text style={styles.swipeEnglish}>BEGIN YOUR JOURNEY</Text>
+                <Ionicons name="arrow-up" size={12} color="#D4AF37" style={{ marginLeft: 6 }} />
+              </View>
             </Animated.View>
           </Animated.View>
         </GestureDetector>
@@ -334,21 +367,24 @@ const styles = StyleSheet.create({
     shadowRadius: 30,
   },
   logoRing: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    borderWidth: 2,
-    borderColor: 'rgba(212,175,55,0.6)',
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    borderWidth: 1.5,
+    borderColor: 'rgba(212,175,55,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
     backgroundColor: '#FFFFFF',
-    padding: 10,
+    padding: 16,
+    shadowColor: ROYAL_GOLD,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 6,
   },
   logoImage: {
     width: '100%',
     height: '100%',
-    opacity: 1.0,
   },
   logoMonogramOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -364,34 +400,34 @@ const styles = StyleSheet.create({
   },
   copy: {
     alignItems: 'center',
-    marginBottom: 100,
+    marginBottom: 90,
   },
   arabicName: {
     color: EMERALD,
-    fontSize: 28,
+    fontSize: 27,
     fontWeight: '800',
     letterSpacing: 0.5,
     textAlign: 'center',
     writingDirection: 'rtl',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   englishName: {
-    color: '#032D23',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 2.5,
+    color: '#064E3B',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 2.8,
     textAlign: 'center',
     textTransform: 'uppercase',
   },
   divider: {
     height: 1.5,
     backgroundColor: ROYAL_GOLD,
-    marginVertical: 18,
+    marginVertical: 16,
     borderRadius: 1,
   },
   subtitle: {
     color: EMERALD,
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }),
     fontWeight: '600',
     textAlign: 'center',
@@ -400,7 +436,7 @@ const styles = StyleSheet.create({
   },
   secondarySubtitle: {
     color: 'rgba(6,78,59,0.7)',
-    fontSize: 13,
+    fontSize: 12.5,
     fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }),
     fontWeight: '500',
     textAlign: 'center',
@@ -411,42 +447,52 @@ const styles = StyleSheet.create({
     width: '100%',
     zIndex: 20,
   },
+  hintIndicator: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  hintText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#8A6D1E',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
   swipePill: {
-    width: 250,
-    height: 76,
-    borderRadius: 38,
+    width: 260,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 1.2,
+    borderColor: 'rgba(212,175,55,0.5)',
     shadowColor: ROYAL_GOLD,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    elevation: 6,
     overflow: 'hidden',
   },
   swipeGlow: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-  },
-  swipeHandleIndicator: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: ROYAL_GOLD,
-    marginBottom: 8,
-    opacity: 0.8,
+    backgroundColor: 'rgba(255,255,255,0.6)',
   },
   swipeArabic: {
     color: EMERALD,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     marginBottom: 2,
+  },
+  swipeEnglishRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   swipeEnglish: {
     color: EMERALD,
     fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1.5,
+    fontWeight: '700',
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
   },
   sweepOverlay: {
