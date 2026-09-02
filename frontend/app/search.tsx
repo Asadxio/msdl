@@ -47,6 +47,8 @@ const APP_TOOLS = [
 ];
 
 const ADMIN_ACTIONS = [
+  { id: 'adm-manage-quizzes', title: 'Manage Quiz Question Bank', subtitle: 'View, edit, update & delete Firestore quiz questions', route: '/admin/manage-quizzes', icon: 'list', badge: 'Admin' },
+  { id: 'adm-ai-quiz', title: 'AI Auto-Quiz & Exam Maker', subtitle: 'Generate exam papers & new quiz sets in seconds', route: '/admin/ai-quiz-maker', icon: 'sparkles', badge: 'Admin' },
   { id: 'adm-users', title: 'Manage Users & Permissions', subtitle: 'Approve, deactivate, assign roles & grant free courses', route: '/admin/users', icon: 'people', badge: 'Admin' },
   { id: 'adm-academics', title: 'Manage Courses & Faculty', subtitle: 'Create courses, modules, assign ustaadha & rosters', route: '/admin/manage-academics', icon: 'school', badge: 'Admin' },
   { id: 'adm-payments', title: 'Fee Management & Transactions', subtitle: 'Track fee submissions, manual receipts & invoices', route: '/admin/payments', icon: 'card', badge: 'Admin' },

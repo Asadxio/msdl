@@ -472,24 +472,45 @@ export default function QuizScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.categoryGrid}>
-            {/* Teacher / Admin AI Auto-Quiz Maker Card */}
+            {/* Teacher / Admin Action Banners */}
             {isTeacher && (
-              <TouchableOpacity
-                style={styles.aiQuizMakerBanner}
-                onPress={() => router.push('/admin/ai-quiz-maker' as any)}
-                activeOpacity={0.88}
-              >
-                <View style={styles.aiQuizMakerLeft}>
-                  <View style={styles.aiQuizMakerIcon}>
-                    <Ionicons name="sparkles" size={20} color="#C8A84E" />
+              <View style={{ gap: 8, marginBottom: 4 }}>
+                <TouchableOpacity
+                  style={styles.aiQuizMakerBanner}
+                  onPress={() => router.push('/admin/ai-quiz-maker' as any)}
+                  activeOpacity={0.88}
+                >
+                  <View style={styles.aiQuizMakerLeft}>
+                    <View style={styles.aiQuizMakerIcon}>
+                      <Ionicons name="sparkles" size={20} color="#C8A84E" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.aiQuizMakerTitle}>AI Auto-Quiz & Exam Maker</Text>
+                      <Text style={styles.aiQuizMakerSubtitle}>Generate & publish new questions in 5 seconds</Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.aiQuizMakerTitle}>AI خودکار پرچہ ساز (AI Quiz Maker)</Text>
-                    <Text style={styles.aiQuizMakerSubtitle}>اساتذہ کے لیے ۵ سیکنڈ میں امتحانی سوالات بنائیں</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#C8A84E" />
-              </TouchableOpacity>
+                  <Ionicons name="chevron-forward" size={18} color="#C8A84E" />
+                </TouchableOpacity>
+
+                {isAdmin && (
+                  <TouchableOpacity
+                    style={[styles.aiQuizMakerBanner, { backgroundColor: '#00382B', borderColor: 'rgba(200,168,78,0.3)' }]}
+                    onPress={() => router.push('/admin/manage-quizzes' as any)}
+                    activeOpacity={0.88}
+                  >
+                    <View style={styles.aiQuizMakerLeft}>
+                      <View style={[styles.aiQuizMakerIcon, { backgroundColor: '#00251C' }]}>
+                        <Ionicons name="list" size={20} color="#34D399" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.aiQuizMakerTitle, { color: '#FFFFFF' }]}>Manage Quiz Question Bank</Text>
+                        <Text style={[styles.aiQuizMakerSubtitle, { color: '#A7F3D0' }]}>Edit, update or delete any question from Firestore</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#34D399" />
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
 
             {QUIZ_CATEGORIES.map((cat) => {
