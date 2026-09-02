@@ -47,6 +47,10 @@ jobs:
           EXPO_PUBLIC_PUSH_API_URL=https://msdl-backend.onrender.com
           EOF
 
+      - name: Expo Prebuild (Generate Android native project)
+        working-directory: frontend
+        run: npx expo prebuild --platform android --clean
+
       - name: Cache Gradle Packages
         uses: actions/cache@v4
         with:
