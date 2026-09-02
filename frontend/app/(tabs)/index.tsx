@@ -236,6 +236,15 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <View style={{ flex: 1 }} />
             <TouchableOpacity 
+              onPress={() => router.push('/search')} 
+              style={styles.headerActionBtn}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+            >
+              <Ionicons name="search-outline" size={21} color={COLORS.surface} />
+            </TouchableOpacity>
+            <TouchableOpacity 
               onPress={() => router.push('/(tabs)/notifications')} 
               style={styles.headerActionBtn}
               accessible={true}
@@ -286,6 +295,22 @@ export default function HomeScreen() {
              </Text>
           </View>
         </View>
+
+        {/* Global Quick Search Bar */}
+        <TouchableOpacity
+          style={styles.homeSearchBar}
+          onPress={() => router.push('/search')}
+          activeOpacity={0.85}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="Search everything in app"
+        >
+          <Ionicons name="search" size={19} color="#002E23" />
+          <Text style={styles.homeSearchPlaceholder}>Search courses, surahs, kitabs, duas, tools...</Text>
+          <View style={styles.searchPillBadge}>
+            <Text style={styles.searchPillBadgeText}>Search</Text>
+          </View>
+        </TouchableOpacity>
 
         {/* Section 3: Daily Wisdom (Editorial Islamic Quote Card) */}
         <View style={styles.sectionContainer}>
@@ -1306,6 +1331,38 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 2,
     textAlign: 'center',
+  },
+  homeSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 10,
+    ...SHADOWS.card,
+  },
+  homeSearchPlaceholder: {
+    flex: 1,
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  searchPillBadge: {
+    backgroundColor: '#002E23',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  searchPillBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   footerContainer: {
     marginTop: 36,

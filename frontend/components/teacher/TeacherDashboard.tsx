@@ -207,6 +207,13 @@ export function TeacherDashboard({
             <View style={styles.headerActions}>
               <TouchableOpacity
                 style={styles.headerActionBtn}
+                onPress={() => router.push('/search' as any)}
+                accessibilityLabel="Search"
+              >
+                <Ionicons name="search-outline" size={20} color={COLORS.surface} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerActionBtn}
                 onPress={() => router.push('/(tabs)/notifications' as any)}
                 accessibilityLabel="Notifications"
               >

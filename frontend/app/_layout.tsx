@@ -465,6 +465,7 @@ export default function RootLayout() {
               }}
             >
               <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="search" options={{ animation: 'fade' }} />
               <Stack.Screen name="course/[id]" />
               <Stack.Screen name="teacher/[id]" />
               <Stack.Screen name="book/[id]" />

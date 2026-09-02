@@ -232,6 +232,15 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             <View style={styles.headerActionsGroup}>
               <TouchableOpacity
                 style={styles.notifBtn}
+                onPress={() => safePush('/search')}
+                accessibilityRole="button"
+                accessibilityLabel="Search"
+              >
+                <Ionicons name="search-outline" size={20} color={THEME.primary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.notifBtn}
                 onPress={() => safePush('/(tabs)/notifications')}
                 accessibilityRole="button"
                 accessibilityLabel="Notifications"
@@ -251,6 +260,21 @@ export const AdminDashboard = React.memo(function AdminDashboard({
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Admin Quick Search Bar */}
+          <TouchableOpacity
+            style={styles.adminSearchBar}
+            onPress={() => safePush('/search')}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Search everything across LMS"
+          >
+            <Ionicons name="search" size={17} color={THEME.primary} />
+            <Text style={styles.adminSearchPlaceholder}>Search students, courses, faculty, logs, kitabs...</Text>
+            <View style={styles.adminSearchBadge}>
+              <Text style={styles.adminSearchBadgeText}>Search</Text>
+            </View>
+          </TouchableOpacity>
 
           {/* Hijri Date & Prayer Reminder Bar */}
           <View style={styles.prayerBar}>
@@ -515,6 +539,37 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: THEME.border,
+  },
+  adminSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    gap: 8,
+    ...SHADOWS.card,
+  },
+  adminSearchPlaceholder: {
+    flex: 1,
+    fontSize: 12.5,
+    color: THEME.textMuted,
+    fontWeight: '500',
+  },
+  adminSearchBadge: {
+    backgroundColor: THEME.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  adminSearchBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   hijriCol: {
     flexDirection: 'row',
