@@ -551,12 +551,13 @@ export default function HomeScreen() {
           <Text style={styles.sectionTitle}>Quick Access</Text>
           <View style={styles.quickAccessGrid}>
              {[
+               { name: 'Quran Karim', icon: 'book-outline', route: '/quran' },
                { name: 'My Courses', icon: 'book', route: '/(tabs)/courses' },
-               { name: 'طہارت و مسائل', icon: 'heart-outline', route: '/taharat-tracker' },
-               { name: 'AI Sabaq (معاون)', icon: 'sparkles', route: '/ai-assistant' },
-               { name: 'فلیش کارڈز (یادداشت)', icon: 'card-outline', route: '/flashcards' },
-               { name: 'دار الافتاء', icon: 'ribbon-outline', route: '/fatawa' },
-               { name: 'دعوت و ثواب', icon: 'gift-outline', route: '/referral' },
+               { name: 'Taharat Tracker', icon: 'heart-outline', route: '/taharat-tracker' },
+               { name: 'AI Sabaq Tutor', icon: 'sparkles', route: '/ai-assistant' },
+               { name: 'Flashcards', icon: 'card-outline', route: '/flashcards' },
+               { name: 'Dar-ul-Iftaa', icon: 'ribbon-outline', route: '/fatawa' },
+               { name: 'Referral Rewards', icon: 'gift-outline', route: '/referral' },
                { name: 'Smart Tasbeeh', icon: 'finger-print', route: '/tasbeeh' },
                { name: 'Sanad / Cert', icon: 'ribbon', route: '/(tabs)/certificate' },
                { name: 'Pay Fees', icon: 'card', route: '/payment' },

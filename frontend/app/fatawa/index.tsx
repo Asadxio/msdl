@@ -147,8 +147,8 @@ export default function DarUlIftaaScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>دَارُ الإِفْتَاءِ وَالإِرْشَاد</Text>
-          <Text style={styles.headerTitle}>Dar-ul-Iftaa & Masail</Text>
+          <Text style={styles.arabicHeader}>Dar-ul-Iftaa & Masail</Text>
+          <Text style={styles.headerTitle}>Private Islamic Guidance & Fatwa Library</Text>
         </View>
         {isTeacherOrAdmin ? (
           <TouchableOpacity
@@ -168,7 +168,7 @@ export default function DarUlIftaaScreen() {
       <View style={styles.purdahBanner}>
         <Ionicons name="lock-closed" size={16} color="#005F46" />
         <Text style={styles.purdahBannerText}>
-          ۱۰۰٪ مکمل پردہ اور رازداری — آپ کا سوال صرف معتمد اساتذہ تک محدود رہے گا۔
+          100% Confidential & Private — Your questions are reviewed only by authorized scholars.
         </Text>
       </View>
 
@@ -177,7 +177,7 @@ export default function DarUlIftaaScreen() {
         <Ionicons name="search-outline" size={18} color="#64748B" />
         <TextInput
           style={styles.searchInput}
-          placeholder="مسائل تلاش کریں (مثلاً: وضو، روزہ، نماز)..."
+          placeholder="Search Masail (e.g. Wudu, Namaz, Roza)..."
           placeholderTextColor="#94A3B8"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -204,7 +204,7 @@ export default function DarUlIftaaScreen() {
           <Text
             style={[styles.tabText, activeTab === 'my_questions' && styles.tabTextActive]}
           >
-            میرے سوالات ({myQuestions.length})
+            My Questions ({myQuestions.length})
           </Text>
         </TouchableOpacity>
 
@@ -220,7 +220,7 @@ export default function DarUlIftaaScreen() {
           <Text
             style={[styles.tabText, activeTab === 'public_library' && styles.tabTextActive]}
           >
-            عام فتاویٰ لائبریری
+            Public Fatwa Library
           </Text>
         </TouchableOpacity>
       </View>
@@ -238,7 +238,7 @@ export default function DarUlIftaaScreen() {
                 onPress={() => setSelectedCategory('all')}
               >
                 <Text style={[styles.chipText, selectedCategory === 'all' && styles.chipTextActive]}>
-                  تمام مسائل (All)
+                  All Masail (تمام مسائل)
                 </Text>
               </TouchableOpacity>
               {categoriesList.map((cat) => (
@@ -266,12 +266,12 @@ export default function DarUlIftaaScreen() {
             <View style={styles.emptyCard}>
               <Ionicons name="chatbubbles-outline" size={48} color="#94A3B8" />
               <Text style={styles.emptyTitle}>
-                {searchQuery ? 'کوئی سوال نہیں ملا' : 'آپ نے ابھی تک کوئی سوال نہیں پوچھا'}
+                {searchQuery ? 'No question found' : 'No questions asked yet'}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {searchQuery
-                  ? 'تلاش کے الفاظ بدل کر دوبارہ کوشش فرمائیں۔'
-                  : 'اگر آپ کو طہارت، نماز، روزہ، یا روزمرہ زندگی کا کوئی شرعی مسئلہ درپیش ہو تو نیچے دیے گئے بٹن سے بلا جھجھک پوچھیں۔'}
+                  ? 'Try searching with different keywords.'
+                  : 'If you have any questions regarding Taharat, Namaz, Roza or daily Islamic life, ask directly to authorized scholars below.'}
               </Text>
               {!searchQuery && (
                 <TouchableOpacity
@@ -279,7 +279,7 @@ export default function DarUlIftaaScreen() {
                   onPress={() => setModalVisible(true)}
                 >
                   <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.emptyActionText}>نیا مسئلہ پوچھیں</Text>
+                  <Text style={styles.emptyActionText}>Ask New Question (مسئلہ پوچھیں)</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -397,7 +397,7 @@ export default function DarUlIftaaScreen() {
         accessibilityLabel="Ask a question"
       >
         <Ionicons name="add" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingAskText}>مسئلہ پوچھیں</Text>
+        <Text style={styles.floatingAskText}>Ask Question (+)</Text>
       </TouchableOpacity>
 
       {/* Ask Question Modal */}

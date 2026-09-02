@@ -81,8 +81,8 @@ export default function SadqahReferralScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>الدَّعْوَةُ إِلَى الخَيْرِ وَالصَّدَقَةُ الجَارِيَة</Text>
-          <Text style={styles.headerTitle}>Sadqah-e-Jariyah & Dawat Hub</Text>
+          <Text style={styles.arabicHeader}>Referral & Sadqah-e-Jariyah</Text>
+          <Text style={styles.headerTitle}>Invite Sisters to Learn Deen</Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -97,18 +97,18 @@ export default function SadqahReferralScreen() {
             قَالَ رَسُولُ اللَّهِ ﷺ: « مَنْ دَلَّ عَلَى خَيْرٍ فَلَهُ مِثْلُ أَجْرِ فَاعِلِهِ »
           </Text>
           <Text style={styles.hadithUrdu}>
-            ”جس نے کسی نیکی کی رہنمائی کی، اسے نیکی کرنے والے کے برابر ثواب ملے گا۔“ (صحیح مسلم)
+            "Whosoever guides someone to a good deed will have a reward equal to the one who does it." (Sahih Muslim)
           </Text>
         </View>
 
         {/* Invite Code Card */}
         <View style={styles.inviteCard}>
-          <Text style={styles.inviteCardLabel}>آپ کا مخصوص دعوت کوڈ (Your Referral Code):</Text>
+          <Text style={styles.inviteCardLabel}>Your Unique Referral Code:</Text>
           <View style={styles.codeRow}>
             <Text style={styles.codeText}>{referralCode}</Text>
             <TouchableOpacity style={styles.copyBtn} onPress={handleCopyCode} activeOpacity={0.8}>
               <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color="#005F46" />
-              <Text style={styles.copyBtnText}>{copied ? 'کاپی شدہ' : 'کاپی'}</Text>
+              <Text style={styles.copyBtnText}>{copied ? 'Copied' : 'Copy'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -119,7 +119,7 @@ export default function SadqahReferralScreen() {
             activeOpacity={0.85}
           >
             <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
-            <Text style={styles.shareBtnText}>واٹس ایپ پر دعوت ارسال کریں (Share)</Text>
+            <Text style={styles.shareBtnText}>Share Invitation on WhatsApp</Text>
           </TouchableOpacity>
         </View>
 
@@ -128,7 +128,7 @@ export default function SadqahReferralScreen() {
           <View style={styles.statBox}>
             <Ionicons name="people" size={24} color="#005F46" />
             <Text style={styles.statVal}>{totalInvited}</Text>
-            <Text style={styles.statLabel}>شامل شدہ بہنیں</Text>
+            <Text style={styles.statLabel}>Joined Sisters</Text>
           </View>
           <View style={styles.statBox}>
             <Ionicons name="ribbon" size={24} color="#C8A84E" />
@@ -141,25 +141,25 @@ export default function SadqahReferralScreen() {
         <View style={styles.milestoneCard}>
           <View style={styles.milestoneHeader}>
             <Ionicons name="sparkles" size={18} color="#C8A84E" />
-            <Text style={styles.milestoneTitle}>صدقہ جاریہ کا درجہ: {currentTier.arabicTitle}</Text>
+            <Text style={styles.milestoneTitle}>Sadqah-e-Jariyah Rank: {currentTier.arabicTitle}</Text>
           </View>
           <Text style={styles.milestoneSub}>
-            ہر وہ بہن جو آپ کے توسط سے قرآن و سنت اور فقہ سیکھے گی، اس کے علم و عمل کا ثواب قیامت تک آپ کے نامۂ اعمال میں درج ہوتا رہے گا۔
+            Every sister who learns Quran, Sunnah and Fiqh through your invitation will earn you continuous blessings and reward in the Akhirah.
           </Text>
         </View>
 
         {/* Invited Sisters List */}
         <View style={styles.listSection}>
-          <Text style={styles.listTitle}>دعوت قبول کرنے والی بہنیں (Joined Sisters):</Text>
+          <Text style={styles.listTitle}>Invited Sisters (دعوت قبول کرنے والی بہنیں):</Text>
 
           {loading ? (
             <ActivityIndicator size="small" color="#FFFFFF" style={{ marginTop: 12 }} />
           ) : referrals.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="heart-outline" size={40} color="#94A3B8" />
-              <Text style={styles.emptyTitle}>ابھی تک کوئی دعوت درج نہیں ہوئی</Text>
+              <Text style={styles.emptyTitle}>No invitations yet</Text>
               <Text style={styles.emptySub}>
-                اوپر دیے گئے بٹن سے اپنی سہیلیوں، بہنوں اور عزیزوں کو مدرسہ کی دعوت بھیجیں اور صدقہ جاریہ کا حصہ بنیں۔
+                Share your invite code with friends and family using the button above to start your Sadqah-e-Jariyah chain.
               </Text>
             </View>
           ) : (

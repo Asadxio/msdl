@@ -147,8 +147,8 @@ export default function TaharatTrackerScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>طَہَارَت وَ خَوَاتِین کِے مَسَائِل</Text>
-          <Text style={styles.headerSubtitle}>Women's Purity & Taharat Tracker</Text>
+          <Text style={styles.arabicHeader}>Taharat & Purity Tracker</Text>
+          <Text style={styles.headerSubtitle}>Women's Islamic Health & Fiqh Guide</Text>
         </View>
         <TouchableOpacity
           style={styles.headerBtn}
@@ -163,16 +163,16 @@ export default function TaharatTrackerScreen() {
       <View style={styles.privacyBanner}>
         <Ionicons name="shield-checkmark" size={14} color="#C8A84E" />
         <Text style={styles.privacyBannerText}>
-          یہ ڈیٹا ۱۰۰٪ پرائیویٹ ہے اور صرف آپ کے اپنے فون میں محفوظ ہے۔
+          100% Private & Stored only on your device (Phone).
         </Text>
       </View>
 
       {/* Tabs */}
       <View style={styles.tabsRow}>
         {[
-          { id: 'status', label: 'طہارت و ایام', icon: 'calendar-outline' },
-          { id: 'qadha', label: 'قضائے صوم (روزے)', icon: 'moon-outline' },
-          { id: 'masail', label: 'فقہی رہنمائی', icon: 'book-outline' },
+          { id: 'status', label: 'Purity Status', icon: 'calendar-outline' },
+          { id: 'qadha', label: 'Qaza Fasting', icon: 'moon-outline' },
+          { id: 'masail', label: 'Fiqh Rules', icon: 'book-outline' },
         ].map((tab) => {
           const isSelected = activeTab === tab.id;
           return (
@@ -223,7 +223,7 @@ export default function TaharatTrackerScreen() {
                 <View style={styles.ghuslBox}>
                   <Ionicons name="water-outline" size={16} color="#005F46" />
                   <Text style={styles.ghuslText}>
-                    عادت کے مطابق متوقع غسل: <Text style={{ fontWeight: '800' }}>{purityStatus.expectedGhuslDate}</Text>
+                    Expected Ghusl Date: <Text style={{ fontWeight: '800' }}>{purityStatus.expectedGhuslDate}</Text>
                   </Text>
                 </View>
               )}
@@ -237,7 +237,7 @@ export default function TaharatTrackerScreen() {
                     activeOpacity={0.88}
                   >
                     <Ionicons name="water" size={18} color="#FFFFFF" />
-                    <Text style={styles.primaryActionBtnText}>خون رک گیا / غسل کا اندراج کریں</Text>
+                    <Text style={styles.primaryActionBtnText}>Bleeding Stopped / Record Ghusl (پاک)</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
@@ -246,7 +246,7 @@ export default function TaharatTrackerScreen() {
                     activeOpacity={0.88}
                   >
                     <Ionicons name="add-circle" size={18} color="#FFFFFF" />
-                    <Text style={styles.primaryActionBtnText}>حیض / نفاس کے آغاز کا اندراج</Text>
+                    <Text style={styles.primaryActionBtnText}>Log Period / Nifas Start (حیض و نفاس)</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -254,11 +254,11 @@ export default function TaharatTrackerScreen() {
 
             {/* Past History List */}
             <View style={styles.historySection}>
-              <Text style={styles.sectionTitle}>ماضی کے شرعی ریکارڈز:</Text>
+              <Text style={styles.sectionTitle}>Past Cycle Records (سابقہ ریکارڈ):</Text>
               {entries.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <Ionicons name="document-text-outline" size={32} color="#94A3B8" />
-                  <Text style={styles.emptyText}>کوئی سابقہ ریکارڈ موجود نہیں ہے۔</Text>
+                  <Text style={styles.emptyText}>No past cycle records found (کوئی ریکارڈ نہیں)</Text>
                 </View>
               ) : (
                 entries.map((entry) => {

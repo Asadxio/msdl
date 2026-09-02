@@ -12,10 +12,10 @@ export interface IslamicFlashcard {
 }
 
 export const FLASHCARD_CATEGORIES = [
-  { id: 'duas', label: 'مسنون دعائیں', icon: 'heart', color: '#10B981' },
-  { id: 'hadith', label: '۴۰ احادیث', icon: 'book', color: '#3B82F6' },
-  { id: 'fiqh', label: 'فقہی مسائل', icon: 'shield-checkmark', color: '#F59E0B' },
-  { id: 'tajweed', label: 'تجوید و قواعد', icon: 'sparkles', color: '#8B5CF6' },
+  { id: 'duas', label: 'Masnoon Duas (دعائیں)', icon: 'heart', color: '#10B981' },
+  { id: 'hadith', label: '40 Hadiths (احادیث)', icon: 'book', color: '#3B82F6' },
+  { id: 'fiqh', label: 'Fiqh Rules (مسائل)', icon: 'shield-checkmark', color: '#F59E0B' },
+  { id: 'tajweed', label: 'Tajweed Rules (تجوید)', icon: 'sparkles', color: '#8B5CF6' },
 ] as const;
 
 export const ISLAMIC_FLASHCARDS: IslamicFlashcard[] = [
