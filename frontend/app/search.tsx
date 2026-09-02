@@ -41,6 +41,7 @@ const APP_TOOLS = [
   { id: 'taharat', title: 'Taharat & Menstrual Tracker', subtitle: 'Specialized Islamic jurisprudence tracker for sisters', route: '/taharat-tracker', icon: 'water', badge: 'Fiqh' },
   { id: 'fatwa', title: 'Dar-ul-Iftaa & Fatwa', subtitle: 'Ask questions to Muftiyan & Browse verified fatawa', route: '/fatwa', icon: 'chatbubbles', badge: 'Shariah' },
   { id: 'flashcards', title: 'Islamic Flashcards & Revision', subtitle: 'Active recall for Arabic vocabulary & Hadees', route: '/flashcards', icon: 'albums', badge: 'Learning' },
+  { id: 'attendance', title: 'Attendance Register (حاضری رجسٹر)', subtitle: 'Class-wise attendance, lecture tracking & teacher records', route: '/(tabs)/attendance', icon: 'calendar', badge: 'Class' },
   { id: 'notifications', title: 'Announcements & Notifications', subtitle: 'Madrasa circulars and daily reminders', route: '/(tabs)/notifications', icon: 'notifications', badge: 'Updates' },
   { id: 'downloads', title: 'Offline Kitabs & Audio', subtitle: 'Manage downloaded PDF notes and lectures', route: '/downloads', icon: 'download', badge: 'Offline' },
   { id: 'settings', title: 'App Settings & Preferences', subtitle: 'Theme, language, font size & audio cache', route: '/settings', icon: 'settings', badge: 'System' },
