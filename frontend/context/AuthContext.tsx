@@ -28,6 +28,7 @@ import {
   trackEmailVerificationError,
 } from '@/lib/emailVerificationAnalytics';
 import { trackEvent } from '@/lib/analytics';
+import { VERIFICATION_ACTION_CODE_SETTINGS } from '@/lib/emailVerificationSettings';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
@@ -430,7 +431,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           uid: cred.user.uid,
           emailDomain: safeEmail.split('@')[1] || 'unknown',
         }, `verification-email-signup-requested-${cred.user.uid}`);
-        await withTimeout(sendEmailVerification(cred.user));
+        await withTimeout(sendEmailVerification(cred.user, VERIFICATION_ACTION_CODE_SETTINGS));
         debugLog('[SIGNUP_DEBUG] sendEmailVerification SUCCESS for uid:', cred.user.uid);
         void markVerificationEmailSent(cred.user.uid);
       } catch (error: any) {
@@ -569,7 +570,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resendVerification = async (): Promise<string | null> => {
     if (!auth.currentUser) return 'Not signed in';
     try {
-      await sendEmailVerification(auth.currentUser);
+      await sendEmailVerification(auth.currentUser, VERIFICATION_ACTION_CODE_SETTINGS);
       logger.info('Verification email sent', { uid: auth.currentUser.uid, email: auth.currentUser.email });
       return null;
     } catch (err: any) {
@@ -613,7 +614,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       await updateEmail(currentUser, safeEmail);
-      await sendEmailVerification(currentUser);
+      await sendEmailVerification(currentUser, VERIFICATION_ACTION_CODE_SETTINGS);
       await AsyncStorage.removeItem(getVerificationResendKey(currentUser.uid)).catch(() => {});
       await setDoc(doc(db, 'users', currentUser.uid), {
         email: safeEmail,
