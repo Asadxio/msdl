@@ -243,31 +243,39 @@ export default function MoreLandingScreen() {
       <View style={styles.statsGrid}>
         <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Courses Available: ${totalCourses}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#EEF2FF' }]}>
-            <Ionicons name="book" size={24} color="#4F46E5" />
+            <Ionicons name="book" size={22} color="#4F46E5" />
           </View>
-          <Text style={styles.statValue}>{totalCourses}</Text>
-          <Text style={styles.statLabel}>Courses Available</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.statValue}>{totalCourses}</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>Courses</Text>
+          </View>
         </ScalePressable>
         <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Lessons Done: ${lessonsCompleted}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#ECFDF5' }]}>
-            <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+            <Ionicons name="checkmark-circle" size={22} color="#10B981" />
           </View>
-          <Text style={styles.statValue}>{lessonsCompleted}</Text>
-          <Text style={styles.statLabel}>Lessons Done</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.statValue}>{lessonsCompleted}</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>Lessons</Text>
+          </View>
         </ScalePressable>
         <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Quizzes Done: ${quizzesCompleted}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#FEF3C7' }]}>
-            <Ionicons name="help-circle" size={24} color="#D97706" />
+            <Ionicons name="help-circle" size={22} color="#D97706" />
           </View>
-          <Text style={styles.statValue}>{quizzesCompleted}</Text>
-          <Text style={styles.statLabel}>Quizzes Done</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.statValue}>{quizzesCompleted}</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>Quizzes</Text>
+          </View>
         </ScalePressable>
         <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Library Books: ${totalBooks}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#F5F3FF' }]}>
-            <Ionicons name="library" size={24} color="#7C3AED" />
+            <Ionicons name="library" size={22} color="#7C3AED" />
           </View>
-          <Text style={styles.statValue}>{totalBooks}</Text>
-          <Text style={styles.statLabel}>Library Books</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.statValue}>{totalBooks}</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>Library Books</Text>
+          </View>
         </ScalePressable>
       </View>
 
@@ -557,76 +565,80 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  /* Stats Grid (2 Columns, Equal Height, Centered Content) */
+  /* Stats Grid (Modern Horizontal/2x2 Compact Cards) */
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 12,
-    columnGap: 12,
+    gap: 12,
     marginBottom: 24,
   },
   statCard: {
-    width: '48%',
+    flexBasis: '48%',
+    flexGrow: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: CARD_RADIUS,
-    padding: 16,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     ...SHADOWS.card,
     shadowOpacity: CARD_SHADOW_OPACITY,
     borderWidth: 1,
     borderColor: CARD_BORDER,
-    minHeight: 116,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   statIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
   },
   statValue: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 4,
-    letterSpacing: -0.5,
-    textAlign: 'center',
+    lineHeight: 24,
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748B',
     fontWeight: '600',
-    textAlign: 'center',
+    lineHeight: 16,
   },
 
-  /* Quick Actions Grid (4 Columns) */
+  /* Quick Actions Grid (4 Columns, balanced square cards) */
   quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 16,
+    gap: 10,
   },
   quickItem: {
-    width: '23%',
-    alignItems: 'center',
-    paddingVertical: 8,
-    minHeight: 80,
-  },
-  quickIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    flexBasis: '22%',
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    ...SHADOWS.card,
+    shadowOpacity: 0.04,
+  },
+  quickIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
   },
   quickLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#334155',
     textAlign: 'center',
   },
 
