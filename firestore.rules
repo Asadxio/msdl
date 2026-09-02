@@ -157,7 +157,7 @@ service cloud.firestore {
     function isValidUserUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at']
+          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'founder']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -170,10 +170,28 @@ service cloud.firestore {
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
         && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
         && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
+        && (!('is_minor' in request.resource.data) || request.resource.data.is_minor is bool)
+        && (!('age_bracket' in request.resource.data) || request.resource.data.age_bracket is string)
+        && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name is string)
+        && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone is string)
+        && (!('founder' in request.resource.data) || request.resource.data.founder is bool)
         && (request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
         && ((request.resource.data.role == 'assistant_teacher') ? isAdmin() : true)
-    && (!resource.data.get('founder', false) || isSuperAdmin());
+        && (!resource.data.get('founder', false) || isSuperAdmin());
+    }
+
+    function isValidEmailVerifiedStudentActivation(uid) {
+      return isSelf(uid)
+        && request.auth.token.email_verified == true
+        && resource.data.role == 'student'
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updated_at'])
+        && request.resource.data.status == 'approved'
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.created_at == resource.data.created_at;
     }
 
     function isValidSelfUserMetadataUpdate(uid) {
@@ -1080,8 +1098,11 @@ service cloud.firestore {
       // Self-signup profile creation.
       allow create: if isValidUserCreate(uid);
 
-      // Admin can fully update users; users can update own push/profile/login metadata.
-      allow update: if (isAdmin() && isValidUserUpdateByAdmin()) || isValidSelfUserMetadataUpdate(uid) || isValidReferralCountIncrement();
+      // Admin can fully update users; users can update own push/profile/login metadata or auto-activate on email verification.
+      allow update: if (isAdmin() && isValidUserUpdateByAdmin())
+        || isValidEmailVerifiedStudentActivation(uid)
+        || isValidSelfUserMetadataUpdate(uid)
+        || isValidReferralCountIncrement();
       allow delete: if isAdmin() && (!resource.data.get('founder', false) || isSuperAdmin());
     }
 

@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
-import { collection, doc, updateDoc, deleteDoc, where, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, updateDoc, deleteDoc, where, setDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { UserProfile, useAuth } from '@/context/AuthContext';
@@ -21,6 +21,7 @@ import { bulkUpdateUserStatus, updateUserRoleSecure } from '@/lib/adminOps';
 import { APP_ROLES, canAssignRole, normalizeRole, type AppRole } from '@/lib/roles';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { getEnrollmentDocId } from '@/lib/enrollments';
 
 type UserWithId = UserProfile & { id: string };
 
@@ -31,6 +32,7 @@ export default function AdminUsersScreen() {
   const isAdmin = hasPermission(profile, 'admin.users.manage');
   const canBulk = hasPermission(profile, 'admin.users.bulk');
   const [users, setUsers] = useState<UserWithId[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -86,8 +88,56 @@ export default function AdminUsersScreen() {
       router.replace('/unauthorized?required=admin');
       return;
     }
-    if (isAdmin) fetchUsers('reset');
+    if (isAdmin) {
+      fetchUsers('reset');
+      getDocs(collection(db, 'courses')).then((snap) => {
+        const cList: Array<{ id: string; name: string }> = [];
+        snap.forEach((d) => cList.push({ id: d.id, name: d.data().name || 'Course' }));
+        setAvailableCourses(cList);
+      }).catch(() => {});
+    }
   }, [isAdmin, roleFilter, statusFilter]);
+
+  const handleGrantCourseAccess = (u: UserWithId) => {
+    if (!availableCourses.length) {
+      Alert.alert('No Courses', 'No courses found in the system to grant access.');
+      return;
+    }
+    const options = availableCourses.map((c) => ({
+      text: c.name,
+      onPress: async () => {
+        try {
+          const enrollmentDocId = getEnrollmentDocId(u.id, c.id);
+          await setDoc(doc(db, 'enrollments', enrollmentDocId), {
+            user_id: u.id,
+            course_id: c.id,
+            status: 'active',
+            enrolled_at: serverTimestamp(),
+            created_at: serverTimestamp(),
+            granted_by_admin: profile?.email || profile?.name || 'admin',
+            granted_free: true,
+          }, { merge: true });
+
+          await createAdminLog(profile, {
+            action: 'grant_free_course_access',
+            performed_by: profile?.email || profile?.name || 'admin',
+            target_id: u.id,
+            details: `Enrolled in course: ${c.name} (${c.id}) without fees`,
+          }).catch(() => {});
+
+          Alert.alert('Access Granted! ✨', `${u.name} now has full access to "${c.name}" without fees.`);
+        } catch (err: any) {
+          Alert.alert('Error', err?.message || 'Failed to grant course access');
+        }
+      },
+    }));
+
+    Alert.alert(
+      'Grant Free Course Access',
+      `Select a course to give ${u.name} full access:`,
+      [...options, { text: 'Cancel', style: 'cancel' }]
+    );
+  };
 
   const updateUser = async (uid: string, updates: Partial<UserProfile> & { updated_at?: any }) => {
     try {
@@ -299,6 +349,12 @@ export default function AdminUsersScreen() {
                   <Text style={styles.reactivateBtnText}>Set Pending</Text>
                 </TouchableOpacity>
               )}
+              {item.role === 'student' && (
+                <TouchableOpacity style={styles.courseAccessBtn} onPress={() => handleGrantCourseAccess(item)} testID={`grant-course-btn-${item.id}`}>
+                  <Ionicons name="school" size={14} color="#059669" />
+                  <Text style={styles.courseAccessBtnText}>Grant Course Free</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.roleBtn} onPress={() => handleToggleRole(item)} testID={`toggle-role-btn-${item.id}`}>
                 <Text style={styles.roleBtnText}>
                   {item.role === 'student' ? 'Make Teacher' : 'Make Student'}
@@ -466,6 +522,8 @@ const styles = StyleSheet.create({
   reactivateBtnText: { color: '#1565C0', fontSize: 13, fontWeight: '700' },
   roleBtn: { backgroundColor: '#EEF2FF', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.xxl },
   roleBtnText: { color: '#3730A3', fontSize: 13, fontWeight: '700' },
+  courseAccessBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECFDF5', paddingHorizontal: 12, paddingVertical: 8, borderRadius: RADIUS.xxl, borderWidth: 1, borderColor: '#A7F3D0' },
+  courseAccessBtnText: { color: '#047857', fontSize: 12, fontWeight: '700' },
   deleteBtn: { backgroundColor: '#FEF2F2', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.xxl, borderWidth: 1, borderColor: COLORS.error },
   deleteBtnText: { color: COLORS.error, fontSize: 13, fontWeight: '700' },
 });

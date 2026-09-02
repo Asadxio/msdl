@@ -94,12 +94,25 @@ export default function PendingScreen() {
     stopPolling();
     logger.info('Navigation triggered', { reason: 'email-verified', route: '/' });
     console.log('[EmailVerification] Navigation triggered', { route: '/' });
+    
+    // Ensure profile status in Firestore is marked approved for email-verified students
+    if (auth.currentUser?.uid && profile?.role === 'student' && profile?.status === 'pending') {
+      try {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          status: 'approved',
+          updated_at: serverTimestamp(),
+        });
+      } catch (e) {
+        console.warn('Auto-approval status update:', e);
+      }
+    }
+
     await refreshProfileRef.current().catch((err) => {
       logger.error('Email verification profile refresh failed before navigation', err);
       console.log('[EmailVerification] Any caught errors', err);
     });
     router.replace('/');
-  }, [router, stopPolling]);
+  }, [router, stopPolling, profile]);
 
   const refreshVerificationStatus = useCallback(async (source: 'mount' | 'manual' | 'poll', showUnverifiedMessage = false) => {
     if (verificationCheckInFlightRef.current) {
