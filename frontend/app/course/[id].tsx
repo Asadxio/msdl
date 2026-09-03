@@ -1377,6 +1377,24 @@ export default function CourseDetailScreen() {
                                     {done ? "Completed" : "Mark lesson complete"}
                                   </Text>
                                 </TouchableOpacity>
+
+                                {/* 🤖 Direct Sabaq AI Tutor Helper Link */}
+                                <TouchableOpacity
+                                  style={styles.askTutorLessonBtn}
+                                  onPress={() => {
+                                    router.push({
+                                      pathname: "/ai-assistant",
+                                      params: {
+                                        courseTitle: course?.name || "Course",
+                                        lessonTitle: lesson.title,
+                                      },
+                                    } as any);
+                                  }}
+                                  activeOpacity={0.85}
+                                >
+                                  <Ionicons name="sparkles" size={15} color="#C8A84E" />
+                                  <Text style={styles.askTutorLessonBtnText}>Ask AI Sabaq Tutor</Text>
+                                </TouchableOpacity>
                                 <View style={styles.lessonRecordingBlock}>
                                   <Text style={styles.lessonRecordingTitle}>
                                     Class Recordings
@@ -2690,5 +2708,23 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 13,
     fontWeight: "700",
+  },
+  askTutorLessonBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#002E23",
+    borderWidth: 1,
+    borderColor: "#C8A84E",
+    borderRadius: RADIUS.md,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    gap: 7,
+    marginTop: 8,
+  },
+  askTutorLessonBtnText: {
+    color: "#FDFBF4",
+    fontSize: 12,
+    fontWeight: "800",
   },
 });
