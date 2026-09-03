@@ -253,7 +253,7 @@ export default function QuranReaderScreen() {
             <Ionicons name={isFullSurahPlaying ? 'pause' : 'play'} size={14} color={isFullSurahPlaying ? '#FFFFFF' : '#002E23'} />
           )}
           <Text style={[styles.audioPillText, isFullSurahPlaying && styles.audioPillTextActive]}>
-            {isFullSurahPlaying ? 'تلاوت جاری ہے' : 'پوری سورہ آڈیو (اردو ترجمہ)'}
+            {isFullSurahPlaying ? 'Recitation Playing' : 'Full Surah Audio Recitation'}
           </Text>
         </TouchableOpacity>
 
@@ -266,14 +266,14 @@ export default function QuranReaderScreen() {
       {status === 'loading' ? (
         <View style={styles.centerBox}>
           <ActivityIndicator size="large" color="#C8A84E" />
-          <Text style={styles.loadingText}>سورہ لوڈ ہو رہی ہے...</Text>
+          <Text style={styles.loadingText}>Loading Surah...</Text>
         </View>
       ) : status === 'error' ? (
         <View style={styles.centerBox}>
           <Ionicons name="wifi-outline" size={48} color="#EF4444" />
-          <Text style={styles.errorText}>انٹرنیٹ کنیکشن چیک کریں</Text>
+          <Text style={styles.errorText}>Please check internet connection</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={loadSurah}>
-            <Text style={styles.retryBtnText}>دوبارہ کوشش کریں</Text>
+            <Text style={styles.retryBtnText}>Try Again</Text>
           </TouchableOpacity>
         </View>
       ) : (

@@ -245,7 +245,7 @@ export default function TeacherDetailScreen() {
           <View style={styles.facultyMetaRow}>
             <View style={styles.facultyStatusPill}>
               <View style={styles.statusDot} />
-              <Text style={styles.facultyStatusText}>APPROVED FACULTY • معتمد استاد</Text>
+              <Text style={styles.facultyStatusText}>APPROVED FACULTY • Certified Scholar</Text>
             </View>
           </View>
 

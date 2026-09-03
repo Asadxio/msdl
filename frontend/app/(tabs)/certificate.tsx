@@ -117,7 +117,7 @@ export default function CertificateScreen() {
       percentage: cert.percentage || 100,
       issueDateGregorian: cert.completion_date || new Date().toLocaleDateString('en-GB'),
       issueDateHijri: cert.hijri_date || '1447 AH',
-      gradeLabel: cert.grade_label || 'Certified (Mumtaz - ممتاز)',
+      gradeLabel: cert.grade_label || 'Certified with Distinction',
       createdAtMs: Date.now(),
     };
     setPreviewCert(certData);
@@ -294,7 +294,7 @@ export default function CertificateScreen() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="shield-checkmark-outline" size={18} color="#005F46" />
-                <Text style={styles.verifySanadBtnText}>🔍 Verify Any Sanad Online (تصدیقِ اسناد)</Text>
+                <Text style={styles.verifySanadBtnText}>🔍 Verify Any Sanad Online</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -80,7 +80,7 @@ export default function TeacherFatawaManageScreen() {
       });
 
       setSelectedQ(null);
-      Alert.alert('فتویٰ جاری ہوگیا', 'مسئلہ کا جواب کامیابی کے ساتھ طالبہ کو ارسال کر دیا گیا ہے۔');
+      Alert.alert('Fatwa Published', 'The answer has been dispatched to the student successfully.');
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to submit fatwa.');
     } finally {
@@ -92,9 +92,9 @@ export default function TeacherFatawaManageScreen() {
     return (
       <View style={[styles.container, styles.center, { paddingTop: insets.top }]}>
         <Ionicons name="lock-closed-outline" size={48} color="#94A3B8" />
-        <Text style={styles.notFoundText}>یہ صفحہ صرف معتمد اساتذہ کے لیے مخصوص ہے۔</Text>
+        <Text style={styles.notFoundText}>This portal is restricted to authorized faculty scholars only.</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/fatawa')}>
-          <Text style={styles.backBtnText}>واپس جائیں</Text>
+          <Text style={styles.backBtnText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -112,7 +112,7 @@ export default function TeacherFatawaManageScreen() {
           <Ionicons name="arrow-back" size={22} color={'#FFFFFF'} />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>مَجْلِسُ الإِفْتَاءِ وَالتَّعْلِيم</Text>
+          <Text style={styles.arabicHeader}>FACULTY DAR-UL-IFTAA DESK</Text>
           <Text style={styles.headerTitle}>Ustaadha Masail Console</Text>
         </View>
         <View style={{ width: 40 }} />
@@ -121,7 +121,7 @@ export default function TeacherFatawaManageScreen() {
       <View style={styles.statsBanner}>
         <Ionicons name="mail-unread-outline" size={18} color="#C8A84E" />
         <Text style={styles.statsText}>
-          زیرِ انتظار مسائل (Pending Inquiries): {pendingQuestions.length}
+          Pending Inquiries: {pendingQuestions.length}
         </Text>
       </View>
 
@@ -129,14 +129,14 @@ export default function TeacherFatawaManageScreen() {
         {loading ? (
           <View style={styles.centerBox}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>مسائل لوڈ ہو رہے ہیں...</Text>
+            <Text style={styles.loadingText}>Loading inquiries...</Text>
           </View>
         ) : pendingQuestions.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="checkmark-done-circle-outline" size={54} color="#007A58" />
-            <Text style={styles.emptyTitle}>تمام مسائل حل شدہ ہیں (All Answered)</Text>
+            <Text style={styles.emptyTitle}>All Inquiries Answered ✓</Text>
             <Text style={styles.emptySubtitle}>
-              فی الوقت کوئی نیا مسئلہ زیرِ انتظار نہیں ہے۔
+              There are currently no unanswered questions pending.
             </Text>
           </View>
         ) : (
@@ -150,7 +150,7 @@ export default function TeacherFatawaManageScreen() {
                     <Ionicons name={cat.icon as any} size={14} color={COLORS.primary} />
                     <Text style={styles.categoryBadgeText}>{cat.arabicTitle}</Text>
                   </View>
-                  <Text style={styles.studentBadge}>سائلہ: {q.student_name}</Text>
+                  <Text style={styles.studentBadge}>Inquirer: {q.student_name}</Text>
                 </View>
 
                 <Text style={styles.cardTitle}>{q.title}</Text>
@@ -162,7 +162,7 @@ export default function TeacherFatawaManageScreen() {
                   activeOpacity={0.85}
                 >
                   <Ionicons name="pencil" size={16} color={'#FFFFFF'} />
-                  <Text style={styles.answerBtnText}>جواب تحریر فرمائیں (Answer)</Text>
+                  <Text style={styles.answerBtnText}>Draft Answer</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -181,8 +181,8 @@ export default function TeacherFatawaManageScreen() {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalArabicTitle}>الْجَوَابُ بِعَوْنِ الْمَلِكِ الْوَهَّاب</Text>
-                <Text style={styles.modalTitle}>شرعی جواب و فتویٰ تحریر کریں</Text>
+                <Text style={styles.modalArabicTitle}>SCHOLARLY RULING & VERDICT</Text>
+                <Text style={styles.modalTitle}>Compose Shariah Verdict</Text>
               </View>
               <TouchableOpacity
                 style={styles.closeBtn}
@@ -201,10 +201,10 @@ export default function TeacherFatawaManageScreen() {
                 </View>
 
                 {/* Answer Input */}
-                <Text style={styles.inputLabel}>شرعی جواب (Scholarly Fatwa / Guidance):</Text>
+                <Text style={styles.inputLabel}>Scholarly Verdict / Guidance:</Text>
                 <TextInput
                   style={styles.textAreaInput}
-                  placeholder="حامداً ومصلیاً ومسلماً... الجواب وباللہ التوفیق..."
+                  placeholder="In the Name of Allah... The Answer & Guidance:"
                   placeholderTextColor="#94A3B8"
                   value={answerText}
                   onChangeText={setAnswerText}
@@ -214,10 +214,10 @@ export default function TeacherFatawaManageScreen() {
                 />
 
                 {/* Reference Input */}
-                <Text style={styles.inputLabel}>کتاب / فقہی حوالہ (Reference Kitab):</Text>
+                <Text style={styles.inputLabel}>Juristic Reference (Kitab / Page):</Text>
                 <TextInput
                   style={styles.titleInput}
-                  placeholder="مثلاً: بہشتی زیور، حصہ دوم / فتاویٰ شامی ج ۱"
+                  placeholder="e.g. Bahishti Zewar Part 2 / Fatawa Shami Vol 1"
                   placeholderTextColor="#94A3B8"
                   value={refKitab}
                   onChangeText={setRefKitab}
@@ -226,9 +226,9 @@ export default function TeacherFatawaManageScreen() {
                 {/* Public Toggle */}
                 <View style={styles.toggleRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.toggleTitle}>عام لائبریری میں شائع کریں</Text>
+                    <Text style={styles.toggleTitle}>Publish to Public Library</Text>
                     <Text style={styles.toggleSub}>
-                      طالبہ کا نام اور شناخت مکمل پوشیدہ رہے گی۔
+                      Student identity is kept completely private and masked.
                     </Text>
                   </View>
                   <Switch
@@ -250,7 +250,7 @@ export default function TeacherFatawaManageScreen() {
                   ) : (
                     <>
                       <Ionicons name="checkmark-done" size={18} color={'#FFFFFF'} />
-                      <Text style={styles.submitBtnText}>فتویٰ کی تصدیق و ارسال</Text>
+                      <Text style={styles.submitBtnText}>Authenticate & Dispatch Fatwa</Text>
                     </>
                   )}
                 </TouchableOpacity>

@@ -649,7 +649,7 @@ export default function AdminSendPushScreen() {
           ) : (
             <View style={styles.btnRow}>
               <Ionicons name="megaphone" size={18} color="#FFF" />
-              <Text style={styles.btnPrimaryText}>Send Broadcast (سب کو بھیجیں)</Text>
+              <Text style={styles.btnPrimaryText}>Send Broadcast</Text>
             </View>
           )}
         </TouchableOpacity>

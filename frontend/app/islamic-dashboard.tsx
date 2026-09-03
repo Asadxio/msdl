@@ -9,7 +9,7 @@ import { COLORS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { goBackOrReplace } from '@/lib/navigation';
 
 const DASHBOARD_ACTIONS = [
-  { label: 'Dar-ul-Iftaa (دار الافتاء)', subtitle: 'Private Islamic questions & official fatwa library', icon: 'ribbon-outline' as const, route: '/fatawa' },
+  { label: 'Dar-ul-Iftaa (Fatwa Library)', subtitle: 'Private Islamic questions & official fatwa library', icon: 'ribbon-outline' as const, route: '/fatawa' },
   { label: 'Islamic Calendar', subtitle: 'Open the Hijri calendar view', icon: 'calendar-number-outline' as const, route: '/islamic-calendar' },
   { label: 'Prayer Times', subtitle: 'View daily prayer schedule', icon: 'time-outline' as const, route: '/prayer-times' },
   { label: 'Qibla Finder', subtitle: 'Find direction to the Kaaba', icon: 'compass-outline' as const, route: '/qibla' },

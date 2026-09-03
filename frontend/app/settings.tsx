@@ -274,7 +274,7 @@ export default function SettingsScreen() {
             },
             trigger: null,
           });
-          Alert.alert('Test Notification Sent / اطلاع بھیج دی گئی', 'A real test notification has been dispatched to your device status bar.');
+          Alert.alert('Test Notification Sent', 'A real test notification has been dispatched to your device status bar.');
           return;
         }
       }
@@ -286,7 +286,7 @@ export default function SettingsScreen() {
 
   const handleClearCache = () => {
     Alert.alert(
-      'Clear App Cache / کیش صاف کریں',
+      'Clear App Cache',
       'Are you sure you want to clear temporary cached data (quiz counts, temporary files)? Your login session will remain active.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -302,7 +302,7 @@ export default function SettingsScreen() {
                 'offline_library_manifest_temp',
               ];
               await AsyncStorage.multiRemove(tempKeys);
-              Alert.alert('Cache Cleared / کیش صاف ہو گیا', 'Temporary cache cleared successfully. Fast loading preserved.');
+              Alert.alert('Cache Cleared', 'Temporary cache cleared successfully. Fast loading preserved.');
             } catch {
               Alert.alert('Error', 'Failed to clear some cache files.');
             }
@@ -362,12 +362,12 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         {/* Section 2: Appearance & Language */}
-        <SettingsSection title="Appearance & Language (زبان و ظاہری شکل)" icon="color-palette-outline" defaultOpen={false}>
+        <SettingsSection title="Appearance & Language" icon="color-palette-outline" defaultOpen={false}>
           <TouchableOpacity style={styles.linkRow} onPress={() => setLangModalVisible(true)}>
             <View style={styles.linkRowLeft}>
               <Ionicons name="globe-outline" size={20} color={COLORS.primary} />
               <View>
-                <Text style={styles.linkText}>App Language (ایپ کی زبان)</Text>
+                <Text style={styles.linkText}>App Language</Text>
                 <Text style={styles.linkSubtext}>{languageName}</Text>
               </View>
             </View>

@@ -280,7 +280,7 @@ export default function AttendanceScreen() {
 
       // Send in-app notification to student
       await addDoc(collection(db, 'notifications'), {
-        title: `Attendance: ${status === 'present' ? 'Present (حاضر) ✓' : 'Absent (غیر حاضر) ✕'}`,
+        title: `Attendance: ${status === 'present' ? 'Present ✓' : 'Absent ✕'}`,
         message: `${courseName} attendance for ${selectedDate} has been recorded as ${status}.`,
         user_id: targetUser.id,
         created_at: serverTimestamp(),

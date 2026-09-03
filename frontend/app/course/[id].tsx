@@ -983,7 +983,7 @@ export default function CourseDetailScreen() {
                   <Ionicons name="lock-closed" size={32} color="#D97706" />
                 </View>
                 <Text style={styles.lockedGateTitle}>Live Classroom Locked</Text>
-                <Text style={styles.lockedGateArabic}>داخلہ لازمی ہے</Text>
+                <Text style={styles.lockedGateArabic}>Official Enrollment Required</Text>
                 <Text style={styles.lockedGateDesc}>
                   Live interactive purdah classrooms and recordings archive are restricted to officially enrolled students of this class.
                 </Text>
@@ -1100,7 +1100,7 @@ export default function CourseDetailScreen() {
                   <Ionicons name="lock-closed" size={32} color="#D97706" />
                 </View>
                 <Text style={styles.lockedGateTitle}>Audio Dars Lectures Locked</Text>
-                <Text style={styles.lockedGateArabic}>داخلہ لازمی ہے</Text>
+                <Text style={styles.lockedGateArabic}>Official Enrollment Required</Text>
                 <Text style={styles.lockedGateDesc}>
                   Audio recordings and summary dars lectures uploaded by ustaadhas are restricted to enrolled students.
                 </Text>
@@ -1229,7 +1229,7 @@ export default function CourseDetailScreen() {
                   <Ionicons name="lock-closed" size={32} color="#D97706" />
                 </View>
                 <Text style={styles.lockedGateTitle}>Sabaq Curriculum Locked</Text>
-                <Text style={styles.lockedGateArabic}>داخلہ لازمی ہے</Text>
+                <Text style={styles.lockedGateArabic}>Official Enrollment Required</Text>
                 <Text style={styles.lockedGateDesc}>
                   Structured sabaq lessons, recitation notes, and assignment submissions are reserved for enrolled students.
                 </Text>

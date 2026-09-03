@@ -137,7 +137,7 @@ export default function AiQuizMakerScreen() {
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.headerTitleMain}>AI Auto-Quiz & Exam Maker</Text>
-          <Text style={styles.headerSubtitle}>مُؤَلِّفُ الامْتِحَانَاتِ بِالذَّكَاءِ الاصْطِنَاعِي</Text>
+          <Text style={styles.headerSubtitle}>AI Assessment & Exam Generator</Text>
         </View>
         <View style={{ width: 38 }} />
       </View>
@@ -153,12 +153,12 @@ export default function AiQuizMakerScreen() {
           </View>
 
           {/* Language Selection */}
-          <Text style={styles.fieldLabel}>Question Language (زبان):</Text>
+          <Text style={styles.fieldLabel}>Question Language:</Text>
           <View style={styles.countRow}>
             {[
-              { id: 'both', label: 'Bilingual (Eng + اردو)' },
+              { id: 'both', label: 'Bilingual (Eng + Urdu)' },
               { id: 'english', label: 'English Only' },
-              { id: 'urdu', label: 'اردو (Urdu Only)' },
+              { id: 'urdu', label: 'Urdu Only' },
             ].map((lang) => {
               const isSelected = language === lang.id;
               return (
@@ -177,7 +177,7 @@ export default function AiQuizMakerScreen() {
           </View>
 
           {/* Category Dropdown/Chips */}
-          <Text style={styles.fieldLabel}>Select Islamic Subject / Masail (کیٹیگری):</Text>
+          <Text style={styles.fieldLabel}>Select Islamic Subject / Fiqh Topic:</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryChipsRow}>
             {QUIZ_CATEGORIES.map((cat) => {
               const isSelected = category === cat;
@@ -195,7 +195,7 @@ export default function AiQuizMakerScreen() {
           </ScrollView>
 
           {/* Question Count */}
-          <Text style={styles.fieldLabel}>Number of Questions (سوالات کی تعداد):</Text>
+          <Text style={styles.fieldLabel}>Number of Questions:</Text>
           <View style={styles.countRow}>
             {[5, 10, 15, 20].map((num) => {
               const isSelected = questionCount === num;
@@ -215,12 +215,12 @@ export default function AiQuizMakerScreen() {
           </View>
 
           {/* Difficulty */}
-          <Text style={styles.fieldLabel}>Difficulty Level (معیار و درجہ):</Text>
+          <Text style={styles.fieldLabel}>Difficulty Level:</Text>
           <View style={styles.countRow}>
             {[
-              { id: 'easy', label: 'Basic / ابتدائی' },
-              { id: 'medium', label: 'Medium / متوسط' },
-              { id: 'hard', label: 'Advanced / اعلیٰ' },
+              { id: 'easy', label: 'Basic' },
+              { id: 'medium', label: 'Medium' },
+              { id: 'hard', label: 'Advanced' },
             ].map((diff) => {
               const isSelected = difficulty === diff.id;
               return (
@@ -250,7 +250,7 @@ export default function AiQuizMakerScreen() {
             ) : (
               <>
                 <Ionicons name="sparkles" size={18} color="#002E23" />
-                <Text style={styles.generateBtnText}>Generate Questions with AI (پرچہ تیار کریں)</Text>
+                <Text style={styles.generateBtnText}>Generate Questions with AI</Text>
               </>
             )}
           </TouchableOpacity>
