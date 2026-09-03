@@ -436,6 +436,15 @@ export default function PendingScreen() {
           </View>
         )}
 
+        <TouchableOpacity
+          style={styles.continueToAppBtn}
+          onPress={() => router.replace('/')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="home-outline" size={18} color="#FFFFFF" />
+          <Text style={styles.continueToAppBtnText}>Continue to Madrasa (داخل ہوں)</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={[styles.checkBtn, busy && styles.disabledBtn]} onPress={handleCheck} disabled={busy} testID="check-status-btn">
           {checking ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
           <Text style={styles.checkBtnText}>{checking ? 'Checking...' : 'Check Status'}</Text>
@@ -510,6 +519,8 @@ const styles = StyleSheet.create({
   pendingStatusText: { fontSize: 12, fontWeight: '700', color: '#92400E', textTransform: 'capitalize' },
   activeStatusBadge: { backgroundColor: '#D1FAE5' },
   activeStatusText: { fontSize: 12, fontWeight: '700', color: '#065F46', textTransform: 'capitalize' },
+  continueToAppBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#005F46', borderRadius: RADIUS.lg, paddingHorizontal: 24, paddingVertical: 14, marginTop: 12, gap: 8 },
+  continueToAppBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   checkBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 2, borderColor: COLORS.primary, borderRadius: RADIUS.lg, paddingHorizontal: 24, paddingVertical: 14, marginTop: 8 },
   checkBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },

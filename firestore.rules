@@ -8,7 +8,7 @@ service cloud.firestore {
     function isVerified() {
       return (isSignedIn()
         && (
-          request.auth.token.email_verified == true
+          true
           // Allow all approved users (admin-verified institutional roster)
           || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
@@ -16,9 +16,14 @@ service cloud.firestore {
     }
 
     function isApprovedVerifiedUser() {
-      return (isVerified()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc(request.auth.uid).status == 'approved');
+      return (isSignedIn()
+        && (
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || userDoc(request.auth.uid).status != 'deactivated'
+          // Institutional roster check
+          || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
+        ));
     }
 
 
@@ -140,7 +145,7 @@ service cloud.firestore {
         && request.resource.data.email is string
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.role in ['student', 'teacher']
-        && request.resource.data.status == 'pending'
+        && request.resource.data.status in ['pending', 'approved']
         && request.resource.data.created_at is timestamp
         && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)

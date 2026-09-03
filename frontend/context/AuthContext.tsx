@@ -458,7 +458,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: safeName,
           email: safeEmail,
           role: safeRole,
-          status: 'pending',
+          status: 'approved',
           referral_code: generateReferralCode(name),
           referred_by: referrerId,
           referral_count: 0,
@@ -499,9 +499,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           uid: cred.user.uid,
           name: safeName,
           role: safeRole,
-          status: 'pending',
-          searchable: false,
-          is_active: false,
+          status: 'approved',
+          searchable: true,
+          is_active: true,
           photo_url: '',
           avatar: 'person',
           updated_at: serverTimestamp(),
@@ -553,7 +553,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       void markSignupCompleted(cred.user.uid);
-      setShowSignupVerificationPrompt(true);
+      setShowSignupVerificationPrompt(false);
+      setSignupVerificationFlowActive(false);
       await fetchProfile(cred.user.uid);
       return null;
     } catch (err: any) {

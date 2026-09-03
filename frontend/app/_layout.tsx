@@ -289,16 +289,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'missing-profile-document' });
       }
-    } else if (!emailVerified && !isAdmin && !isSuperAdminFounder) {
-      // Email not verified (non-admin) -> pending screen for verification
-      if (!inPendingAuthRoute) {
-        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'email-unverified' });
-        performReplace('/auth/pending');
-      } else {
-        startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
-      }
-    } else if (user && (profile?.status === 'approved' || isAdmin || isSuperAdminFounder)) {
-      if (user.uid && emailVerified && enteredAppTrackedRef.current !== user.uid) {
+    } else if (user) {
+      if (user.uid && enteredAppTrackedRef.current !== user.uid) {
         enteredAppTrackedRef.current = user.uid;
         void markUserEnteredApp(user.uid);
       }

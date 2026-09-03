@@ -496,7 +496,11 @@ export default function SignupScreen() {
         referralCode.trim(),
         complianceData
       );
-      if (err) setError(err);
+      if (err) {
+        setError(err);
+      } else {
+        router.replace('/');
+      }
     } catch (e: any) {
       setError(e?.message || 'Signup failed. Please try again.');
     } finally {
