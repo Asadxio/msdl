@@ -14,7 +14,7 @@ import { validateConfig, getMissingConfigVars } from '@/lib/config';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
 import { getConsentStatus, LEGAL_DOCS } from '@/lib/legal';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { reportError } from '@/lib/errorReporter';
 import { getReleaseDiagnostics } from '@/lib/releaseDiagnostics';
@@ -377,6 +377,55 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       await registerDevicePushToken(user.uid);
     });
     return () => tokenSub.remove();
+  }, [user?.uid]);
+
+  // Direct Firebase Realtime Notification Trigger (Zero Expo Middleman)
+  useEffect(() => {
+    if (!user?.uid) return () => {};
+    const sessionStart = Date.now();
+    const seenNotifIds = new Set<string>();
+
+    try {
+      const q = query(
+        collection(db, 'notifications'),
+        where('user_id', 'in', [user.uid, 'all']),
+        limit(10)
+      );
+
+      const unsub = onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const docData = change.doc.data();
+            const createdAt = docData.created_at_ms || (docData.created_at?.toMillis ? docData.created_at.toMillis() : 0);
+            if (createdAt >= sessionStart - 3000 && !seenNotifIds.has(change.doc.id)) {
+              seenNotifIds.add(change.doc.id);
+              if (docData.actor_id !== user.uid) {
+                void Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: String(docData.title || 'Madrasatu-s-Salikat Notice'),
+                    body: String(docData.message || docData.body || ''),
+                    sound: 'default',
+                    priority: Notifications.AndroidNotificationPriority.MAX,
+                    data: {
+                      ...(docData.data || {}),
+                      url: docData.route || (docData.channel === 'live_classes' ? '/live-class' : '/notifications'),
+                      channel: docData.channel || 'announcements',
+                    },
+                  },
+                  trigger: null,
+                }).catch(() => {});
+              }
+            }
+          }
+        });
+      }, (err) => {
+        console.log('[Notifications] realtime listener note:', err);
+      });
+
+      return () => unsub();
+    } catch {
+      return () => {};
+    }
   }, [user?.uid]);
 
   useEffect(() => {
