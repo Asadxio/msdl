@@ -158,7 +158,7 @@ export default function PrayerTimesScreen() {
     return () => { alive = false; unsub(); };
   }, []);
 
-  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
 
   useEffect(() => {
     const upd = () => {

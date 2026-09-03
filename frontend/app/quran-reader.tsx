@@ -46,6 +46,7 @@ export default function QuranReaderScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const ayatHeights = useRef<Record<number, number>>({});
   const scrolledToInitial = useRef(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
     Promise.all([loadShowRoman(), loadFontSize()]).then(([roman, size]) => {
@@ -53,11 +54,12 @@ export default function QuranReaderScreen() {
       setFontSize(size);
     });
     return () => {
-      if (sound) {
-        sound.unloadAsync().catch(() => {});
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
       }
     };
-  }, [sound]);
+  }, []);
 
   const loadSurah = useCallback(async () => {
     setStatus('loading');
@@ -93,15 +95,16 @@ export default function QuranReaderScreen() {
 
   // Audio Playback Handlers
   const stopCurrentAudio = async () => {
-    if (sound) {
+    if (soundRef.current) {
       try {
-        await sound.stopAsync();
-        await sound.unloadAsync();
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
       } catch (e) {
         // ignore
       }
-      setSound(null);
+      soundRef.current = null;
     }
+    setSound(null);
     setIsPlayingAudio(false);
     setPlayingAyatNum(null);
     setIsFullSurahPlaying(false);
@@ -110,7 +113,7 @@ export default function QuranReaderScreen() {
   const playAyatAudio = async (ayatNum: number) => {
     try {
       setAudioLoading(true);
-      if (sound && isPlayingAudio && playingAyatNum === ayatNum) {
+      if (soundRef.current && isPlayingAudio && playingAyatNum === ayatNum) {
         await stopCurrentAudio();
         setAudioLoading(false);
         return;
@@ -128,6 +131,7 @@ export default function QuranReaderScreen() {
         { shouldPlay: true }
       );
 
+      soundRef.current = newSound;
       setSound(newSound);
       setIsPlayingAudio(true);
       setPlayingAyatNum(ayatNum);
@@ -154,7 +158,7 @@ export default function QuranReaderScreen() {
   const playFullSurahAudio = async () => {
     try {
       setAudioLoading(true);
-      if (sound && isFullSurahPlaying) {
+      if (soundRef.current && isFullSurahPlaying) {
         await stopCurrentAudio();
         setAudioLoading(false);
         return;
@@ -172,6 +176,7 @@ export default function QuranReaderScreen() {
         { shouldPlay: true }
       );
 
+      soundRef.current = newSound;
       setSound(newSound);
       setIsPlayingAudio(true);
       setIsFullSurahPlaying(true);

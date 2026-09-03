@@ -142,7 +142,6 @@ export default function TabLayout() {
         tabBarLabelStyle: styles.tabLabel,
         tabBarHideOnKeyboard: true,
         lazy: true,
-        freezeOnBlur: true,
       }}
     >
       <Tabs.Screen name="index" options={{ title: t('tabs.home', 'Home'), tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'home' : 'home-outline'} color={color} focused={focused} /> }} />

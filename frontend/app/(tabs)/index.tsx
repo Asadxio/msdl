@@ -109,7 +109,7 @@ export default function HomeScreen() {
   const nextPrayer = prayerWindow.next;
   const progressRatio = prayerWindow.progress;
 
-  const resume = getResumeLearning();
+  const resume = useMemo(() => getResumeLearning(), [getResumeLearning]);
   const activeCourseProgress = useMemo(() => {
     if (!resume) return null;
     return getCourseProgress(resume.courseId);

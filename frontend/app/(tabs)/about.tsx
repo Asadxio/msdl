@@ -489,7 +489,7 @@ export default function AboutScreen() {
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'feedback'), orderBy('created_at', 'desc'));
+    const q = query(collection(db, 'feedback'), orderBy('created_at', 'desc'), limit(20));
     const unsub = onSnapshot(q, (snap) => {
       const arr: FeedbackItem[] = [];
       snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
