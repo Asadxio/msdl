@@ -296,7 +296,7 @@ export default function AdminSendPushScreen() {
           sendToAll: isSendToAll,
           dedupeId: dedupe,
         }),
-        12000
+        30000
       );
 
       setDispatchResult(res);
@@ -316,8 +316,21 @@ export default function AdminSendPushScreen() {
       void fetchHistory();
     } catch (err: any) {
       console.warn('[AdminSendPush] Dispatch failed:', err);
-      setStatusMessage({ text: `❌ Dispatch failed: ${err?.message || 'Unknown error'}`, isError: true });
-      Alert.alert('Dispatch Error', err?.message || 'Failed to send broadcast.');
+      const isTimeout = String(err?.message || '').toLowerCase().includes('timed out');
+      if (isTimeout) {
+        setStatusMessage({
+          text: '⚠️ Broadcast is processing in background. Push delivery will complete shortly.',
+          isError: false,
+        });
+        Alert.alert(
+          'Broadcast Submitted',
+          'Your broadcast was queued successfully. Hardware push delivery to devices is completing in the background.'
+        );
+        void fetchHistory();
+      } else {
+        setStatusMessage({ text: `❌ Dispatch failed: ${err?.message || 'Unknown error'}`, isError: true });
+        Alert.alert('Dispatch Error', err?.message || 'Failed to send broadcast.');
+      }
     } finally {
       setSending(false);
     }

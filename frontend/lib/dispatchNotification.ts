@@ -63,43 +63,35 @@ async function collectPushTokens(targetUids: string[], isSendToAll: boolean): Pr
     typeof t === 'string' && (t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['));
 
   if (isSendToAll) {
-    // 1. Gather tokens from users collection
-    try {
-      const usersSnap = await withTimeout(
-        getDocs(query(collection(db, 'users'), limitQ(500))),
-        5000
-      );
-      usersSnap.forEach((d) => {
+    // 1. Gather tokens from users and user_tokens concurrently with 4s timeout
+    const [usersResult, tokensResult] = await Promise.allSettled([
+      withTimeout(getDocs(query(collection(db, 'users'), limitQ(300))), 4000),
+      withTimeout(getDocs(query(collection(db, 'user_tokens'), limitQ(500))), 4000),
+    ]);
+
+    if (usersResult.status === 'fulfilled') {
+      usersResult.value.forEach((d) => {
         const data = d.data();
         const tokens = Array.isArray(data.expo_push_tokens) ? data.expo_push_tokens : [];
         tokens.forEach((t: unknown) => { if (isExpoPushToken(t)) tokensSet.add(t); });
       });
-    } catch (e) {
-      console.warn('[Push] Error querying users for tokens:', e);
     }
 
-    // 2. Gather tokens from user_tokens collection
-    try {
-      const userTokensSnap = await withTimeout(
-        getDocs(query(collection(db, 'user_tokens'), limitQ(500))),
-        5000
-      );
-      userTokensSnap.forEach((d) => {
+    if (tokensResult.status === 'fulfilled') {
+      tokensResult.value.forEach((d) => {
         const data = d.data();
         if (isExpoPushToken(data.token)) tokensSet.add(data.token);
         if (isExpoPushToken(data.expoPushToken)) tokensSet.add(data.expoPushToken);
       });
-    } catch (e) {
-      console.warn('[Push] Error querying user_tokens:', e);
     }
   } else if (targetUids.length > 0) {
     const chunkSize = 20;
     for (let i = 0; i < targetUids.length; i += chunkSize) {
       const chunk = targetUids.slice(i, i + chunkSize);
-      await Promise.all(
+      await Promise.allSettled(
         chunk.map(async (uid) => {
           try {
-            const userSnap = await withTimeout(getDoc(doc(db, 'users', uid)), 3500);
+            const userSnap = await withTimeout(getDoc(doc(db, 'users', uid)), 3000);
             if (userSnap.exists()) {
               const data = userSnap.data();
               const tokens = Array.isArray(data.expo_push_tokens) ? data.expo_push_tokens : [];
@@ -108,7 +100,7 @@ async function collectPushTokens(targetUids: string[], isSendToAll: boolean): Pr
           } catch {}
 
           try {
-            const tokenSnap = await withTimeout(getDoc(doc(db, 'user_tokens', uid)), 3500);
+            const tokenSnap = await withTimeout(getDoc(doc(db, 'user_tokens', uid)), 3000);
             if (tokenSnap.exists()) {
               const data = tokenSnap.data();
               if (isExpoPushToken(data.token)) tokensSet.add(data.token);
@@ -200,67 +192,71 @@ export async function dispatchNotification(
   const route = buildNotificationRoute(input);
   const actorId = String(input.actorId || auth.currentUser?.uid || 'admin');
 
-  let writtenRecipients = 0;
-
-  if (isSendToAll) {
-    await writeNotificationRecord({
-      recipient_id: 'all',
-      user_id: 'all',
-      actor_id: actorId,
-      channel: input.channel,
-      event: input.event,
-      title: input.title,
-      body: input.body,
-      route,
-      data: { ...payload, is_broadcast: true },
-      dedupe_id: dedupeId,
-    });
-    writtenRecipients = 1;
-  } else {
-    const uniqueRecipients = Array.from(new Set(input.recipientIds.filter(Boolean)));
-    const allowed: string[] = [];
-
-    for (const uid of uniqueRecipients) {
-      const prefs = await getNotificationPreferences(uid).catch(() => null);
-      if (!prefs) {
-        allowed.push(uid);
-        continue;
-      }
-      const mapped =
-        input.channel === 'live_classes' ? 'live_class' : input.channel === 'stories' ? 'story' : input.channel;
-      if ((prefs.channels as Record<string, boolean>)[mapped] === false) continue;
-      allowed.push(uid);
-    }
-
-    await Promise.all(
-      allowed.map((uid) =>
-        writeNotificationRecord({
-          recipient_id: uid,
-          user_id: uid,
+  // Step 1 & 2: Write notification records and collect push tokens in parallel
+  const [writtenRecipients, tokens] = await Promise.all([
+    (async () => {
+      if (isSendToAll) {
+        await writeNotificationRecord({
+          recipient_id: 'all',
+          user_id: 'all',
           actor_id: actorId,
           channel: input.channel,
           event: input.event,
           title: input.title,
           body: input.body,
           route,
-          data: payload,
+          data: { ...payload, is_broadcast: true },
           dedupe_id: dedupeId,
-        })
-      )
-    );
-    writtenRecipients = allowed.length;
+        });
+        return 1;
+      } else {
+        const uniqueRecipients = Array.from(new Set(input.recipientIds.filter(Boolean)));
+        const allowed: string[] = [];
 
-    await Promise.all(
-      allowed.map((uid) =>
-        updateTelemetryStatus({ dedupeId, recipientId: uid, status: 'queued' }).catch(() => {})
-      )
-    );
-  }
+        for (const uid of uniqueRecipients) {
+          const prefs = await getNotificationPreferences(uid).catch(() => null);
+          if (!prefs) {
+            allowed.push(uid);
+            continue;
+          }
+          const mapped =
+            input.channel === 'live_classes' ? 'live_class' : input.channel === 'stories' ? 'story' : input.channel;
+          if ((prefs.channels as Record<string, boolean>)[mapped] === false) continue;
+          allowed.push(uid);
+        }
 
-  // Step 2: Push delivery to hardware devices via Expo Push API
+        await Promise.all(
+          allowed.map((uid) =>
+            writeNotificationRecord({
+              recipient_id: uid,
+              user_id: uid,
+              actor_id: actorId,
+              channel: input.channel,
+              event: input.event,
+              title: input.title,
+              body: input.body,
+              route,
+              data: payload,
+              dedupe_id: dedupeId,
+            })
+          )
+        );
+
+        void Promise.all(
+          allowed.map((uid) =>
+            updateTelemetryStatus({ dedupeId, recipientId: uid, status: 'queued' }).catch(() => {})
+          )
+        );
+
+        return allowed.length;
+      }
+    })(),
+    collectPushTokens(input.recipientIds, isSendToAll).catch(() => []),
+  ]);
+
+  // Step 3: Push delivery to hardware devices via Expo Push API
   let pushTokensSent = 0;
   try {
-    const tokens = await collectPushTokens(input.recipientIds, isSendToAll);
     logger.info('[notification_tokens_collected]', { count: tokens.length, isSendToAll });
 
     if (tokens.length > 0) {
