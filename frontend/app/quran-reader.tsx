@@ -45,8 +45,33 @@ export default function QuranReaderScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
   const ayatHeights = useRef<Record<number, number>>({});
+  const ayatOffsets = useRef<Record<number, number>>({});
   const scrolledToInitial = useRef(false);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const surahDataRef = useRef<SurahData | null>(null);
+  const autoAdvanceRef = useRef(true);
+  const [autoAdvance, setAutoAdvance] = useState(true);
+
+  useEffect(() => {
+    surahDataRef.current = surahData;
+  }, [surahData]);
+
+  useEffect(() => {
+    autoAdvanceRef.current = autoAdvance;
+  }, [autoAdvance]);
+
+  const scrollToAyat = useCallback((ayatNum: number) => {
+    const y = ayatOffsets.current[ayatNum];
+    if (y !== undefined && scrollRef.current) {
+      scrollRef.current.scrollTo({ y: Math.max(0, y - 24), animated: true });
+    } else {
+      let approxY = 0;
+      for (let i = 1; i < ayatNum; i++) {
+        approxY += (ayatHeights.current[i] || 150);
+      }
+      scrollRef.current?.scrollTo({ y: Math.max(0, approxY - 24), animated: true });
+    }
+  }, []);
 
   useEffect(() => {
     Promise.all([loadShowRoman(), loadFontSize()]).then(([roman, size]) => {
@@ -83,15 +108,11 @@ export default function QuranReaderScreen() {
     if (status !== 'ready' || !surahData || scrolledToInitial.current) return;
     if (initialAyat > 1) {
       setTimeout(() => {
-        let yOffset = 0;
-        for (let i = 1; i < initialAyat; i++) {
-          yOffset += (ayatHeights.current[i] || 120);
-        }
-        scrollRef.current?.scrollTo({ y: yOffset - 60, animated: true });
+        scrollToAyat(initialAyat);
         scrolledToInitial.current = true;
       }, 400);
     }
-  }, [status, surahData, initialAyat]);
+  }, [status, surahData, initialAyat, scrollToAyat]);
 
   // Audio Playback Handlers
   const stopCurrentAudio = async () => {
@@ -120,6 +141,12 @@ export default function QuranReaderScreen() {
       }
       await stopCurrentAudio();
 
+      // Immediately highlight and smooth-shift viewport to this verse
+      setPlayingAyatNum(ayatNum);
+      setIsPlayingAudio(true);
+      setIsFullSurahPlaying(false);
+      scrollToAyat(ayatNum);
+
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
@@ -133,23 +160,25 @@ export default function QuranReaderScreen() {
 
       soundRef.current = newSound;
       setSound(newSound);
-      setIsPlayingAudio(true);
-      setPlayingAyatNum(ayatNum);
-      setIsFullSurahPlaying(false);
 
       newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
         if (!playbackStatus.isLoaded) return;
         if (playbackStatus.didJustFinish) {
-          setIsPlayingAudio(false);
-          setPlayingAyatNum(null);
-          // Auto-play next ayat if available
-          if (surahData && ayatNum < surahData.totalAyat) {
-            playAyatAudio(ayatNum + 1);
+          const currentData = surahDataRef.current;
+          const total = currentData?.totalAyat || surahMeta?.totalAyat || 0;
+          if (autoAdvanceRef.current && ayatNum < total) {
+            // Automatically advance, shift viewport, and play next verse
+            void playAyatAudio(ayatNum + 1);
+          } else {
+            setIsPlayingAudio(false);
+            setPlayingAyatNum(null);
           }
         }
       });
     } catch (error) {
       console.warn('Audio play error:', error);
+      setIsPlayingAudio(false);
+      setPlayingAyatNum(null);
     } finally {
       setAudioLoading(false);
     }
@@ -284,7 +313,7 @@ export default function QuranReaderScreen() {
       ) : (
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + (playingAyatNum !== null ? 100 : 30) }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Bismillah */}
@@ -304,7 +333,10 @@ export default function QuranReaderScreen() {
               <View
                 key={ayat.number}
                 style={[styles.ayatCard, isThisAyatPlaying && styles.ayatCardPlaying]}
-                onLayout={(e) => { ayatHeights.current[ayat.number] = e.nativeEvent.layout.height; }}
+                onLayout={(e) => {
+                  ayatOffsets.current[ayat.number] = e.nativeEvent.layout.y;
+                  ayatHeights.current[ayat.number] = e.nativeEvent.layout.height;
+                }}
               >
                 <View style={styles.ayatHeader}>
                   <View style={styles.ayatNumBadge}>
@@ -368,6 +400,85 @@ export default function QuranReaderScreen() {
             );
           })}
         </ScrollView>
+      )}
+
+      {/* Floating Bottom Audio Player Bar with Auto-Shift & Verse Navigation */}
+      {playingAyatNum !== null && isPlayingAudio && (
+        <View style={[styles.floatingPlayer, { bottom: insets.bottom + 12 }]}>
+          <View style={styles.floatingInfo}>
+            <View style={styles.playingIndicatorDot}>
+              {audioLoading ? (
+                <ActivityIndicator size="small" color="#C8A84E" />
+              ) : (
+                <Ionicons name="volume-medium" size={18} color="#C8A84E" />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.floatingTitle} numberOfLines={1}>
+                {surahMeta?.englishName || 'Surah'} • Verse {playingAyatNum} of {surahData?.totalAyat || surahMeta?.totalAyat || 7}
+              </Text>
+              <Text style={styles.floatingSubtitle}>
+                {autoAdvance ? 'Auto-Shifting to Next Verses' : 'Single Verse Mode'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.floatingControls}>
+            {/* Prev Verse */}
+            <TouchableOpacity
+              style={[styles.floatingBtn, playingAyatNum <= 1 && styles.floatingBtnDisabled]}
+              onPress={() => {
+                if (playingAyatNum > 1) {
+                  void playAyatAudio(playingAyatNum - 1);
+                }
+              }}
+              disabled={playingAyatNum <= 1}
+              accessibilityLabel="Previous Verse"
+            >
+              <Ionicons name="play-skip-back" size={16} color={playingAyatNum <= 1 ? '#64748B' : '#FFFFFF'} />
+            </TouchableOpacity>
+
+            {/* Play/Pause/Stop */}
+            <TouchableOpacity
+              style={styles.floatingPlayBtn}
+              onPress={stopCurrentAudio}
+              accessibilityLabel="Pause Audio"
+            >
+              <Ionicons name="pause" size={18} color="#002E23" />
+            </TouchableOpacity>
+
+            {/* Next Verse */}
+            <TouchableOpacity
+              style={[
+                styles.floatingBtn,
+                playingAyatNum >= (surahData?.totalAyat || surahMeta?.totalAyat || 999) && styles.floatingBtnDisabled,
+              ]}
+              onPress={() => {
+                const total = surahData?.totalAyat || surahMeta?.totalAyat || 999;
+                if (playingAyatNum < total) {
+                  void playAyatAudio(playingAyatNum + 1);
+                }
+              }}
+              disabled={playingAyatNum >= (surahData?.totalAyat || surahMeta?.totalAyat || 999)}
+              accessibilityLabel="Next Verse"
+            >
+              <Ionicons
+                name="play-skip-forward"
+                size={16}
+                color={playingAyatNum >= (surahData?.totalAyat || surahMeta?.totalAyat || 999) ? '#64748B' : '#FFFFFF'}
+              />
+            </TouchableOpacity>
+
+            {/* Auto Advance Toggle */}
+            <TouchableOpacity
+              style={[styles.floatingAutoBtn, autoAdvance && styles.floatingAutoBtnActive]}
+              onPress={() => setAutoAdvance((prev) => !prev)}
+              accessibilityLabel="Toggle Continuous Auto-Play"
+            >
+              <Ionicons name="repeat" size={14} color={autoAdvance ? '#002E23' : '#94A3B8'} />
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       {/* Settings Panel */}
@@ -458,4 +569,84 @@ const styles = StyleSheet.create({
   fontBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: RADIUS.md, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
   fontBtnActive: { backgroundColor: '#005F46', borderColor: '#005F46' },
   fontBtnText: { fontSize: 12, fontWeight: '700', color: '#334155' },
+  floatingPlayer: {
+    position: 'absolute',
+    left: SPACING.md,
+    right: SPACING.md,
+    backgroundColor: '#002E23',
+    borderRadius: RADIUS.xl,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: '#C8A84E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 90,
+  },
+  floatingInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginRight: 8,
+  },
+  playingIndicatorDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(200, 168, 78, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#C8A84E',
+  },
+  floatingSubtitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  floatingControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  floatingBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingBtnDisabled: {
+    opacity: 0.4,
+  },
+  floatingPlayBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#C8A84E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingAutoBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingAutoBtnActive: {
+    backgroundColor: '#C8A84E',
+  },
 });
