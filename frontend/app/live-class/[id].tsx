@@ -191,35 +191,39 @@ export default function LiveClassroomScreen() {
         const userIds = enrollmentsSnap.docs.map((d) => d.data().user_id).filter(Boolean);
         if (userIds.length > 0) {
           const usersSnap = await getDocs(
-            query(collection(db, 'users'), where('role', '==', 'student'), where('status', '==', 'approved'))
+            query(collection(db, 'users'), where('role', '==', 'student'))
           );
           usersSnap.forEach((docSnap) => {
             if (userIds.includes(docSnap.id)) {
               const uData = docSnap.data();
-              studentList.push({
-                id: docSnap.id,
-                name: uData.name || 'Taliba',
-                email: uData.email || '',
-                status: 'present',
-              });
+              if (uData.status === 'approved' || uData.status === 'active' || !uData.status) {
+                studentList.push({
+                  id: docSnap.id,
+                  name: uData.name || 'Taliba',
+                  email: uData.email || '',
+                  status: 'present',
+                });
+              }
             }
           });
         }
       }
 
-      // Fallback: if no enrollment records found, load approved students
+      // Fallback: if no enrollment records found, load approved and active students
       if (studentList.length === 0) {
         const usersSnap = await getDocs(
-          query(collection(db, 'users'), where('role', '==', 'student'), where('status', '==', 'approved'))
+          query(collection(db, 'users'), where('role', '==', 'student'))
         );
         usersSnap.forEach((docSnap) => {
           const uData = docSnap.data();
-          studentList.push({
-            id: docSnap.id,
-            name: uData.name || 'Taliba',
-            email: uData.email || '',
-            status: 'present',
-          });
+          if (uData.status === 'approved' || uData.status === 'active' || !uData.status) {
+            studentList.push({
+              id: docSnap.id,
+              name: uData.name || 'Taliba',
+              email: uData.email || '',
+              status: 'present',
+            });
+          }
         });
       }
 
@@ -252,25 +256,26 @@ export default function LiveClassroomScreen() {
     setSavingAttendance(true);
     const dateStr = new Date().toISOString().slice(0, 10);
     try {
-      let presentCount = 0;
-      for (const st of attendanceStudents) {
-        if (st.status === 'present') presentCount++;
-        await addDoc(collection(db, 'attendance'), {
-          user_id: st.id,
-          user_name: st.name,
-          user_email: st.email,
-          date: dateStr,
-          status: st.status,
-          marked_by: 'live_class',
-          marked_by_uid: user.uid,
-          marked_by_name: profile.name || liveClass.teacher_name || 'Ustaadha',
-          live_class_id: (classId as string) || '',
-          course_id: liveClass.course_id || '',
-          marked_at: serverTimestamp(),
-          updated_at: serverTimestamp(),
-          created_at: serverTimestamp(),
-        });
-      }
+      const presentCount = attendanceStudents.filter((s) => s.status === 'present').length;
+      await Promise.all(
+        attendanceStudents.map((st) =>
+          addDoc(collection(db, 'attendance'), {
+            user_id: st.id,
+            user_name: st.name,
+            user_email: st.email,
+            date: dateStr,
+            status: st.status,
+            marked_by: 'live_class',
+            marked_by_uid: user.uid,
+            marked_by_name: profile.name || liveClass.teacher_name || 'Ustaadha',
+            live_class_id: (classId as string) || '',
+            course_id: liveClass.course_id || '',
+            marked_at: serverTimestamp(),
+            updated_at: serverTimestamp(),
+            created_at: serverTimestamp(),
+          })
+        )
+      );
       setAttendanceSubmittedCount(presentCount);
       setAttendanceModalVisible(false);
       Alert.alert(
