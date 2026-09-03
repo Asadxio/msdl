@@ -67,6 +67,8 @@ type PremiumInputProps = {
   onSubmitEditing?: () => void;
   returnKeyType?: 'next' | 'done' | 'go' | 'search' | 'send';
   blurOnSubmit?: boolean;
+  autoComplete?: 'email' | 'password' | 'current-password' | 'new-password' | 'username' | 'name' | 'tel' | 'off';
+  textContentType?: 'emailAddress' | 'password' | 'name' | 'telephoneNumber' | 'none';
 };
 
 const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function PremiumInput({
@@ -87,6 +89,8 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
   onSubmitEditing,
   returnKeyType,
   blurOnSubmit,
+  autoComplete = 'off',
+  textContentType = 'none',
 }: PremiumInputProps, ref) {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
@@ -110,23 +114,25 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
       : colors.textMuted;
 
   return (
-    <View style={styles.inputContainer}>
+    <View style={styles.inputContainer} collapsable={false}>
       <Text style={[styles.inputLabel, { color: labelColor }]}>
         {label}
       </Text>
-      <View style={[
-        styles.inputRow,
-        { 
-          borderColor: activeBorderColor, 
-          backgroundColor: activeBgColor,
-          shadowColor: isFocused ? '#005F46' : 'transparent',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: isFocused ? 0.08 : 0,
-          shadowRadius: 6,
-          elevation: isFocused ? 2 : 0,
-        },
-        disabled && styles.inputRowDisabled
-      ]}>
+      <View 
+        collapsable={false}
+        style={[
+          styles.inputRow,
+          { 
+            borderColor: activeBorderColor, 
+            backgroundColor: activeBgColor,
+            shadowColor: isFocused ? '#005F46' : 'transparent',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: isFocused ? 0.06 : 0,
+            shadowRadius: 4,
+          },
+          disabled && styles.inputRowDisabled
+        ]}
+      >
         <Ionicons 
           name={leftIcon} 
           size={20} 
@@ -136,6 +142,7 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
         {prefix ? <View style={styles.prefixContainer}>{prefix}</View> : null}
         <TextInput
           ref={ref}
+          collapsable={false}
           style={[styles.textInput, { color: colors.text }]}
           placeholder={placeholder}
           placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'}
@@ -147,9 +154,9 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
           autoCorrect={false}
           spellCheck={false}
           editable={!disabled}
-          autoComplete="off"
-          textContentType="none"
-          importantForAutofill="no"
+          autoComplete={autoComplete}
+          textContentType={textContentType}
+          importantForAutofill={autoComplete !== 'off' ? 'yes' : 'no'}
           returnKeyType={returnKeyType ?? (secureTextEntry ? 'done' : 'next')}
           blurOnSubmit={blurOnSubmit ?? !!secureTextEntry}
           onSubmitEditing={onSubmitEditing}
@@ -516,7 +523,8 @@ export default function SignupScreen() {
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="always"
+          keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={false}
           showsVerticalScrollIndicator={false}
         >
           <FadeInView style={styles.headerSection}>
@@ -559,6 +567,8 @@ export default function SignupScreen() {
                 success={name.length >= 3 && !nameError}
                 disabled={loading}
                 autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
                 returnKeyType="next"
                 blurOnSubmit={false}
                 onSubmitEditing={() => mobileRef.current?.focus()}
@@ -575,6 +585,8 @@ export default function SignupScreen() {
                 onChangeText={setMobile}
                 prefix={phonePrefix}
                 keyboardType="numeric"
+                autoComplete="tel"
+                textContentType="telephoneNumber"
                 error={mobileError}
                 success={mobile.length === 10 && !mobileError}
                 disabled={loading}
@@ -596,6 +608,9 @@ export default function SignupScreen() {
                 success={emailValid}
                 disabled={loading}
                 keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
                 returnKeyType="next"
                 blurOnSubmit={false}
                 onSubmitEditing={() => passwordRef.current?.focus()}
@@ -614,6 +629,9 @@ export default function SignupScreen() {
                   secureTextEntry={!showPass}
                   disabled={loading}
                   success={passwordValidation.isValid}
+                  autoCapitalize="none"
+                  autoComplete="new-password"
+                  textContentType="password"
                   returnKeyType="next"
                   blurOnSubmit={false}
                   onSubmitEditing={() => confirmPasswordRef.current?.focus()}
@@ -672,6 +690,9 @@ export default function SignupScreen() {
                   disabled={loading}
                   success={confirmPassword.length > 0 && confirmPassword === password}
                   error={confirmPasswordIsError ? 'Passwords do not match' : undefined}
+                  autoCapitalize="none"
+                  autoComplete="new-password"
+                  textContentType="password"
                   returnKeyType="done"
                   blurOnSubmit={true}
                   rightElement={

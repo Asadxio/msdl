@@ -43,6 +43,8 @@ type PremiumInputProps = {
   onSubmitEditing?: () => void;
   returnKeyType?: 'next' | 'done' | 'go' | 'search' | 'send';
   blurOnSubmit?: boolean;
+  autoComplete?: 'email' | 'password' | 'current-password' | 'new-password' | 'username' | 'name' | 'tel' | 'off';
+  textContentType?: 'emailAddress' | 'password' | 'name' | 'telephoneNumber' | 'none';
 };
 
 const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function PremiumInput({
@@ -62,6 +64,8 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
   onSubmitEditing,
   returnKeyType,
   blurOnSubmit,
+  autoComplete = 'off',
+  textContentType = 'none',
 }: PremiumInputProps, ref) {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
@@ -85,23 +89,25 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
       : colors.textMuted;
 
   return (
-    <View style={styles.inputContainer}>
+    <View style={styles.inputContainer} collapsable={false}>
       <Text style={[styles.inputLabel, { color: labelColor }]}>
         {label}
       </Text>
-      <View style={[
-        styles.inputRow,
-        { 
-          borderColor: activeBorderColor, 
-          backgroundColor: activeBgColor,
-          shadowColor: isFocused ? '#005F46' : 'transparent',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: isFocused ? 0.08 : 0,
-          shadowRadius: 6,
-          elevation: isFocused ? 2 : 0,
-        },
-        disabled && styles.inputRowDisabled
-      ]}>
+      <View 
+        collapsable={false}
+        style={[
+          styles.inputRow,
+          { 
+            borderColor: activeBorderColor, 
+            backgroundColor: activeBgColor,
+            shadowColor: isFocused ? '#005F46' : 'transparent',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: isFocused ? 0.06 : 0,
+            shadowRadius: 4,
+          },
+          disabled && styles.inputRowDisabled
+        ]}
+      >
         <Ionicons 
           name={leftIcon} 
           size={20} 
@@ -110,6 +116,7 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
         />
         <TextInput
           ref={ref}
+          collapsable={false}
           style={[styles.textInput, { color: colors.text }]}
           placeholder={placeholder}
           placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'}
@@ -119,9 +126,9 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
-          autoComplete="off"
-          textContentType="none"
-          importantForAutofill="no"
+          autoComplete={autoComplete}
+          textContentType={textContentType}
+          importantForAutofill={autoComplete !== 'off' ? 'yes' : 'no'}
           spellCheck={false}
           editable={!disabled}
           returnKeyType={returnKeyType ?? (secureTextEntry ? 'done' : 'next')}
@@ -208,7 +215,8 @@ export default function LoginScreen() {
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="always"
+          keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={false}
           showsVerticalScrollIndicator={false}
         >
           {/* Hero Section */}
@@ -253,6 +261,9 @@ export default function LoginScreen() {
                 success={emailValid}
                 disabled={loading}
                 keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
                 returnKeyType="next"
                 blurOnSubmit={false}
                 onSubmitEditing={() => passwordRef.current?.focus()}
@@ -272,6 +283,9 @@ export default function LoginScreen() {
                   disabled={loading}
                   success={password.length >= 6}
                   error={passwordError}
+                  autoCapitalize="none"
+                  autoComplete="password"
+                  textContentType="password"
                   returnKeyType="done"
                   blurOnSubmit={true}
                   onSubmitEditing={handleLogin}

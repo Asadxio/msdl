@@ -56,7 +56,7 @@ export default function ForgotPasswordScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" removeClippedSubviews={false} showsVerticalScrollIndicator={false}>
           
           <TouchableOpacity 
             style={styles.backRow} 
@@ -108,25 +108,27 @@ export default function ForgotPasswordScreen() {
               ) : null}
 
               {/* Email Input Field with Focus Glow */}
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} collapsable={false}>
                 <Text style={[
                   styles.inputLabel,
                   { color: error ? colors.error : isFocused ? (isDarkMode ? '#10B981' : '#005F46') : colors.textMuted }
                 ]}>
                   Email Address
                 </Text>
-                <View style={[
-                  styles.inputRow,
-                  {
-                    borderColor: error ? colors.error : isFocused ? '#005F46' : (isDarkMode ? '#2E3D5C' : '#E2E8E5'),
-                    backgroundColor: isDarkMode ? (isFocused ? '#132C23' : '#102820') : (isFocused ? '#FFFFFF' : '#FAFCFB'),
-                    shadowColor: isFocused ? '#005F46' : 'transparent',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: isFocused ? 0.08 : 0,
-                    shadowRadius: 6,
-                    elevation: isFocused ? 2 : 0,
-                  }
-                ]}>
+                <View 
+                  collapsable={false}
+                  style={[
+                    styles.inputRow,
+                    {
+                      borderColor: error ? colors.error : isFocused ? '#005F46' : (isDarkMode ? '#2E3D5C' : '#E2E8E5'),
+                      backgroundColor: isDarkMode ? (isFocused ? '#132C23' : '#102820') : (isFocused ? '#FFFFFF' : '#FAFCFB'),
+                      shadowColor: isFocused ? '#005F46' : 'transparent',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: isFocused ? 0.06 : 0,
+                      shadowRadius: 4,
+                    }
+                  ]}
+                >
                   <Ionicons 
                     name="mail-outline" 
                     size={20} 
@@ -134,6 +136,7 @@ export default function ForgotPasswordScreen() {
                     style={styles.leftIcon} 
                   />
                   <TextInput
+                    collapsable={false}
                     style={[styles.textInput, { color: colors.text }]}
                     placeholder="Enter your registered email"
                     placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'}
@@ -143,9 +146,9 @@ export default function ForgotPasswordScreen() {
                     autoCorrect={false}
                     spellCheck={false}
                     keyboardType="email-address"
-                    autoComplete="off"
-                    textContentType="none"
-                    importantForAutofill="no"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    importantForAutofill="yes"
                     returnKeyType="done"
                     blurOnSubmit={true}
                     onSubmitEditing={() => {}}
