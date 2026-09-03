@@ -261,7 +261,7 @@ export default function ChatsScreen() {
         setUsers(list);
       } catch (err: unknown) {
         logFirestoreFailure({ collection: 'public_profiles', operation: 'get', query: 'where searchable == true' }, err);
-        setError('Could not load users list.');
+        console.warn('[Chats] Non-fatal loadUsers error:', err);
       }
     };
     loadUsers().catch(() => {});
