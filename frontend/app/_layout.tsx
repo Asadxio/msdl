@@ -14,7 +14,7 @@ import { validateConfig, getMissingConfigVars } from '@/lib/config';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
 import { getConsentStatus, LEGAL_DOCS } from '@/lib/legal';
-import { doc, onSnapshot, collection, query, where, limit } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, limit, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { reportError } from '@/lib/errorReporter';
 import { getReleaseDiagnostics } from '@/lib/releaseDiagnostics';
@@ -389,7 +389,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       const q = query(
         collection(db, 'notifications'),
         where('user_id', 'in', [user.uid, 'all']),
-        limit(10)
+        orderBy('created_at', 'desc'),
+        limit(20)
       );
 
       const unsub = onSnapshot(q, (snapshot) => {
