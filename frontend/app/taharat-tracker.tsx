@@ -72,22 +72,22 @@ export default function TaharatTrackerScreen() {
     setLogModalVisible(false);
     setNotes('');
     await refreshData();
-    Alert.alert('رجوع ہو گیا', 'نیا شرعی ریکارڈ درج کر دیا گیا ہے۔');
+    Alert.alert('Record Saved', 'Your Shariah cycle record has been logged successfully.');
   };
 
   const handleEndCycle = () => {
     if (!activeCycle) return;
     Alert.alert(
-      'خون رک گیا / غسل کا وقت',
-      'کیا خون مکمل طور پر بند ہو چکا ہے؟ اب غسل فرما کر نماز بحال کرنے کا وقت ہے۔',
+      'Bleeding Ceased / Ghusl Time',
+      'Has the bleeding completely stopped? It is now time to perform Ghusl and resume Salah.',
       [
-        { text: 'منسوخ', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'ہاں، خون بند ہو گیا',
+          text: 'Yes, Bleeding Stopped',
           onPress: async () => {
             await endActiveCycle(activeCycle.id, new Date().toISOString());
             await refreshData();
-            Alert.alert('الحمد للہ', 'طہارت کا وقت شروع ہو چکا ہے۔ برائے مہربانی غسل فرما کر نماز ادا فرمائیں۔');
+            Alert.alert('Alhamdulillah', 'Purity period has commenced. Please perform Ghusl and resume prayers.');
           },
         },
       ]
@@ -95,10 +95,10 @@ export default function TaharatTrackerScreen() {
   };
 
   const handleDeleteEntry = (id: string) => {
-    Alert.alert('حذف کریں', 'کیا آپ یہ ریکارڈ حذف کرنا چاہتی ہیں؟', [
-      { text: 'منسوخ', style: 'cancel' },
+    Alert.alert('Delete Record', 'Are you sure you want to delete this record?', [
+      { text: 'Cancel', style: 'cancel' },
       {
-        text: 'حذف کریں',
+        text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           await deleteCycleEntry(id);
@@ -208,7 +208,7 @@ export default function TaharatTrackerScreen() {
                 {activeCycle && (
                   <View style={styles.daysPill}>
                     <Text style={[styles.daysPillText, { color: stateTheme.text }]}>
-                      دن: {purityStatus.activeCycleDays}
+                      Day: {purityStatus.activeCycleDays}
                     </Text>
                   </View>
                 )}
@@ -237,7 +237,7 @@ export default function TaharatTrackerScreen() {
                     activeOpacity={0.88}
                   >
                     <Ionicons name="water" size={18} color="#FFFFFF" />
-                    <Text style={styles.primaryActionBtnText}>Bleeding Stopped / Record Ghusl (پاک)</Text>
+                    <Text style={styles.primaryActionBtnText}>Bleeding Stopped / Record Ghusl</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
@@ -246,7 +246,7 @@ export default function TaharatTrackerScreen() {
                     activeOpacity={0.88}
                   >
                     <Ionicons name="add-circle" size={18} color="#FFFFFF" />
-                    <Text style={styles.primaryActionBtnText}>Log Period / Nifas Start (حیض و نفاس)</Text>
+                    <Text style={styles.primaryActionBtnText}>Log Period / Nifas Start</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -254,11 +254,11 @@ export default function TaharatTrackerScreen() {
 
             {/* Past History List */}
             <View style={styles.historySection}>
-              <Text style={styles.sectionTitle}>Past Cycle Records (سابقہ ریکارڈ):</Text>
+              <Text style={styles.sectionTitle}>Past Cycle Records:</Text>
               {entries.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <Ionicons name="document-text-outline" size={32} color="#94A3B8" />
-                  <Text style={styles.emptyText}>No past cycle records found (کوئی ریکارڈ نہیں)</Text>
+                  <Text style={styles.emptyText}>No past cycle records found</Text>
                 </View>
               ) : (
                 entries.map((entry) => {
@@ -272,7 +272,7 @@ export default function TaharatTrackerScreen() {
                         day: 'numeric',
                         month: 'short',
                       })
-                    : 'جاری ہے';
+                    : 'Ongoing';
 
                   return (
                     <View key={entry.id} style={styles.historyCard}>
@@ -280,10 +280,10 @@ export default function TaharatTrackerScreen() {
                         <View style={styles.historyDot} />
                         <View>
                           <Text style={styles.historyType}>
-                            {entry.type === 'haiz' ? 'حیض' : entry.type === 'nifas' ? 'نفاس' : 'استحاضہ'}
+                            {entry.type === 'haiz' ? 'Hayd (Menses)' : entry.type === 'nifas' ? 'Nifas (Postnatal)' : 'Istihadha (Irregular)'}
                           </Text>
                           <Text style={styles.historyDates}>
-                            {startStr} تا {endStr}
+                            {startStr} to {endStr}
                           </Text>
                         </View>
                       </View>
@@ -305,25 +305,25 @@ export default function TaharatTrackerScreen() {
         {activeTab === 'qadha' && (
           <View style={styles.qadhaSection}>
             <View style={styles.qadhaCard}>
-              <Text style={styles.qadhaTitle}>رمضان المبارک کے قضاء روزے</Text>
+              <Text style={styles.qadhaTitle}>Ramadan Missed Fasts (Qadha)</Text>
               <Text style={styles.qadhaSub}>
-                حیض یا نفاس کی وجہ سے چھوٹے ہوئے روزوں کی قضاء فرض ہے:
+                Fasts missed due to Hayd or Nifas must be made up before the next Ramadan:
               </Text>
 
               <View style={styles.qadhaStatsGrid}>
                 <View style={styles.qadhaStatBox}>
                   <Text style={styles.qadhaStatNum}>{qadhaTotal}</Text>
-                  <Text style={styles.qadhaStatLabel}>کل چھوٹے ہوئے روزے</Text>
+                  <Text style={styles.qadhaStatLabel}>Total Missed Fasts</Text>
                 </View>
                 <View style={[styles.qadhaStatBox, { borderColor: '#10B981', backgroundColor: '#E8F5EE' }]}>
                   <Text style={[styles.qadhaStatNum, { color: '#005F46' }]}>{qadhaDone}</Text>
-                  <Text style={styles.qadhaStatLabel}>ادا شدہ قضاء روزے</Text>
+                  <Text style={styles.qadhaStatLabel}>Completed Fasts</Text>
                 </View>
                 <View style={[styles.qadhaStatBox, { borderColor: '#EF4444', backgroundColor: '#FEE2E2' }]}>
                   <Text style={[styles.qadhaStatNum, { color: '#B91C1C' }]}>
                     {Math.max(0, qadhaTotal - qadhaDone)}
                   </Text>
-                  <Text style={styles.qadhaStatLabel}>باقی قضاء روزے</Text>
+                  <Text style={styles.qadhaStatLabel}>Remaining Fasts</Text>
                 </View>
               </View>
 
@@ -334,11 +334,11 @@ export default function TaharatTrackerScreen() {
                 activeOpacity={0.85}
               >
                 <Ionicons name="checkmark-done" size={18} color="#FFFFFF" />
-                <Text style={styles.markQadhaBtnText}>ماشاءاللہ! ۱ قضاء روزہ ادا ہو گیا</Text>
+                <Text style={styles.markQadhaBtnText}>Alhamdulillah! Completed 1 Fast ✓</Text>
               </TouchableOpacity>
 
               <View style={styles.addQadhaRow}>
-                <Text style={styles.addQadhaLabel}>نئے قضاء روزے شامل کریں:</Text>
+                <Text style={styles.addQadhaLabel}>Log Additional Missed Fasts:</Text>
                 <View style={styles.addChipsRow}>
                   {[1, 5, 7].map((num) => (
                     <TouchableOpacity
@@ -346,7 +346,7 @@ export default function TaharatTrackerScreen() {
                       style={styles.addChip}
                       onPress={() => handleAddQadhaTotal(num)}
                     >
-                      <Text style={styles.addChipText}>+{num} روزے</Text>
+                      <Text style={styles.addChipText}>+{num} Fasts</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -360,30 +360,30 @@ export default function TaharatTrackerScreen() {
           <View style={styles.masailSection}>
             {[
               {
-                q: 'حیض کی کم از کم اور زیادہ سے زیادہ مدت کیا ہے؟',
-                a: 'فقہ حنفی کے مطابق حیض کی کم از کم مدت ۳ دن اور ۳ راتیں (پورے ۷۲ گھنٹے) ہیں، اور زیادہ سے زیادہ مدت ۱۰ دن اور ۱۰ راتیں (۲۴۰ گھنٹے) ہیں۔',
-                ref: 'بہشتی زیور / الہدایۃ',
+                q: 'What is the minimum and maximum duration of Hayd (Menstruation)?',
+                a: 'According to Hanafi jurisprudence, the minimum duration of Hayd is 3 days and 3 nights (72 complete hours), and the maximum duration is 10 days and 10 nights (240 hours). Any bleeding outside this duration is considered Istihadha (irregular bleeding).',
+                ref: 'Bahishti Zewar / Al-Hidayah',
               },
               {
-                q: 'دو حیض کے درمیان پاکی (طہر) کا کم از کم وقفہ کتنا ہے؟',
-                a: 'دو حیض کے درمیان کم از کم ۱۵ دن کی پاکی کا ہونا ضروری ہے۔ اگر ۱۵ دن سے پہلے خون آ جائے تو وہ استحاضہ شمار ہوگا۔',
-                ref: 'نور الایضاح',
+                q: 'What is the minimum period of purity (Tuhr) between two menstrual cycles?',
+                a: 'The minimum valid period of purity (Tuhr) between two cycles is 15 complete days. If bleeding recurs before 15 days of purity have elapsed, it is classified as Istihadha.',
+                ref: 'Nur al-Idah',
               },
               {
-                q: 'حالتِ استحاضہ میں نماز کا کیا طریقہ ہے؟',
-                a: 'استحاضہ بیماری کا خون ہے جس میں نماز اور روزہ معاف نہیں ہے۔ ہر نماز کے وقت کے داخل ہونے کے بعد نیا وضو فرما کر نماز ادا کی جائے گی۔',
-                ref: 'قدوری',
+                q: 'What is the ruling for Salah during Istihadha (irregular bleeding)?',
+                a: 'Istihadha is due to a medical condition and does not exempt one from Salah or fasting. The woman performs fresh Wudhu after the entry of each prayer time and offers her prayers normally.',
+                ref: 'Mukhtasar al-Quduri',
               },
               {
-                q: 'نفاس کی زیادہ سے زیادہ مدت کیا ہے؟',
-                a: 'بچے کی ولادت کے بعد نفاس کی زیادہ سے زیادہ مدت ۴۰ دن ہے، کم کی کوئی حد نہیں ہے۔ ۴۰ دن مکمل ہوتے ہی غسل فرض ہو جاتا ہے۔',
-                ref: 'رد المحتار / شامی',
+                q: 'What is the maximum duration of Nifas (postnatal bleeding)?',
+                a: 'The maximum duration of Nifas following childbirth is 40 days. There is no minimum limit. Once bleeding ceases or upon completing 40 days, Ghusl is obligatory and Salah resumes immediately.',
+                ref: 'Radd al-Muhtar / Shami',
               },
             ].map((m, idx) => (
               <View key={idx} style={styles.masailCard}>
-                <Text style={styles.masailQ}>سوال: {m.q}</Text>
+                <Text style={styles.masailQ}>Question: {m.q}</Text>
                 <Text style={styles.masailA}>{m.a}</Text>
-                <Text style={styles.masailRef}>حوالہ: {m.ref}</Text>
+                <Text style={styles.masailRef}>Reference: {m.ref}</Text>
               </View>
             ))}
 
@@ -395,9 +395,9 @@ export default function TaharatTrackerScreen() {
             >
               <Ionicons name="ribbon" size={24} color="#C8A84E" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.askMuftiahTitle}>پیچیدہ مسئلہ؟ دار الافتاء سے پوچھیں</Text>
+                <Text style={styles.askMuftiahTitle}>Complex Question? Ask Dar-ul-Iftaa</Text>
                 <Text style={styles.askMuftiahSub}>
-                  سینئر مفتیہ صاحبہ سے مکمل پردے میں اپنا سوال پوچھیں۔
+                  Consult our certified female scholars in complete privacy.
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#C8A84E" />
@@ -411,19 +411,19 @@ export default function TaharatTrackerScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>نیا شرعی اندراج درج کریں</Text>
+              <Text style={styles.modalTitle}>Log New Cycle Entry</Text>
               <TouchableOpacity onPress={() => setLogModalVisible(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={22} color="#64748B" />
               </TouchableOpacity>
             </View>
 
             {/* Type Selector */}
-            <Text style={styles.fieldLabel}>قسم منتخب فرمائیں:</Text>
+            <Text style={styles.fieldLabel}>Select Cycle Type:</Text>
             <View style={styles.typeSelectorRow}>
               {[
-                { id: 'haiz', label: 'حیض (Menses)' },
-                { id: 'nifas', label: 'نفاس (Post-natal)' },
-                { id: 'istihaza', label: 'استحاضہ (Irregular)' },
+                { id: 'haiz', label: 'Hayd (Menstruation)' },
+                { id: 'nifas', label: 'Nifas (Postnatal)' },
+                { id: 'istihaza', label: 'Istihadha (Irregular)' },
               ].map((t) => {
                 const isSelected = selectedType === t.id;
                 return (
@@ -441,12 +441,12 @@ export default function TaharatTrackerScreen() {
             </View>
 
             {/* Intensity */}
-            <Text style={styles.fieldLabel}>خون کا بہاؤ (Flow Intensity):</Text>
+            <Text style={styles.fieldLabel}>Flow Intensity:</Text>
             <View style={styles.typeSelectorRow}>
               {[
-                { id: 'light', label: 'ہلکا (Light)' },
-                { id: 'medium', label: 'درمیانہ (Medium)' },
-                { id: 'heavy', label: 'زیادہ (Heavy)' },
+                { id: 'light', label: 'Light' },
+                { id: 'medium', label: 'Medium' },
+                { id: 'heavy', label: 'Heavy' },
               ].map((i) => {
                 const isSelected = intensity === i.id;
                 return (
@@ -464,17 +464,17 @@ export default function TaharatTrackerScreen() {
             </View>
 
             {/* Notes */}
-            <Text style={styles.fieldLabel}>اضافی نوٹس (اختیاری):</Text>
+            <Text style={styles.fieldLabel}>Additional Notes (Optional):</Text>
             <TextInput
               style={styles.notesInput}
-              placeholder="وقت یا رنگ سے متعلق کوئی یادداشت..."
+              placeholder="Notes regarding timing, color, or details..."
               placeholderTextColor="#94A3B8"
               value={notes}
               onChangeText={setNotes}
             />
 
             <TouchableOpacity style={styles.submitBtn} onPress={handleStartCycle} activeOpacity={0.88}>
-              <Text style={styles.submitBtnText}>محفوظ کریں (Save Entry)</Text>
+              <Text style={styles.submitBtnText}>Save Entry</Text>
             </TouchableOpacity>
           </View>
         </View>

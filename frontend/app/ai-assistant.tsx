@@ -258,7 +258,7 @@ export default function AiAssistantScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>مُعَاوِنُ المَطَالَعَةِ وَالسَّبَق</Text>
+          <Text style={styles.arabicHeader}>AI SABAQ TUTOR & COMPANION</Text>
           <View style={styles.statusRow}>
             <View style={styles.onlineDot} />
             <Text style={styles.headerSubtitle}>

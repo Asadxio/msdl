@@ -100,8 +100,8 @@ export default function DarUlIftaaScreen() {
       setAskQuestion('');
       setModalVisible(false);
       Alert.alert(
-        'سوال موصول ہوگیا (Question Submitted)',
-        'آپ کا سوال دار الافتاء کو موصول ہوگیا ہے۔ اساتذہ جلد از جلد شرعی رہنمائی فراہم فرمائیں گے۔'
+        'Question Submitted',
+        'Your question has been received by Dar-ul-Iftaa. Certified scholars will provide guidance shortly.'
       );
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Could not submit your question.');
@@ -238,7 +238,7 @@ export default function DarUlIftaaScreen() {
                 onPress={() => setSelectedCategory('all')}
               >
                 <Text style={[styles.chipText, selectedCategory === 'all' && styles.chipTextActive]}>
-                  All Masail (تمام مسائل)
+                  All Topics
                 </Text>
               </TouchableOpacity>
               {categoriesList.map((cat) => (
@@ -259,7 +259,7 @@ export default function DarUlIftaaScreen() {
         {loading ? (
           <View style={styles.centerBox}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>لوڈ ہو رہا ہے...</Text>
+            <Text style={styles.loadingText}>Loading rulings...</Text>
           </View>
         ) : activeTab === 'my_questions' ? (
           filteredMyQuestions.length === 0 ? (
@@ -279,7 +279,7 @@ export default function DarUlIftaaScreen() {
                   onPress={() => setModalVisible(true)}
                 >
                   <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.emptyActionText}>Ask New Question (مسئلہ پوچھیں)</Text>
+                  <Text style={styles.emptyActionText}>Ask New Question</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -317,7 +317,7 @@ export default function DarUlIftaaScreen() {
                           isAnswered ? styles.statusTextAnswered : styles.statusTextPending,
                         ]}
                       >
-                        {isAnswered ? 'جواب موصول' : 'زیرِ غور'}
+                        {isAnswered ? 'Answered' : 'Under Review'}
                       </Text>
                     </View>
                   </View>
@@ -329,7 +329,7 @@ export default function DarUlIftaaScreen() {
 
                   {isAnswered && (
                     <View style={styles.answerPreviewBox}>
-                      <Text style={styles.answerLabel}>خلاصہ جواب ({q.answered_by_name || 'استاذہ'}):</Text>
+                      <Text style={styles.answerLabel}>Answer Summary ({q.answered_by_name || 'Faculty'}):</Text>
                       <Text style={styles.answerSnippet} numberOfLines={2}>
                         {q.answer}
                       </Text>
@@ -344,10 +344,10 @@ export default function DarUlIftaaScreen() {
             <View style={styles.emptyCard}>
               <Ionicons name="book-outline" size={48} color="#94A3B8" />
               <Text style={styles.emptyTitle}>
-                {searchQuery ? 'اس تلاش کے مطابق کوئی فتویٰ نہیں ملا' : 'اس کیٹیگری میں ابھی کوئی فتویٰ موجود نہیں ہے'}
+                {searchQuery ? 'No rulings found matching your search' : 'No rulings available in this category yet'}
               </Text>
               <Text style={styles.emptySubtitle}>
-                دیگر شعبہ جات منتخب کریں یا تلاش کے الفاظ تبدیل کریں۔
+                Select another category or modify your search keywords.
               </Text>
             </View>
           ) : (
@@ -367,7 +367,7 @@ export default function DarUlIftaaScreen() {
                       <Text style={styles.categoryBadgeText}>{cat.arabicTitle}</Text>
                     </View>
                     <Text style={styles.referenceBadge}>
-                      {q.reference_kitab || 'کتبِ فقہ'}
+                      {q.reference_kitab || 'Fiqh Reference'}
                     </Text>
                   </View>
 
@@ -377,7 +377,7 @@ export default function DarUlIftaaScreen() {
                   </Text>
 
                   <View style={styles.answerPreviewBox}>
-                    <Text style={styles.answerLabel}>شرعی رہنمائی و جواب:</Text>
+                    <Text style={styles.answerLabel}>Shariah Ruling & Answer:</Text>
                     <Text style={styles.answerSnippet} numberOfLines={3}>
                       {q.answer}
                     </Text>
@@ -411,8 +411,8 @@ export default function DarUlIftaaScreen() {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalArabicTitle}>اِسْتَفْتِ قَلْبَكَ وَاسْأَلِ العُلَمَاء</Text>
-                <Text style={styles.modalTitle}>اپنا شرعی مسئلہ تحریر فرمائیں</Text>
+                <Text style={styles.modalArabicTitle}>DAR-UL-IFTAA CONSULTATION</Text>
+                <Text style={styles.modalTitle}>Submit Your Fiqh Question</Text>
               </View>
               <TouchableOpacity
                 style={styles.closeBtn}
@@ -424,7 +424,7 @@ export default function DarUlIftaaScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
               {/* Category Picker */}
-              <Text style={styles.inputLabel}>متعلقہ شعبہ (Select Category):</Text>
+              <Text style={styles.inputLabel}>Select Category:</Text>
               <View style={styles.catGrid}>
                 {categoriesList.map((cat) => {
                   const selected = askCategory === cat.key;
@@ -450,10 +450,10 @@ export default function DarUlIftaaScreen() {
               </View>
 
               {/* Title Input */}
-              <Text style={styles.inputLabel}>سوال کا مختصر عنوان (Title):</Text>
+              <Text style={styles.inputLabel}>Question Title:</Text>
               <TextInput
                 style={styles.titleInput}
-                placeholder="مثلاً: حالتِ نماز میں شک ہونا"
+                placeholder="e.g. Ruling regarding doubt during Salah"
                 placeholderTextColor="#94A3B8"
                 value={askTitle}
                 onChangeText={setAskTitle}
@@ -461,10 +461,10 @@ export default function DarUlIftaaScreen() {
               />
 
               {/* Detail Input */}
-              <Text style={styles.inputLabel}>مسئلہ کی مکمل تفصیل (Detailed Question):</Text>
+              <Text style={styles.inputLabel}>Detailed Question:</Text>
               <TextInput
                 style={styles.textAreaInput}
-                placeholder="اپنا سوال مکمل وضاحت اور باریکی کے ساتھ تحریر فرمائیں..."
+                placeholder="Please describe your question in detail..."
                 placeholderTextColor="#94A3B8"
                 value={askQuestion}
                 onChangeText={setAskQuestion}
@@ -477,7 +477,7 @@ export default function DarUlIftaaScreen() {
               <View style={styles.modalPurdahNotice}>
                 <Ionicons name="shield-checkmark" size={16} color="#005F46" />
                 <Text style={styles.modalPurdahText}>
-                  یہ سوال براہِ راست مستند استاذہ کو ارسال ہوگا۔ آپ کا نام اور رابطہ مکمل صیغۂ راز میں رکھا جائے گا۔
+                  Your inquiry is delivered directly to certified scholars. Your details are kept strictly confidential.
                 </Text>
               </View>
 
@@ -492,7 +492,7 @@ export default function DarUlIftaaScreen() {
                 ) : (
                   <>
                     <Ionicons name="paper-plane" size={18} color="#FFFFFF" />
-                    <Text style={styles.submitBtnText}>دار الافتاء کو ارسال کریں</Text>
+                    <Text style={styles.submitBtnText}>Submit to Dar-ul-Iftaa</Text>
                   </>
                 )}
               </TouchableOpacity>

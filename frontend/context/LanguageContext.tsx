@@ -314,7 +314,7 @@ const LanguageContext = createContext<LanguageContextType>({
 });
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>('ur');
+  const [language, setLanguageState] = useState<Language>('en');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -378,7 +378,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   const matchedOption = LANGUAGE_OPTIONS.find((o) => o.code === language);
-  const languageName = matchedOption?.nativeName || 'اردو';
+  const languageName = matchedOption?.nativeName || 'English';
   const isRTL = language === 'ur' || language === 'ar';
   const isNastaliq = language === 'ur';
   const fontFamily = isNastaliq ? getUrduFontFamily() : 'System';

@@ -49,38 +49,38 @@ export default function FatawaDetailScreen() {
     const newState = await toggleFatwaBookmark(id);
     setBookmarked(newState);
     Alert.alert(
-      newState ? 'محفوظ ہوگیا (Bookmarked)' : 'بک مارک ہٹا دیا گیا',
+      newState ? 'Bookmarked' : 'Bookmark Removed',
       newState
-        ? 'یہ فتویٰ آپ کے محفوظ شدہ مسائل میں شامل کر دیا گیا ہے۔'
-        : 'یہ فتویٰ محفوظ شدہ لسٹ سے ہٹا دیا گیا ہے۔'
+        ? 'This fatwa has been added to your saved rulings.'
+        : 'This fatwa has been removed from your saved rulings.'
     );
   };
 
   const handleCopyFatwa = async () => {
     if (!question) return;
     const textToCopy =
-      'دار الافتاء و الارشاد — مدرسۃ السالکات للبنات\n\n' +
-      'عنوان: ' + question.title + '\n' +
-      'السؤال: ' + question.question + '\n\n' +
-      'الجواب وباللہ التوفیق:\n' + (question.answer || 'زیرِ غور') + '\n\n' +
-      'حوالہ: ' + (question.reference_kitab || 'کتبِ فقہ') + '\n' +
-      'مصدقہ: ' + (question.answered_by_name || 'استاذہ') + '\n\n' +
-      'واللہ تعالیٰ اعلم بالصواب';
+      'Dar-ul-Iftaa — Madrasatu-s-Salikat Lil Banat\n\n' +
+      'Title: ' + question.title + '\n' +
+      'Question: ' + question.question + '\n\n' +
+      'Answer: ' + (question.answer || 'Under Review') + '\n\n' +
+      'Reference: ' + (question.reference_kitab || 'Fiqh Reference') + '\n' +
+      'Verified By: ' + (question.answered_by_name || 'Faculty') + '\n\n' +
+      'Wallahu Ta\'ala A\'lam bi-s-Sawab';
     await Clipboard.setStringAsync(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
-    Alert.alert('کاپی ہوگیا (Copied)', 'فتویٰ کا متن کامیابی کے ساتھ کاپی ہو چکا ہے۔');
+    Alert.alert('Copied', 'The fatwa text has been copied to your clipboard.');
   };
 
   const handleShareFatwa = async () => {
     if (!question) return;
     const shareMessage =
-      'دار الافتاء و الارشاد — مدرسۃ السالکات للبنات\n\n' +
-      'مسئلہ: ' + question.title + '\n' +
-      'سوال: ' + question.question + '\n\n' +
-      'الجواب وباللہ التوفیق:\n' + (question.answer || 'زیرِ غور') + '\n\n' +
-      'حوالہ: ' + (question.reference_kitab || 'کتبِ فقہ') + '\n\n' +
-      'واللہ تعالیٰ اعلم بالصواب\nMadrasatu-s-Salikat Lil Banat App';
+      'Dar-ul-Iftaa — Madrasatu-s-Salikat Lil Banat\n\n' +
+      'Topic: ' + question.title + '\n' +
+      'Question: ' + question.question + '\n\n' +
+      'Answer: ' + (question.answer || 'Under Review') + '\n\n' +
+      'Reference: ' + (question.reference_kitab || 'Fiqh Reference') + '\n\n' +
+      'Wallahu Ta\'ala A\'lam bi-s-Sawab\nMadrasatu-s-Salikat Lil Banat App';
     try {
       await Share.share({
         message: shareMessage,
@@ -93,7 +93,7 @@ export default function FatawaDetailScreen() {
     return (
       <View style={[styles.container, styles.center, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>فتویٰ لوڈ ہو رہا ہے...</Text>
+        <Text style={styles.loadingText}>Loading fatwa...</Text>
       </View>
     );
   }
@@ -102,9 +102,9 @@ export default function FatawaDetailScreen() {
     return (
       <View style={[styles.container, styles.center, { paddingTop: insets.top }]}>
         <Ionicons name="alert-circle-outline" size={48} color="#94A3B8" />
-        <Text style={styles.notFoundText}>مطلوبہ فتویٰ دستیاب نہیں ہے۔</Text>
+        <Text style={styles.notFoundText}>The requested fatwa could not be found.</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/fatawa')}>
-          <Text style={styles.backBtnText}>واپس جائیں</Text>
+          <Text style={styles.backBtnText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -125,7 +125,7 @@ export default function FatawaDetailScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
+          <Text style={styles.arabicHeader}>DAR-UL-IFTAA VERDICT</Text>
           <Text style={styles.headerTitle}>Dar-ul-Iftaa Fatwa View</Text>
         </View>
         <View style={styles.headerActionBtns}>
@@ -176,7 +176,7 @@ export default function FatawaDetailScreen() {
                 isAnswered ? styles.statusPillTextAnswered : styles.statusPillTextPending,
               ]}
             >
-              {isAnswered ? 'شرعی جواب جاری شدہ' : 'زیرِ غور / فی الوقت زیرِ تحقیق'}
+              {isAnswered ? 'Official Shariah Ruling Issued' : 'Under Review / Active Research'}
             </Text>
           </View>
         </View>
@@ -185,7 +185,7 @@ export default function FatawaDetailScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeaderStrip}>
             <Ionicons name="help-circle" size={18} color="#005F46" />
-            <Text style={styles.cardHeaderLabel}>السؤال (The Question):</Text>
+            <Text style={styles.cardHeaderLabel}>The Question:</Text>
           </View>
           <Text style={styles.questionTitle}>{question.title}</Text>
           <Text style={styles.questionBody}>{question.question}</Text>
@@ -199,9 +199,9 @@ export default function FatawaDetailScreen() {
                 <Ionicons name="ribbon" size={22} color="#C8A84E" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.fatwaArabicHeading}>الْجَوَابُ وَبِاللَّهِ التَّوْفِيق</Text>
+                <Text style={styles.fatwaArabicHeading}>The Shariah Ruling & Verdict</Text>
                 <Text style={styles.fatwaSub}>
-                  مصدقہ بذریعہ: {question.answered_by_name || 'استاذہ و مفتیہ'}
+                  Verified By: {question.answered_by_name || 'Faculty Scholar'}
                 </Text>
               </View>
             </View>
@@ -214,7 +214,7 @@ export default function FatawaDetailScreen() {
             {question.reference_kitab && (
               <View style={styles.referenceRow}>
                 <Ionicons name="bookmarks-outline" size={16} color="#C8A84E" />
-                <Text style={styles.referenceLabel}>فقہی حوالہ / مآخذ:</Text>
+                <Text style={styles.referenceLabel}>Juristic Reference:</Text>
                 <Text style={styles.referenceValue}>{question.reference_kitab}</Text>
               </View>
             )}
@@ -232,7 +232,7 @@ export default function FatawaDetailScreen() {
                   color={COLORS.primary}
                 />
                 <Text style={styles.actionBtnText}>
-                  {copied ? 'کاپی ہوگیا' : 'متن کاپی کریں'}
+                  {copied ? 'Copied ✓' : 'Copy Text'}
                 </Text>
               </TouchableOpacity>
 
@@ -243,21 +243,21 @@ export default function FatawaDetailScreen() {
               >
                 <Ionicons name="share-social" size={16} color="#FFFFFF" />
                 <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>
-                  شیئر کریں (Share)
+                  Share Ruling
                 </Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.fatwaFooter}>
-              <Text style={styles.wallahuAlam}>وَاللَّهُ تَعَالَى أَعْلَمُ بِالصَّوَاب</Text>
+              <Text style={styles.wallahuAlam}>And Allah Ta'ala Knows Best</Text>
             </View>
           </View>
         ) : (
           <View style={styles.pendingNoticeCard}>
             <Ionicons name="hourglass-outline" size={36} color="#B45309" />
-            <Text style={styles.pendingNoticeTitle}>سوال استاذہ کے پیشِ نظر ہے</Text>
+            <Text style={styles.pendingNoticeTitle}>Question Under Review</Text>
             <Text style={styles.pendingNoticeBody}>
-              آپ کے مسئلے پر فقہی کتب کی روشنی میں غور کیا جا رہا ہے۔ جواب مکمل ہوتے ہی آپ کو یہاں مطلع کر دیا جائے گا۔
+              Your question is currently being reviewed in light of authentic Fiqh sources. You will be notified here as soon as the verdict is issued.
             </Text>
           </View>
         )}

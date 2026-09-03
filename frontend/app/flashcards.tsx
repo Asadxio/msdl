@@ -203,7 +203,7 @@ export default function FlashcardsScreen() {
               </View>
 
               <View style={styles.cardBody}>
-                <Text style={styles.bismillahTiny}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
+                <Text style={styles.bismillahTiny}>Bismillahir-Rahmanir-Rahim</Text>
                 <Text style={styles.arabicTextLarge}>{currentCard.frontText}</Text>
                 {currentCard.frontSubtitle && (
                   <Text style={styles.frontSubtitleText}>{currentCard.frontSubtitle}</Text>
@@ -213,7 +213,7 @@ export default function FlashcardsScreen() {
               {/* FLIP HINT */}
               <View style={styles.cardFooter}>
                 <Ionicons name="sync-outline" size={16} color="#005F46" />
-                <Text style={styles.flipHintText}>Tap Card to Flip & View Meaning (ترجمہ کے لیے ٹیپ کریں)</Text>
+                <Text style={styles.flipHintText}>Tap Card to Flip & View Meaning</Text>
               </View>
             </Animated.View>
 
@@ -221,7 +221,7 @@ export default function FlashcardsScreen() {
             <Animated.View style={[styles.card, styles.backCard, backAnimatedStyle]}>
               <View style={styles.cardTopBar}>
                 <View style={[styles.topicBadge, { backgroundColor: '#FEF3C7' }]}>
-                  <Text style={[styles.topicBadgeText, { color: '#B45309' }]}>ترجمہ و رہنمائی</Text>
+                  <Text style={[styles.topicBadgeText, { color: '#B45309' }]}>Meaning & Guidance</Text>
                 </View>
                 <View style={styles.cardCounter}>
                   <Text style={styles.cardCounterText}>
@@ -257,14 +257,14 @@ export default function FlashcardsScreen() {
 
               <View style={styles.cardBottomBar}>
                 <Ionicons name="sync-outline" size={16} color="#005F46" />
-                <Text style={styles.flipHintText}>Tap to Return to Arabic (عربی کے لیے ٹیپ کریں)</Text>
+                <Text style={styles.flipHintText}>Tap to Return to Arabic Word</Text>
               </View>
             </Animated.View>
           </TouchableOpacity>
         ) : (
           <View style={styles.emptyCard}>
             <Ionicons name="albums-outline" size={48} color="#94A3B8" />
-            <Text style={styles.emptyTitle}>اس کیٹیگری میں فی الحال کارڈز نہیں ہیں</Text>
+            <Text style={styles.emptyTitle}>No flashcards currently in this category</Text>
           </View>
         )}
       </View>
@@ -287,11 +287,11 @@ export default function FlashcardsScreen() {
         >
           <Ionicons
             name={isCurrentMastered ? 'checkmark-circle' : 'checkmark-circle-outline'}
-            size={20}
+            size={18}
             color={isCurrentMastered ? '#FFFFFF' : '#005F46'}
           />
           <Text style={[styles.masteryBtnText, isCurrentMastered && styles.masteryBtnTextActive]}>
-            {isCurrentMastered ? 'Mastered (یاد ہوگیا)' : 'Mark as Mastered'}
+            {isCurrentMastered ? 'Mastered ✓' : 'Mark as Mastered'}
           </Text>
         </TouchableOpacity>
 

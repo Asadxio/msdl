@@ -53,15 +53,14 @@ export default function VerifySanadScreen() {
   const handleShareVerification = async () => {
     if (!sanad) return;
     const shareMsg =
-      'بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم\n\n' +
-      '📜 *مدرسۃ السالکات للبنات — سند کی سرکاری تصدیق*\n\n' +
-      '✅ یہ سند باقاعدہ تصدیق شدہ ہے:\n' +
-      'طالبہ: ' + sanad.studentName + '\n' +
-      'شعبہ / کورس: ' + sanad.courseName + '\n' +
-      'درجہ: ' + (sanad.gradeLabel || 'کامیاب') + '\n' +
-      'تاریخ: ' + sanad.completionDate + ' (' + (sanad.hijriDate || '') + ')\n' +
-      'سند نمبر: ' + sanad.certificateId + '\n\n' +
-      '🔗 لائیو تصدیقی لنک: https://mslb.app/verify-sanad?id=' + encodeURIComponent(sanad.certificateId);
+      '📜 *Madrasatu-s-Salikat Lil Banat — Official Sanad Verification*\n\n' +
+      '✅ This certificate is officially authenticated and verified:\n' +
+      'Student: ' + sanad.studentName + '\n' +
+      'Course / Discipline: ' + sanad.courseName + '\n' +
+      'Grade / Distinction: ' + (sanad.gradeLabel || 'Passed') + '\n' +
+      'Completion Date: ' + sanad.completionDate + ' (' + (sanad.hijriDate || '') + ')\n' +
+      'Certificate Serial: ' + sanad.certificateId + '\n\n' +
+      '🔗 Live Verification Link: https://mslb.app/verify-sanad?id=' + encodeURIComponent(sanad.certificateId);
 
     try {
       await Share.share({
@@ -83,7 +82,7 @@ export default function VerifySanadScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>تَصْدِيقُ الشَّهَادَاتِ وَالأَسْنَاد</Text>
+          <Text style={styles.arabicHeader}>OFFICIAL VERIFICATION PORTAL</Text>
           <Text style={styles.headerTitle}>Official Sanad Verification</Text>
         </View>
         <View style={{ width: 40 }} />
@@ -92,7 +91,7 @@ export default function VerifySanadScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Search Input Card */}
         <View style={styles.searchCard}>
-          <Text style={styles.searchLabel}>سند نمبر درج فرمائیں (Enter Certificate Serial):</Text>
+          <Text style={styles.searchLabel}>Enter Certificate Serial Number:</Text>
           <View style={styles.searchRow}>
             <TextInput
               style={styles.searchInput}
@@ -115,7 +114,7 @@ export default function VerifySanadScreen() {
               ) : (
                 <>
                   <Ionicons name="search" size={16} color="#FFFFFF" />
-                  <Text style={styles.verifyBtnText}>تصدیق کریں</Text>
+                  <Text style={styles.verifyBtnText}>Verify Certificate</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -125,15 +124,15 @@ export default function VerifySanadScreen() {
         {loading ? (
           <View style={styles.centerBox}>
             <ActivityIndicator size="large" color="#C8A84E" />
-            <Text style={styles.loadingText}>سند کا ریکارڈ چیک کیا جا رہا ہے...</Text>
+            <Text style={styles.loadingText}>Checking certificate registry...</Text>
           </View>
         ) : sanad ? (
           /* Verified Sanad Card */
           <View style={styles.verifiedCard}>
             {/* Islamic Header & Seal */}
             <View style={styles.bismillahBox}>
-              <Text style={styles.bismillahText}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
-              <Text style={styles.madrasaTitle}>مدرسۃ السالکات للبنات</Text>
+              <Text style={styles.bismillahText}>Bismillahir-Rahmanir-Rahim</Text>
+              <Text style={styles.madrasaTitle}>Madrasatu-s-Salikat Lil Banat</Text>
               <Text style={styles.madrasaEng}>Madrasatu-s-Salikat Lil Banat</Text>
             </View>
 
@@ -141,7 +140,7 @@ export default function VerifySanadScreen() {
             <View style={styles.statusBanner}>
               <Ionicons name="checkmark-circle" size={22} color="#007A58" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.statusTitle}>سند باقاعدہ مصدقہ و اصلی ہے</Text>
+                <Text style={styles.statusTitle}>Official Certificate Authenticated ✓</Text>
                 <Text style={styles.statusSub}>Officially Issued & Verified Sanad</Text>
               </View>
             </View>
@@ -149,27 +148,27 @@ export default function VerifySanadScreen() {
             {/* Details Grid */}
             <View style={styles.detailsBox}>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>فاضلہ / طالبہ کا نام:</Text>
+                <Text style={styles.detailLabel}>Student / Graduate Name:</Text>
                 <Text style={styles.detailValue}>{sanad.studentName}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>شعبہ / مضمون:</Text>
+                <Text style={styles.detailLabel}>Course / Discipline:</Text>
                 <Text style={styles.detailValue}>{sanad.courseName}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>درجہ و امتیاز:</Text>
+                <Text style={styles.detailLabel}>Grade & Distinction:</Text>
                 <Text style={[styles.detailValue, { color: '#005F46', fontWeight: '800' }]}>
-                  {sanad.gradeLabel || 'کامیاب'}
+                  {sanad.gradeLabel || 'Passed'}
                 </Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>تاریخِ تکمیل:</Text>
+                <Text style={styles.detailLabel}>Completion Date:</Text>
                 <Text style={styles.detailValue}>
                   {sanad.completionDate + (sanad.hijriDate ? (' (' + sanad.hijriDate + ')') : '')}
                 </Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>سند سیریل نمبر:</Text>
+                <Text style={styles.detailLabel}>Certificate Serial No:</Text>
                 <Text style={[styles.detailValue, styles.serialText]}>{sanad.certificateId}</Text>
               </View>
             </View>
@@ -180,7 +179,7 @@ export default function VerifySanadScreen() {
                 <Text style={styles.stampText}>★ OFFICIAL SEAL ★</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.authorityLabel}>جاری کردہ ادارہ:</Text>
+                <Text style={styles.authorityLabel}>Issuing Authority:</Text>
                 <Text style={styles.authorityValue}>{sanad.issuingAuthority}</Text>
               </View>
             </View>
@@ -192,25 +191,25 @@ export default function VerifySanadScreen() {
               activeOpacity={0.85}
             >
               <Ionicons name="share-social" size={18} color="#FFFFFF" />
-              <Text style={styles.shareVerificationBtnText}>تصدیقی لنک شیئر کریں (Share)</Text>
+              <Text style={styles.shareVerificationBtnText}>Share Verification Link</Text>
             </TouchableOpacity>
           </View>
         ) : searched ? (
           /* Unverified / Not Found Card */
           <View style={styles.errorCard}>
             <Ionicons name="close-circle" size={54} color="#DC2626" />
-            <Text style={styles.errorTitle}>سند کا ریکارڈ دستیاب نہیں</Text>
+            <Text style={styles.errorTitle}>Certificate Record Not Found</Text>
             <Text style={styles.errorSub}>
-              درج کردہ سند نمبر کے مطابق مدرسہ کے ریکارڈ میں کوئی سند موجود نہیں ہے۔ برائے مہربانی سیریل نمبر دوبارہ چیک فرمائیں۔
+              No authenticated certificate was found matching this serial number. Please re-check the serial number and try again.
             </Text>
           </View>
         ) : (
           /* Initial State Card */
           <View style={styles.infoCard}>
             <Ionicons name="shield-checkmark-outline" size={48} color="#C8A84E" />
-            <Text style={styles.infoTitle}>سرکاری سند کی تصدیق</Text>
+            <Text style={styles.infoTitle}>Official Sanad Verification</Text>
             <Text style={styles.infoSub}>
-              مدرسۃ السالکات للبنات کی طرف سے جاری کردہ کسی بھی سند، اجازت، یا سرٹیفکیٹ کی لائیو اور مستند تصدیق کے لیے اوپر سیریل نمبر درج فرمائیں۔
+              Enter a certificate serial number above to verify authentic degrees, certificates, and authorizations issued by Madrasatu-s-Salikat Lil Banat.
             </Text>
           </View>
         )}

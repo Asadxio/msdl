@@ -66,7 +66,7 @@ export function classifyBleeding(
         durationDays: days,
         isExceedingMax: true,
         isBelowMin: false,
-        fiqhNote: '۴۰ دن سے زائد کا خون نفاس نہیں بلکہ استحاضہ (بیماری کا خون) ہے، غسل کر کے نماز ادا کرنا فرض ہے۔',
+        fiqhNote: 'Bleeding exceeding 40 days is not Nifas, but Istihadha (irregular bleeding). Ghusl is obligatory and prayers must be performed.',
       };
     }
     return {
@@ -75,7 +75,7 @@ export function classifyBleeding(
       durationDays: days,
       isExceedingMax: false,
       isBelowMin: false,
-      fiqhNote: 'حالتِ نفاس میں نماز معاف ہے اور روزے بعد میں قضاء کرنے ہوں گے۔ زیادہ سے زیادہ مدت ۴۰ دن ہے۔',
+      fiqhNote: 'During Nifas, prayers are exempt and fasts are to be made up later. The maximum period is 40 days.',
     };
   }
 
@@ -87,7 +87,7 @@ export function classifyBleeding(
       durationDays: days,
       isExceedingMax: false,
       isBelowMin: true,
-      fiqhNote: '۳ دن (۷۲ گھنٹے) سے کم کا خون حیض نہیں بلکہ استحاضہ ہے۔ چھوٹی ہوئی نمازوں کی قضاء لازم ہے۔',
+      fiqhNote: 'Bleeding less than 3 days (72 hours) is not Hayd, but Istihadha. Any missed prayers must be made up (Qadha).'
     };
   }
 
@@ -98,7 +98,7 @@ export function classifyBleeding(
       durationDays: days,
       isExceedingMax: true,
       isBelowMin: false,
-      fiqhNote: '۱۰ دن سے زائد کا خون استحاضہ شمار ہوگا۔ ۱۰ دن مکمل ہوتے ہی غسل فرض ہے اور نماز ادا کرنا لازم ہے۔',
+      fiqhNote: 'Bleeding exceeding 10 days is considered Istihadha. Ghusl becomes obligatory upon completing 10 days and prayers must resume.',
     };
   }
 
@@ -108,7 +108,7 @@ export function classifyBleeding(
     durationDays: days,
     isExceedingMax: false,
     isBelowMin: false,
-    fiqhNote: '۳ تا ۱۰ دن کا خون شرعی حیض ہے۔ اس دوران نماز معاف ہے اور رمضان کے روزوں کی بعد میں قضاء لازم ہے۔',
+    fiqhNote: 'Bleeding between 3 to 10 days is valid Hayd. Prayers are exempt and Ramadan fasts must be made up later.',
   };
 }
 
@@ -119,13 +119,13 @@ export function getCurrentPurityStatus(
   if (!entries || entries.length === 0) {
     return {
       state: 'pure',
-      stateLabel: 'حالتِ طہارت (پاک)',
-      description: 'آپ حالتِ طہارت میں ہیں۔ نماز ادا کرنا، تلاوتِ قرآن اور تمام عبادات فرض و مسنون ہیں۔',
+      stateLabel: 'State of Purity (Tuhr)',
+      description: 'You are currently in a state of ritual purity. Salah, Quran recitation, and worship are obligatory and encouraged.',
       isSalahObligatory: true,
       isFastingObligatory: true,
       isGhuslRequiredNow: false,
       activeCycleDays: 0,
-      fiqhDaleel: 'فقہ حنفی: عام حالت میں طہارت برقرار رہتی ہے۔',
+      fiqhDaleel: 'Hanafi Fiqh: The default state remains purity until valid bleeding is established.',
     };
   }
 
@@ -139,7 +139,7 @@ export function getCurrentPurityStatus(
   if (!latest.endDate) {
     const classification = classifyBleeding(latest.startDate, undefined, latest.type === 'nifas' ? 'nifas' : 'haiz', habit);
     const startObj = new Date(latest.startDate);
-    const expectedGhusl = new Date(startObj.getTime() + habit.haizDays * 24 * 60 * 60 * 1000).toLocaleDateString('ur-PK', {
+    const expectedGhusl = new Date(startObj.getTime() + habit.haizDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'long',
       weekday: 'long',
@@ -148,8 +148,8 @@ export function getCurrentPurityStatus(
     if (classification.type === 'haiz') {
       return {
         state: 'haiz',
-        stateLabel: 'حالتِ حیض (معذوری کا شرعی وقت)',
-        description: 'اس وقت نماز معاف ہے اور روزہ رکھنا منع ہے۔ بعد میں صرف روزوں کی قضاء لازم ہوگی، نمازوں کی قضاء نہیں۔',
+        stateLabel: 'State of Hayd (Menstruation)',
+        description: 'Salah is exempt and fasting is prohibited during this time. Only missed fasts must be made up later, not missed prayers.',
         isSalahObligatory: false,
         isFastingObligatory: false,
         isGhuslRequiredNow: false,
@@ -162,8 +162,8 @@ export function getCurrentPurityStatus(
     if (classification.type === 'nifas') {
       return {
         state: 'nifas',
-        stateLabel: 'حالتِ نفاس (ولادت کے بعد)',
-        description: 'نفاس کے ایام میں نماز معاف ہے اور روزے موخر ہیں۔ خون بند ہوتے ہی یا ۴۰ دن پر غسل فرض ہے۔',
+        stateLabel: 'State of Nifas (Postnatal)',
+        description: 'Salah is exempt during Nifas and fasts are deferred. Ghusl is obligatory when bleeding stops or upon 40 days.',
         isSalahObligatory: false,
         isFastingObligatory: false,
         isGhuslRequiredNow: false,
@@ -175,8 +175,8 @@ export function getCurrentPurityStatus(
 
     return {
       state: 'istihaza',
-      stateLabel: 'حالتِ استحاضہ (بیماری کا عذر)',
-      description: 'استحاضہ میں نماز معاف نہیں ہے۔ ہر نماز کے وقت نیا وضو فرما کر نماز ادا کرنا اور روزہ رکھنا فرض ہے۔',
+      stateLabel: 'State of Istihadha (Irregular Bleeding)',
+      description: 'Salah is not exempt in Istihadha. Perform fresh Wudhu for each prayer time and offer obligatory prayers and fasts.',
       isSalahObligatory: true,
       isFastingObligatory: true,
       isGhuslRequiredNow: true,
@@ -189,12 +189,12 @@ export function getCurrentPurityStatus(
   const hoursSinceEnd = calculateHoursBetween(latest.endDate, new Date().toISOString());
   return {
     state: 'pure',
-    stateLabel: 'حالتِ طہارت (پاک)',
-    description: 'خون مکمل رک چکا ہے۔ اگر غسل نہیں فرمایا تو فوراً غسل فرما کر نماز بحال فرمائیں۔',
+    stateLabel: 'State of Purity (Tuhr)',
+    description: 'Bleeding has ceased. If you have not performed Ghusl, please perform it immediately and resume prayers.',
     isSalahObligatory: true,
     isFastingObligatory: true,
     isGhuslRequiredNow: hoursSinceEnd < 24,
     activeCycleDays: Math.floor(hoursSinceEnd / 24),
-    fiqhDaleel: 'فقہ حنفی: پاکی کا کم از کم وقفہ ۱۵ دن ہے۔',
+    fiqhDaleel: 'Hanafi Fiqh: The minimum interval of valid purity (Tuhr) is 15 complete days.',
   };
 }

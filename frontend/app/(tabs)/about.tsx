@@ -1803,10 +1803,10 @@ export default function AboutScreen() {
                   );
                 })}
                 <Text style={styles.starLabelText}>
-                  {fbRating === '5' && '⭐⭐⭐⭐⭐ Outstanding (بہترین)'}
-                  {fbRating === '4' && '⭐⭐⭐⭐ Very Good (بہت اچھا)'}
-                  {fbRating === '3' && '⭐⭐⭐ Good (اچھا)'}
-                  {fbRating === '2' && '⭐⭐ Fair (متوسط)'}
+                  {fbRating === '5' && '⭐⭐⭐⭐⭐ Outstanding'}
+                  {fbRating === '4' && '⭐⭐⭐⭐ Very Good'}
+                  {fbRating === '3' && '⭐⭐⭐ Good'}
+                  {fbRating === '2' && '⭐⭐ Fair'}
                   {fbRating === '1' && '⭐ Needs Improvement'}
                 </Text>
               </View>

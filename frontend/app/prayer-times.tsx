@@ -64,11 +64,11 @@ const RED      = '#DC2626';
 const RED_BG   = 'rgba(220,38,38,0.10)';
 
 const KIND: Record<string, { bar: string; badge: string; badgeTxt: string; label: string }> = {
-  fard:   { bar: GOLD,      badge: GOLD_BG,                 badgeTxt: GOLD,      label: 'فرض'   },
-  sun:    { bar: '#F97316', badge: 'rgba(249,115,22,0.12)', badgeTxt: '#F97316', label: 'طلوع'  },
-  nafl:   { bar: '#818CF8', badge: 'rgba(129,140,248,0.12)',badgeTxt: '#818CF8', label: 'نفل'   },
-  marker: { bar: W50,       badge: W20,                     badgeTxt: W50,       label: 'علامت' },
-  makruh: { bar: RED,       badge: RED_BG,                  badgeTxt: RED,       label: 'مکروہ' },
+  fard:   { bar: GOLD,      badge: GOLD_BG,                 badgeTxt: GOLD,      label: 'Fard'   },
+  sun:    { bar: '#F97316', badge: 'rgba(249,115,22,0.12)', badgeTxt: '#F97316', label: 'Sunrise'  },
+  nafl:   { bar: '#818CF8', badge: 'rgba(129,140,248,0.12)',badgeTxt: '#818CF8', label: 'Nafl'   },
+  marker: { bar: W50,       badge: W20,                     badgeTxt: W50,       label: 'Marker' },
+  makruh: { bar: RED,       badge: RED_BG,                  badgeTxt: RED,       label: 'Makruh' },
 };
 
 function fmt(d: Date) {
@@ -304,7 +304,7 @@ export default function PrayerTimesScreen() {
   const ARC_MARKERS = useMemo(() => {
     if (!prayerTimes) return [];
     return ['Fajr','Ishraq','Zawal','Asr','Isha'].map(name => {
-      const labels: Record<string, string> = { Fajr:'فجر', Ishraq:'اشراق', Zawal:'زوال', Asr:'عصر', Isha:'عشاء' };
+      const labels: Record<string, string> = { Fajr: 'Fajr', Ishraq: 'Ishraq', Zawal: 'Zawal', Asr: 'Asr', Isha: 'Isha' };
       return { name, label: labels[name], time: prayerTimes.find(p => p.name === name)?.time };
     }).filter(m => !!m.time);
   }, [prayerTimes]);
@@ -318,7 +318,7 @@ export default function PrayerTimesScreen() {
           <Ionicons name="arrow-back" size={20} color={W} />
         </TouchableOpacity>
         <View style={s.hCenter}>
-          <Text style={s.hArabic}>اَوْقَاتِ نَمَاز</Text>
+          <Text style={s.hArabic}>PRAYER SCHEDULE</Text>
           <Text style={s.hSub}>Prayer Times · Tauqeet-Level</Text>
         </View>
         <TouchableOpacity style={[s.hBtn, isCurrentlyMakruh && s.hBtnRed]} onPress={() => setSettingsModal(true)}>
@@ -331,10 +331,10 @@ export default function PrayerTimesScreen() {
       {/* Tab Bar */}
       <View style={s.tabBar}>
         {([
-          { id: 'today',   label: 'آج',     icon: 'sunny-outline'    },
-          { id: 'monthly', label: 'ماہانہ', icon: 'calendar-outline' },
-          { id: 'moon',    label: 'چاند',   icon: 'moon-outline'     },
-          { id: 'qaza',    label: 'قضاء',   icon: 'time-outline'     },
+          { id: 'today',   label: 'Today',   icon: 'sunny-outline'    },
+          { id: 'monthly', label: 'Monthly', icon: 'calendar-outline' },
+          { id: 'moon',    label: 'Moon',    icon: 'moon-outline'     },
+          { id: 'qaza',    label: 'Qaza',    icon: 'time-outline'     },
         ] as const).map(tab => {
           const sel = activeTab === tab.id;
           return (
@@ -352,12 +352,12 @@ export default function PrayerTimesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {status === 'loading' ? (
-          <View style={s.loadBox}><ActivityIndicator size="large" color={GOLD} /><Text style={s.loadTxt}>اوقات حساب ہو رہے ہیں...</Text></View>
+          <View style={s.loadBox}><ActivityIndicator size="large" color={GOLD} /><Text style={s.loadTxt}>Calculating prayer times...</Text></View>
         ) : status === 'error' ? (
           <View style={s.loadBox}>
             <Ionicons name="alert-circle-outline" size={48} color={RED} />
-            <Text style={s.loadTxt}>حساب میں خرابی آ گئی۔</Text>
-            <TouchableOpacity style={s.retryBtn} onPress={() => setSettings(DEFAULT_PRAYER_SETTINGS)}><Text style={s.retryTxt}>دوبارہ کوشش کریں</Text></TouchableOpacity>
+            <Text style={s.loadTxt}>Error calculating prayer times.</Text>
+            <TouchableOpacity style={s.retryBtn} onPress={() => setSettings(DEFAULT_PRAYER_SETTINGS)}><Text style={s.retryTxt}>Try Again</Text></TouchableOpacity>
           </View>
         ) : (
           <>
@@ -381,19 +381,19 @@ export default function PrayerTimesScreen() {
                   <View style={s.dayNightRow}>
                     <View style={s.dayNightItem}>
                       <Ionicons name="sunny" size={14} color={GOLD} />
-                      <Text style={s.dayNightLbl}>روز</Text>
+                      <Text style={s.dayNightLbl}>Day</Text>
                       <Text style={s.dayNightVal}>{formatDuration(dayLenMin)}</Text>
                     </View>
                     <View style={s.dayNightDiv} />
                     <View style={s.dayNightItem}>
                       <Ionicons name="moon" size={14} color="#818CF8" />
-                      <Text style={s.dayNightLbl}>رات</Text>
+                      <Text style={s.dayNightLbl}>Night</Text>
                       <Text style={s.dayNightVal}>{formatDuration(nightLenMin)}</Text>
                     </View>
                     <View style={s.dayNightDiv} />
                     <View style={s.dayNightItem}>
                       <Ionicons name="compass" size={14} color={EMRD} />
-                      <Text style={s.dayNightLbl}>قبلہ</Text>
+                      <Text style={s.dayNightLbl}>Qibla</Text>
                       <Text style={s.dayNightVal}>{qiblaDir.toFixed(1)}° {compassLabel(qiblaDir)}</Text>
                     </View>
                   </View>
@@ -401,7 +401,7 @@ export default function PrayerTimesScreen() {
 
                 {/* Sun Arc */}
                 <View style={s.arcCard}>
-                  <Text style={s.arcTitle}>آفتاب کا راستہ · Solar Track</Text>
+                  <Text style={s.arcTitle}>Solar Track & Sun Position</Text>
                   <View style={s.arcTrack}>
                     <View style={[s.arcFill, { width: (Math.min(100, sunPercent) + '%') as any }]} />
                     <View style={[s.sunDot, { left: (Math.min(93, sunPercent) + '%') as any }]}>
@@ -417,9 +417,9 @@ export default function PrayerTimesScreen() {
                     ))}
                   </View>
                   <View style={s.arcChipRow}>
-                    {sunriseTime && <View style={s.arcChip}><Ionicons name="sunny-outline" size={11} color={GOLD} /><Text style={s.arcChipTxt}>طلوع {fmt(sunriseTime)}</Text></View>}
-                    {sunsetTime  && <View style={s.arcChip}><Ionicons name="moon-outline"  size={11} color={GOLD} /><Text style={s.arcChipTxt}>غروب {fmt(sunsetTime)}</Text></View>}
-                    <View style={s.arcChip}><Ionicons name="time-outline" size={11} color={GOLD} /><Text style={s.arcChipTxt}>دن {formatDuration(dayLenMin)}</Text></View>
+                    {sunriseTime && <View style={s.arcChip}><Ionicons name="sunny-outline" size={11} color={GOLD} /><Text style={s.arcChipTxt}>Sunrise {fmt(sunriseTime)}</Text></View>}
+                    {sunsetTime  && <View style={s.arcChip}><Ionicons name="moon-outline"  size={11} color={GOLD} /><Text style={s.arcChipTxt}>Sunset {fmt(sunsetTime)}</Text></View>}
+                    <View style={s.arcChip}><Ionicons name="time-outline" size={11} color={GOLD} /><Text style={s.arcChipTxt}>Day {formatDuration(dayLenMin)}</Text></View>
                   </View>
                 </View>
 
@@ -430,19 +430,19 @@ export default function PrayerTimesScreen() {
                       <View style={s.makruhAlert}>
                         <Animated.View style={[s.makruhDot, { opacity: pulseAnim }]} />
                         <View style={{ flex: 1 }}>
-                          <Text style={s.makruhAlertTitle}>مکروہ وقت جاری ہے</Text>
-                          <Text style={s.makruhAlertSub}>ابھی نماز نہ پڑھیں — مکروہ تحریمی</Text>
+                          <Text style={s.makruhAlertTitle}>Makruh Window Active</Text>
+                          <Text style={s.makruhAlertSub}>Prohibited prayer time — Do not perform Salah now</Text>
                         </View>
                       </View>
                     ) : (
                       <View style={s.nextContent}>
                         <View>
-                          <Text style={s.nextLabel}>اگلی نماز</Text>
+                          <Text style={s.nextLabel}>Next Prayer</Text>
                           <Text style={s.nextName}>{nextPrayer.urduName}</Text>
                           <Text style={s.nextTime}>{fmt(nextPrayer.time)}</Text>
                           {prevPrayer && (
                             <Text style={s.prevLabel}>
-                              {prevPrayer.urduName} · {Math.floor((now.getTime() - prevPrayer.time.getTime()) / 60000)}m پہلے
+                              {prevPrayer.urduName} · {Math.floor((now.getTime() - prevPrayer.time.getTime()) / 60000)}m ago
                             </Text>
                           )}
                         </View>
@@ -493,8 +493,8 @@ export default function PrayerTimesScreen() {
                 <View style={s.makruhCard}>
                   <View style={s.makruhCardHdr}>
                     <Ionicons name="warning-outline" size={15} color={RED} />
-                    <Text style={s.makruhCardTitle}>مکروہ اوقات — 3 Makruh Windows</Text>
-                    {isCurrentlyMakruh && <View style={s.activeBadge}><Text style={s.activeBadgeTxt}>● جاری</Text></View>}
+                    <Text style={s.makruhCardTitle}>Makruh Windows (Prohibited Times)</Text>
+                    {isCurrentlyMakruh && <View style={s.activeBadge}><Text style={s.activeBadgeTxt}>● ACTIVE</Text></View>}
                   </View>
                   {makruhWindows.map((w, i) => {
                     const dur = Math.round((w.end.getTime() - w.start.getTime()) / 60000);
@@ -515,7 +515,7 @@ export default function PrayerTimesScreen() {
                 <View style={s.astroCard}>
                   <View style={s.astroHdr}>
                     <Ionicons name="telescope-outline" size={16} color={GOLD} />
-                    <Text style={s.astroTitle}>علمِ فلکیات — Advanced Astronomy</Text>
+                    <Text style={s.astroTitle}>Astronomy & Solar Data</Text>
                   </View>
                   <View style={s.astroGrid}>
                     <StatChip icon="sunny-outline"       label="Solar Altitude"  value={`${solarAlt > 0 ? '+' : ''}${solarAlt}°`} />
@@ -535,11 +535,11 @@ export default function PrayerTimesScreen() {
             {/* ══ MONTHLY TAB ════════════════════════════════════════════════ */}
             {activeTab === 'monthly' && (
               <View style={s.monthlySection}>
-                <Text style={s.sectionTitle}>{new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })} — ماہانہ اوقاتِ نماز</Text>
+                <Text style={s.sectionTitle}>{new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })} — Monthly Prayer Timetable</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View>
                     <View style={[s.mRow, s.mHdrRow]}>
-                      {['تاریخ','فجر','طلوع','ظہر','عصر','مغرب','عشاء'].map((h, i) => (
+                      {['Date','Fajr','Sunrise','Zuhr','Asr','Maghrib','Isha'].map((h, i) => (
                         <Text key={i} style={[s.mCell, s.mHdr, i === 0 && { width: 72 }]}>{h}</Text>
                       ))}
                     </View>
@@ -549,7 +549,7 @@ export default function PrayerTimesScreen() {
                         <View key={idx} style={[s.mRow, isToday && s.mRowToday]}>
                           <View style={{ width: 72 }}>
                             <Text style={[s.mDateTxt, isToday && { color: GOLD, fontWeight: '900' }]}>{row.dateStr}</Text>
-                            {row.hijriDay > 0 && <Text style={s.mHijriTxt}>{row.hijriDay} ہج</Text>}
+                            {row.hijriDay > 0 && <Text style={s.mHijriTxt}>{row.hijriDay} AH</Text>}
                           </View>
                           {[row.fajr, row.sunrise, row.zuhr, row.asr, row.maghrib, row.isha].map((t, i) => (
                             <Text key={i} style={[s.mCell, s.mTimeTxt]}>{t}</Text>
@@ -573,21 +573,21 @@ export default function PrayerTimesScreen() {
                     <View style={[s.moonCycleFill, { width: ((moonInfo.phase / 29.5) * 100 + '%') as any }]} />
                     <View style={[s.moonCycleDot, { left: (Math.min(94, (moonInfo.phase / 29.5) * 100) + '%') as any }]} />
                   </View>
-                  <Text style={s.moonCycleLbl}>ہلالی مہینہ: {moonInfo.phase} / 29 دن گزرے</Text>
+                  <Text style={s.moonCycleLbl}>Lunar Cycle: Day {moonInfo.phase} of 29</Text>
                   <View style={s.moonIllumRow}>
                     <View style={s.moonIllumBar}>
                       <View style={[s.moonIllumFill, { width: (Math.round(moonInfo.illumination * 100) + '%') as any }]} />
                     </View>
-                    <Text style={s.moonIllumTxt}>روشنی {Math.round(moonInfo.illumination * 100)}٪</Text>
+                    <Text style={s.moonIllumTxt}>Illumination {Math.round(moonInfo.illumination * 100)}%</Text>
                   </View>
                 </View>
 
                 <View style={s.moonStats}>
                   {[
-                    { num: moonInfo.phase,                              label: 'آج کا ہلالی دن',   icon: 'calendar-outline' },
-                    { num: moonInfo.daysToFullMoon,                     label: 'بدر میں دن',       icon: 'moon'             },
-                    { num: moonInfo.daysToNewMoon,                      label: 'نئے چاند میں',     icon: 'moon-outline'     },
-                    { num: Math.round(moonInfo.illumination * 100),     label: 'روشنی فیصد',       icon: 'star-outline'     },
+                    { num: moonInfo.phase,                              label: 'Lunar Day',   icon: 'calendar-outline' },
+                    { num: moonInfo.daysToFullMoon,                     label: 'Days to Full Moon',       icon: 'moon'             },
+                    { num: moonInfo.daysToNewMoon,                      label: 'Days to New Moon',     icon: 'moon-outline'     },
+                    { num: Math.round(moonInfo.illumination * 100),     label: 'Illumination %',       icon: 'star-outline'     },
                   ].map((item, i) => (
                     <View key={i} style={s.moonStatCard}>
                       <Ionicons name={item.icon as any} size={18} color={GOLD} />
@@ -600,14 +600,14 @@ export default function PrayerTimesScreen() {
                 <View style={s.ayyamCard}>
                   <View style={s.ayyamHdr}>
                     <Ionicons name="star" size={15} color={GOLD} />
-                    <Text style={s.ayyamTitle}>ایام البیض — Ayyam al-Bid (سنت روزے)</Text>
+                    <Text style={s.ayyamTitle}>Ayyam al-Bid (White Days Fasting)</Text>
                   </View>
-                  <Text style={s.ayyamDesc}>ہر ہلالی مہینے کی 13، 14 اور 15 تاریخ کو روزہ رکھنا سنت مؤکدہ ہے۔ آج کا ہلالی دن: {moonInfo.phase}</Text>
+                  <Text style={s.ayyamDesc}>Fasting on the 13th, 14th, and 15th of every lunar month is a Sunnah. Current lunar day: {moonInfo.phase}</Text>
                   {[13, 14, 15].map(d => (
                     <View key={d} style={[s.ayyamDay, moonInfo.phase === d && s.ayyamDayActive]}>
                       <Text style={[s.ayyamDayNum, moonInfo.phase === d && { color: BG }]}>{d}</Text>
                       <Text style={[s.ayyamDayLbl, moonInfo.phase === d && { color: BG }]}>
-                        {d === 13 ? 'تیرہ' : d === 14 ? 'چودہ' : 'پندرہ'} تاریخ{moonInfo.phase === d ? ' ← آج!' : ''}
+                        {d}th Lunar Day{moonInfo.phase === d ? ' ← Today!' : ''}
                       </Text>
                     </View>
                   ))}
@@ -616,14 +616,14 @@ export default function PrayerTimesScreen() {
                 <View style={s.hijriCard}>
                   <Ionicons name="information-circle-outline" size={16} color={GOLD} />
                   <View style={{ flex: 1 }}>
-                    <Text style={s.hijriCardLbl}>آج کی اسلامی تاریخ (مغرب کے بعد نئی تاریخ شروع)</Text>
+                    <Text style={s.hijriCardLbl}>Current Islamic Date (New day starts at Maghrib)</Text>
                     <Text style={s.hijriCardVal}>{hijriDate}</Text>
                   </View>
                 </View>
 
                 <View style={s.lunarMonthCard}>
-                  <Text style={s.lunarTitle}>اسلامی مہینوں کی ترتیب</Text>
-                  {['محرم الحرام','صفر المظفر','ربیع الاول','ربیع الثانی','جمادی الاولی','جمادی الثانیہ','رجب المرجب','شعبان المعظم','رمضان المبارک','شوال المکرم','ذوالقعدہ','ذوالحجہ'].map((m, i) => (
+                  <Text style={s.lunarTitle}>Islamic Hijri Months</Text>
+                  {['Muharram','Safar','Rabi al-Awwal','Rabi al-Thani','Jumada al-Awwal','Jumada al-Thani','Rajab','Sha\'ban','Ramadan','Shawwal','Dhu al-Qi\'dah','Dhu al-Hijjah'].map((m, i) => (
                     <View key={i} style={s.lunarMonthRow}>
                       <View style={s.lunarNum}><Text style={s.lunarNumTxt}>{i + 1}</Text></View>
                       <Text style={s.lunarName}>{m}</Text>
@@ -641,14 +641,14 @@ export default function PrayerTimesScreen() {
                     <Text style={[s.qazaCircleNum, { color: qazaTotal === 0 ? EMRD : qazaTotal < 10 ? GOLD : RED }]}>{qazaTotal}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.qazaTotalLbl}>کل قضاء نمازیں باقی</Text>
-                    {qazaTotal > 0 && qazaTarget > 0 && <Text style={s.qazaEst}>روزانہ {qazaTarget} پر: ~{Math.ceil(qazaTotal / qazaTarget)} دن باقی</Text>}
-                    {qazaTotal === 0 && <Text style={s.qazaClear}>الحمدللہ! سب ادا ہو گئی ✓</Text>}
+                    <Text style={s.qazaTotalLbl}>Total Missed Prayers (Qaza)</Text>
+                    {qazaTotal > 0 && qazaTarget > 0 && <Text style={s.qazaEst}>At {qazaTarget}/day: ~{Math.ceil(qazaTotal / qazaTarget)} days remaining</Text>}
+                    {qazaTotal === 0 && <Text style={s.qazaClear}>Alhamdulillah! All completed ✓</Text>}
                   </View>
                 </View>
 
                 <View style={s.targetRow}>
-                  <Text style={s.targetLbl}>روزانہ ہدف:</Text>
+                  <Text style={s.targetLbl}>Daily Target:</Text>
                   {[1,2,3,5].map(t => (
                     <TouchableOpacity key={t} style={[s.targetBtn, qazaTarget === t && s.targetBtnSel]} onPress={() => setQazaTarget(t)}>
                       <Text style={[s.targetBtnTxt, qazaTarget === t && { color: BG }]}>{t}</Text>
@@ -657,11 +657,11 @@ export default function PrayerTimesScreen() {
                 </View>
 
                 {([
-                  { key: 'fajr' as const,    label: 'فجر',   icon: 'moon-outline'         },
-                  { key: 'zuhr' as const,    label: 'ظہر',   icon: 'sunny'                },
-                  { key: 'asr' as const,     label: 'عصر',   icon: 'partly-sunny-outline' },
-                  { key: 'maghrib' as const, label: 'مغرب',  icon: 'cloudy-night-outline' },
-                  { key: 'isha' as const,    label: 'عشاء',  icon: 'moon'                 },
+                  { key: 'fajr' as const,    label: 'Fajr',   icon: 'moon-outline'         },
+                  { key: 'zuhr' as const,    label: 'Zuhr',   icon: 'sunny'                },
+                  { key: 'asr' as const,     label: 'Asr',   icon: 'partly-sunny-outline' },
+                  { key: 'maghrib' as const, label: 'Maghrib',  icon: 'cloudy-night-outline' },
+                  { key: 'isha' as const,    label: 'Isha',  icon: 'moon'                 },
                 ]).map(item => {
                   const count = qaza[item.key];
                   const color = count === 0 ? EMRD : count < 10 ? GOLD : RED;
@@ -680,7 +680,7 @@ export default function PrayerTimesScreen() {
 
                 <View style={s.qazaInfo}>
                   <Ionicons name="information-circle-outline" size={15} color={EMRD_DIM} />
-                  <Text style={s.qazaInfoTxt}>قضاء نماز کا ادا کرنا واجب ہے۔ ہر نماز کے بعد ایک قضاء ادا کریں اور (-) سے کم کریں۔ یہ ڈیٹا صرف آپ کے فون میں محفوظ ہے۔</Text>
+                  <Text style={s.qazaInfoTxt}>Fulfilling missed obligatory prayers is mandatory. Offer one Qaza prayer after each daily prayer and tap (-) to decrement. All data is saved privately on your device.</Text>
                 </View>
               </View>
             )}
@@ -693,13 +693,13 @@ export default function PrayerTimesScreen() {
         <View style={s.modalOverlay}>
           <View style={s.modalBox}>
             <View style={s.modalHdr}>
-              <Text style={s.modalTitle}>اوقاتِ نماز کی ترتیب</Text>
+              <Text style={s.modalTitle}>Prayer Times Settings</Text>
               <TouchableOpacity onPress={() => setSettingsModal(false)} style={{ padding: 4 }}><Ionicons name="close" size={22} color={W} /></TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={{ gap: 12, padding: SPACING.lg }} showsVerticalScrollIndicator={false}>
-              <Text style={s.settLabel}>حساب کا طریقہ</Text>
+              <Text style={s.settLabel}>Calculation Method</Text>
               {(['auto','muslimWorldLeague','egyptian','karachi','ummAlQura','northAmerica'] as const).map(key => {
-                const label = key === 'auto' ? 'خودکار (ملک کے مطابق)' : (PRAYER_METHODS[key]?.method || key);
+                const label = key === 'auto' ? 'Auto (Location Based)' : (PRAYER_METHODS[key]?.method || key);
                 const sel = methodOverride === key;
                 return (
                   <TouchableOpacity key={key} style={[s.settItem, sel && s.settItemSel]} onPress={() => handleApplyCalc(key)}>
@@ -708,39 +708,39 @@ export default function PrayerTimesScreen() {
                   </TouchableOpacity>
                 );
               })}
-              <Text style={s.settLabel}>عصر کا وقت</Text>
-              {[{ val: 2 as const, label: 'حنفی — مثلین (Hanafi)' }, { val: 1 as const, label: 'شافعی / جمہور — مثلِ اول' }].map(opt => (
+              <Text style={s.settLabel}>Asr Juristic Method</Text>
+              {[{ val: 2 as const, label: 'Hanafi (Double Shadow)' }, { val: 1 as const, label: 'Shafi\'i / Majority (Single Shadow)' }].map(opt => (
                 <TouchableOpacity key={opt.val} style={[s.settItem, asrFactor === opt.val && s.settItemSel]} onPress={() => handleApplyCalc(undefined, undefined, opt.val)}>
                   <Text style={[s.settItemTxt, asrFactor === opt.val && { color: GOLD, fontWeight: '800' }]}>{opt.label}</Text>
                   {asrFactor === opt.val && <Ionicons name="checkmark-circle" size={18} color={GOLD} />}
                 </TouchableOpacity>
               ))}
-              <Text style={s.settLabel}>عشاء — شفق</Text>
-              {[{ val: 'abyad' as const, label: 'شفقِ ابیض (18°) — حنفی' }, { val: 'ahmar' as const, label: 'شفقِ احمر (12°) — شافعی/مالکی' }].map(opt => (
+              <Text style={s.settLabel}>Isha Twilight Angle</Text>
+              {[{ val: 'abyad' as const, label: 'Shafaq Abyad (18°) — Hanafi' }, { val: 'ahmar' as const, label: 'Shafaq Ahmar (15°) — Majority' }].map(opt => (
                 <TouchableOpacity key={opt.val} style={[s.settItem, shafaqType === opt.val && s.settItemSel]} onPress={() => handleApplyCalc(undefined, opt.val)}>
                   <Text style={[s.settItemTxt, shafaqType === opt.val && { color: GOLD, fontWeight: '800' }]}>{opt.label}</Text>
                   {shafaqType === opt.val && <Ionicons name="checkmark-circle" size={18} color={GOLD} />}
                 </TouchableOpacity>
               ))}
-              <Text style={s.settLabel}>مقام کی ترتیب</Text>
+              <Text style={s.settLabel}>Location Settings</Text>
               <View style={s.locTabRow}>
                 {(['auto','search','manual'] as const).map(mode => (
                   <TouchableOpacity key={mode} style={[s.locTab, locationTab === mode && s.locTabSel]} onPress={() => setLocationTab(mode)}>
-                    <Text style={[s.locTabTxt, locationTab === mode && s.locTabTxtSel]}>{mode === 'auto' ? 'GPS' : mode === 'search' ? 'تلاش' : 'دستی'}</Text>
+                    <Text style={[s.locTabTxt, locationTab === mode && s.locTabTxtSel]}>{mode === 'auto' ? 'GPS' : mode === 'search' ? 'Search' : 'Manual'}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
               {locationTab === 'auto' && (
                 <TouchableOpacity style={s.settBtn} onPress={() => { handleAutoDetect(); setSettingsModal(false); }}>
                   <Ionicons name="location-outline" size={18} color={BG} />
-                  <Text style={s.settBtnTxt}>GPS سے جگہ معلوم کریں</Text>
+                  <Text style={s.settBtnTxt}>Locate via GPS</Text>
                 </TouchableOpacity>
               )}
               {locationTab === 'search' && (
                 <>
-                  <TextInput style={s.textInput} placeholder="شہر کا نام (e.g. Karachi)" placeholderTextColor={W50} value={searchQuery} onChangeText={setSearchQuery} />
+                  <TextInput style={s.textInput} placeholder="City Name (e.g. Karachi, London)" placeholderTextColor={W50} value={searchQuery} onChangeText={setSearchQuery} />
                   <TouchableOpacity style={s.settBtn} onPress={handleSearch} disabled={searching}>
-                    {searching ? <ActivityIndicator size="small" color={BG} /> : <><Ionicons name="search" size={18} color={BG} /><Text style={s.settBtnTxt}>شہر تلاش کریں</Text></>}
+                    {searching ? <ActivityIndicator size="small" color={BG} /> : <><Ionicons name="search" size={18} color={BG} /><Text style={s.settBtnTxt}>Search City</Text></>}
                   </TouchableOpacity>
                 </>
               )}
@@ -754,7 +754,7 @@ export default function PrayerTimesScreen() {
                   <TextInput style={s.textInput} keyboardType="numeric" placeholder="0" placeholderTextColor={W50} value={manualAlt} onChangeText={setManualAlt} />
                   <TouchableOpacity style={s.settBtn} onPress={handleManualSave}>
                     <Ionicons name="checkmark" size={18} color={BG} />
-                    <Text style={s.settBtnTxt}>محفوظ کریں</Text>
+                    <Text style={s.settBtnTxt}>Save Settings</Text>
                   </TouchableOpacity>
                 </>
               )}

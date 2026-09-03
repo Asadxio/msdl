@@ -56,7 +56,7 @@ export default function SadqahReferralScreen() {
     await Clipboard.setStringAsync(referralCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
-    Alert.alert('دعوت کوڈ کاپی ہوگیا', 'دعوت کوڈ کامیابی سے کاپی ہو چکا ہے۔');
+    Alert.alert('Referral Code Copied', 'Your invite code has been copied to your clipboard.');
   };
 
   const handleShareInvite = async () => {
@@ -64,7 +64,7 @@ export default function SadqahReferralScreen() {
     try {
       await Share.share({
         message: msg,
-        title: 'مدرسۃ السالکات للبنات — دعوت و صدقہ جاریہ',
+        title: 'Madrasatu-s-Salikat Lil Banat — Invite & Reward',
       });
     } catch {}
   };
@@ -150,7 +150,7 @@ export default function SadqahReferralScreen() {
 
         {/* Invited Sisters List */}
         <View style={styles.listSection}>
-          <Text style={styles.listTitle}>Invited Sisters (دعوت قبول کرنے والی بہنیں):</Text>
+          <Text style={styles.listTitle}>Invited Sisters:</Text>
 
           {loading ? (
             <ActivityIndicator size="small" color="#FFFFFF" style={{ marginTop: 12 }} />
@@ -171,12 +171,12 @@ export default function SadqahReferralScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sisterName}>{item.referee_name}</Text>
                   <Text style={styles.sisterStatus}>
-                    طالبہ مدرسہ • شمولیت: صدقہ جاریہ
+                    Student of Madrasa • Continuous Reward (Sadaqah Jariyah)
                   </Text>
                 </View>
                 <View style={styles.verifiedBadge}>
                   <Ionicons name="checkmark-circle" size={14} color="#007A58" />
-                  <Text style={styles.verifiedText}>جوائن شدہ</Text>
+                  <Text style={styles.verifiedText}>Joined</Text>
                 </View>
               </View>
             ))

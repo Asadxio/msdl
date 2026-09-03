@@ -49,7 +49,7 @@ export function getSadqahTier(count: number): SadqahTier {
     return {
       title: 'Senior Deen Ambassador',
       arabicTitle: 'داعية إسلامية ومربية',
-      badge: '👑 داعیۂ اسلام',
+      badge: '👑 داعیۂ اسلام (Senior Da\'iyah)',
       icon: 'ribbon',
       color: '#C8A84E',
       nextMilestone: 15,
@@ -59,7 +59,7 @@ export function getSadqahTier(count: number): SadqahTier {
     return {
       title: 'Deen Messenger',
       arabicTitle: 'مبلغة الخير',
-      badge: '📖 مبلّغۂ خیر',
+      badge: '📖 مبلّغۂ خیر (Deen Messenger)',
       icon: 'book',
       color: '#005F46',
       nextMilestone: 15,
@@ -68,7 +68,7 @@ export function getSadqahTier(count: number): SadqahTier {
   return {
     title: 'Beginner Da’iyah',
     arabicTitle: 'داعية مبتدئة',
-    badge: '🌸 داعیۂ ابتدائی',
+    badge: '🌸 داعیۂ ابتدائی (Junior Da\'iyah)',
     icon: 'heart',
     color: '#059669',
     nextMilestone: 5,
@@ -76,16 +76,15 @@ export function getSadqahTier(count: number): SadqahTier {
 }
 
 export function getReferralShareMessage(referralCode: string, studentName?: string): string {
-  const name = studentName || 'طالبہ';
   return (
-    'بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم\n\n' +
-    '🌸 *مدرسۃ السالکات للبنات* میں آن لائن اسلامی تعلیم و تربیت حاصل کریں۔\n\n' +
-    'عزیز بہن! میں آپ کو مدرسۃ السالکات للبنات جوائن کرنے کی پرخلوص دعوت دیتی ہوں جہاں مکمل پردہ کے ساتھ تجوید، فقہ، حدیث، اور فرض علوم سکھائے جاتے ہیں۔\n\n' +
-    '✨ *دعوت کوڈ:* ' + referralCode + '\n' +
-    '📲 *ایپ ڈاؤن لوڈ و رجسٹریشن لنک:* https://mslb.app/join?ref=' + referralCode + '\n\n' +
-    'رسول اللہ ﷺ نے فرمایا:\n' +
+    'Bismillahir-Rahmanir-Rahim\n\n' +
+    '🌸 *Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات)* — Online Islamic Education for Women.\n\n' +
+    'Dear Sister! I warmly invite you to join Madrasatu-s-Salikat Lil Banat, offering Tajweed, Fiqh, Hadith, and essential Islamic sciences under strict Purdah compliance.\n\n' +
+    '✨ *Referral / Invite Code:* ' + referralCode + '\n' +
+    '📲 *App Download & Registration:* https://mslb.app/join?ref=' + referralCode + '\n\n' +
+    'The Prophet ﷺ said:\n' +
     '*"مَنْ دَلَّ عَلَى خَيْرٍ فَلَهُ مِثْلُ أَجْرِ فَاعِلِهِ"*\n' +
-    '(جس نے کسی نیکی کی رہنمائی کی، اسے بھی نیکی کرنے والے کے برابر ثواب ملے گا — صحیح مسلم)'
+    '"Whoever guides someone to goodness will have a reward like one who did it." (Sahih Muslim)'
   );
 }
 
@@ -103,7 +102,7 @@ export async function recordReferralSignup(params: {
 
     // Mask name for purdah
     const nameParts = params.newStudentName.trim().split(/\s+/);
-    const maskedName = nameParts[0] ? nameParts[0] + ' (محفوظ برائے پردہ)' : 'طالبہ';
+    const maskedName = nameParts[0] ? nameParts[0] + ' (Protected for Purdah)' : 'Sister';
 
     await setDoc(docRef, {
       id: recordId,
