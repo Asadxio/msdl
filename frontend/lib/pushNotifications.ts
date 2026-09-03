@@ -2,7 +2,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import {
-  arrayRemove, arrayUnion, doc, serverTimestamp, updateDoc,
+  arrayRemove, arrayUnion, doc, serverTimestamp, updateDoc, setDoc,
   getDoc, getDocs, collection, query, limit,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -130,10 +130,19 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
     console.log('[Notifications] Device push token result', { hasToken: Boolean(token) });
     if (!token) return null;
 
-    await withTimeout(updateDoc(doc(db, 'users', userId), {
+    await withTimeout(setDoc(doc(db, 'users', userId), {
       expo_push_tokens: arrayUnion(token),
       fcm_token_updated_at: serverTimestamp(),
-    }));
+    }, { merge: true })).catch(() => {});
+
+    await withTimeout(setDoc(doc(db, 'user_tokens', userId), {
+      token,
+      expoPushToken: token,
+      userId,
+      platform: Device.osName || 'android',
+      updatedAt: serverTimestamp(),
+    }, { merge: true })).catch(() => {});
+
     console.log('[Notifications] Device push token saved');
 
     return token;

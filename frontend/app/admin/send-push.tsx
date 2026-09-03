@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  FlatList,
   Image,
   Modal,
   ActivityIndicator,
@@ -24,6 +23,7 @@ import { dispatchNotification } from '@/lib/dispatchNotification';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
+import type { NotificationChannel } from '@/lib/notificationTypes';
 
 type TargetMode = 'all' | 'class' | 'teachers' | 'custom';
 
@@ -47,21 +47,25 @@ const QUICK_TEMPLATES = [
     label: '🔴 Live Class Alert',
     title: '🔴 Live Class Starting Now',
     body: 'Your live interactive class session is now active. Please join the classroom on time.',
+    channel: 'live_classes' as NotificationChannel,
   },
   {
     label: '🎙️ Dars Recording',
     title: '🎙️ New Class Recording Available',
     body: 'The latest audio recording and Tajweed notes for your course have been published.',
+    channel: 'announcements' as NotificationChannel,
   },
   {
     label: '🏆 Quiz & Sabaq Due',
     title: '🏆 Sabaq & Quiz Assessment Reminder',
     body: 'Please complete your pending Tajweed assessment before the deadline.',
+    channel: 'announcements' as NotificationChannel,
   },
   {
     label: '📢 Madrasa Notice',
     title: '📢 Madrasa General Announcement',
-    body: 'Important notice regarding upcoming classes and Madrasa schedules.',
+    body: 'Important notice regarding upcoming classes, schedules, and Madrasa guidelines.',
+    channel: 'announcements' as NotificationChannel,
   },
 ];
 
@@ -83,7 +87,13 @@ export default function AdminSendPushScreen() {
   const [body, setBody] = useState('');
   const [targetMode, setTargetMode] = useState<TargetMode>('all');
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  
+  const [channel, setChannel] = useState<NotificationChannel>('announcements');
+  const [highPriority, setHighPriority] = useState(true);
+
+  // System stats
+  const [totalUsersCount, setTotalUsersCount] = useState<number | null>(null);
+  const [totalDevicesCount, setTotalDevicesCount] = useState<number | null>(null);
+
   // Custom user selection
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
@@ -93,12 +103,35 @@ export default function AdminSendPushScreen() {
   // Modals & Action states
   const [previewVisible, setPreviewVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [dispatchResult, setDispatchResult] = useState<{ recipients: number; pushCount: number } | null>(null);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   // History state
   const [history, setHistory] = useState<SentNotificationItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Fetch stats on mount
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const uSnap = await getDocs(query(collection(db, 'users'), limitQ(300)));
+        setTotalUsersCount(uSnap.size);
+        let tokens = 0;
+        uSnap.forEach((d) => {
+          const dt = d.data();
+          if (Array.isArray(dt.expo_push_tokens) && dt.expo_push_tokens.length > 0) {
+            tokens += dt.expo_push_tokens.length;
+          }
+        });
+        setTotalDevicesCount(tokens);
+      } catch {
+        // non-fatal
+      }
+    };
+    void loadStats();
+  }, []);
 
   const selectedUsers = useMemo(() => {
     return searchResults.filter((item) => selectedIds.includes(item.id));
@@ -114,13 +147,13 @@ export default function AdminSendPushScreen() {
       const rows: SentNotificationItem[] = [];
       snap.forEach((docSnap) => {
         const data = docSnap.data();
-        if (data.category === 'announcement' || data.channel === 'admin' || !data.category) {
+        if (data.channel === 'announcements' || data.channel === 'live_classes' || data.user_id === 'all' || !data.category) {
           rows.push({
             id: docSnap.id,
             title: String(data.title || 'Notification'),
             message: String(data.message || data.body || ''),
             created_at_ms: data.created_at_ms || (data.created_at?.toMillis ? data.created_at.toMillis() : Date.now()),
-            category: data.category,
+            category: data.category || data.channel,
           });
         }
       });
@@ -175,23 +208,26 @@ export default function AdminSendPushScreen() {
     return () => { mounted = false; };
   }, [search]);
 
-  // Calculate targeted users count description
+  // Target audience description
   const targetDescription = useMemo(() => {
     switch (targetMode) {
-      case 'all':
-        return 'Broadcast to ALL registered students and users across the platform.';
+      case 'all': {
+        const uText = totalUsersCount !== null ? `(${totalUsersCount} students & users)` : '';
+        const dText = totalDevicesCount !== null && totalDevicesCount > 0 ? ` • ${totalDevicesCount} phone(s) connected` : '';
+        return `Universal Broadcast: Will deliver to ALL registered accounts ${uText}${dText}.`;
+      }
       case 'class': {
         const c = courses.find((item) => item.id === selectedCourseId);
-        return c ? `Targeting students enrolled in: "${c.name}"` : 'Please select an active course/class.';
+        return c ? `Targeting students enrolled in: "${c.name}"` : 'Please select an active course/class below.';
       }
       case 'teachers':
-        return `Targeting all registered faculty and teachers (${teachers.length} teachers found).`;
+        return `Targeting all registered faculty and teachers (${teachers.length} teachers registered).`;
       case 'custom': {
         const customCount = selectedIds.length || userIdsText.split(/[,\n\s]+/).filter(Boolean).length;
         return `Targeting ${customCount} individually selected user(s).`;
       }
     }
-  }, [targetMode, selectedCourseId, courses, teachers, selectedIds.length, userIdsText]);
+  }, [targetMode, selectedCourseId, courses, teachers, selectedIds.length, userIdsText, totalUsersCount, totalDevicesCount]);
 
   // Handle prepare broadcast
   const handleInitiateSend = () => {
@@ -209,13 +245,13 @@ export default function AdminSendPushScreen() {
       return;
     }
     if (targetMode === 'custom' && selectedIds.length === 0 && !userIdsText.trim()) {
-      Alert.alert('No Users Selected', 'Please select users or paste user IDs.');
+      Alert.alert('No Users Selected', 'Please select users from search or paste user IDs.');
       return;
     }
     setConfirmVisible(true);
   };
 
-  // Actual dispatch logic
+  // Dispatch broadcast
   const handleConfirmSend = async () => {
     setConfirmVisible(false);
     setSending(true);
@@ -223,11 +259,9 @@ export default function AdminSendPushScreen() {
 
     try {
       let targetUserIds: string[] = [];
-      let isSendToAll = false;
+      const isSendToAll = targetMode === 'all';
 
-      if (targetMode === 'all') {
-        isSendToAll = true;
-      } else if (targetMode === 'class' && selectedCourseId) {
+      if (targetMode === 'class' && selectedCourseId) {
         const enrolledQ = query(
           collection(db, 'enrollments'),
           where('course_id', '==', selectedCourseId),
@@ -251,30 +285,23 @@ export default function AdminSendPushScreen() {
 
       const dedupe = `admin:${Date.now()}`;
 
-      // Build recipient list — for send_to_all, fetch all approved user IDs
-      let finalRecipientIds = targetUserIds;
-      if (isSendToAll) {
-        try {
-          const allUsersQ = query(collection(db, 'users'), where('status', '==', 'approved'));
-          const allUsersDocs = await getDocs(allUsersQ);
-          finalRecipientIds = allUsersDocs.docs.map((d) => d.id).filter(Boolean);
-        } catch {
-          // fallback: empty means dispatchNotification handles all
-          finalRecipientIds = [];
-        }
-      }
-
-      await dispatchNotification({
-        channel: 'announcements',
-        event: 'announcement_posted',
+      const res = await dispatchNotification({
+        channel: channel,
+        event: channel === 'live_classes' ? 'live_class_started' : 'announcement_posted',
         title: title.trim(),
         body: body.trim(),
-        recipientIds: finalRecipientIds,
+        recipientIds: targetUserIds,
         sendToAll: isSendToAll,
         dedupeId: dedupe,
       });
 
-      setStatusMessage({ text: '✅ Notification dispatched successfully to target audience!', isError: false });
+      setDispatchResult(res);
+      setSuccessModalVisible(true);
+      setStatusMessage({
+        text: `✅ Broadcast sent! In-app active, ${res.pushCount} phone push notification(s) dispatched.`,
+        isError: false,
+      });
+
       setTitle('');
       setBody('');
       setSelectedIds([]);
@@ -283,37 +310,73 @@ export default function AdminSendPushScreen() {
     } catch (err: any) {
       console.warn('[AdminSendPush] Dispatch failed:', err);
       setStatusMessage({ text: `❌ Dispatch failed: ${err?.message || 'Unknown error'}`, isError: true });
+      Alert.alert('Dispatch Error', err?.message || 'Failed to send broadcast.');
     } finally {
       setSending(false);
     }
   };
 
-  if (profile && !isAdmin) return null;
+  const isFormValid = Boolean(
+    title.trim() &&
+    body.trim() &&
+    (targetMode !== 'class' || selectedCourseId) &&
+    (targetMode !== 'custom' || selectedIds.length > 0 || userIdsText.trim().length > 0)
+  );
 
   return (
-    <View style={[styles.mainContainer, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + SPACING.sm }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')}>
+    <View style={styles.mainContainer}>
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/(tabs)/profile')}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Enterprise Broadcasts</Text>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.headerTitle}>Enterprise Broadcasts</Text>
+          <Text style={styles.headerSubtitle}>Instant Push Notifications & Madrasa Alerts</Text>
+        </View>
         <TouchableOpacity style={styles.previewIconBtn} onPress={() => setPreviewVisible(true)}>
           <Ionicons name="eye-outline" size={22} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Recipient Targeting Chips */}
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Status Message Banner */}
+        {statusMessage && (
+          <View style={[styles.statusBanner, statusMessage.isError ? styles.statusError : styles.statusSuccess]}>
+            <Ionicons
+              name={statusMessage.isError ? 'alert-circle' : 'checkmark-circle'}
+              size={20}
+              color={statusMessage.isError ? '#991B1B' : '#065F46'}
+            />
+            <Text style={[styles.statusText, statusMessage.isError ? styles.statusErrorText : styles.statusSuccessText]}>
+              {statusMessage.text}
+            </Text>
+          </View>
+        )}
+
+        {/* 1. Target Audience */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>1. Target Audience</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>1. Target Audience</Text>
+            {totalUsersCount !== null && (
+              <View style={styles.statsBadge}>
+                <Ionicons name="people" size={12} color="#065F46" />
+                <Text style={styles.statsBadgeText}>{totalUsersCount} Total Users</Text>
+              </View>
+            )}
+          </View>
+
           <View style={styles.chipsRow}>
             <TouchableOpacity
               style={[styles.targetChip, targetMode === 'all' && styles.targetChipActive]}
               onPress={() => setTargetMode('all')}
             >
               <Ionicons name="globe-outline" size={16} color={targetMode === 'all' ? '#FFF' : COLORS.textMuted} />
-              <Text style={[styles.targetChipText, targetMode === 'all' && styles.targetChipTextActive]}>All Students</Text>
+              <Text style={[styles.targetChipText, targetMode === 'all' && styles.targetChipTextActive]}>
+                All Students & Staff
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -321,7 +384,9 @@ export default function AdminSendPushScreen() {
               onPress={() => setTargetMode('class')}
             >
               <Ionicons name="school-outline" size={16} color={targetMode === 'class' ? '#FFF' : COLORS.textMuted} />
-              <Text style={[styles.targetChipText, targetMode === 'class' && styles.targetChipTextActive]}>Specific Class</Text>
+              <Text style={[styles.targetChipText, targetMode === 'class' && styles.targetChipTextActive]}>
+                Specific Class
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -329,7 +394,9 @@ export default function AdminSendPushScreen() {
               onPress={() => setTargetMode('teachers')}
             >
               <Ionicons name="people-outline" size={16} color={targetMode === 'teachers' ? '#FFF' : COLORS.textMuted} />
-              <Text style={[styles.targetChipText, targetMode === 'teachers' && styles.targetChipTextActive]}>Teachers Only</Text>
+              <Text style={[styles.targetChipText, targetMode === 'teachers' && styles.targetChipTextActive]}>
+                Teachers Only
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -337,12 +404,14 @@ export default function AdminSendPushScreen() {
               onPress={() => setTargetMode('custom')}
             >
               <Ionicons name="person-add-outline" size={16} color={targetMode === 'custom' ? '#FFF' : COLORS.textMuted} />
-              <Text style={[styles.targetChipText, targetMode === 'custom' && styles.targetChipTextActive]}>Custom Users</Text>
+              <Text style={[styles.targetChipText, targetMode === 'custom' && styles.targetChipTextActive]}>
+                Custom Users
+              </Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.targetInfoBox}>
-            <Ionicons name="information-circle" size={18} color={COLORS.primary} />
+            <Ionicons name="information-circle" size={18} color="#047857" />
             <Text style={styles.targetInfoText}>{targetDescription}</Text>
           </View>
 
@@ -377,7 +446,7 @@ export default function AdminSendPushScreen() {
                 value={search}
                 onChangeText={setSearch}
                 style={styles.input}
-                placeholder="Type at least 2 characters..."
+                placeholder="Type student name or email..."
                 placeholderTextColor={COLORS.textMuted}
               />
               {searchResults.length > 0 && (
@@ -438,7 +507,7 @@ export default function AdminSendPushScreen() {
           )}
         </View>
 
-        {/* Quick Templates Section */}
+        {/* 2. Quick Preset Templates */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>2. Quick Preset Templates</Text>
           <ScrollView
@@ -453,6 +522,7 @@ export default function AdminSendPushScreen() {
                 onPress={() => {
                   setTitle(tmpl.title);
                   setBody(tmpl.body);
+                  setChannel(tmpl.channel);
                 }}
               >
                 <Text style={styles.templateChipText}>{tmpl.label}</Text>
@@ -461,12 +531,12 @@ export default function AdminSendPushScreen() {
           </ScrollView>
         </View>
 
-        {/* Compose Notification */}
+        {/* 3. Compose Message */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>3. Compose Message</Text>
-            <TouchableOpacity onPress={() => setPreviewVisible(true)} style={styles.previewBtnSmall}>
-              <Ionicons name="eye" size={14} color={COLORS.primary} />
+            <TouchableOpacity style={styles.previewBtnSmall} onPress={() => setPreviewVisible(true)}>
+              <Ionicons name="eye" size={14} color="#2563EB" />
               <Text style={styles.previewBtnText}>Live Preview</Text>
             </TouchableOpacity>
           </View>
@@ -475,10 +545,10 @@ export default function AdminSendPushScreen() {
           <TextInput
             value={title}
             onChangeText={setTitle}
-            style={styles.input}
-            placeholder="e.g., Ramadan Special Lecture Tomorrow!"
-            placeholderTextColor={COLORS.textMuted}
             maxLength={60}
+            style={styles.input}
+            placeholder="e.g., 🔴 Live Class Starting Now"
+            placeholderTextColor={COLORS.textMuted}
           />
           <Text style={styles.charCount}>{title.length}/60</Text>
 
@@ -486,55 +556,37 @@ export default function AdminSendPushScreen() {
           <TextInput
             value={body}
             onChangeText={setBody}
-            style={[styles.input, { height: 110, textAlignVertical: 'top' }]}
-            placeholder="Write clear, inspiring instructions or announcements..."
-            placeholderTextColor={COLORS.textMuted}
-            multiline
             maxLength={240}
+            style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
+            multiline
+            placeholder="Your live interactive class session is now active. Please join the classroom on time."
+            placeholderTextColor={COLORS.textMuted}
           />
           <Text style={styles.charCount}>{body.length}/240</Text>
-        </View>
 
-        {/* Status Feedback */}
-        {statusMessage && (
-          <View style={[styles.statusBanner, statusMessage.isError ? styles.statusError : styles.statusSuccess]}>
-            <Text style={[styles.statusText, statusMessage.isError ? styles.statusErrorText : styles.statusSuccessText]}>
-              {statusMessage.text}
-            </Text>
+          {/* Alert Options */}
+          <View style={styles.priorityBox}>
+            <TouchableOpacity
+              style={styles.priorityRow}
+              onPress={() => setHighPriority(!highPriority)}
+            >
+              <Ionicons
+                name={highPriority ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={highPriority ? COLORS.primary : COLORS.textMuted}
+              />
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <Text style={styles.priorityTitle}>High Priority Broadcast</Text>
+                <Text style={styles.prioritySub}>Plays sound & displays immediate heads-up banner on devices</Text>
+              </View>
+            </TouchableOpacity>
           </View>
-        )}
-
-        {/* Action Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={styles.btnSecondary}
-            onPress={() => setPreviewVisible(true)}
-            disabled={sending}
-          >
-            <Ionicons name="phone-portrait-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.btnSecondaryText}>Preview</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.btnPrimary}
-            onPress={handleInitiateSend}
-            disabled={sending || !title.trim() || !body.trim()}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="send" size={18} color="#FFF" />
-                <Text style={styles.btnPrimaryText}>Dispatch Broadcast</Text>
-              </>
-            )}
-          </TouchableOpacity>
         </View>
 
-        {/* Sent Notification History */}
-        <View style={[styles.sectionCard, { marginTop: SPACING.xl }]}>
+        {/* 4. Sent Notification History */}
+        <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>3. Recent Broadcasts</Text>
+            <Text style={styles.sectionTitle}>4. Recent Broadcasts</Text>
             <TouchableOpacity onPress={fetchHistory} disabled={loadingHistory}>
               <Ionicons name="refresh" size={18} color={COLORS.primary} />
             </TouchableOpacity>
@@ -566,6 +618,36 @@ export default function AdminSendPushScreen() {
         </View>
       </ScrollView>
 
+      {/* Floating Sticky Bottom Bar */}
+      <View style={[styles.bottomStickyBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+        <TouchableOpacity
+          style={styles.btnSecondary}
+          onPress={() => setPreviewVisible(true)}
+          disabled={sending}
+        >
+          <Ionicons name="phone-portrait-outline" size={18} color={COLORS.primary} />
+          <Text style={styles.btnSecondaryText}>Preview</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.btnPrimary, (!isFormValid || sending) && styles.btnPrimaryDisabled]}
+          onPress={handleInitiateSend}
+          disabled={sending || !isFormValid}
+        >
+          {sending ? (
+            <View style={styles.btnRow}>
+              <ActivityIndicator size="small" color="#FFF" />
+              <Text style={styles.btnPrimaryText}>Dispatching...</Text>
+            </View>
+          ) : (
+            <View style={styles.btnRow}>
+              <Ionicons name="megaphone" size={18} color="#FFF" />
+              <Text style={styles.btnPrimaryText}>Send Broadcast (سب کو بھیجیں)</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* Live Preview Modal */}
       <Modal visible={previewVisible} transparent animationType="fade" onRequestClose={() => setPreviewVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -578,16 +660,15 @@ export default function AdminSendPushScreen() {
             </View>
 
             <Text style={styles.previewHelpText}>
-              This is how your broadcast will appear on students&apos; mobile lockscreens:
+              This is how your broadcast will appear on students' mobile lockscreens:
             </Text>
 
-            {/* Simulated Banner */}
             <View style={styles.pushBannerCard}>
               <View style={styles.pushBannerTopRow}>
                 <View style={styles.pushAppIcon}>
                   <Text style={styles.pushAppIconText}>M</Text>
                 </View>
-                <Text style={styles.pushAppName}>MSDL LMS</Text>
+                <Text style={styles.pushAppName}>Madrasatu-s-Salikat</Text>
                 <Text style={styles.pushAppTime}>now</Text>
               </View>
               <Text style={styles.pushBannerTitle}>{title.trim() || 'Notification Title'}</Text>
@@ -608,17 +689,17 @@ export default function AdminSendPushScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalBox}>
             <View style={styles.confirmIconWrap}>
-              <Ionicons name="alert-circle" size={40} color="#F59E0B" />
+              <Ionicons name="megaphone" size={38} color={COLORS.primary} />
             </View>
-            <Text style={styles.confirmTitle}>Confirm Broadcast</Text>
+            <Text style={styles.confirmTitle}>Confirm Push Broadcast</Text>
             <Text style={styles.confirmSubtitle}>
-              You are about to dispatch this push notification to {targetMode.toUpperCase()} audience.
+              You are about to alert {targetMode === 'all' ? 'ALL students and devices' : targetMode.toUpperCase()} immediately.
             </Text>
 
             <View style={styles.confirmDetailsBox}>
               <Text style={styles.confirmDetailRow}>
                 <Text style={{ fontWeight: '700' }}>Target: </Text>
-                {targetMode === 'all' ? 'All Registered Users' : targetMode === 'teachers' ? 'All Faculty / Teachers' : targetMode === 'class' ? 'Specific Class Students' : 'Custom Selected Users'}
+                {targetMode === 'all' ? 'All Registered Users & Phones' : targetMode === 'teachers' ? 'All Faculty / Teachers' : targetMode === 'class' ? 'Specific Class Students' : 'Custom Selected Users'}
               </Text>
               <Text style={styles.confirmDetailRow}>
                 <Text style={{ fontWeight: '700' }}>Title: </Text>
@@ -635,9 +716,42 @@ export default function AdminSendPushScreen() {
                 <Text style={styles.confirmCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.confirmProceedBtn} onPress={handleConfirmSend}>
-                <Text style={styles.confirmProceedText}>Confirm & Send</Text>
+                <Text style={styles.confirmProceedText}>Confirm & Send Now</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Result Modal */}
+      <Modal visible={successModalVisible} transparent animationType="fade" onRequestClose={() => setSuccessModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalBox}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: '#10B98120' }]}>
+              <Ionicons name="checkmark-circle" size={44} color="#10B981" />
+            </View>
+            <Text style={styles.confirmTitle}>Broadcast Dispatched!</Text>
+            <Text style={styles.confirmSubtitle}>
+              Your notification has been broadcast successfully across the Madrasa.
+            </Text>
+
+            <View style={styles.confirmDetailsBox}>
+              <Text style={styles.confirmDetailRow}>
+                <Text style={{ fontWeight: '700' }}>📋 Madrasa Feed: </Text>
+                Active for all users
+              </Text>
+              <Text style={styles.confirmDetailRow}>
+                <Text style={{ fontWeight: '700' }}>📱 Push Dispatches: </Text>
+                {dispatchResult?.pushCount || 0} device(s) alerted directly
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.confirmProceedBtn, { width: '100%', marginTop: 16 }]}
+              onPress={() => setSuccessModalVisible(false)}
+            >
+              <Text style={styles.confirmProceedText}>Done</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -669,13 +783,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
   },
+  headerSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
   previewIconBtn: {
-    padding: 4,
+    padding: 6,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#0FA95815',
   },
   scrollContent: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
-    paddingBottom: SPACING.xxl * 2,
   },
   sectionCard: {
     backgroundColor: COLORS.surface,
@@ -693,10 +813,23 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.text,
-    marginBottom: SPACING.sm,
+  },
+  statsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#10B98115',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  statsBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#065F46',
   },
   chipsRow: {
     flexDirection: 'row',
@@ -756,28 +889,29 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   courseScroll: {
+    flexDirection: 'row',
     gap: 8,
     paddingVertical: 4,
   },
   courseChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.full,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   courseChipSelected: {
-    backgroundColor: '#3B82F615',
-    borderColor: '#3B82F6',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   courseChipText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: COLORS.textMuted,
+    color: COLORS.text,
   },
   courseChipTextSelected: {
-    color: '#2563EB',
+    color: '#FFF',
   },
   input: {
     backgroundColor: COLORS.background,
@@ -793,13 +927,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.text,
-    marginTop: 10,
+    marginTop: 8,
     marginBottom: 4,
   },
   charCount: {
     fontSize: 11,
     color: COLORS.textMuted,
     textAlign: 'right',
+    marginTop: 2,
+  },
+  priorityBox: {
+    backgroundColor: COLORS.background,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  priorityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  priorityTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  prioritySub: {
+    fontSize: 11,
+    color: COLORS.textMuted,
     marginTop: 2,
   },
   searchResultsBox: {
@@ -894,6 +1050,9 @@ const styles = StyleSheet.create({
     color: '#2563EB',
   },
   statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     marginBottom: SPACING.md,
@@ -909,6 +1068,7 @@ const styles = StyleSheet.create({
     borderColor: '#EF4444',
   },
   statusText: {
+    flex: 1,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -918,9 +1078,20 @@ const styles = StyleSheet.create({
   statusErrorText: {
     color: '#991B1B',
   },
-  actionRow: {
+  bottomStickyBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    paddingTop: 10,
     flexDirection: 'row',
     gap: SPACING.sm,
+    ...SHADOWS.card,
+    elevation: 8,
   },
   btnSecondary: {
     flex: 1,
@@ -935,23 +1106,30 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   btnSecondaryText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: COLORS.primary,
   },
   btnPrimary: {
-    flex: 2,
-    flexDirection: 'row',
+    flex: 2.2,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 14,
     borderRadius: RADIUS.lg,
     backgroundColor: COLORS.primary,
     ...SHADOWS.card,
   },
+  btnPrimaryDisabled: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.7,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   btnPrimaryText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFF',
   },
@@ -980,11 +1158,11 @@ const styles = StyleSheet.create({
   },
   historyTitle: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: COLORS.text,
   },
   historyBody: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textMuted,
     marginTop: 2,
   },
@@ -1003,7 +1181,7 @@ const styles = StyleSheet.create({
   previewModalBox: {
     width: '100%',
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     ...SHADOWS.card,
   },
@@ -1014,7 +1192,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   previewModalTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: COLORS.text,
   },
@@ -1028,32 +1206,31 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.lg,
-    ...SHADOWS.card,
   },
   pushBannerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     marginBottom: 8,
   },
   pushAppIcon: {
     width: 20,
     height: 20,
     borderRadius: 4,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#10B981',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 6,
   },
   pushAppIconText: {
-    fontSize: 11,
-    fontWeight: '800',
     color: '#FFF',
+    fontWeight: '800',
+    fontSize: 11,
   },
   pushAppName: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '600',
     color: '#94A3B8',
-    flex: 1,
   },
   pushAppTime: {
     fontSize: 11,
@@ -1062,46 +1239,56 @@ const styles = StyleSheet.create({
   pushBannerTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   pushBannerBody: {
     fontSize: 13,
-    color: '#E2E8F0',
+    color: '#CBD5E1',
     lineHeight: 18,
   },
   modalCloseBtn: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 12,
-    borderRadius: RADIUS.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
   },
   modalCloseBtnText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#FFF',
+    fontWeight: '600',
+    color: COLORS.text,
   },
   confirmModalBox: {
     width: '100%',
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
     alignItems: 'center',
     ...SHADOWS.card,
   },
   confirmIconWrap: {
-    marginBottom: SPACING.sm,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#0FA95820',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
   },
   confirmTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: COLORS.text,
-    marginBottom: 6,
+    textAlign: 'center',
   },
   confirmSubtitle: {
     fontSize: 13,
     color: COLORS.textMuted,
     textAlign: 'center',
+    marginTop: 4,
     marginBottom: SPACING.md,
   },
   confirmDetailsBox: {
@@ -1116,33 +1303,35 @@ const styles = StyleSheet.create({
   confirmDetailRow: {
     fontSize: 13,
     color: COLORS.text,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   confirmActionsRow: {
     flexDirection: 'row',
-    gap: SPACING.md,
+    gap: SPACING.sm,
     width: '100%',
   },
   confirmCancelBtn: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
-    alignItems: 'center',
   },
   confirmCancelText: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.textMuted,
+    color: COLORS.text,
   },
   confirmProceedBtn: {
-    flex: 1,
+    flex: 1.6,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.primary,
-    alignItems: 'center',
   },
   confirmProceedText: {
     fontSize: 14,
