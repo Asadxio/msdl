@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger';
 import { buildNotificationPayload, buildNotificationRoute } from '@/lib/notificationPayloads';
 import type { DispatchNotificationInput, NotificationRecordInput } from '@/lib/notificationTypes';
 import { getNotificationPreferences } from '@/lib/notificationCenter';
-import { createTelemetryRecord, getTelemetryCreatedAtMs, updateTelemetryStatus } from '@/lib/notificationTelemetryWriter';
+import { createTelemetryRecord, updateTelemetryStatus } from '@/lib/notificationTelemetryWriter';
 import { withTimeout } from '@/lib/errors';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
@@ -14,7 +14,7 @@ function makeDedupeId(input: DispatchNotificationInput): string {
 
 export async function writeNotificationRecord(input: NotificationRecordInput & { user_id?: string }): Promise<string> {
   try {
-    const ref = await addDoc(collection(db, 'notifications'), {
+    const docData: Record<string, unknown> = {
       recipient_id: input.recipient_id,
       actor_id: input.actor_id,
       channel: input.channel,
@@ -23,15 +23,20 @@ export async function writeNotificationRecord(input: NotificationRecordInput & {
       message: input.body,
       body: input.body,
       route: input.route,
-      data: input.data,
+      data: input.data || {},
       read: input.recipient_id === 'all' ? {} : { [input.recipient_id]: false },
       user_id: input.user_id || input.recipient_id,
       dedupe_id: input.dedupe_id,
       created_at: serverTimestamp(),
       created_at_ms: Date.now(),
-    });
+    };
 
-    await createTelemetryRecord({
+    const ref = await withTimeout(
+      addDoc(collection(db, 'notifications'), docData),
+      6000
+    );
+
+    void createTelemetryRecord({
       notificationId: ref.id,
       dedupeId: input.dedupe_id,
       recipientId: input.recipient_id,
@@ -43,7 +48,10 @@ export async function writeNotificationRecord(input: NotificationRecordInput & {
 
     return ref.id;
   } catch (error: unknown) {
-    logFirestoreFailure({ collection: 'notifications', operation: 'add', path: 'notifications', query: `dispatch notification ${input.event}/${input.channel}` }, error);
+    logFirestoreFailure(
+      { collection: 'notifications', operation: 'add', path: 'notifications', query: `dispatch notification ${input.event}/${input.channel}` },
+      error
+    );
     throw error;
   }
 }
@@ -55,8 +63,12 @@ async function collectPushTokens(targetUids: string[], isSendToAll: boolean): Pr
     typeof t === 'string' && (t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['));
 
   if (isSendToAll) {
+    // 1. Gather tokens from users collection
     try {
-      const usersSnap = await getDocs(query(collection(db, 'users'), limitQ(500)));
+      const usersSnap = await withTimeout(
+        getDocs(query(collection(db, 'users'), limitQ(500))),
+        5000
+      );
       usersSnap.forEach((d) => {
         const data = d.data();
         const tokens = Array.isArray(data.expo_push_tokens) ? data.expo_push_tokens : [];
@@ -66,8 +78,12 @@ async function collectPushTokens(targetUids: string[], isSendToAll: boolean): Pr
       console.warn('[Push] Error querying users for tokens:', e);
     }
 
+    // 2. Gather tokens from user_tokens collection
     try {
-      const userTokensSnap = await getDocs(query(collection(db, 'user_tokens'), limitQ(500)));
+      const userTokensSnap = await withTimeout(
+        getDocs(query(collection(db, 'user_tokens'), limitQ(500))),
+        5000
+      );
       userTokensSnap.forEach((d) => {
         const data = d.data();
         if (isExpoPushToken(data.token)) tokensSet.add(data.token);
@@ -83,7 +99,7 @@ async function collectPushTokens(targetUids: string[], isSendToAll: boolean): Pr
       await Promise.all(
         chunk.map(async (uid) => {
           try {
-            const userSnap = await getDoc(doc(db, 'users', uid));
+            const userSnap = await withTimeout(getDoc(doc(db, 'users', uid)), 3500);
             if (userSnap.exists()) {
               const data = userSnap.data();
               const tokens = Array.isArray(data.expo_push_tokens) ? data.expo_push_tokens : [];
@@ -92,7 +108,7 @@ async function collectPushTokens(targetUids: string[], isSendToAll: boolean): Pr
           } catch {}
 
           try {
-            const tokenSnap = await getDoc(doc(db, 'user_tokens', uid));
+            const tokenSnap = await withTimeout(getDoc(doc(db, 'user_tokens', uid)), 3500);
             if (tokenSnap.exists()) {
               const data = tokenSnap.data();
               if (isExpoPushToken(data.token)) tokensSet.add(data.token);
@@ -136,18 +152,23 @@ async function sendExpoPushBatches(
   for (let i = 0; i < messages.length; i += batchSize) {
     const batch = messages.slice(i, i + batchSize);
     try {
-      const res = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Accept-Encoding': 'gzip, deflate',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(batch),
-      });
+      const res = await withTimeout(
+        fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(batch),
+        }),
+        6000
+      );
       if (res.ok) {
         totalSent += batch.length;
       }
+      const resJson = await res.json().catch(() => null);
+      console.log('[Push] Expo push batch response:', resJson);
     } catch (err) {
       console.warn('[Push] Expo push batch send failed:', err);
     }
@@ -236,6 +257,7 @@ export async function dispatchNotification(
     );
   }
 
+  // Step 2: Push delivery to hardware devices via Expo Push API
   let pushTokensSent = 0;
   try {
     const tokens = await collectPushTokens(input.recipientIds, isSendToAll);
@@ -254,6 +276,7 @@ export async function dispatchNotification(
     logger.warn('[notification_push_failed]', { error: String(pushErr) });
   }
 
+  // Step 3: Try backend enqueue as secondary delivery / audit if available
   try {
     const base = String(
       process.env.EXPO_PUBLIC_PUSH_API_URL ||

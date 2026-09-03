@@ -23,6 +23,7 @@ import { dispatchNotification } from '@/lib/dispatchNotification';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
+import { withTimeout } from '@/lib/errors';
 import type { NotificationChannel } from '@/lib/notificationTypes';
 
 type TargetMode = 'all' | 'class' | 'teachers' | 'custom';
@@ -285,20 +286,26 @@ export default function AdminSendPushScreen() {
 
       const dedupe = `admin:${Date.now()}`;
 
-      const res = await dispatchNotification({
-        channel: channel,
-        event: channel === 'live_classes' ? 'live_class_started' : 'announcement_posted',
-        title: title.trim(),
-        body: body.trim(),
-        recipientIds: targetUserIds,
-        sendToAll: isSendToAll,
-        dedupeId: dedupe,
-      });
+      const res = await withTimeout(
+        dispatchNotification({
+          channel: channel,
+          event: channel === 'live_classes' ? 'live_class_started' : 'announcement_posted',
+          title: title.trim(),
+          body: body.trim(),
+          recipientIds: targetUserIds,
+          sendToAll: isSendToAll,
+          dedupeId: dedupe,
+        }),
+        12000
+      );
 
       setDispatchResult(res);
       setSuccessModalVisible(true);
+      const pushNote = res.pushCount > 0
+        ? `${res.pushCount} phone push notification(s) dispatched`
+        : 'In-app feed active (0 push-registered phones found)';
       setStatusMessage({
-        text: `✅ Broadcast sent! In-app active, ${res.pushCount} phone push notification(s) dispatched.`,
+        text: `✅ Broadcast sent! ${pushNote}.`,
         isError: false,
       });
 
@@ -306,7 +313,7 @@ export default function AdminSendPushScreen() {
       setBody('');
       setSelectedIds([]);
       setUserIdsText('');
-      await fetchHistory();
+      void fetchHistory();
     } catch (err: any) {
       console.warn('[AdminSendPush] Dispatch failed:', err);
       setStatusMessage({ text: `❌ Dispatch failed: ${err?.message || 'Unknown error'}`, isError: true });

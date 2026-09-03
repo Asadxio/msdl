@@ -36,7 +36,9 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return (isVerified() && roleOf(request.auth.uid) == 'super_admin' && userDoc(request.auth.uid).status == 'approved');
+      return (isVerified()
+        && roleOf(request.auth.uid) == 'super_admin'
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
 
     function hasRole(uid, roles) {
@@ -44,21 +46,23 @@ service cloud.firestore {
     }
 
     function isModerator() {
-      return (isVerified() && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin']) && userDoc(request.auth.uid).status == 'approved');
+      return (isVerified()
+        && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin'])
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
 
     function isAdmin() {
       return (isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) in ['admin', 'super_admin']
-        && userDoc(request.auth.uid).status == 'approved');
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
 
     function isTeacherOrAdmin() {
       return (isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) in ['teacher', 'assistant_teacher', 'admin', 'super_admin', 'moderator']
-        && userDoc(request.auth.uid).status == 'approved');
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
 
 
@@ -1202,15 +1206,16 @@ service cloud.firestore {
       // (combines runtime get() with resource.data) or `field is list` type
       // guards from array-contains query constraints. Per-document role
       // verification is enforced by the allow get rule via canReadNotification().
-      allow list: if isApprovedVerifiedUser()
-        && (
-          // Query: where user_id == 'all' orderBy created_at desc
-          resource.data.user_id == 'all'
-          // Query: where user_id in [<uid>, 'all'] orderBy created_at desc
-          || resource.data.user_id == request.auth.uid
-          // Query: where user_id == 'role_targeted', target_roles array-contains <role>
-          || resource.data.user_id == 'role_targeted'
-        );
+      allow list: if isAdmin()
+        || (isApprovedVerifiedUser()
+          && (
+            // Query: where user_id == 'all' orderBy created_at desc
+            resource.data.user_id == 'all'
+            // Query: where user_id in [<uid>, 'all'] orderBy created_at desc
+            || resource.data.user_id == request.auth.uid
+            // Query: where user_id == 'role_targeted', target_roles array-contains <role>
+            || resource.data.user_id == 'role_targeted'
+          ));
 
       // Admin can create/modify; teachers can create direct class notifications; users can create own local result notifications.
       allow create: if isValidNotificationCreate();
@@ -1592,7 +1597,7 @@ service cloud.firestore {
     // Only the token owner may read or write their own token document.
     // Field-level validation prevents injection of arbitrary fields.
     match /user_tokens/{userId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow create, update: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.data.keys().hasOnly([

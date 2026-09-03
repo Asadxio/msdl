@@ -122,30 +122,50 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
     }
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId }).catch((error) => {
-      console.log('[Notifications] getExpoPushTokenAsync ERROR', error);
-      return null;
-    });
-    const token = String(tokenResponse?.data || '');
-    console.log('[Notifications] Device push token result', { hasToken: Boolean(token) });
-    if (!token) return null;
+    let token = '';
+    try {
+      const tokenResponse = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+      token = String(tokenResponse?.data || '');
+    } catch (expoErr) {
+      console.log('[Notifications] getExpoPushTokenAsync ERROR', expoErr);
+    }
 
-    await withTimeout(setDoc(doc(db, 'users', userId), {
-      expo_push_tokens: arrayUnion(token),
+    let nativeFcmToken = '';
+    try {
+      const deviceTokenResp = await Notifications.getDevicePushTokenAsync();
+      nativeFcmToken = String(deviceTokenResp?.data || '');
+    } catch (devErr) {
+      console.log('[Notifications] getDevicePushTokenAsync ERROR', devErr);
+    }
+
+    const primaryToken = token || nativeFcmToken;
+    console.log('[Notifications] Device push token result', { hasToken: Boolean(primaryToken), hasExpo: Boolean(token), hasNative: Boolean(nativeFcmToken) });
+    if (!primaryToken) return null;
+
+    const userPatch: Record<string, unknown> = {
       fcm_token_updated_at: serverTimestamp(),
-    }, { merge: true })).catch(() => {});
+    };
+    if (token) {
+      userPatch.expo_push_tokens = arrayUnion(token);
+    }
+    if (nativeFcmToken) {
+      userPatch.fcm_tokens = arrayUnion(nativeFcmToken);
+    }
+
+    await withTimeout(setDoc(doc(db, 'users', userId), userPatch, { merge: true }), 5000).catch(() => {});
 
     await withTimeout(setDoc(doc(db, 'user_tokens', userId), {
-      token,
-      expoPushToken: token,
+      token: primaryToken,
+      expoPushToken: token || primaryToken,
+      fcmToken: nativeFcmToken || primaryToken,
       userId,
       platform: Device.osName || 'android',
       updatedAt: serverTimestamp(),
-    }, { merge: true })).catch(() => {});
+    }, { merge: true }), 5000).catch(() => {});
 
     console.log('[Notifications] Device push token saved');
 
-    return token;
+    return primaryToken;
   } catch (error) {
     console.log('[Notifications] registerDevicePushToken ERROR', error);
     return null;
