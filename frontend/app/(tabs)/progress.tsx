@@ -1,5 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, StatusBar, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  ActivityIndicator,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Alert,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +20,14 @@ import { ScalePressable } from '@/components/ui';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import {
+  calculateStudyStreak,
+  loadWeeklyGoal,
+  saveWeeklyGoal,
+  getQuizzesThisWeek,
+  exportStudentProgressCsv,
+  type AttendanceProgressSummary,
+} from '@/lib/studentProgressService';
 
 type QuizResult = {
   id: string;
@@ -18,19 +37,39 @@ type QuizResult = {
   created_at?: any;
 };
 
+type AttendanceRecord = {
+  id: string;
+  date: string;
+  status: 'present' | 'absent';
+  marked_at?: any;
+};
+
 const CARD_RADIUS = 20;
 const CARD_BORDER = 'rgba(15, 23, 42, 0.06)';
 
 export default function ProgressScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [quizResults, setQuizResults] = useState<QuizResult[]>([]);
+
+  // 4.1 Attendance State
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+
+  // 4.3 Weekly Goal State
+  const [weeklyGoal, setWeeklyGoal] = useState<number>(5);
+  const [goalModalVisible, setGoalModalVisible] = useState<boolean>(false);
+  const [goalInput, setGoalInput] = useState<string>('5');
+
+  // 4.4 Export State
+  const [exporting, setExporting] = useState<boolean>(false);
 
   useEffect(() => {
     if (!user?.uid) return;
     setLoading(true);
+
+    // 1. Quizzes listener
     const quizUnsub = onSnapshot(
       query(collection(db, 'quiz_results'), where('user_id', '==', user.uid), orderBy('created_at', 'desc')),
       (snap) => {
@@ -43,7 +82,30 @@ export default function ProgressScreen() {
         setLoading(false);
       }
     );
-    return () => quizUnsub();
+
+    // 2. Attendance listener (4.1 Attendance Progress)
+    const attUnsub = onSnapshot(
+      query(collection(db, 'attendance'), where('user_id', '==', user.uid)),
+      (snap) => {
+        const attArr: AttendanceRecord[] = [];
+        snap.forEach((d) => attArr.push({ id: d.id, ...(d.data() as any) }));
+        setAttendanceRecords(attArr);
+      },
+      (err) => {
+        console.warn('[ProgressScreen] attendance error:', err);
+      }
+    );
+
+    // 3. Load Saved Weekly Goal (4.3 Weekly Goal Setting)
+    loadWeeklyGoal(user.uid).then((val) => {
+      setWeeklyGoal(val);
+      setGoalInput(String(val));
+    });
+
+    return () => {
+      quizUnsub();
+      attUnsub();
+    };
   }, [user?.uid]);
 
   // Derived Analytics (STRICT ZERO REGRESSION - Exact existing calculations)
@@ -81,6 +143,99 @@ export default function ProgressScreen() {
   const bestCategory = categoryStats.length > 0 ? categoryStats[0] : null;
   const weakestCategory = categoryStats.length > 0 ? categoryStats[categoryStats.length - 1] : null;
   const recentAttempts = quizResults.slice(0, 10);
+
+  // 4.1 Attendance Progress Analytics
+  const attendanceSummary: AttendanceProgressSummary = useMemo(() => {
+    const totalSessions = attendanceRecords.length;
+    const presentSessions = attendanceRecords.filter((a) => a.status === 'present').length;
+    const absentSessions = totalSessions - presentSessions;
+    const attendancePct = totalSessions > 0 ? Math.round((presentSessions / totalSessions) * 100) : 100;
+    const status = attendancePct >= 80 ? 'optimal' : attendancePct >= 65 ? 'warning' : 'critical';
+
+    return {
+      totalSessions,
+      presentSessions,
+      absentSessions,
+      attendancePct,
+      status,
+    };
+  }, [attendanceRecords]);
+
+  // 4.2 Study Streak Calculation (combining quiz attempts + attendance activities)
+  const studyStreak = useMemo(() => {
+    const dates: string[] = [];
+
+    quizResults.forEach((q) => {
+      try {
+        if (q.created_at?.toDate) {
+          dates.push(q.created_at.toDate().toISOString().slice(0, 10));
+        }
+      } catch {}
+    });
+
+    attendanceRecords.forEach((a) => {
+      if (a.date) {
+        dates.push(a.date.slice(0, 10));
+      }
+    });
+
+    return calculateStudyStreak(dates);
+  }, [quizResults, attendanceRecords]);
+
+  // 4.3 Weekly Goal Progress
+  const quizzesCompletedThisWeek = useMemo(() => {
+    const dates: string[] = [];
+    quizResults.forEach((q) => {
+      try {
+        if (q.created_at?.toDate) {
+          dates.push(q.created_at.toDate().toISOString().slice(0, 10));
+        }
+      } catch {}
+    });
+    return getQuizzesThisWeek(dates);
+  }, [quizResults]);
+
+  const goalProgressPct = Math.min(
+    100,
+    Math.round((quizzesCompletedThisWeek / Math.max(1, weeklyGoal)) * 100)
+  );
+
+  const handleSaveGoal = async (val?: number) => {
+    const target = val || parseInt(goalInput, 10);
+    if (isNaN(target) || target <= 0 || target > 50) {
+      Alert.alert('Invalid Target', 'Please enter a target between 1 and 50 quizzes per week.');
+      return;
+    }
+    if (user?.uid) {
+      await saveWeeklyGoal(user.uid, target);
+      setWeeklyGoal(target);
+      setGoalModalVisible(false);
+      Alert.alert('Target Saved', `Weekly target set to ${target} quizzes!`);
+    }
+  };
+
+  // 4.4 Export My Progress
+  const handleExportProgress = async () => {
+    try {
+      setExporting(true);
+      const studentName = profile?.name || user?.displayName || 'Taliba';
+      const studentEmail = user?.email || profile?.email || '';
+
+      await exportStudentProgressCsv({
+        studentName,
+        studentEmail,
+        overallAccuracy,
+        totalAttempts,
+        streakDays: studyStreak.currentStreak,
+        attendance: attendanceSummary,
+        quizResults,
+      });
+    } catch (err: any) {
+      Alert.alert('Export Failed', err?.message || 'Could not generate report.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Insights & Achievements (STRICT ZERO REGRESSION)
   const hasPerfectScore = quizResults.some(r => r.total_questions > 0 && r.score === r.total_questions);
@@ -153,21 +308,191 @@ export default function ProgressScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      {/* ─── Hero Header ─── */}
+      {/* ─── Hero Header with 4.4 Export Action ─── */}
       <View style={[styles.heroHeader, { paddingTop: insets.top + 16 }]}>
-        <View style={styles.heroContent}>
-          <View style={[styles.heroIconBadge, { backgroundColor: '#EEF2FF' }]}>
-            <Ionicons name="stats-chart" size={28} color="#4F46E5" />
+        <View style={styles.heroContentRow}>
+          <View style={styles.heroContent}>
+            <View style={[styles.heroIconBadge, { backgroundColor: '#EEF2FF' }]}>
+              <Ionicons name="stats-chart" size={28} color="#4F46E5" />
+            </View>
+            <View style={styles.heroTextContainer}>
+              <Text style={styles.heroTitle}>Analytics Dashboard</Text>
+              <Text style={styles.heroSubtitle}>Track your learning journey, attendance, and study goals</Text>
+            </View>
           </View>
-          <View style={styles.heroTextContainer}>
-            <Text style={styles.heroTitle}>Analytics Dashboard</Text>
-            <Text style={styles.heroSubtitle}>Track your learning journey, performance metrics, and skill mastery</Text>
-          </View>
+
+          {/* 4.4 Export My Progress Action */}
+          <TouchableOpacity
+            style={styles.exportProgressBtn}
+            onPress={handleExportProgress}
+            disabled={exporting}
+            accessibilityRole="button"
+            accessibilityLabel="Export My Progress"
+          >
+            {exporting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="download-outline" size={15} color="#FFFFFF" />
+                <Text style={styles.exportProgressText}>Export</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
         
+        {/* ─── 4.2 & 4.3 Interactive Study Streak & Weekly Goal Banner ─── */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.streakGoalRow}>
+            {/* 4.2 Study Streak Card */}
+            <View style={styles.streakCard}>
+              <View style={styles.streakCardTop}>
+                <View style={styles.streakFlameBadge}>
+                  <Text style={styles.streakFlameIcon}>🔥</Text>
+                </View>
+                <View style={styles.streakInfoCol}>
+                  <Text style={styles.streakCountNumber}>{studyStreak.currentStreak} Days</Text>
+                  <Text style={styles.streakLabel}>Study Streak</Text>
+                </View>
+              </View>
+              <Text style={styles.streakFootnote}>
+                {studyStreak.isActiveToday
+                  ? '✨ Active today! Keep the flame alive'
+                  : 'Take a quiz to maintain your streak'}
+              </Text>
+            </View>
+
+            {/* 4.3 Weekly Goal Card */}
+            <TouchableOpacity
+              style={styles.weeklyGoalCard}
+              onPress={() => setGoalModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.goalCardTop}>
+                <View style={styles.goalIconBadge}>
+                  <Ionicons name="flag" size={18} color="#047857" />
+                </View>
+                <View style={styles.goalInfoCol}>
+                  <View style={styles.goalHeaderRow}>
+                    <Text style={styles.goalTitle}>Weekly Goal</Text>
+                    <Ionicons name="pencil" size={12} color="#64748B" />
+                  </View>
+                  <Text style={styles.goalFraction}>
+                    {quizzesCompletedThisWeek} / {weeklyGoal} <Text style={styles.goalUnit}>quizzes</Text>
+                  </Text>
+                </View>
+              </View>
+              {/* Goal Progress Bar */}
+              <View style={styles.goalProgressTrack}>
+                <View style={[styles.goalProgressFill, { width: `${goalProgressPct}%` }]} />
+              </View>
+              <Text style={styles.goalStatusSub}>
+                {goalProgressPct >= 100 ? '🎉 Goal Achieved!' : `${weeklyGoal - quizzesCompletedThisWeek} more to target`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ─── 4.1 Attendance Progress Combined Card ─── */}
+        <View style={styles.sectionBlock}>
+          <Text style={styles.sectionTitle}>🕌  ATTENDANCE & PARTICIPATION PROGRESS</Text>
+          <View style={styles.attendanceSummaryCard}>
+            <View style={styles.attHeaderRow}>
+              <View style={styles.attIconTitleWrap}>
+                <View style={[styles.attBadgeIcon, { backgroundColor: '#ECFDF5' }]}>
+                  <Ionicons name="calendar" size={20} color="#047857" />
+                </View>
+                <View>
+                  <Text style={styles.attTitle}>Class Attendance</Text>
+                  <Text style={styles.attSubtitle}>Live dars & lecture participation</Text>
+                </View>
+              </View>
+
+              <View
+                style={[
+                  styles.attStatusPill,
+                  {
+                    backgroundColor:
+                      attendanceSummary.status === 'optimal'
+                        ? '#ECFDF5'
+                        : attendanceSummary.status === 'warning'
+                        ? '#FEF3C7'
+                        : '#FEE2E2',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.attStatusPillText,
+                    {
+                      color:
+                        attendanceSummary.status === 'optimal'
+                          ? '#047857'
+                          : attendanceSummary.status === 'warning'
+                          ? '#B45309'
+                          : '#B91C1C',
+                    },
+                  ]}
+                >
+                  {attendanceSummary.attendancePct}% •{' '}
+                  {attendanceSummary.status === 'optimal'
+                    ? 'Excellent'
+                    : attendanceSummary.status === 'warning'
+                    ? 'Warning'
+                    : 'Shortage'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Attendance Metrics Grid */}
+            <View style={styles.attGrid}>
+              <View style={styles.attGridCell}>
+                <Text style={styles.attMetricValue}>{attendanceSummary.totalSessions}</Text>
+                <Text style={styles.attMetricLabel}>Total Sessions</Text>
+              </View>
+              <View style={styles.attGridDivider} />
+              <View style={styles.attGridCell}>
+                <Text style={[styles.attMetricValue, { color: '#047857' }]}>
+                  {attendanceSummary.presentSessions}
+                </Text>
+                <Text style={styles.attMetricLabel}>Present (حاضر)</Text>
+              </View>
+              <View style={styles.attGridDivider} />
+              <View style={styles.attGridCell}>
+                <Text style={[styles.attMetricValue, { color: '#EF4444' }]}>
+                  {attendanceSummary.absentSessions}
+                </Text>
+                <Text style={styles.attMetricLabel}>Absent (غیر حاضر)</Text>
+              </View>
+            </View>
+
+            {/* Attendance Progress Track */}
+            <View style={styles.attBarContainer}>
+              <View style={styles.attBarBg}>
+                <View
+                  style={[
+                    styles.attBarFill,
+                    {
+                      width: `${attendanceSummary.attendancePct}%`,
+                      backgroundColor:
+                        attendanceSummary.status === 'optimal'
+                          ? '#10B981'
+                          : attendanceSummary.status === 'warning'
+                          ? '#F59E0B'
+                          : '#EF4444',
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.attBarFootnote}>
+                Minimum 75% attendance is required for course completion certificates.
+              </Text>
+            </View>
+          </View>
+        </View>
+
         {/* ─── Section 1: Hero Summary Card ─── */}
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>📊  EXECUTIVE SUMMARY</Text>
@@ -578,6 +903,72 @@ export default function ProgressScreen() {
         </View>
 
       </ScrollView>
+
+      {/* ─── 4.3 Weekly Goal Setting Modal ─── */}
+      <Modal visible={goalModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalIconBadge}>
+                <Ionicons name="flag" size={22} color="#047857" />
+              </View>
+              <Text style={styles.modalTitle}>Set Weekly Quiz Goal</Text>
+            </View>
+            <Text style={styles.modalSubtitle}>
+              Apna hafta-waar target muqarrar karein taake consistent study bani rahe:
+            </Text>
+
+            {/* Quick preset selector buttons */}
+            <View style={styles.presetGoalRow}>
+              {[3, 5, 7, 10].map((preset) => (
+                <TouchableOpacity
+                  key={preset}
+                  style={[
+                    styles.presetGoalBtn,
+                    parseInt(goalInput, 10) === preset && styles.presetGoalBtnActive,
+                  ]}
+                  onPress={() => setGoalInput(String(preset))}
+                >
+                  <Text
+                    style={[
+                      styles.presetGoalText,
+                      parseInt(goalInput, 10) === preset && styles.presetGoalTextActive,
+                    ]}
+                  >
+                    {preset} / wk
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.inputFieldLabel}>CUSTOM TARGET (1 - 50)</Text>
+            <TextInput
+              style={styles.goalNumberInput}
+              keyboardType="number-pad"
+              value={goalInput}
+              onChangeText={setGoalInput}
+              placeholder="5"
+              placeholderTextColor="#94A3B8"
+              maxLength={2}
+            />
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setGoalModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmBtn}
+                onPress={() => handleSaveGoal()}
+              >
+                <Text style={styles.modalConfirmText}>Save Goal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -597,9 +988,32 @@ const styles = StyleSheet.create({
     ...SHADOWS.card,
     shadowOpacity: 0.04,
   },
-  heroContent: {
+  heroContentRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  exportProgressBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#004D3A',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    ...SHADOWS.card,
+    shadowOpacity: 0.1,
+  },
+  exportProgressText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   heroIconBadge: {
     width: 56,
@@ -607,23 +1021,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   heroTextContainer: {
     flex: 1,
     justifyContent: 'center',
   },
   heroTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: '#0F172A',
     letterSpacing: -0.5,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   heroSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748B',
-    lineHeight: 18,
+    lineHeight: 16,
   },
 
   /* Body & Section Headers */
@@ -1184,6 +1598,345 @@ const styles = StyleSheet.create({
   emptyCtaText: {
     fontSize: 15,
     fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  /* 4.2 & 4.3 Study Streak & Weekly Goal Row */
+  streakGoalRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  streakCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    justifyContent: 'space-between',
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+  },
+  streakCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  streakFlameBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakFlameIcon: {
+    fontSize: 22,
+  },
+  streakInfoCol: {
+    flex: 1,
+  },
+  streakCountNumber: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#EA580C',
+  },
+  streakLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 1,
+  },
+  streakFootnote: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 8,
+    lineHeight: 14,
+  },
+
+  /* Weekly Goal Card */
+  weeklyGoalCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    justifyContent: 'space-between',
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+  },
+  goalCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  goalIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalInfoCol: {
+    flex: 1,
+  },
+  goalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  goalTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  goalFraction: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginTop: 1,
+  },
+  goalUnit: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  goalProgressTrack: {
+    width: '100%',
+    height: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  goalProgressFill: {
+    height: '100%',
+    backgroundColor: '#10B981',
+    borderRadius: 3,
+  },
+  goalStatusSub: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 6,
+  },
+
+  /* 4.1 Attendance Progress Card */
+  attendanceSummaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    ...SHADOWS.card,
+    shadowOpacity: 0.05,
+  },
+  attHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  attIconTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  attBadgeIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  attSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  attStatusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  attStatusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  attGrid: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  attGridCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  attMetricValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  attMetricLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 2,
+  },
+  attGridDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E2E8F0',
+  },
+  attBarContainer: {
+    marginTop: 12,
+  },
+  attBarBg: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  attBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  attBarFootnote: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+
+  /* 4.3 Goal Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    ...SHADOWS.card,
+    shadowOpacity: 0.2,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  modalIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  presetGoalRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  presetGoalBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+  },
+  presetGoalBtnActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
+  presetGoalText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  presetGoalTextActive: {
+    color: '#047857',
+    fontWeight: '800',
+  },
+  inputFieldLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#475569',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  goalNumberInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#047857',
+    alignItems: 'center',
+  },
+  modalConfirmText: {
+    fontSize: 14,
+    fontWeight: '800',
     color: '#FFFFFF',
   },
 });
