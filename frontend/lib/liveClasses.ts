@@ -124,17 +124,22 @@ export async function startLiveClass(input: LiveClassCreateInput): Promise<strin
     const enrolledDocs = await getDocs(enrolledQ);
     const enrolledUids = enrolledDocs.docs.map(d => d.data().user_id).filter(Boolean);
 
-    await dispatchNotification({
-      channel: 'live_classes',
-      event: 'live_class_started',
-      title: '🔴 Live Class Started',
-      body: `${input.teacherName} has started a live class for ${input.title}. Tap to join now!`,
-      recipientIds: enrolledUids,
-      sendToAll: false,
-      route: { pathname: '/course/[id]', params: { id: input.courseId } },
-    });
-  } catch (err) {
-    console.error('Failed to send live class push notification:', err);
+      await dispatchNotification({
+        channel: 'live_classes',
+        event: 'live_class_started',
+        title: '🔴 Live Class Started',
+        body: `${input.teacherName} has started a live class for ${input.title}. Tap to join now!`,
+        recipientIds: enrolledUids,
+        sendToAll: false,
+        data: {
+          live_class_id: docRef.id,
+          course_id: input.courseId,
+        },
+        route: { pathname: '/course/[id]', params: { id: input.courseId } },
+      });
+    } catch (err) {
+      console.error('Failed to send live class push notification:', err);
+
   }
 
   return docRef.id;

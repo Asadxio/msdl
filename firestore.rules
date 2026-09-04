@@ -337,6 +337,18 @@ service cloud.firestore {
           || (isSelf(request.resource.data.user_id))
           || (
             isApprovedVerifiedUser()
+            && request.resource.data.channel == 'chat'
+            && request.resource.data.event == 'chat_message'
+            && request.resource.data.actor_id == request.auth.uid
+          )
+          || (
+            isApprovedVerifiedUser()
+            && request.resource.data.channel == 'calls'
+            && (request.resource.data.event == 'call_incoming' || request.resource.data.event == 'call_missed')
+            && request.resource.data.actor_id == request.auth.uid
+          )
+          || (
+            isApprovedVerifiedUser()
             && request.resource.data.user_id == 'role_targeted'
             && request.resource.data.category == 'assignment_submitted'
             && request.resource.data.target_roles is list
@@ -351,6 +363,7 @@ service cloud.firestore {
           )
         );
     }
+
 
     function canReadNotification() {
       return isApprovedVerifiedUser()

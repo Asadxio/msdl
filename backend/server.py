@@ -844,8 +844,24 @@ async def send_push(payload: PushSendRequest, request: Request, authorization: s
             for recipient_uid in target_user_ids:
                 if recipient_uid not in allowed_students:
                     raise HTTPException(status_code=403, detail="Recipient outside live class enrollment")
+        elif event_type in {"call_incoming", "call_missed"}:
+            call_id = str((payload.data or {}).get("call_id", "")).strip()
+            if not call_id:
+                raise HTTPException(status_code=403, detail="Call push requires call context")
+            call_snap = firebase_db.collection("calls").document(call_id).get()
+            if not call_snap.exists:
+                raise HTTPException(status_code=404, detail="Call not found")
+            call_data = call_snap.to_dict() or {}
+            if call_data.get("caller_id") != requester_uid and role != "admin":
+                raise HTTPException(status_code=403, detail="Not caller for this call")
+            callee_id = call_data.get("callee_id")
+            if not callee_id or callee_id not in target_user_ids:
+                raise HTTPException(status_code=403, detail="Recipient is not the callee")
+        elif event_type in {"assignment_posted", "assignment_submitted", "assignment_alert"} and role in {"teacher", "admin", "student"}:
+            pass
         else:
-            raise HTTPException(status_code=403, detail="Non-admin push is restricted to chat and live-class notifications")
+            raise HTTPException(status_code=403, detail="Non-admin push is restricted to chat, calls, assignments, and live-class notifications")
+
 
     tokens, expo_tokens, token_owners = _collect_tokens(target_user_ids)
     grouped = route_tokens(tokens + expo_tokens)

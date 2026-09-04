@@ -70,16 +70,21 @@ export function dedupeNotificationEvent(key: string): boolean {
 }
 
 export function resolveRouteFromNotificationData(data: Record<string, unknown>): string | null {
+  const directUrl = String(data.url || data.route || '').trim();
+  if (directUrl && directUrl.startsWith('/')) return directUrl;
   const callId = String(data.call_id || '').trim();
   if (callId) return `/call/${callId}`;
   const chatId = String(data.chat_id || '').trim();
   if (chatId) return `/chat/${chatId}`;
   const classId = String(data.live_class_id || '').trim();
   if (classId) return `/live-class/${classId}`;
+  const courseId = String(data.course_id || '').trim();
+  if (courseId) return `/course/${courseId}`;
   const statusId = String(data.status_id || '').trim();
   if (statusId) return '/status';
   return '/notifications';
 }
+
 
 export async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
   const uid = String(userId || '').trim();
