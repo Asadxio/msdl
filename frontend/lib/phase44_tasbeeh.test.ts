@@ -42,4 +42,32 @@ describe('Phase 44 — Digital Smart Tasbeeh Counter & Daily Azkar Tracker', () 
     expect(homeScreenSrc).toContain('/tasbeeh');
     expect(homeScreenSrc).toContain('islamicGridRow');
   });
+
+  test('9.1 Vibration on target reached triggers multi-burst haptic vibration sequence', () => {
+    expect(tasbeehScreenSrc).toContain('triggerCelebrationVibration');
+    expect(tasbeehScreenSrc).toContain('Haptics.notificationAsync');
+    expect(tasbeehScreenSrc).toContain('Haptics.NotificationFeedbackType.Success');
+    expect(tasbeehScreenSrc).toContain('Haptics.ImpactFeedbackStyle.Heavy');
+    expect(tasbeehScreenSrc).toContain('celebrateAnim');
+    expect(tasbeehScreenSrc).toContain('celebrateGlow');
+  });
+
+  test('9.2 7-day daily history stats and bar chart are provided', () => {
+    expect(tasbeehStorageSrc).toContain('dailyHistory');
+    expect(tasbeehScreenSrc).toContain('past7DaysData');
+    expect(tasbeehScreenSrc).toContain('chartContainer');
+    expect(tasbeehScreenSrc).toContain('7-Day Dhikr Activity');
+    expect(tasbeehScreenSrc).toContain('barFill');
+  });
+
+  test('9.3 Custom Dhikr creation, persistence, selection and deletion are supported', () => {
+    expect(tasbeehStorageSrc).toContain('loadCustomDhikrs');
+    expect(tasbeehStorageSrc).toContain('saveCustomDhikrs');
+    expect(tasbeehStorageSrc).toContain('addCustomDhikr');
+    expect(tasbeehStorageSrc).toContain('deleteCustomDhikr');
+    expect(tasbeehScreenSrc).toContain('handleCreateCustomDhikr');
+    expect(tasbeehScreenSrc).toContain('handleDeleteCustomDhikr');
+    expect(tasbeehScreenSrc).toContain('showAddDhikrModal');
+    expect(tasbeehScreenSrc).toContain('Apna Dhikr Jodein');
+  });
 });
