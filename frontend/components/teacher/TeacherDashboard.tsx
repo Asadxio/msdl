@@ -18,7 +18,7 @@ import { UserProfile } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { db } from '@/lib/firebase';
 import { DAILY_WISDOM, HADITHS } from '@/constants/wisdomData';
-import { MADRASA_WEBSITE_URL } from '@/lib/links';
+import { MADRASA_WEBSITE_URL, MADRASA_WEBSITE_DISPLAY } from '@/lib/links';
 import * as Linking from 'expo-linking';
 import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 
@@ -695,7 +695,7 @@ export function TeacherDashboard({
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.portalTitle}>Madrasatu-s-Salikat Official Portal</Text>
-                <Text style={styles.portalSub}>Visit institutional portal: madrasa-website-299.netlify.app</Text>
+                <Text style={styles.portalSub}>Visit institutional portal: {MADRASA_WEBSITE_DISPLAY}</Text>
               </View>
             </View>
             <Ionicons name="open-outline" size={18} color={COLORS.secondary} />

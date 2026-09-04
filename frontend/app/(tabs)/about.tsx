@@ -639,7 +639,7 @@ export default function AboutScreen() {
 
   const shareApp = async () => {
     await Share.share({
-      message: 'Join Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات) app for courses, library and updates.\nhttps://madrasa-website-299.netlify.app/',
+      message: `Join Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات) app for courses, library and updates.\n${MADRASA_WEBSITE_URL}`,
     });
   };
 

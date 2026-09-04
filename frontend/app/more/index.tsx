@@ -2,7 +2,7 @@ import { ScreenRefreshControl, ScalePressable } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View, Linking, Share, Platform } from 'react-native';
-import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL } from '@/lib/links';
+import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL, MADRASA_WEBSITE_DISPLAY } from '@/lib/links';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -406,7 +406,7 @@ export default function MoreLandingScreen() {
               </View>
               <View style={styles.supportRowContent}>
                 <Text style={styles.supportLabel}>Official Website</Text>
-                <Text style={styles.supportRowSub}>madrasa-website-299.netlify.app</Text>
+                <Text style={styles.supportRowSub}>{MADRASA_WEBSITE_DISPLAY}</Text>
               </View>
               <View style={styles.rowChevronContainer}>
                 <Ionicons name="open-outline" size={18} color="#4F46E5" />

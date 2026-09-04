@@ -13,7 +13,7 @@ import { useTutorial } from '@/context/TutorialContext';
 import { useTheme } from '@/context/ThemeContext';
 import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
 import Constants from 'expo-constants';
-import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL } from '@/lib/links';
+import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL, MADRASA_WEBSITE_DISPLAY } from '@/lib/links';
 import AdminHealthDashboard from '@/components/AdminHealthDashboard';
 import { useLanguage, type Language } from '@/context/LanguageContext';
 import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
@@ -664,7 +664,7 @@ export default function SettingsScreen() {
               <Ionicons name="globe-outline" size={20} color="#0FA958" />
               <View>
                 <Text style={styles.linkText}>Official Website</Text>
-                <Text style={styles.linkSubtext}>madrasa-website-299.netlify.app</Text>
+                <Text style={styles.linkSubtext}>{MADRASA_WEBSITE_DISPLAY}</Text>
               </View>
             </View>
             <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
