@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, Alert, TextInput,
+  Share, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 /* eslint-disable react-hooks/exhaustive-deps */
@@ -22,7 +23,7 @@ import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { IslamicReceiptModal } from '@/components/IslamicReceiptModal';
 import { shareReceiptToWhatsApp, type FeeReceiptData } from '@/lib/receiptGenerator';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
 
@@ -43,6 +44,8 @@ type PaymentItem = {
   refund_reason?: string;
   created_at?: { toDate?: () => Date };
   finalized_at?: { toDate?: () => Date };
+  due_date?: string;
+  due_date_set_by?: string;
 };
 
 function paymentState(payment: Pick<PaymentItem, 'state' | 'status'>): PaymentStatus {
@@ -74,6 +77,11 @@ export default function AdminPaymentsScreen() {
   const [fetching, setFetching] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<FeeReceiptData | null>(null);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  // 12.2 — Bulk WhatsApp reminder
+  const [bulkReminderLoading, setBulkReminderLoading] = useState(false);
+  // 12.3 — Due date input state
+  const [dueDateInputId, setDueDateInputId] = useState<string | null>(null);
+  const [dueDateText, setDueDateText] = useState('');
 
   const loadPayments = useCallback(async (direction: 'reset' | 'next' | 'prev' = 'reset') => {
     if (!isAdmin || fetching) return;
@@ -255,6 +263,83 @@ export default function AdminPaymentsScreen() {
     await shareReceiptToWhatsApp(receiptData, parentPhone);
   };
 
+  // 12.2 — Bulk WhatsApp Fee Reminder (compile all pending into a text file + share)
+  const handleBulkWhatsAppReminder = async () => {
+    const pending = payments.filter((p) => {
+      const s = paymentState(p);
+      return ['pending', 'submitted', 'processing'].includes(s);
+    });
+    if (pending.length === 0) {
+      Alert.alert('کوئی پینڈنگ فیس نہیں', 'فی الحال کوئی زیر التواء فیس موجود نہیں۔');
+      return;
+    }
+    setBulkReminderLoading(true);
+    try {
+      const lines: string[] = [
+        '🕌 *Madrasatu-s-Salikat Lil Banat*',
+        '📋 *Fee Reminder — Pending Payments*',
+        `📅 Date: ${new Date().toLocaleDateString('ur-PK')}`,
+        '━━━━━━━━━━━━━━━━━━━━━━',
+        '',
+      ];
+      for (const p of pending) {
+        const name = p.user_name || p.user_id;
+        const amount = `₹${Number(p.amount || 0).toFixed(0)}`;
+        const type = (p.payment_type || p.type || 'fees').toUpperCase();
+        const dueNote = (p as any).due_date ? `\n   ⏰ Due: ${(p as any).due_date}` : '';
+        lines.push(`👩‍🎓 *${name}*\n   💰 Amount: ${amount} (${type})${dueNote}`);
+        lines.push('');
+      }
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+      lines.push('براہ کرم جلد از جلد فیس جمع کرائیں۔ جزاکم اللہ خیراً');
+      const fullText = lines.join('\n');
+      // Try WhatsApp first, fallback to Share
+      const encodedText = encodeURIComponent(fullText);
+      const waUrl = `whatsapp://send?text=${encodedText}`;
+      const canOpen = await Linking.canOpenURL(waUrl).catch(() => false);
+      if (canOpen) {
+        await Linking.openURL(waUrl);
+      } else {
+        await Share.share({ message: fullText, title: 'Fee Reminder — MSLB' });
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Could not prepare reminder.');
+    } finally {
+      setBulkReminderLoading(false);
+    }
+  };
+
+  // 12.3 — Set fee due date on a pending payment
+  const handleSetDueDate = async (paymentId: string, dateStr: string) => {
+    const trimmed = dateStr.trim();
+    const dateRegex = /^(0?[1-9]|[12]\d|3[01])-(0?[1-9]|1[0-2])-\d{4}$/;
+    if (!dateRegex.test(trimmed)) {
+      Alert.alert('غلط فارمیٹ', 'تاریخ کا فارمیٹ: DD-MM-YYYY\nمثال: 15-09-2026');
+      return;
+    }
+    try {
+      setUpdatingId(paymentId);
+      await updateDoc(doc(db, 'payments', paymentId), {
+        due_date: trimmed,
+        due_date_set_by: profile?.email || profile?.name || 'admin',
+        due_date_set_at: serverTimestamp(),
+      });
+      await createAdminLog(profile, {
+        action: 'set_due_date',
+        performed_by: profile?.email || profile?.name || 'admin',
+        target_id: paymentId,
+        details: `Due date set to: ${trimmed}`,
+      }).catch(() => {});
+      setDueDateInputId(null);
+      setDueDateText('');
+      await loadPayments('reset');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to set due date.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   if (profile && !isAdmin) return null;
 
   return (
@@ -284,7 +369,24 @@ export default function AdminPaymentsScreen() {
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
         <>
-          <Text style={{ paddingHorizontal: 16, color: COLORS.textMuted, fontSize: 12 }}>Filter: {statusFilter.toUpperCase()}</Text>
+          {/* 12.2 — Bulk Reminder bar */}
+          <View style={styles.bulkReminderBar}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bulkReminderTitle}>زیر التواء فیس ({payments.filter(p => ['pending','submitted','processing'].includes(paymentState(p))).length})</Text>
+              <Text style={styles.bulkReminderSub}>تمام والدین کو ایک ساتھ یاددہانی بھیجیں</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.bulkReminderBtn}
+              onPress={() => { void handleBulkWhatsAppReminder(); }}
+              disabled={bulkReminderLoading}
+            >
+              {bulkReminderLoading
+                ? <ActivityIndicator size="small" color="#FFF" />
+                : <Ionicons name="logo-whatsapp" size={16} color="#FFF" />}
+              <Text style={styles.bulkReminderBtnText}>Bulk Reminder</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={{ paddingHorizontal: 16, color: COLORS.textMuted, fontSize: 12, marginBottom: 4 }}>Filter: {statusFilter.toUpperCase()}</Text>
           <FlatList
             removeClippedSubviews
             initialNumToRender={10}
@@ -319,8 +421,71 @@ export default function AdminPaymentsScreen() {
                   {item.refund_id ? <Text style={styles.meta}>Refund ID: {item.refund_id}</Text> : null}
                   <Text style={styles.time}>Created: {formatDate(item)}</Text>
 
+                  {/* 12.3 — Due Date display & inline setter */}
+                  {item.due_date ? (
+                    <View style={styles.dueDateBadgeRow}>
+                      <Ionicons name="calendar-outline" size={14} color="#B45309" />
+                      <Text style={styles.dueDateText}>
+                        Due Date: <Text style={{ fontWeight: '700' }}>{item.due_date}</Text>
+                      </Text>
+                    </View>
+                  ) : isPending ? (
+                    <View style={styles.dueDateBadgeRow}>
+                      <Text style={styles.noDueDateText}>کوئی آخری تاریخ مقرر نہیں (No Due Date)</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Inline Due Date Input Box when editing this item */}
+                  {dueDateInputId === item.id ? (
+                    <View style={styles.inlineDueDateContainer}>
+                      <TextInput
+                        style={styles.inlineDueDateInput}
+                        placeholder="DD-MM-YYYY (e.g. 20-09-2026)"
+                        placeholderTextColor={COLORS.textMuted}
+                        value={dueDateText}
+                        onChangeText={setDueDateText}
+                        keyboardType="numbers-and-punctuation"
+                      />
+                      <TouchableOpacity
+                        style={styles.saveDueDateBtn}
+                        onPress={() => handleSetDueDate(item.id, dueDateText)}
+                        disabled={updatingId === item.id}
+                      >
+                        {updatingId === item.id ? (
+                          <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                          <Text style={styles.saveDueDateBtnText}>Save</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.cancelDueDateBtn}
+                        onPress={() => {
+                          setDueDateInputId(null);
+                          setDueDateText('');
+                        }}
+                      >
+                        <Ionicons name="close" size={16} color={COLORS.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+
                   {/* Actions based on payment state */}
                   <View style={styles.actions}>
+                    {/* 12.3: Set Due Date button for pending payments */}
+                    {isPending && dueDateInputId !== item.id ? (
+                      <TouchableOpacity
+                        style={styles.setDueDateBtn}
+                        onPress={() => {
+                          setDueDateInputId(item.id);
+                          setDueDateText(item.due_date || '');
+                        }}
+                      >
+                        <Ionicons name="calendar" size={13} color="#B45309" />
+                        <Text style={styles.setDueDateBtnText}>
+                          {item.due_date ? 'Change Due' : 'Set Due Date'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
                     {/* View Official Receipt */}
                     <TouchableOpacity
                       style={styles.receiptBtn}
@@ -496,5 +661,116 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
   empty: { color: COLORS.textMuted, fontSize: 14, marginTop: 8 },
   noteInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: COLORS.surface, color: COLORS.textMain, fontSize: 13 },
+  // 12.2 Bulk Reminder Styles
+  bulkReminderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ECFDF5',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    gap: 8,
+  },
+  bulkReminderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  bulkReminderSub: {
+    fontSize: 11,
+    color: '#047857',
+    marginTop: 1,
+  },
+  bulkReminderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#059669',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+    gap: 6,
+  },
+  bulkReminderBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  // 12.3 Due Date Styles
+  dueDateBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    backgroundColor: '#FEF3C7',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+  },
+  dueDateText: {
+    fontSize: 11,
+    color: '#92400E',
+  },
+  noDueDateText: {
+    fontSize: 11,
+    color: '#B45309',
+    fontStyle: 'italic',
+  },
+  inlineDueDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    backgroundColor: '#FFFBEB',
+    padding: 8,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  inlineDueDateInput: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D97706',
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 12,
+    color: COLORS.textMain,
+  },
+  saveDueDateBtn: {
+    backgroundColor: '#D97706',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+  },
+  saveDueDateBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  cancelDueDateBtn: {
+    padding: 4,
+  },
+  setDueDateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  setDueDateBtnText: {
+    color: '#92400E',
+    fontWeight: '600',
+    fontSize: 11,
+  },
 });
 

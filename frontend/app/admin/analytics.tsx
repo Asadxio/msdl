@@ -86,11 +86,17 @@ export default function AdminAnalyticsScreen() {
   const [metrics, setMetrics] = useState<AnalyticsMetrics>(EMPTY_METRICS);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [exportingType, setExportingType] = useState<ExportType | null>(null);
+  // 12.4 — Date range filter preset
+  const [dateFilter, setDateFilter] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
+  // 12.5 — Courses list for course-wise quiz export
+  const [courseList, setCourseList] = useState<Array<{ id: string; name: string }>>([]);
+  const [exportingCourseId, setExportingCourseId] = useState<string | null>(null);
 
-  const handleExport = async (type: ExportType) => {
+  const handleExport = async (type: ExportType, courseId?: string, courseName?: string) => {
     try {
-      setExportingType(type);
-      await exportAdminCsvAndShare(type);
+      if (courseId) setExportingCourseId(courseId);
+      else setExportingType(type);
+      await exportAdminCsvAndShare(type, courseId, courseName);
     } catch (err: any) {
       Alert.alert(
         'Export Failed',
@@ -98,17 +104,20 @@ export default function AdminAnalyticsScreen() {
       );
     } finally {
       setExportingType(null);
+      setExportingCourseId(null);
     }
   };
 
   const loadAnalytics = useCallback(async () => {
-    if (!lastRefreshed) setLoading(true);
+    setLoading(true);
     setError('');
     try {
       const now = new Date();
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const daysLookup: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 };
+      const days = daysLookup[dateFilter] || 30;
+      const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const thirtyDaysAgoTs = Timestamp.fromDate(thirtyDaysAgo);
+      const cutoffDateTs = Timestamp.fromDate(cutoffDate);
 
       // Parallel fetches — users by role
       const [
@@ -122,7 +131,7 @@ export default function AdminAnalyticsScreen() {
         getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))),
         getCountFromServer(query(collection(db, 'users'), where('role', '==', 'teacher'))),
         getCountFromServer(query(collection(db, 'users'), where('role', '==', 'admin'))),
-        getDocs(query(collection(db, 'users'), where('last_login_at', '>=', thirtyDaysAgoTs))),
+        getDocs(query(collection(db, 'users'), where('last_login_at', '>=', cutoffDateTs))),
         getCountFromServer(collection(db, 'courses')),
         getCountFromServer(query(collection(db, 'courses'), where('status', '==', 'active'))),
         getCountFromServer(collection(db, 'quiz_results')),
@@ -207,7 +216,7 @@ export default function AdminAnalyticsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [lastRefreshed, profile?.role, profile?.status]);
+  }, [dateFilter, profile?.role, profile?.status]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await loadAnalytics();
@@ -218,8 +227,18 @@ export default function AdminAnalyticsScreen() {
       router.replace('/unauthorized?required=admin');
       return;
     }
-    if (isAdmin) loadAnalytics().catch(() => setLoading(false));
-  }, [isAdmin]);
+    if (isAdmin) {
+      loadAnalytics().catch(() => setLoading(false));
+      // 12.5 — Fetch courses for course-specific quiz export
+      getDocs(collection(db, 'courses')).then((snap) => {
+        const list: Array<{ id: string; name: string }> = [];
+        snap.forEach((d) => {
+          list.push({ id: d.id, name: d.data().name || d.id });
+        });
+        setCourseList(list);
+      }).catch(() => {});
+    }
+  }, [isAdmin, dateFilter]);
 
   if (profile && !isAdmin) return null;
 
@@ -268,6 +287,32 @@ export default function AdminAnalyticsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+          {/* 12.4 — Date Range Filter Pills */}
+          <View style={styles.filterPillsContainer}>
+            <Text style={styles.filterSectionLabel}>Date Range (وقت کا دورانیہ):</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsRow}>
+              {(['7d', '30d', '90d', '1y'] as const).map((filterKey) => {
+                const labels: Record<string, string> = {
+                  '7d': '7 Days (ہفتہ)',
+                  '30d': '30 Days (ماہ)',
+                  '90d': '3 Months (سہ ماہی)',
+                  '1y': '1 Year (سالانہ)',
+                };
+                const isSelected = dateFilter === filterKey;
+                return (
+                  <TouchableOpacity
+                    key={filterKey}
+                    style={[styles.pillBtn, isSelected && styles.pillBtnActive]}
+                    onPress={() => setDateFilter(filterKey)}
+                  >
+                    <Text style={[styles.pillText, isSelected && styles.pillTextActive]}>
+                      {labels[filterKey]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           {/* 1-CLICK EXCEL / CSV EXPORT */}
           <SectionHeader title="1-Click Reports & Excel Export (ایکسل شیٹس)" icon="download-outline" />
@@ -275,7 +320,7 @@ export default function AdminAnalyticsScreen() {
             <TouchableOpacity
               style={[styles.exportCard, { borderColor: '#10B981', backgroundColor: '#ECFDF5' }]}
               onPress={() => handleExport('attendance')}
-              disabled={exportingType !== null}
+              disabled={exportingType !== null || exportingCourseId !== null}
               activeOpacity={0.8}
             >
               <View style={[styles.exportIconBox, { backgroundColor: '#10B981' }]}>
@@ -295,7 +340,7 @@ export default function AdminAnalyticsScreen() {
             <TouchableOpacity
               style={[styles.exportCard, { borderColor: '#8B5CF6', backgroundColor: '#F5F3FF' }]}
               onPress={() => handleExport('quiz_marks')}
-              disabled={exportingType !== null}
+              disabled={exportingType !== null || exportingCourseId !== null}
               activeOpacity={0.8}
             >
               <View style={[styles.exportIconBox, { backgroundColor: '#8B5CF6' }]}>
@@ -306,12 +351,41 @@ export default function AdminAnalyticsScreen() {
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.exportTitle}>امتحانی نتائج (Quiz Marks)</Text>
+                <Text style={styles.exportTitle}>امتحانی نتائج (All Quiz Marks)</Text>
                 <Text style={styles.exportSub}>1-Click Excel/CSV of all scores & grades</Text>
               </View>
               <Ionicons name="share-outline" size={18} color="#7C3AED" />
             </TouchableOpacity>
           </View>
+
+          {/* 12.5 — Course-Wise Quiz Marks Export */}
+          {courseList.length > 0 ? (
+            <View style={styles.courseExportSection}>
+              <Text style={styles.courseExportSectionTitle}>
+                Export Quiz Marks by Course (کورس کے لحاظ سے برآمد):
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.coursePillsRow}>
+                {courseList.map((c) => {
+                  const isExportingThis = exportingCourseId === c.id;
+                  return (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[styles.courseExportPill, isExportingThis && styles.courseExportPillActive]}
+                      onPress={() => handleExport('quiz_marks', c.id, c.name)}
+                      disabled={exportingCourseId !== null || exportingType !== null}
+                    >
+                      {isExportingThis ? (
+                        <ActivityIndicator size="small" color="#7C3AED" />
+                      ) : (
+                        <Ionicons name="download-outline" size={14} color="#7C3AED" />
+                      )}
+                      <Text style={styles.courseExportPillText}>{c.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
 
           {/* USERS */}
           <SectionHeader title="Users" icon="people-outline" />
@@ -485,5 +559,80 @@ const styles = StyleSheet.create({
   exportSub: {
     fontSize: 12,
     color: COLORS.textMuted,
+  },
+  // 12.4 Date Filter Pills
+  filterPillsContainer: {
+    marginBottom: 4,
+  },
+  filterSectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 4,
+  },
+  pillBtn: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  pillBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  pillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  pillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  // 12.5 Course Export Section
+  courseExportSection: {
+    backgroundColor: '#FAF5FF',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    borderRadius: RADIUS.xl,
+    padding: 12,
+    marginBottom: 4,
+  },
+  courseExportSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B21A8',
+    marginBottom: 8,
+  },
+  coursePillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  courseExportPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#C084FC',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+  },
+  courseExportPillActive: {
+    backgroundColor: '#F3E8FF',
+  },
+  courseExportPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
 });

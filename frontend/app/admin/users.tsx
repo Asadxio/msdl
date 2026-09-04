@@ -168,6 +168,9 @@ export default function AdminUsersScreen() {
     }
   };
   const toggleSelected = (uid: string) => setSelectedIds((prev) => (prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]));
+  const [bulkEnrolling, setBulkEnrolling] = useState(false);
+  const [bulkEnrollProgress, setBulkEnrollProgress] = useState('');
+
   const runBulkStatus = async (status: 'approved' | 'rejected' | 'deactivated' | 'pending') => {
     if (!canBulk || selectedIds.length === 0) return;
     const result = await bulkUpdateUserStatus({
@@ -179,6 +182,60 @@ export default function AdminUsersScreen() {
     setSelectedIds([]);
     Alert.alert('Bulk Update', `Updated ${result.updated} users`);
     await fetchUsers();
+  };
+
+  // 12.1 — Bulk student enrollment into a selected course
+  const runBulkEnroll = () => {
+    if (!canBulk || selectedIds.length < 2 || !availableCourses.length) {
+      Alert.alert('Bulk Enroll', availableCourses.length === 0 ? 'No courses available.' : 'Select at least 2 students first.');
+      return;
+    }
+    const courseOptions = availableCourses.map((c) => ({
+      text: c.name,
+      onPress: async () => {
+        setBulkEnrolling(true);
+        let enrolled = 0;
+        let failed = 0;
+        for (let i = 0; i < selectedIds.length; i++) {
+          const uid = selectedIds[i];
+          setBulkEnrollProgress(`Enrolling ${i + 1}/${selectedIds.length}...`);
+          try {
+            const enrollmentDocId = getEnrollmentDocId(uid, c.id);
+            await setDoc(doc(db, 'enrollments', enrollmentDocId), {
+              user_id: uid,
+              course_id: c.id,
+              status: 'active',
+              enrolled_at: serverTimestamp(),
+              created_at: serverTimestamp(),
+              granted_by_admin: profile?.email || profile?.name || 'admin',
+              granted_free: true,
+              bulk_enrolled: true,
+            }, { merge: true });
+            await createAdminLog(profile, {
+              action: 'bulk_enroll',
+              performed_by: profile?.email || profile?.name || 'admin',
+              target_id: uid,
+              details: `Bulk enrolled in course: ${c.name} (${c.id})`,
+            }).catch(() => {});
+            enrolled++;
+          } catch {
+            failed++;
+          }
+        }
+        setBulkEnrolling(false);
+        setBulkEnrollProgress('');
+        setSelectedIds([]);
+        Alert.alert(
+          'Bulk Enrollment Done ✅',
+          `${enrolled} students enrolled in "${c.name}"` + (failed > 0 ? `\n${failed} failed` : ''),
+        );
+      },
+    }));
+    Alert.alert(
+      `Bulk Enroll ${selectedIds.length} Students`,
+      'Select a course to enroll all selected students:',
+      [...courseOptions, { text: 'Cancel', style: 'cancel' as const }],
+    );
   };
 
   const handleApprove = (u: UserWithId) => {
@@ -390,11 +447,28 @@ export default function AdminUsersScreen() {
         </TouchableOpacity>
       </View>
       {canBulk ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, gap: 8, paddingBottom: 8 }}>
-          <TouchableOpacity style={styles.approveBtn} onPress={() => runBulkStatus('approved')}><Text style={styles.approveBtnText}>Bulk Approve ({selectedIds.length})</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.deactivateBtn} onPress={() => runBulkStatus('deactivated')}><Text style={styles.deactivateBtnText}>Bulk Deactivate</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.rejectBtn} onPress={() => runBulkStatus('rejected')}><Text style={styles.rejectBtnText}>Bulk Reject</Text></TouchableOpacity>
-        </ScrollView>
+        <View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, gap: 8, paddingBottom: 6 }}>
+            <TouchableOpacity style={styles.approveBtn} onPress={() => runBulkStatus('approved')}><Text style={styles.approveBtnText}>Bulk Approve ({selectedIds.length})</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.deactivateBtn} onPress={() => runBulkStatus('deactivated')}><Text style={styles.deactivateBtnText}>Bulk Deactivate</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.rejectBtn} onPress={() => runBulkStatus('rejected')}><Text style={styles.rejectBtnText}>Bulk Reject</Text></TouchableOpacity>
+            {/* 12.1 — Bulk Enroll button (only when 2+ selected) */}
+            {selectedIds.length >= 2 && (
+              <TouchableOpacity
+                style={styles.bulkEnrollBtn}
+                onPress={runBulkEnroll}
+                disabled={bulkEnrolling}
+              >
+                {bulkEnrolling
+                  ? <ActivityIndicator size="small" color="#FFF" />
+                  : <Ionicons name="school" size={14} color="#FFF" />}
+                <Text style={styles.bulkEnrollBtnText}>
+                  {bulkEnrolling ? bulkEnrollProgress : `Enroll in Course (${selectedIds.length})`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
       ) : null}
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
@@ -526,4 +600,7 @@ const styles = StyleSheet.create({
   courseAccessBtnText: { color: '#047857', fontSize: 12, fontWeight: '700' },
   deleteBtn: { backgroundColor: '#FEF2F2', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.xxl, borderWidth: 1, borderColor: COLORS.error },
   deleteBtnText: { color: COLORS.error, fontSize: 13, fontWeight: '700' },
+  // 12.1 — Bulk Enroll
+  bulkEnrollBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0EA5E9', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.xxl },
+  bulkEnrollBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
 });

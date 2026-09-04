@@ -8,7 +8,7 @@
  * Utilizes Expo FileSystem & Sharing with UTF-8 BOM for flawless opening in Microsoft Excel.
  */
 
-import { collection, getDocs, orderBy, query, limit } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -102,12 +102,24 @@ export async function generateAttendanceCsv(): Promise<string> {
 
 /**
  * Fetch and generate 1-Click Quiz Marks & Examination Results CSV
+ * 12.5: Supports optional courseId filter
  */
-export async function generateQuizMarksCsv(): Promise<string> {
-  // 1. Fetch quiz_results
-  const quizSnap = await getDocs(
-    query(collection(db, 'quiz_results'), orderBy('created_at', 'desc'), limit(5000))
-  );
+export async function generateQuizMarksCsv(courseId?: string): Promise<string> {
+  // 1. Fetch quiz_results (optionally filtered by course_id)
+  const baseQuery = courseId
+    ? query(collection(db, 'quiz_results'), where('course_id', '==', courseId), orderBy('created_at', 'desc'), limit(5000))
+    : query(collection(db, 'quiz_results'), orderBy('created_at', 'desc'), limit(5000));
+
+  let quizSnap;
+  try {
+    quizSnap = await getDocs(baseQuery);
+  } catch {
+    // Fallback without orderBy in case of compound index requirement
+    const fallbackQuery = courseId
+      ? query(collection(db, 'quiz_results'), where('course_id', '==', courseId), limit(5000))
+      : query(collection(db, 'quiz_results'), limit(5000));
+    quizSnap = await getDocs(fallbackQuery);
+  }
 
   // 2. Fetch users map
   const usersSnap = await getDocs(collection(db, 'users'));
@@ -124,6 +136,7 @@ export async function generateQuizMarksCsv(): Promise<string> {
     'Student Name (طالبہ کا نام)',
     'Student Email',
     'Student UID',
+    'Course ID (کورس آئی ڈی)',
     'Quiz Category / Subject (مضمون)',
     'Obtained Marks (حاصل کردہ نمبر)',
     'Total Marks (کل نمبر)',
@@ -163,6 +176,7 @@ export async function generateQuizMarksCsv(): Promise<string> {
         escapeCsvCell(uInfo.name),
         escapeCsvCell(uInfo.email),
         escapeCsvCell(d.user_id || ''),
+        escapeCsvCell(d.course_id || 'عام / جنرل'),
         escapeCsvCell(d.category || 'عام دینی سوالات'),
         escapeCsvCell(score),
         escapeCsvCell(total),
@@ -179,14 +193,22 @@ export async function generateQuizMarksCsv(): Promise<string> {
 /**
  * 1-Click Export & Share Handler
  * Saves CSV to device file system and opens native share dialog (WhatsApp, Drive, Email, Excel).
+ * 12.5: Accepts optional courseId and courseName for course-specific exports
  */
-export async function exportAdminCsvAndShare(type: 'attendance' | 'quiz_marks'): Promise<void> {
+export async function exportAdminCsvAndShare(
+  type: 'attendance' | 'quiz_marks',
+  courseId?: string,
+  courseName?: string,
+): Promise<void> {
   const isAttendance = type === 'attendance';
-  const csvData = isAttendance ? await generateAttendanceCsv() : await generateQuizMarksCsv();
+  const csvData = isAttendance ? await generateAttendanceCsv() : await generateQuizMarksCsv(courseId);
 
   const timestamp = new Date().toISOString().slice(0, 10);
+  const cleanCourse = courseName ? courseName.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
   const fileName = isAttendance
     ? `MSLB_Students_Attendance_${timestamp}.csv`
+    : courseId
+    ? `MSLB_Quiz_${cleanCourse || courseId}_${timestamp}.csv`
     : `MSLB_Quiz_Marks_Results_${timestamp}.csv`;
 
   if (Platform.OS === 'web') {
@@ -208,6 +230,8 @@ export async function exportAdminCsvAndShare(type: 'attendance' | 'quiz_marks'):
 
   const dialogTitle = isAttendance
     ? 'Download / Share Student Attendance Sheet'
+    : courseName
+    ? `Download / Share Quiz Marks for "${courseName}"`
     : 'Download / Share Quiz Marks & Examination Sheet';
 
   if (await Sharing.isAvailableAsync()) {
