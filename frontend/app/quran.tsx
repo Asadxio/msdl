@@ -12,8 +12,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS, RADIUS, SPACING } from "@/constants/theme";
 import { QURAN_SURAHS, searchSurahs, TOTAL_AYAT, TOTAL_PARAHS, SurahMeta } from "@/constants/quranSurahs";
 import {
-  loadLastRead, loadKhatamProgress, loadHifzProgress,
-  toggleParahHifz, KhatamProgress, HifzProgress,
+  loadLastRead, loadKhatamProgress, loadHifzProgress, loadBookmarks,
+  toggleParahHifz, KhatamProgress, HifzProgress, QuranBookmark,
 } from "@/lib/quranStorage";
 import { getDailyAyat } from "@/lib/quranApi";
 import type { DailyAyatCache } from "@/lib/quranStorage";
@@ -27,6 +27,7 @@ export default function QuranScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredSurahs, setFilteredSurahs] = useState<SurahMeta[]>(QURAN_SURAHS);
   const [lastRead, setLastRead] = useState<{ surahNumber: number; ayatNumber: number; surahName: string } | null>(null);
+  const [bookmarks, setBookmarks] = useState<QuranBookmark[]>([]);
   const [khatam, setKhatam] = useState<KhatamProgress | null>(null);
   const [hifz, setHifz] = useState<HifzProgress | null>(null);
   const [dailyAyat, setDailyAyat] = useState<DailyAyatCache | null>(null);
@@ -34,10 +35,11 @@ export default function QuranScreen() {
 
   useEffect(() => {
     const init = async () => {
-      const [lr, kt, hf] = await Promise.all([loadLastRead(), loadKhatamProgress(), loadHifzProgress()]);
+      const [lr, kt, hf, bms] = await Promise.all([loadLastRead(), loadKhatamProgress(), loadHifzProgress(), loadBookmarks()]);
       setLastRead(lr);
       setKhatam(kt);
       setHifz(hf);
+      setBookmarks(bms);
     };
     init();
   }, []);
@@ -60,8 +62,8 @@ export default function QuranScreen() {
   };
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    const [lr, kt, hf] = await Promise.all([loadLastRead(), loadKhatamProgress(), loadHifzProgress()]);
-    setLastRead(lr); setKhatam(kt); setHifz(hf);
+    const [lr, kt, hf, bms] = await Promise.all([loadLastRead(), loadKhatamProgress(), loadHifzProgress(), loadBookmarks()]);
+    setLastRead(lr); setKhatam(kt); setHifz(hf); setBookmarks(bms);
     setDailyAyat(null);
   });
 
@@ -136,11 +138,33 @@ export default function QuranScreen() {
       {/* Tab Content */}
       {activeTab === 'surahs' && (
         <View style={{ flex: 1 }}>
+          {/* Prominent Quick-Resume Banner in Surahs list */}
+          {lastRead && !searchQuery && (
+            <TouchableOpacity
+              style={styles.surahLastReadBanner}
+              activeOpacity={0.85}
+              onPress={() => router.push(('/quran-reader?surah=' + lastRead.surahNumber + '&ayat=' + lastRead.ayatNumber) as any)}
+            >
+              <View style={styles.surahLastReadIconWrap}>
+                <Ionicons name="bookmark" size={18} color="#C8A84E" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.surahLastReadLabel}>جہاں چھوڑا تھا وہیں سے جاری رکھیں</Text>
+                <Text style={styles.surahLastReadTitle} numberOfLines={1}>
+                  {lastRead.surahName} • آیت #{lastRead.ayatNumber}
+                </Text>
+              </View>
+              <View style={styles.surahLastReadBtn}>
+                <Text style={styles.surahLastReadBtnText}>شروع کریں ▶</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
           <View style={styles.searchBox}>
             <Ionicons name="search" size={18} color="#64748B" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search Surah (e.g. Yaseen, Baqarah, 36)..."
+              placeholder="Search Surah (e.g. Yaseen, Baqarah, بقرہ, 36)..."
               placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={handleSearch}
@@ -192,6 +216,40 @@ export default function QuranScreen() {
               <Text style={styles.noLastReadSubtitle}>Select a Surah from the Surahs tab to start reading</Text>
             </View>
           )}
+          {/* Bookmarked Ayahs Section (2.1) */}
+          {bookmarks.length > 0 && (
+            <View style={{ gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={styles.sectionLabel}>محفوظ شدہ آیات (Bookmarked Ayahs)</Text>
+                <View style={styles.bookmarkCountBadge}>
+                  <Text style={styles.bookmarkCountText}>{bookmarks.length}</Text>
+                </View>
+              </View>
+              {bookmarks.slice(0, 10).map((bm) => (
+                <TouchableOpacity
+                  key={`${bm.surahNumber}_${bm.ayatNumber}`}
+                  style={styles.bookmarkCard}
+                  activeOpacity={0.8}
+                  onPress={() => router.push(('/quran-reader?surah=' + bm.surahNumber + '&ayat=' + bm.ayatNumber) as any)}
+                >
+                  <View style={styles.bookmarkBadge}>
+                    <Ionicons name="bookmark" size={16} color="#C8A84E" />
+                    <Text style={styles.bookmarkAyatNum}>#{bm.ayatNumber}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bookmarkSurahName}>{bm.surahName}</Text>
+                    {bm.arabicText ? (
+                      <Text style={styles.bookmarkArabicSnippet} numberOfLines={1}>
+                        {bm.arabicText}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#C8A84E" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           <Text style={styles.sectionLabel}>Frequently Read Surahs</Text>
           {[1, 36, 55, 67, 112, 113, 114].map((num) => {
             const s = QURAN_SURAHS[num - 1];
@@ -416,4 +474,92 @@ const styles = StyleSheet.create({
   readFullBtnText: { fontSize: 14, fontWeight: '800', color: '#005F46' },
   loadingBox: { alignItems: 'center', paddingVertical: 60, gap: 14 },
   loadingText: { color: '#94A3B8', fontSize: 14, fontWeight: '600' },
+  surahLastReadBanner: {
+    marginHorizontal: SPACING.md,
+    marginBottom: 10,
+    backgroundColor: '#003D2E',
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: '#C8A84E',
+  },
+  surahLastReadIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(200,168,78,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  surahLastReadLabel: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  surahLastReadTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  surahLastReadBtn: {
+    backgroundColor: '#C8A84E',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.md,
+  },
+  surahLastReadBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#002E23',
+  },
+  bookmarkCountBadge: {
+    backgroundColor: '#C8A84E',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  bookmarkCountText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#002E23',
+  },
+  bookmarkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.lg,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  bookmarkBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#003D2E',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.md,
+  },
+  bookmarkAyatNum: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#C8A84E',
+  },
+  bookmarkSurahName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  bookmarkArabicSnippet: {
+    fontSize: 13,
+    color: '#005F46',
+    fontWeight: '600',
+    marginTop: 2,
+  },
 });

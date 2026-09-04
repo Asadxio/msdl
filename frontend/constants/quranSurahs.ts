@@ -145,14 +145,84 @@ export function getSurahsByParah(parah: number): SurahMeta[] {
   return QURAN_SURAHS.filter((s) => s.parah === parah);
 }
 
+/**
+ * Normalizes Urdu and Arabic text by stripping diacritics (tashkeel/aerab),
+ * harmonizing Alif forms (ا, آ, أ, إ), Heh forms (ہ, ه, ة, ھ),
+ * and Yeh forms (ی, ي, ے, ئ, ى). Also allows prefix-agnostic matching for "ال" (Al-).
+ */
+export function normalizeUrduAndArabicText(text: string): string {
+  if (!text) return '';
+  return text
+    // Strip Arabic/Urdu diacritics (fatha, damma, kasra, shadda, sukun, etc.)
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+    // Unify Alif variants
+    .replace(/[آأإٱ]/g, 'ا')
+    // Unify Heh / Teh Marbuta variants
+    .replace(/[ةهھ]/g, 'ہ')
+    // Unify Yeh / Alef Maksura variants
+    .replace(/[يےئى]/g, 'ی')
+    // Remove tatweel (kashida)
+    .replace(/\u0640/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 export function searchSurahs(query: string): SurahMeta[] {
-  const q = query.toLowerCase().trim();
-  if (!q) return QURAN_SURAHS;
-  return QURAN_SURAHS.filter(
-    (s) =>
-      s.englishName.toLowerCase().includes(q) ||
-      s.arabicName.includes(q) ||
-      s.urduName.includes(q) ||
-      s.number.toString() === q
-  );
+  const rawQ = query.trim();
+  if (!rawQ) return QURAN_SURAHS;
+
+  const lowerQ = rawQ.toLowerCase();
+  const normQ = normalizeUrduAndArabicText(rawQ);
+  // Also create a stripped prefix version without leading 'ال' or 'al-' or 'at-' or 'an-' or 'ar-' or 'ash-' or 'as-' or 'az-'
+  const normQWithoutAl = normQ.startsWith('ال') ? normQ.slice(2) : normQ;
+
+  return QURAN_SURAHS.filter((s) => {
+    // 1. Surah number exact match
+    if (s.number.toString() === lowerQ) return true;
+
+    // 2. English name match
+    if (s.englishName.toLowerCase().includes(lowerQ)) return true;
+
+    // 3. Normalized Urdu & Arabic text match
+    const normUrdu = normalizeUrduAndArabicText(s.urduName);
+    const normArabic = normalizeUrduAndArabicText(s.arabicName);
+
+    const normUrduWithoutAl = normUrdu.startsWith('ال') ? normUrdu.slice(2) : normUrdu;
+    const normArabicWithoutAl = normArabic.startsWith('ال') ? normArabic.slice(2) : normArabic;
+
+    // Check direct normalized inclusions
+    if (
+      normUrdu.includes(normQ) ||
+      normArabic.includes(normQ) ||
+      normUrduWithoutAl.includes(normQWithoutAl) ||
+      normArabicWithoutAl.includes(normQWithoutAl)
+    ) {
+      return true;
+    }
+
+    // Special phonetic Urdu aliases (e.g. Yaseen/یاسین/یسین, Baqarah/بقرہ/بقره, Fatihah/فاتحہ)
+    if (normQ === 'یسین' || normQ === 'یاسین') {
+      if (s.number === 36) return true;
+    }
+    if (normQ === 'فاتحہ' || normQ === 'فاتحه') {
+      if (s.number === 1) return true;
+    }
+    if (normQ === 'بقرہ' || normQ === 'بقره') {
+      if (s.number === 2) return true;
+    }
+    if (normQ === 'کہف' || normQ === 'کهف') {
+      if (s.number === 18) return true;
+    }
+    if (normQ === 'رحمن' || normQ === 'رحمان') {
+      if (s.number === 55) return true;
+    }
+    if (normQ === 'ملک' || normQ === 'تیاک') {
+      if (s.number === 67) return true;
+    }
+    if (normQ === 'اخلاص') {
+      if (s.number === 112) return true;
+    }
+
+    return false;
+  });
 }

@@ -14,9 +14,9 @@ import {
   getAyatAudioUrl, getFullSurahUrduAudioUrl,
 } from '@/lib/quranApi';
 import {
-  addBookmark, incrementKhatamAyats,
+  addBookmark, removeBookmark, loadBookmarks, incrementKhatamAyats,
   loadFontSize, loadShowRoman,
-  removeBookmark, saveFontSize, saveLastRead, saveShowRoman,
+  saveFontSize, saveLastRead, saveShowRoman,
   saveQuranAudioPlayback, loadQuranAudioPlayback,
   savePreferredAudioSpeed, loadPreferredAudioSpeed,
   type QuranAudioPlaybackState,
@@ -38,6 +38,7 @@ export default function QuranReaderScreen() {
   const [fontSize, setFontSize] = useState(22);
   const [bookmarkedAyats, setBookmarkedAyats] = useState<Set<number>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Audio Player & Speed / Resume State
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -86,7 +87,8 @@ export default function QuranReaderScreen() {
       loadFontSize(),
       loadPreferredAudioSpeed(),
       loadQuranAudioPlayback(surahNum),
-    ]).then(([roman, size, speed, savedPos]) => {
+      loadBookmarks(),
+    ]).then(([roman, size, speed, savedPos, bms]) => {
       setShowRoman(roman);
       setFontSize(size);
       if (speed) {
@@ -95,6 +97,14 @@ export default function QuranReaderScreen() {
       }
       if (savedPos && (savedPos.ayatNumber > 1 || savedPos.positionMillis > 2000)) {
         setResumeCandidate(savedPos);
+      }
+      const thisSurahBookmarks = new Set(
+        bms.filter((b) => b.surahNumber === surahNum).map((b) => b.ayatNumber)
+      );
+      setBookmarkedAyats(thisSurahBookmarks);
+      if (initialAyat > 1) {
+        setToastMessage(`Resumed at Ayat #${initialAyat}`);
+        setTimeout(() => setToastMessage(null), 3000);
       }
     });
     return () => {
@@ -284,10 +294,22 @@ export default function QuranReaderScreen() {
     if (already) {
       await removeBookmark(surahNum, ayat.number);
       setBookmarkedAyats((prev) => { const next = new Set(prev); next.delete(key); return next; });
+      setToastMessage(`Ayat #${ayat.number} bookmark removed`);
+      setTimeout(() => setToastMessage(null), 2500);
     } else {
       await addBookmark({ surahNumber: surahNum, ayatNumber: ayat.number, surahName: surahMeta?.englishName || '', arabicText: ayat.arabic, savedAt: Date.now() });
       setBookmarkedAyats((prev) => new Set([...prev, key]));
+      setToastMessage(`Ayat #${ayat.number} bookmarked!`);
+      setTimeout(() => setToastMessage(null), 2500);
     }
+  };
+
+  const changeFontSize = async (delta: number) => {
+    const nextSize = Math.max(16, Math.min(36, fontSize + delta));
+    setFontSize(nextSize);
+    await saveFontSize(nextSize);
+    setToastMessage(`Font Size: ${nextSize}px`);
+    setTimeout(() => setToastMessage(null), 1500);
   };
 
   const handleShare = (ayat: QuranAyat) => {
@@ -363,6 +385,27 @@ export default function QuranReaderScreen() {
           <Ionicons name="chevron-back" size={18} color={surahNum > 1 ? '#C8A84E' : '#334155'} />
         </TouchableOpacity>
 
+        {/* Quick Font Size Controls (2.3) */}
+        <View style={styles.quickFontControls}>
+          <TouchableOpacity
+            style={styles.quickFontBtn}
+            onPress={() => void changeFontSize(-2)}
+            disabled={fontSize <= 16}
+            accessibilityLabel="Decrease Font Size"
+          >
+            <Text style={[styles.quickFontBtnText, fontSize <= 16 && styles.quickFontBtnTextDisabled]}>A-</Text>
+          </TouchableOpacity>
+          <Text style={styles.quickFontSizeDisplay}>{fontSize}</Text>
+          <TouchableOpacity
+            style={styles.quickFontBtn}
+            onPress={() => void changeFontSize(2)}
+            disabled={fontSize >= 36}
+            accessibilityLabel="Increase Font Size"
+          >
+            <Text style={[styles.quickFontBtnText, fontSize >= 36 && styles.quickFontBtnTextDisabled]}>A+</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Full Surah Audio Button (From user website collection) */}
         <TouchableOpacity
           style={[styles.audioPillBtn, isFullSurahPlaying && styles.audioPillBtnActive]}
@@ -375,7 +418,7 @@ export default function QuranReaderScreen() {
             <Ionicons name={isFullSurahPlaying ? 'pause' : 'play'} size={14} color={isFullSurahPlaying ? '#FFFFFF' : '#002E23'} />
           )}
           <Text style={[styles.audioPillText, isFullSurahPlaying && styles.audioPillTextActive]}>
-            {isFullSurahPlaying ? 'Recitation Playing' : 'Full Surah Audio Recitation'}
+            {isFullSurahPlaying ? 'Playing' : 'Audio'}
           </Text>
         </TouchableOpacity>
 
@@ -383,6 +426,16 @@ export default function QuranReaderScreen() {
           <Ionicons name="chevron-forward" size={18} color={surahNum < 114 ? '#C8A84E' : '#334155'} />
         </TouchableOpacity>
       </View>
+
+      {/* Floating Reader Toast Message (2.1 & 2.2) */}
+      {toastMessage && (
+        <View style={styles.toastWrap}>
+          <View style={styles.toastCard}>
+            <Ionicons name="information-circle" size={16} color="#C8A84E" />
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        </View>
+      )}
 
       {/* Content */}
       {status === 'loading' ? (
@@ -844,5 +897,60 @@ const styles = StyleSheet.create({
   },
   resumeDismissBtn: {
     padding: 4,
+  },
+  quickFontControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 4,
+  },
+  quickFontBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  quickFontBtnText: {
+    color: '#C8A84E',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  quickFontBtnTextDisabled: {
+    color: '#64748B',
+  },
+  quickFontSizeDisplay: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    minWidth: 18,
+    textAlign: 'center',
+  },
+  toastWrap: {
+    position: 'absolute',
+    top: 90,
+    alignSelf: 'center',
+    zIndex: 99,
+  },
+  toastCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#003D2E',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#C8A84E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
