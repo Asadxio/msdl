@@ -121,8 +121,8 @@ export async function dispatchWelcomeNotification(
   if (!safeUid) return false;
 
   const displayName = String(studentName || '').trim() || 'طالبہ';
-  const title = '🌸 مدرسۃ السالکات میں خوش آمدید';
-  const body = `السلام علیکم ${displayName}! مدرسۃ السالکات میں آپ کا خیر مقدم ہے۔ آپ کا دینی تعلیمی سفر شروع ہو چکا ہے۔ اپنے کورسز اور اسباق دیکھیں۔`;
+  const title = '🌸 مدرسۃ السالکات میں خوش آمدید (Welcome!)';
+  const body = `السلام علیکم ${displayName}! مدرسۃ السالکات میں آپ کا خیر مقدم ہے۔ (Welcome to Madrasatu-s-Salikat! Your learning journey begins today. Explore your courses & lessons.)`;
 
   try {
     await dispatchNotification({
