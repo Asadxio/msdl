@@ -9,6 +9,8 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Linking,
+  Share,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +50,43 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
       Alert.alert('Share Error', err?.message || 'Failed to share certificate.');
     } finally {
       setSharing(false);
+    }
+  };
+
+  const handleWhatsAppShare = async () => {
+    try {
+      const verifyUrl = `https://mslb.app/verify-sanad?id=${encodeURIComponent(certificate.certificateId)}`;
+      const shareText = `🌸 الحمد لله رب العالمين!
+
+ہماری بیٹی *${certificate.studentName}* نے *مدرسۃ السالکات للبنات* کے کورس/کوئز *${certificate.quizCategory}* میں شاندار کامیابی حاصل کر کے سند (Official Sanad) حاصل کی ہے۔
+
+📊 حاصل کردہ نمبر: *${certificate.score} / ${certificate.totalQuestions}* (${certificate.percentage}%)
+🏅 درجہ / گریڈ: *${certificate.gradeLabel}*
+📜 سند نمبر: *${certificate.certificateId}*
+
+🔗 سند کی آن لائن لائیو تصدیق (Live Verification Link):
+${verifyUrl}
+
+مدرسۃ السالکات للبنات (Madrasatu-s-Salikat Lil Banat)`;
+
+      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
+      const canOpen = await Linking.canOpenURL(whatsappUrl).catch(() => false);
+      if (canOpen) {
+        await Linking.openURL(whatsappUrl);
+      } else {
+        const webWhatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+        const canOpenWeb = await Linking.canOpenURL(webWhatsappUrl).catch(() => false);
+        if (canOpenWeb) {
+          await Linking.openURL(webWhatsappUrl);
+        } else {
+          await Share.share({
+            title: `Sanad - ${certificate.studentName}`,
+            message: shareText,
+          });
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('WhatsApp Error', err?.message || 'Failed to open WhatsApp.');
     }
   };
 
@@ -202,6 +241,16 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
 
             {/* ─── Share / Download & Verification Actions ─── */}
             <View style={styles.actionsContainer}>
+              {/* Direct WhatsApp Share / Status Button */}
+              <TouchableOpacity
+                style={styles.whatsAppShareBtn}
+                onPress={handleWhatsAppShare}
+                activeOpacity={0.88}
+              >
+                <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
+                <Text style={styles.whatsAppShareBtnText}>Share on WhatsApp / Status (واٹس ایپ شیئر)</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.shareBtn, { backgroundColor: currentTheme.primaryColor }]}
                 onPress={handleShare}
@@ -213,7 +262,7 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
                 ) : (
                   <>
                     <Ionicons name="share-social" size={18} color="#FFFFFF" />
-                    <Text style={styles.shareBtnText}>Share / Save Official Sanad</Text>
+                    <Text style={styles.shareBtnText}>Share / Save Official Sanad (تصویر / فائل)</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -515,6 +564,22 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     marginTop: SPACING.md,
+    gap: 8,
+  },
+  whatsAppShareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#25D366',
+    borderRadius: RADIUS.full,
+    paddingVertical: 14,
+    gap: 8,
+    ...SHADOWS.card,
+  },
+  whatsAppShareBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFF',
   },
   shareBtn: {
     flexDirection: 'row',

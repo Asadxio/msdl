@@ -35,6 +35,8 @@ type ScoreBreakdownItem = {
   id: string;
   question: string;
   selected: string;
+  correctAnswer?: string;
+  explanation?: string;
   ok: boolean;
 };
 
@@ -71,6 +73,7 @@ export default function QuizScreen() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [generatedCert, setGeneratedCert] = useState<QuizCertificateData | null>(null);
   const [certModalVisible, setCertModalVisible] = useState(false);
+  const [revisionFilter, setRevisionFilter] = useState<'all' | 'mistakes'>('all');
   const submissionLockRef = useRef(false);
   const currentAttemptIdRef = useRef<string | null>(null);
 
@@ -265,7 +268,9 @@ export default function QuizScreen() {
             id: q.id,
             question: q.question,
             selected: answers[q.id] || '',
-            ok: breakdownItem ? breakdownItem.wasCorrect : false,
+            correctAnswer: breakdownItem?.correctAnswer || '',
+            explanation: breakdownItem?.explanation || '',
+            ok: breakdownItem ? Boolean(breakdownItem.wasCorrect) : false,
           };
         })
       );
@@ -649,30 +654,98 @@ export default function QuizScreen() {
               );
             })()}
           </View>
-          {scoreBreakdown.map((item, i) => (
-            <View key={item.id} style={styles.answerCard}>
-              <Text style={styles.answerQ}>{i + 1}. {item.question}</Text>
-              <Text style={[styles.answerLine, !item.ok && { color: COLORS.error }]}>Your answer: {item.selected || 'Not answered'}</Text>
-              {!item.ok ? <Text style={styles.answerLine}>Correct Answer Hidden</Text> : null}
-              {isAdmin ? (
-                <View style={styles.row}>
-                  <TouchableOpacity
-                    style={styles.secondaryBtn}
-                    onPress={() => {
-                      const q = questions.find((question) => question.id === item.id);
-                      if (!q) return;
-                      editQuestion(q).catch(() => {});
-                    }}
-                  >
-                    <Text style={styles.secondaryBtnText}>Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => removeQuestion(item.id)}>
-                    <Text style={styles.secondaryBtnText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+          {/* ─── Islamic Revision Mode ("غلط جوابات کا جائزہ") ─── */}
+          <View style={styles.revisionHeaderBlock}>
+            <View style={styles.revisionHeaderTop}>
+              <View style={styles.revisionTitleRow}>
+                <Ionicons name="book" size={18} color="#C8A84E" />
+                <Text style={styles.revisionTitleUrdu}>غلط جوابات کا جائزہ و اصلاح</Text>
+              </View>
+              <Text style={styles.revisionSub}>Islamic Revision Mode & Explanations</Text>
             </View>
-          ))}
+
+            {/* Filter Toggle: All vs Only Mistakes */}
+            <View style={styles.revisionFilterRow}>
+              <TouchableOpacity
+                style={[styles.revisionFilterBtn, revisionFilter === 'all' && styles.revisionFilterBtnActive]}
+                onPress={() => setRevisionFilter('all')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.revisionFilterBtnText, revisionFilter === 'all' && styles.revisionFilterBtnTextActive]}>
+                  سب سوالات ({scoreBreakdown.length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.revisionFilterBtn, revisionFilter === 'mistakes' && styles.revisionFilterBtnActiveMistakes]}
+                onPress={() => setRevisionFilter('mistakes')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.revisionFilterBtnText, revisionFilter === 'mistakes' && styles.revisionFilterBtnTextActiveMistakes]}>
+                  صرف غلط جوابات ({scoreBreakdown.filter((item) => !item.ok).length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Render Questions / Mistakes with Islamic Explanation */}
+          {scoreBreakdown
+            .filter((item) => (revisionFilter === 'mistakes' ? !item.ok : true))
+            .map((item, i) => (
+              <View key={item.id} style={[styles.answerCard, !item.ok && styles.answerCardMistake]}>
+                <View style={styles.answerQRow}>
+                  <View style={[styles.statusMiniBadge, item.ok ? styles.statusBadgeCorrect : styles.statusBadgeWrong]}>
+                    <Ionicons name={item.ok ? 'checkmark' : 'close'} size={14} color="#FFF" />
+                    <Text style={styles.statusMiniBadgeText}>{item.ok ? 'صحیح' : 'غلط'}</Text>
+                  </View>
+                  <Text style={styles.answerQ}>{i + 1}. {item.question}</Text>
+                </View>
+
+                {/* Student's Answer */}
+                <View style={[styles.answerAnswerRow, !item.ok ? styles.answerRowWrong : styles.answerRowCorrect]}>
+                  <Text style={styles.answerLabelUrdu}>آپ کا جواب:</Text>
+                  <Text style={[styles.answerTextValue, !item.ok && { color: '#B91C1C', fontWeight: '800' }]}>
+                    {item.selected || 'جواب نہیں دیا گیا'}
+                  </Text>
+                </View>
+
+                {/* Correct Answer if student got it wrong */}
+                {!item.ok && item.correctAnswer ? (
+                  <View style={[styles.answerAnswerRow, styles.answerRowCorrectAnswer]}>
+                    <Text style={styles.correctLabelUrdu}>صحیح جواب (درست):</Text>
+                    <Text style={styles.correctAnswerValue}>{item.correctAnswer}</Text>
+                  </View>
+                ) : null}
+
+                {/* Islamic Explanation & Daleel Card */}
+                {item.explanation ? (
+                  <View style={styles.explanationBox}>
+                    <View style={styles.explanationHeader}>
+                      <Ionicons name="information-circle" size={16} color="#005F46" />
+                      <Text style={styles.explanationHeaderUrdu}>شرعی و فقہی وضاحت / دلیل:</Text>
+                    </View>
+                    <Text style={styles.explanationText}>{item.explanation}</Text>
+                  </View>
+                ) : null}
+
+                {isAdmin ? (
+                  <View style={styles.row}>
+                    <TouchableOpacity
+                      style={styles.secondaryBtn}
+                      onPress={() => {
+                        const q = questions.find((question) => question.id === item.id);
+                        if (!q) return;
+                        editQuestion(q).catch(() => {});
+                      }}
+                    >
+                      <Text style={styles.secondaryBtnText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.secondaryBtn} onPress={() => removeQuestion(item.id)}>
+                      <Text style={styles.secondaryBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+            ))}
           <TouchableOpacity style={styles.btn} onPress={quitQuiz}><Text style={styles.btnText}>Back to Categories</Text></TouchableOpacity>
         </ScrollView>
       ) : (
@@ -909,5 +982,168 @@ const styles = StyleSheet.create({
     color: '#C8A84E',
     fontWeight: '600',
     marginTop: 2,
+  },
+  // Islamic Revision Mode Styles
+  revisionHeaderBlock: {
+    backgroundColor: '#003D2E',
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    marginTop: 6,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#C8A84E',
+    ...SHADOWS.card,
+  },
+  revisionHeaderTop: {
+    marginBottom: 10,
+  },
+  revisionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  revisionTitleUrdu: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  revisionSub: {
+    fontSize: 11,
+    color: '#C8A84E',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  revisionFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  revisionFilterBtn: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(200, 168, 78, 0.4)',
+  },
+  revisionFilterBtnActive: {
+    backgroundColor: '#C8A84E',
+    borderColor: '#C8A84E',
+  },
+  revisionFilterBtnActiveMistakes: {
+    backgroundColor: '#DC2626',
+    borderColor: '#EF4444',
+  },
+  revisionFilterBtnText: {
+    color: '#E2E8F0',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  revisionFilterBtnTextActive: {
+    color: '#003D2E',
+    fontWeight: '900',
+  },
+  revisionFilterBtnTextActiveMistakes: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+  answerCardMistake: {
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    backgroundColor: '#FFFDFD',
+  },
+  answerQRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 4,
+  },
+  statusMiniBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    alignSelf: 'flex-start',
+  },
+  statusBadgeCorrect: {
+    backgroundColor: '#059669',
+  },
+  statusBadgeWrong: {
+    backgroundColor: '#DC2626',
+  },
+  statusMiniBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  answerAnswerRow: {
+    padding: 10,
+    borderRadius: RADIUS.md,
+    marginVertical: 3,
+  },
+  answerRowWrong: {
+    backgroundColor: '#FEE2E2',
+    borderLeftWidth: 3,
+    borderLeftColor: '#DC2626',
+  },
+  answerRowCorrect: {
+    backgroundColor: '#ECFDF5',
+    borderLeftWidth: 3,
+    borderLeftColor: '#059669',
+  },
+  answerRowCorrectAnswer: {
+    backgroundColor: '#EFF6FF',
+    borderLeftWidth: 3,
+    borderLeftColor: '#2563EB',
+  },
+  answerLabelUrdu: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  answerTextValue: {
+    fontSize: 14,
+    color: COLORS.textMain,
+    fontWeight: '600',
+  },
+  correctLabelUrdu: {
+    fontSize: 11,
+    color: '#1D4ED8',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  correctAnswerValue: {
+    fontSize: 14,
+    color: '#1E40AF',
+    fontWeight: '800',
+  },
+  explanationBox: {
+    backgroundColor: '#F7F4E9',
+    borderRadius: RADIUS.lg,
+    padding: 12,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E2D5B4',
+  },
+  explanationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  explanationHeaderUrdu: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#005F46',
+  },
+  explanationText: {
+    fontSize: 13,
+    color: '#2D3748',
+    lineHeight: 20,
+    fontWeight: '500',
   },
 });

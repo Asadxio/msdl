@@ -20,7 +20,12 @@ interface SubmitQuizResponse {
   passed: boolean;
   resultId: string;
   duplicate?: boolean;
-  breakdown?: { id: string; wasCorrect: boolean }[];
+  breakdown?: {
+    id: string;
+    wasCorrect: boolean;
+    correctAnswer?: string;
+    explanation?: string;
+  }[];
 }
 
 export const submitQuiz = onCall(
@@ -69,13 +74,18 @@ export const submitQuiz = onCall(
       throw invalidArgumentError(`No quiz found for category: ${category}`);
     }
 
-    // Build answer key map: { docId -> correctAnswer }
-    const answerKeyMap: Record<string, string> = {};
+    // Build answer key & explanation map: { docId -> { correctAnswer, explanation } }
+    const answerKeyMap: Record<string, { correctAnswer: string; explanation: string }> = {};
     snapshot.docs.forEach((doc: FirebaseFirestore.QueryDocumentSnapshot) => {
       const data = doc.data();
       // Support both field names used in production data
       const correctAnswer = String(data.correctAnswer ?? data.correct_answer ?? '');
-      answerKeyMap[doc.id] = correctAnswer;
+      const rawExplanation = String(data.explanation ?? data.wazahat ?? data.notes ?? data.daleel ?? '').trim();
+      const fallbackExplanation = correctAnswer
+        ? `اس سوال کا صحیح جواب اسلامی کتب اور فقہی احکام کے مطابق "${correctAnswer}" ہے۔`
+        : 'اس سوال کا صحیح جواب اسلامی فقہ کی روشنی میں درج ہے۔';
+      const explanation = rawExplanation || fallbackExplanation;
+      answerKeyMap[doc.id] = { correctAnswer, explanation };
     });
 
     const total = snapshot.docs.length;
@@ -100,10 +110,17 @@ export const submitQuiz = onCall(
 
     // Server-side grading — compare submitted answers to server answer key
     let score = 0;
-    const breakdown: { id: string, wasCorrect: boolean }[] = [];
+    const breakdown: {
+      id: string;
+      wasCorrect: boolean;
+      correctAnswer: string;
+      explanation: string;
+    }[] = [];
     
     for (const [docId, submittedAnswer] of Object.entries(answers)) {
-      const correctAnswer = answerKeyMap[docId];
+      const info = answerKeyMap[docId];
+      const correctAnswer = info?.correctAnswer || '';
+      const explanation = info?.explanation || '';
       const wasCorrect = (correctAnswer && submittedAnswer === correctAnswer) || false;
       if (wasCorrect) {
         score++;
@@ -111,6 +128,8 @@ export const submitQuiz = onCall(
       breakdown.push({
         id: docId,
         wasCorrect,
+        correctAnswer,
+        explanation,
       });
     }
 
@@ -152,7 +171,7 @@ export const submitQuiz = onCall(
 
     logger.info(`[submitQuiz] Result written resultId=${resultId} uid=${user.uid} score=${score}/${total}`);
 
-    // NEVER return correctAnswer or answerKeyMap
+    // Return graded result with breakdown and explanations for revision mode
     return { score, total, percentage, passed, resultId, breakdown };
   }
 );
