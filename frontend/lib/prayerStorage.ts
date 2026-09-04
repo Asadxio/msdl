@@ -100,3 +100,45 @@ export async function saveQazaRecord(record: QazaRecord): Promise<void> {
     console.warn("Failed to save Qaza record:", e);
   }
 }
+
+export const QAZA_LOGS_STORAGE_KEY = "@msdl_qaza_history_logs";
+
+export interface QazaLogEntry {
+  id: string;
+  prayer: keyof QazaRecord;
+  change: number; // -1 for completed (ada ki), +1 for missed added
+  dateStr: string; // YYYY-MM-DD
+  timestamp: number;
+}
+
+export async function loadQazaLogs(): Promise<QazaLogEntry[]> {
+  try {
+    const raw = await AsyncStorage.getItem(QAZA_LOGS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.warn("Failed to load Qaza logs:", e);
+  }
+  return [];
+}
+
+export async function addQazaLog(prayer: keyof QazaRecord, change: number): Promise<QazaLogEntry[]> {
+  try {
+    const existing = await loadQazaLogs();
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0];
+    const newEntry: QazaLogEntry = {
+      id: `qaza_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      prayer,
+      change,
+      dateStr,
+      timestamp: Date.now(),
+    };
+    // Keep last 100 entries
+    const updated = [newEntry, ...existing].slice(0, 100);
+    await AsyncStorage.setItem(QAZA_LOGS_STORAGE_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    console.warn("Failed to save Qaza log entry:", e);
+    return [];
+  }
+}

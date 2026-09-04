@@ -443,7 +443,14 @@ export default function HomeScreen() {
 
         {/* Section 6: Phase 2 — Prayer Times Card with Location UX Fallback */}
         <View style={styles.sectionContainer}>
-          <View style={styles.prayerCard}>
+          <TouchableOpacity 
+            style={styles.prayerCard}
+            onPress={() => router.push('/prayer-times')}
+            activeOpacity={0.92}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Open Full Prayer Times and Compass"
+          >
             <View style={styles.prayerHeader}>
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text style={styles.prayerTitle}>Prayer Times</Text>
@@ -516,7 +523,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
             )}
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Section 7: Islamic Utilities (Calendar, Digital Tasbeeh & Recordings) */}

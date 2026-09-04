@@ -42,7 +42,10 @@ import {
   DEFAULT_PRAYER_SETTINGS,
   loadQazaRecord,
   saveQazaRecord,
+  loadQazaLogs,
+  addQazaLog,
   QazaRecord,
+  QazaLogEntry,
   DEFAULT_QAZA_RECORD,
 } from '@/lib/prayerStorage';
 import {
@@ -134,6 +137,7 @@ export default function PrayerTimesScreen() {
   const [monthlyRows, setMonthlyRows]     = useState<DailyPrayerRow[]>([]);
   const [moonInfo, setMoonInfo]           = useState<MoonPhaseInfo | null>(null);
   const [qaza, setQaza]                   = useState<QazaRecord>(DEFAULT_QAZA_RECORD);
+  const [qazaLogs, setQazaLogs]           = useState<QazaLogEntry[]>([]);
   const [now, setNow]                     = useState(new Date());
   const [solarAlt, setSolarAlt]           = useState(0);
   const [sunAz, setSunAz]                 = useState(0);
@@ -156,12 +160,13 @@ export default function PrayerTimesScreen() {
     (async () => {
       const st = await loadPrayerSettings();
       const qz = await loadQazaRecord();
+      const logs = await loadQazaLogs();
       const ac = await loadPrayerAlarmsConfig();
       if (!alive) return;
       setSettings(st); setLocationTab(st.locationMode); setMethodOverride(st.method);
       setShafaqType(st.shafaqType || 'abyad'); setAsrFactor(st.asrFactor || 2);
       setManualLat(st.latitude.toString()); setManualLng(st.longitude.toString());
-      setManualAlt((st.altitude || 0).toString()); setQaza(qz); setAlarmConfig(ac);
+      setManualAlt((st.altitude || 0).toString()); setQaza(qz); setQazaLogs(logs); setAlarmConfig(ac);
     })();
     const unsub = subscribeToPrayerSettings(s => { if (alive) setSettings(s); });
     return () => { alive = false; unsub(); };
@@ -331,8 +336,18 @@ export default function PrayerTimesScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(async () => { await handleAutoDetect(); });
   const handleQazaChange = async (key: keyof QazaRecord, delta: number) => {
     const u = { ...qaza, [key]: Math.max(0, (qaza[key] || 0) + delta) };
-    setQaza(u); await saveQazaRecord(u);
+    setQaza(u);
+    await saveQazaRecord(u);
+    const updatedLogs = await addQazaLog(key, delta);
+    setQazaLogs(updatedLogs);
   };
+
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [now]);
+  const todayQazaCompleted = useMemo(() => {
+    return qazaLogs
+      .filter(l => l.dateStr === todayStr && l.change < 0)
+      .reduce((sum, l) => sum + Math.abs(l.change), 0);
+  }, [qazaLogs, todayStr]);
 
   const ARC_MARKERS = useMemo(() => {
     if (!prayerTimes) return [];
@@ -597,11 +612,18 @@ export default function PrayerTimesScreen() {
                       return (
                         <View key={idx} style={[s.mRow, isToday && s.mRowToday]}>
                           <View style={{ width: 72 }}>
-                            <Text style={[s.mDateTxt, isToday && { color: GOLD, fontWeight: '900' }]}>{row.dateStr}</Text>
-                            {row.hijriDay > 0 && <Text style={s.mHijriTxt}>{row.hijriDay} AH</Text>}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                              <Text style={[s.mDateTxt, isToday && { color: GOLD_LT, fontWeight: '900' }]}>{row.dateStr}</Text>
+                              {isToday && (
+                                <View style={s.mTodayBadge}>
+                                  <Text style={s.mTodayBadgeTxt}>آج</Text>
+                                </View>
+                              )}
+                            </View>
+                            {row.hijriDay > 0 && <Text style={[s.mHijriTxt, isToday && { color: GOLD, fontWeight: '700' }]}>{row.hijriDay} AH</Text>}
                           </View>
                           {[row.fajr, row.sunrise, row.zuhr, row.asr, row.maghrib, row.isha].map((t, i) => (
-                            <Text key={i} style={[s.mCell, s.mTimeTxt]}>{t}</Text>
+                            <Text key={i} style={[s.mCell, s.mTimeTxt, isToday && { color: W, fontWeight: '800' }]}>{t}</Text>
                           ))}
                         </View>
                       );
@@ -705,12 +727,27 @@ export default function PrayerTimesScreen() {
                   ))}
                 </View>
 
+                {/* Today's Completed Qaza (آج ادا کردہ قضاء) */}
+                <View style={s.qazaTodayCard}>
+                  <View style={s.qazaTodayHdr}>
+                    <Ionicons name="checkmark-circle" size={20} color={EMRD} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.qazaTodayTitle}>آج ادا کردہ قضاء (Today's Qaza Completed)</Text>
+                      <Text style={s.qazaTodaySub}>روزانہ قضاء ادا کر کے اپنے ذمہ سے فرض سبکدوش کریں</Text>
+                    </View>
+                    <View style={s.qazaTodayBadge}>
+                      <Text style={s.qazaTodayBadgeCount}>{todayQazaCompleted}</Text>
+                      <Text style={s.qazaTodayBadgeLbl}>ادا کیں</Text>
+                    </View>
+                  </View>
+                </View>
+
                 {([
-                  { key: 'fajr' as const,    label: 'Fajr',   icon: 'moon-outline'         },
-                  { key: 'zuhr' as const,    label: 'Zuhr',   icon: 'sunny'                },
-                  { key: 'asr' as const,     label: 'Asr',   icon: 'partly-sunny-outline' },
-                  { key: 'maghrib' as const, label: 'Maghrib',  icon: 'cloudy-night-outline' },
-                  { key: 'isha' as const,    label: 'Isha',  icon: 'moon'                 },
+                  { key: 'fajr' as const,    label: 'Fajr (فجر)',   icon: 'moon-outline'         },
+                  { key: 'zuhr' as const,    label: 'Zuhr (ظہر)',   icon: 'sunny'                },
+                  { key: 'asr' as const,     label: 'Asr (عصر)',   icon: 'partly-sunny-outline' },
+                  { key: 'maghrib' as const, label: 'Maghrib (مغرب)',  icon: 'cloudy-night-outline' },
+                  { key: 'isha' as const,    label: 'Isha (عشاء)',  icon: 'moon'                 },
                 ]).map(item => {
                   const count = qaza[item.key];
                   const color = count === 0 ? EMRD : count < 10 ? GOLD : RED;
@@ -719,13 +756,70 @@ export default function PrayerTimesScreen() {
                       <Ionicons name={item.icon as any} size={20} color={color} />
                       <Text style={[s.qazaRowLbl, { color }]}>{item.label}</Text>
                       <View style={s.qazaCounter}>
-                        <TouchableOpacity style={s.qazaBtn} onPress={() => handleQazaChange(item.key, -1)}><Ionicons name="remove" size={18} color={RED} /></TouchableOpacity>
+                        <TouchableOpacity 
+                          style={[s.qazaBtn, s.qazaBtnMinus]} 
+                          onPress={() => handleQazaChange(item.key, -1)}
+                          accessible={true}
+                          accessibilityLabel={`Decrement ${item.label} Qaza`}
+                        >
+                          <Ionicons name="remove" size={18} color="#FF6B6B" />
+                        </TouchableOpacity>
                         <Text style={[s.qazaCount, { color }]}>{count}</Text>
-                        <TouchableOpacity style={s.qazaBtn} onPress={() => handleQazaChange(item.key, 1)}><Ionicons name="add" size={18} color={EMRD_DIM} /></TouchableOpacity>
+                        <TouchableOpacity 
+                          style={s.qazaBtn} 
+                          onPress={() => handleQazaChange(item.key, 1)}
+                          accessible={true}
+                          accessibilityLabel={`Increment ${item.label} Qaza`}
+                        >
+                          <Ionicons name="add" size={18} color={EMRD_DIM} />
+                        </TouchableOpacity>
                       </View>
                     </View>
                   );
                 })}
+
+                {/* Qaza History Log (حالیہ ریکارڈ) */}
+                <View style={s.qazaLogCard}>
+                  <View style={s.qazaLogHdr}>
+                    <Ionicons name="time-outline" size={16} color={GOLD} />
+                    <Text style={s.qazaLogTitle}>حالیہ قضاء ہسٹری لاگ (Recent Activity)</Text>
+                  </View>
+                  {qazaLogs.length === 0 ? (
+                    <Text style={s.qazaLogEmpty}>ابھی تک کوئی لاگ ریکارڈ نہیں ہوا۔ جیسے ہی آپ قضاء ادا کریں گے، یہاں تاریخ اور وقت درج ہو جائے گا۔</Text>
+                  ) : (
+                    <View style={s.qazaLogList}>
+                      {qazaLogs.slice(0, 7).map((log) => {
+                        const isCompleted = log.change < 0;
+                        const prayerLabels: Record<string, string> = {
+                          fajr: 'فجر',
+                          zuhr: 'ظہر',
+                          asr: 'عصر',
+                          maghrib: 'مغرب',
+                          isha: 'عشاء',
+                        };
+                        const timeStr = new Date(log.timestamp).toLocaleTimeString([], {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        });
+                        return (
+                          <View key={log.id} style={s.qazaLogItem}>
+                            <View style={[s.qazaLogDot, { backgroundColor: isCompleted ? EMRD : RED }]} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.qazaLogAction}>
+                                {isCompleted ? 'قضاء ادا کی ✓' : 'قضاء شامل کی'} — {prayerLabels[log.prayer] || log.prayer}
+                              </Text>
+                              <Text style={s.qazaLogDate}>{log.dateStr} · {timeStr}</Text>
+                            </View>
+                            <Text style={[s.qazaLogDelta, { color: isCompleted ? EMRD : RED }]}>
+                              {isCompleted ? '-1' : '+1'}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
 
                 <View style={s.qazaInfo}>
                   <Ionicons name="information-circle-outline" size={15} color={EMRD_DIM} />
@@ -796,6 +890,7 @@ export default function PrayerTimesScreen() {
                         { key: 'asr' as const, name: 'عصر (Asr)' },
                         { key: 'maghrib' as const, name: 'مغرب (Maghrib)' },
                         { key: 'isha' as const, name: 'عشاء (Isha)' },
+                        { key: 'tahajjud' as const, name: 'تہجد (Tahajjud)' },
                       ].map((p) => {
                         const active = alarmConfig[p.key] !== false;
                         return (
@@ -1016,8 +1111,10 @@ const s = StyleSheet.create({
   monthlySection: { gap: 8 },
   sectionTitle:   { fontSize: 13, fontWeight: '800', color: GOLD, marginBottom: 4 },
   mHdrRow:        { backgroundColor: SURFACE2 },
-  mRow:           { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: W20 },
-  mRowToday:      { backgroundColor: GOLD_BG, borderLeftWidth: 3, borderLeftColor: GOLD },
+  mRow:           { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: W20, borderRadius: 8 },
+  mRowToday:      { backgroundColor: 'rgba(200, 168, 78, 0.18)', borderWidth: 1.5, borderColor: GOLD, borderLeftWidth: 4, borderLeftColor: GOLD_LT },
+  mTodayBadge:    { backgroundColor: GOLD, borderRadius: 6, paddingHorizontal: 4, paddingVertical: 1 },
+  mTodayBadgeTxt: { color: BG, fontSize: 8, fontWeight: '900' },
   mCell:          { width: 54, textAlign: 'center' },
   mHdr:           { color: GOLD, fontSize: 10, fontWeight: '900', textAlign: 'center' },
   mDateTxt:       { fontSize: 11, fontWeight: '700', color: W },
@@ -1071,11 +1168,109 @@ const s = StyleSheet.create({
   targetBtn:     { width: 36, height: 36, borderRadius: 18, backgroundColor: W20, alignItems: 'center', justifyContent: 'center' },
   targetBtnSel:  { backgroundColor: GOLD },
   targetBtnTxt:  { color: W, fontSize: 14, fontWeight: '900' },
+  qazaTodayCard: {
+    backgroundColor: 'rgba(0, 168, 107, 0.12)',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 168, 107, 0.35)',
+  },
+  qazaTodayHdr: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  qazaTodayTitle: {
+    color: '#34D399',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  qazaTodaySub: {
+    color: W50,
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  qazaTodayBadge: {
+    backgroundColor: EMRD,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  qazaTodayBadgeCount: {
+    color: W,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  qazaTodayBadgeLbl: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 8,
+    fontWeight: '700',
+  },
   qazaRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: W20, gap: 10 },
-  qazaRowLbl:    { flex: 1, fontSize: 17, fontWeight: '900' },
+  qazaRowLbl:    { flex: 1, fontSize: 15, fontWeight: '800' },
   qazaCounter:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
   qazaBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: W20, alignItems: 'center', justifyContent: 'center' },
+  qazaBtnMinus:  { backgroundColor: 'rgba(220, 38, 38, 0.15)', borderWidth: 1, borderColor: 'rgba(220, 38, 38, 0.3)' },
   qazaCount:     { fontSize: 22, fontWeight: '900', minWidth: 36, textAlign: 'center' },
+  qazaLogCard: {
+    backgroundColor: SURFACE,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: W20,
+    gap: 10,
+  },
+  qazaLogHdr: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  qazaLogTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: GOLD,
+    flex: 1,
+  },
+  qazaLogEmpty: {
+    fontSize: 11,
+    color: W50,
+    fontStyle: 'italic',
+    lineHeight: 16,
+    paddingVertical: 6,
+  },
+  qazaLogList: {
+    gap: 8,
+  },
+  qazaLogItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: W20,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  qazaLogDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  qazaLogAction: {
+    color: W,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  qazaLogDate: {
+    color: W50,
+    fontSize: 9,
+    marginTop: 1,
+  },
+  qazaLogDelta: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
   qazaInfo:      { flexDirection: 'row', backgroundColor: 'rgba(0,168,107,0.10)', borderRadius: 16, padding: 14, gap: 8, alignItems: 'flex-start', borderWidth: 1, borderColor: 'rgba(0,168,107,0.2)' },
   qazaInfoTxt:   { flex: 1, fontSize: 11, color: EMRD, lineHeight: 17, fontWeight: '600' },
 

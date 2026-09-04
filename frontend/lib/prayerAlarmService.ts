@@ -17,6 +17,7 @@ export interface PrayerAlarmsConfig {
   asr: boolean;
   maghrib: boolean;
   isha: boolean;
+  tahajjud?: boolean;
   reminderMinutesBefore: number; // 0 for exact time, or 10, 15 min before
 }
 
@@ -27,6 +28,7 @@ export const DEFAULT_PRAYER_ALARMS_CONFIG: PrayerAlarmsConfig = {
   asr: true,
   maghrib: true,
   isha: true,
+  tahajjud: true,
   reminderMinutesBefore: 0,
 };
 
@@ -36,6 +38,7 @@ const PRAYER_URDU_MAP: Record<string, { urduName: string; emoji: string }> = {
   Asr: { urduName: 'عصر', emoji: '🌤️' },
   Maghrib: { urduName: 'مغرب', emoji: '🌇' },
   Isha: { urduName: 'عشاء', emoji: '🌙' },
+  Tahajjud: { urduName: 'تہجد / قیام اللیل', emoji: '🌌' },
 };
 
 export async function loadPrayerAlarmsConfig(): Promise<PrayerAlarmsConfig> {
@@ -147,8 +150,13 @@ export async function scheduleOfflinePrayerAlarms(
       );
 
       const fardPrayers = times.filter((p) => p.kind === 'fard');
+      const tahajjudPrayer = times.find((p) => p.name === 'Tahajjud');
+      const prayersToSchedule = [...fardPrayers];
+      if (tahajjudPrayer && config.tahajjud !== false) {
+        prayersToSchedule.push(tahajjudPrayer);
+      }
 
-      for (const prayer of fardPrayers) {
+      for (const prayer of prayersToSchedule) {
         const prayerKey = prayer.name.toLowerCase() as keyof Omit<PrayerAlarmsConfig, 'enabled' | 'reminderMinutesBefore'>;
         if (config[prayerKey] === false) {
           continue;
