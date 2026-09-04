@@ -2,10 +2,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput, Alert,
+  View, Text, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, ScrollView, TextInput, Alert, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getCountFromServer, query, serverTimestamp, setDoc, updateDoc, where, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getCountFromServer, query, serverTimestamp, setDoc, updateDoc, where, Timestamp, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -39,6 +39,17 @@ type ScoreBreakdownItem = {
   explanation?: string;
   ok: boolean;
 };
+
+type QuizAttemptHistory = {
+  id: string;
+  category: string;
+  score: number;
+  total: number;
+  percentage: number;
+  createdAt: number;
+};
+
+const QUESTION_TIME_LIMIT = 30; // 30 seconds per question
 
 function shuffle<T>(arr: T[]): T[] {
   const copy = [...arr];
@@ -74,6 +85,9 @@ export default function QuizScreen() {
   const [generatedCert, setGeneratedCert] = useState<QuizCertificateData | null>(null);
   const [certModalVisible, setCertModalVisible] = useState(false);
   const [revisionFilter, setRevisionFilter] = useState<'all' | 'mistakes'>('all');
+  const [timeLeft, setTimeLeft] = useState<number>(QUESTION_TIME_LIMIT);
+  const [scoreHistory, setScoreHistory] = useState<QuizAttemptHistory[]>([]);
+  const [isRetryingMistakes, setIsRetryingMistakes] = useState(false);
   const submissionLockRef = useRef(false);
   const currentAttemptIdRef = useRef<string | null>(null);
 
@@ -128,6 +142,47 @@ export default function QuizScreen() {
     return () => { mounted = false; };
   }, []);
 
+  // Fetch recent quiz score history for performance trend chart
+  useEffect(() => {
+    if (!user?.uid) return;
+    try {
+      const q = query(
+        collection(db, 'quiz_results'),
+        where('user_id', '==', user.uid),
+        orderBy('created_at', 'desc'),
+        limit(7)
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const results: QuizAttemptHistory[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const score = Number(data.score || 0);
+          const total = Number(data.total || data.total_questions || 0);
+          const pct = total > 0 ? Math.round((score / total) * 100) : 0;
+          let createdMs = Date.now();
+          if (data.created_at?.toMillis) {
+            createdMs = data.created_at.toMillis();
+          } else if (typeof data.created_at === 'number') {
+            createdMs = data.created_at;
+          }
+          results.push({
+            id: docSnap.id,
+            category: String(data.category || 'General'),
+            score,
+            total,
+            percentage: pct,
+            createdAt: createdMs,
+          });
+        });
+        setScoreHistory(results);
+      }, (err) => {
+        console.warn('[QuizScreen] score history fetch note:', err?.message);
+      });
+      return () => unsubscribe();
+    } catch (err) {
+      console.warn('[QuizScreen] score history setup error:', err);
+    }
+  }, [user?.uid]);
 
   const loadQuiz = useCallback(async (category: string) => {
     setLoading(true);
@@ -135,6 +190,8 @@ export default function QuizScreen() {
     setResult(null);
     setAnswers({});
     setIndex(0);
+    setTimeLeft(QUESTION_TIME_LIMIT);
+    setIsRetryingMistakes(false);
     setSessionExpired(false);
     
     try {
@@ -184,6 +241,65 @@ export default function QuizScreen() {
     setResult(null);
     setError('');
     setAnswers({});
+    setTimeLeft(QUESTION_TIME_LIMIT);
+    setIsRetryingMistakes(false);
+  };
+
+  // 3.2 Retry Only Wrong Answers Handler
+  const retryMistakes = () => {
+    if (!result || questions.length === 0) return;
+    const wrongIds = new Set(scoreBreakdown.filter((item) => !item.ok).map((item) => item.id));
+    const mistakeQuestions = questions.filter((q) => wrongIds.has(q.id));
+
+    if (mistakeQuestions.length === 0) {
+      Alert.alert('ماشاءاللہ', 'آپ کے تمام جوابات درست ہیں! دوبارہ مشق کرنے کے لیے کوئی غلط جواب نہیں ملا۔');
+      return;
+    }
+
+    submissionLockRef.current = false;
+    currentAttemptIdRef.current = null;
+    setQuestions(mistakeQuestions);
+    setAnswers({});
+    setIndex(0);
+    setResult(null);
+    setScoreBreakdown([]);
+    setError('');
+    setTimeLeft(QUESTION_TIME_LIMIT);
+    setIsRetryingMistakes(true);
+  };
+
+  // 3.4 WhatsApp Share Result Handler
+  const shareQuizResultViaWhatsApp = () => {
+    if (!result) return;
+    const pct = result.total > 0 ? Math.round((result.score / result.total) * 100) : 0;
+    const passed = pct >= 60;
+    const studentName = profile?.name || user?.displayName || 'طالبہ';
+    const categoryName = selectedCategory || 'دینی معلومات';
+
+    const text = 
+      `🎓 *مدرسۃ السالکات للبنات — کوئز رپورٹ*\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `👤 *طالبہ:* ${studentName}\n` +
+      `📚 *موضوع:* ${categoryName}\n` +
+      `📊 *حاصل کردہ نمبر:* ${result.score} / ${result.total} (${pct}%)\n` +
+      `🎖️ *نتیجہ:* ${passed ? '✅ کامیاب (Passed)' : '🔄 مزید محنت کی ضرورت (Needs Practice)'}\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `✨ *علم نافع اور عمل صالح کی دعا کے ساتھ* ✨\n` +
+      `📱 مدرسۃ السالکات آن لائن پورٹل`;
+
+    const encodedText = encodeURIComponent(text);
+    const whatsappUrl = `whatsapp://send?text=${encodedText}`;
+
+    Linking.canOpenURL(whatsappUrl).then((supported) => {
+      if (supported) {
+        Linking.openURL(whatsappUrl);
+      } else {
+        const webUrl = `https://wa.me/?text=${encodedText}`;
+        Linking.openURL(webUrl);
+      }
+    }).catch((err) => {
+      Alert.alert('خطا', 'WhatsApp کھولنے میں مسئلہ پیش آیا۔');
+    });
   };
 
   const current = questions[index];
@@ -444,6 +560,32 @@ export default function QuizScreen() {
     }).catch(() => {});
   }, [answers, questions, user?.uid, result, selectedCategory]);
 
+  // 3.1 Per-question 30-second countdown timer
+  useEffect(() => {
+    if (loading || result || questions.length === 0 || !selectedCategory) return;
+    
+    // Reset timer on question change
+    setTimeLeft(QUESTION_TIME_LIMIT);
+
+    const qTimer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          // Time expired for this question: auto-advance to next question if available
+          setIndex((currIdx) => {
+            if (currIdx < questions.length - 1) {
+              return currIdx + 1;
+            }
+            return currIdx;
+          });
+          return QUESTION_TIME_LIMIT;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(qTimer);
+  }, [loading, result, questions.length, index, selectedCategory]);
+
   useEffect(() => {
     if (loading || result || questions.length === 0) return;
     const startedAt = Date.now();
@@ -515,6 +657,49 @@ export default function QuizScreen() {
                     <Ionicons name="chevron-forward" size={18} color="#34D399" />
                   </TouchableOpacity>
                 )}
+              </View>
+            )}
+
+            {/* 3.3 Score History Trend Card */}
+            {scoreHistory.length > 0 && (
+              <View style={styles.trendCard}>
+                <View style={styles.trendHeaderRow}>
+                  <View style={styles.trendTitleRow}>
+                    <Ionicons name="analytics" size={18} color="#C8A84E" />
+                    <Text style={styles.trendTitleText}>حالیہ امتحانات کا ریکارڈ و کارکردگی</Text>
+                  </View>
+                  <Text style={styles.trendSubText}>Recent Quiz Score Trend</Text>
+                </View>
+
+                <View style={styles.trendChartContainer}>
+                  <View style={styles.trendYAxis}>
+                    <Text style={styles.trendAxisLabel}>100%</Text>
+                    <Text style={styles.trendAxisLabel}>50%</Text>
+                    <Text style={styles.trendAxisLabel}>0%</Text>
+                  </View>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendBarsRow}>
+                    {scoreHistory.slice().reverse().map((item, idx) => (
+                      <View key={item.id || idx} style={styles.trendBarCol}>
+                        <Text style={styles.trendBarPct}>{item.percentage}%</Text>
+                        <View style={styles.trendBarTrack}>
+                          <View
+                            style={[
+                              styles.trendBarFill,
+                              {
+                                height: `${Math.max(6, item.percentage)}%`,
+                                backgroundColor: item.percentage >= 60 ? '#10B981' : '#EF4444',
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.trendBarLabel} numberOfLines={1}>
+                          {item.category.length > 8 ? item.category.slice(0, 7) + '..' : item.category}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
               </View>
             )}
 
@@ -639,6 +824,31 @@ export default function QuizScreen() {
                   <Text style={styles.resultMessage}>
                     {passed ? 'Great job! You have a solid understanding of this topic.' : 'Keep learning and try again. You can do this!'}
                   </Text>
+
+                  {/* 3.4 WhatsApp Share Result Button */}
+                  <TouchableOpacity
+                    style={styles.whatsappShareBtn}
+                    onPress={shareQuizResultViaWhatsApp}
+                    activeOpacity={0.82}
+                  >
+                    <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
+                    <Text style={styles.whatsappShareBtnText}>نتیجہ واٹس ایپ پر شیئر کریں (Share via WhatsApp)</Text>
+                  </TouchableOpacity>
+
+                  {/* 3.2 Retry Mistakes Only Button */}
+                  {result.score < result.total && (
+                    <TouchableOpacity
+                      style={styles.retryMistakesBtn}
+                      onPress={retryMistakes}
+                      activeOpacity={0.82}
+                    >
+                      <Ionicons name="refresh-circle" size={20} color="#FFFFFF" />
+                      <Text style={styles.retryMistakesBtnText}>
+                        صرف غلط سوالات کا دوبارہ امتحان ({result.total - result.score} سوالات)
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
                   {passed && generatedCert ? (
                     <TouchableOpacity
                       style={styles.claimCertBtn}
@@ -750,7 +960,45 @@ export default function QuizScreen() {
         </ScrollView>
       ) : (
         <View style={styles.body}>
-          <Text style={styles.progress}>Question {index + 1} / {questions.length}</Text>
+          {/* Question Counter & 3.1 Per-Question Countdown Timer Badge */}
+          <View style={styles.questionHeaderRow}>
+            <View style={styles.questionCountBadge}>
+              <Text style={styles.progress}>
+                {isRetryingMistakes ? 'اصلاحِ غلطیاں: ' : ''}سوال {index + 1} / {questions.length}
+              </Text>
+            </View>
+
+            <View style={[
+              styles.timerBadge,
+              timeLeft <= 5 ? styles.timerBadgeDanger : timeLeft <= 10 ? styles.timerBadgeWarning : styles.timerBadgeNormal
+            ]}>
+              <Ionicons
+                name="timer-outline"
+                size={16}
+                color={timeLeft <= 5 ? '#DC2626' : timeLeft <= 10 ? '#D97706' : '#047857'}
+              />
+              <Text style={[
+                styles.timerText,
+                timeLeft <= 5 ? styles.timerTextDanger : timeLeft <= 10 ? styles.timerTextWarning : styles.timerTextNormal
+              ]}>
+                {timeLeft}s
+              </Text>
+            </View>
+          </View>
+
+          {/* 30s Countdown Visual Bar */}
+          <View style={styles.timerTrack}>
+            <View
+              style={[
+                styles.timerFill,
+                {
+                  width: `${Math.round((timeLeft / QUESTION_TIME_LIMIT) * 100)}%`,
+                  backgroundColor: timeLeft <= 5 ? '#EF4444' : timeLeft <= 10 ? '#F59E0B' : '#10B981',
+                }
+              ]}
+            />
+          </View>
+
           <View style={styles.questionCard}>
             <Text style={styles.question}>{current?.question}</Text>
             {current?.options.map((opt) => (
@@ -1145,5 +1393,185 @@ const styles = StyleSheet.create({
     color: '#2D3748',
     lineHeight: 20,
     fontWeight: '500',
+  },
+
+  // 3.1 Question Header and Timer Bar Styles
+  questionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  questionCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  timerBadgeNormal: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  timerBadgeWarning: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  timerBadgeDanger: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  timerText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  timerTextNormal: {
+    color: '#047857',
+  },
+  timerTextWarning: {
+    color: '#D97706',
+  },
+  timerTextDanger: {
+    color: '#DC2626',
+  },
+  timerTrack: {
+    height: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  timerFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+
+  // 3.4 WhatsApp Share Result Button
+  whatsappShareBtn: {
+    marginTop: 14,
+    backgroundColor: '#25D366',
+    borderRadius: RADIUS.full,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    ...SHADOWS.card,
+  },
+  whatsappShareBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  // 3.2 Retry Mistakes Only Button
+  retryMistakesBtn: {
+    marginTop: 10,
+    backgroundColor: '#D97706',
+    borderRadius: RADIUS.full,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    ...SHADOWS.card,
+  },
+  retryMistakesBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  // 3.3 Score Trend Card Styles
+  trendCard: {
+    backgroundColor: '#003D2E',
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    marginBottom: 6,
+    borderWidth: 1.5,
+    borderColor: '#C8A84E',
+    ...SHADOWS.card,
+  },
+  trendHeaderRow: {
+    marginBottom: 10,
+  },
+  trendTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trendTitleText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  trendSubText: {
+    fontSize: 11,
+    color: '#C8A84E',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  trendChartContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  trendYAxis: {
+    height: 100,
+    justifyContent: 'space-between',
+    paddingRight: 8,
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(200, 168, 78, 0.3)',
+  },
+  trendAxisLabel: {
+    fontSize: 9,
+    color: '#C8A84E',
+    fontWeight: '700',
+  },
+  trendBarsRow: {
+    paddingHorizontal: 12,
+    alignItems: 'flex-end',
+    gap: 14,
+    height: 120,
+  },
+  trendBarCol: {
+    alignItems: 'center',
+    width: 44,
+  },
+  trendBarPct: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  trendBarTrack: {
+    width: 22,
+    height: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 6,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  trendBarFill: {
+    width: '100%',
+    borderRadius: 6,
+  },
+  trendBarLabel: {
+    fontSize: 9,
+    color: '#C8A84E',
+    fontWeight: '600',
+    marginTop: 6,
+    textAlign: 'center',
   },
 });
