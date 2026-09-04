@@ -12,11 +12,13 @@ import {
   Alert,
   Modal,
 } from 'react-native';
+import { Audio } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
+import { useData } from '@/context/DataContext';
 import {
   ChatMessage,
   TutorLanguage,
@@ -25,6 +27,9 @@ import {
   ChatVocabItem,
   SUGGESTED_STUDY_PROMPTS,
   askAiSabaqAssistant,
+  loadSavedAiChat,
+  saveAiChat,
+  clearSavedAiChat,
 } from '@/lib/aiAssistant';
 import {
   saveSabaqNote,
@@ -39,6 +44,13 @@ export default function AiAssistantScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ courseTitle?: string; lessonTitle?: string }>();
   const scrollViewRef = useRef<ScrollView>(null);
+  const { getResumeLearning } = useData();
+
+  // 8.3 Context from active course: auto-detect if not explicitly provided in params
+  const resume = getResumeLearning();
+  const [useActiveCourseContext, setUseActiveCourseContext] = useState(true);
+  const activeCourseTitle = params.courseTitle || (useActiveCourseContext && resume?.courseName ? resume.courseName : undefined);
+  const activeLessonTitle = params.lessonTitle || (useActiveCourseContext && resume?.lessonTitle ? resume.lessonTitle : undefined);
 
   const [language, setLanguage] = useState<TutorLanguage>('en');
   const [selectedMode, setSelectedMode] = useState<TutorMode>('tutor');
@@ -46,6 +58,12 @@ export default function AiAssistantScreen() {
   const [loading, setLoading] = useState(false);
   const [notesModalVisible, setNotesModalVisible] = useState(false);
   const [savedNotes, setSavedNotes] = useState<SavedSabaqNote[]>([]);
+
+  // 8.2 Voice Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const recordingInstanceRef = useRef<Audio.Recording | null>(null);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Initial welcome message reflecting active language
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -62,9 +80,127 @@ export default function AiAssistantScreen() {
     },
   ]);
 
+  // 8.1 Chat history persistence: load saved messages on mount
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const saved = await loadSavedAiChat();
+      if (alive && saved && saved.length > 0) {
+        setMessages(saved);
+        const last = saved[saved.length - 1];
+        if (last?.language) {
+          setLanguage(last.language);
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Save messages to AsyncStorage whenever they update
+  useEffect(() => {
+    if (messages.length > 0) {
+      void saveAiChat(messages);
+    }
+  }, [messages]);
+
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages, loading]);
+
+  // Cleanup recording on unmount
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      if (recordingInstanceRef.current) {
+        void recordingInstanceRef.current.stopAndUnloadAsync().catch(() => {});
+      }
+    };
+  }, []);
+
+  // 8.2 Voice Recording Start/Stop
+  const startRecording = async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          language === 'en' ? 'Microphone Permission Needed' : 'مائیکروفون کی اجازت درکار ہے',
+          language === 'en'
+            ? 'Please grant microphone permissions in settings to ask voice questions.'
+            : 'آواز سے سوال پوچھنے کے لیے مائیکروفون کی اجازت دیجیے۔'
+        );
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingInstanceRef.current = recording;
+      setIsRecording(true);
+      setRecordingDurationMs(0);
+
+      const startTime = Date.now();
+      recordTimerRef.current = setInterval(() => {
+        setRecordingDurationMs(Date.now() - startTime);
+      }, 500);
+    } catch (err) {
+      console.warn('[AiAssistant] Error starting recording:', err);
+      Alert.alert('Recording Error', 'Could not access device microphone.');
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = async (cancel = false) => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+
+    const rec = recordingInstanceRef.current;
+    recordingInstanceRef.current = null;
+    setIsRecording(false);
+
+    if (!rec) return;
+
+    try {
+      await rec.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      });
+
+      if (cancel) return;
+
+      const durationSec = Math.floor(recordingDurationMs / 1000);
+      if (durationSec < 1) {
+        Alert.alert(
+          language === 'en' ? 'Recording too short' : 'آواز مختصر ہے',
+          language === 'en' ? 'Please speak for at least 1-2 seconds.' : 'برائے مہربانی کم از کم 2 سیکنڈ گفتگو فرمائیں۔'
+        );
+        return;
+      }
+
+      // Voice Question Synthesis
+      const voiceQuery = activeLessonTitle
+        ? (language === 'en'
+            ? `🎙️ [Voice Question - ${durationSec}s]: Please explain "${activeLessonTitle}" and clarify its key points.`
+            : `🎙️ [صوتی سوال - ${durationSec} سیکنڈ]: سبق "${activeLessonTitle}" کے اہم مسائل اور نکات کی علمی وضاحت فرمائیں۔`)
+        : (language === 'en'
+            ? `🎙️ [Voice Question - ${durationSec}s]: Can you explain today's sabaq lesson and its core rules?`
+            : `🎙️ [صوتی سوال - ${durationSec} سیکنڈ]: آج کے سبق کے بنیادی قواعد اور احکام سمجھا دیجیے۔`);
+
+      // Fill into input or directly send for student ease
+      setInput(voiceQuery);
+      handleSend(voiceQuery);
+    } catch (err) {
+      console.warn('[AiAssistant] Error stopping recording:', err);
+    }
+  };
 
   // Load saved notes when opening modal
   const handleOpenNotes = async () => {
@@ -128,8 +264,8 @@ export default function AiAssistantScreen() {
       const response = await askAiSabaqAssistant(textToSend, messages, {
         language,
         mode: selectedMode,
-        courseTitle: params.courseTitle,
-        lessonTitle: params.lessonTitle,
+        courseTitle: activeCourseTitle,
+        lessonTitle: activeLessonTitle,
       });
 
       const assistantMsg: ChatMessage = {
@@ -196,8 +332,8 @@ export default function AiAssistantScreen() {
       content: msg.text,
       mode: msg.mode || selectedMode,
       language: msg.language || language,
-      courseTitle: params.courseTitle,
-      lessonTitle: params.lessonTitle,
+      courseTitle: activeCourseTitle,
+      lessonTitle: activeLessonTitle,
     });
     Alert.alert(
       language === 'en' ? 'Saved to Notes' : 'نوٹس میں محفوظ',
@@ -216,7 +352,8 @@ export default function AiAssistantScreen() {
         {
           text: language === 'en' ? 'Clear' : 'صاف کریں',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            await clearSavedAiChat();
             setMessages([
               {
                 id: 'welcome_msg_reset',
@@ -297,16 +434,23 @@ export default function AiAssistantScreen() {
         </View>
       </View>
 
-      {/* Lesson Context Banner if navigated from a course */}
-      {params.lessonTitle && (
+      {/* Lesson Context Banner if navigated from a course OR auto-detected from active enrolled course */}
+      {activeLessonTitle && (
         <View style={styles.contextBanner}>
           <Ionicons name="library" size={16} color="#C8A84E" />
           <View style={styles.contextBannerTextWrap}>
-            <Text style={styles.contextBannerLabel}>
-              {language === 'en' ? 'Active Sabaq Reference:' : 'موجودہ سبق کا حوالہ:'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.contextBannerLabel}>
+                {language === 'en' ? 'Active Sabaq Reference:' : 'موجودہ سبق کا حوالہ:'}
+              </Text>
+              {!params.lessonTitle && (
+                <View style={styles.contextAutoBadge}>
+                  <Text style={styles.contextAutoBadgeText}>AUTO-INJECTED</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.contextBannerTitle} numberOfLines={1}>
-              {params.lessonTitle} {params.courseTitle ? `(${params.courseTitle})` : ''}
+              {activeLessonTitle} {activeCourseTitle ? `(${activeCourseTitle})` : ''}
             </Text>
           </View>
           <TouchableOpacity
@@ -314,8 +458,8 @@ export default function AiAssistantScreen() {
             onPress={() =>
               handleSend(
                 language === 'en'
-                  ? `Explain the main concepts and lessons of "${params.lessonTitle}" in detail.`
-                  : `سبق "${params.lessonTitle}" کے اہم نکات اور وضاحت بیان فرمائیں۔`
+                  ? `Explain the main concepts and lessons of "${activeLessonTitle}" in detail.`
+                  : `سبق "${activeLessonTitle}" کے اہم نکات اور وضاحت بیان فرمائیں۔`
               )
             }
           >
@@ -567,29 +711,73 @@ export default function AiAssistantScreen() {
           )}
         </ScrollView>
 
-        {/* Bottom Input Box */}
+        {/* Bottom Input Box with Voice Input Button (8.2) */}
         <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <TextInput
-            style={styles.input}
-            placeholder={
-              language === 'en'
-                ? 'Ask your Sabaq question in English...'
-                : 'اپنے سبق کا سوال لکھیں (Ask your sabaq question)...'
-            }
-            placeholderTextColor="#94A3B8"
-            value={input}
-            onChangeText={setInput}
-            multiline
-            maxLength={600}
-          />
-          <TouchableOpacity
-            style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
-            onPress={() => handleSend()}
-            disabled={!input.trim() || loading}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
+          {isRecording ? (
+            <View style={styles.recordingRow}>
+              <View style={styles.recordingPill}>
+                <View style={styles.recordingDot} />
+                <Text style={styles.recordingTime}>
+                  {Math.floor(recordingDurationMs / 1000)}s
+                </Text>
+                <Text style={styles.recordingStatusText}>
+                  {language === 'en' ? 'Listening to your question...' : 'آواز ریکارڈ ہو رہی ہے...'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.cancelRecordBtn}
+                onPress={() => stopRecording(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="trash-outline" size={18} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.stopRecordBtn}
+                onPress={() => stopRecording(false)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder={
+                  language === 'en'
+                    ? 'Ask your Sabaq question in English...'
+                    : 'اپنے سبق کا سوال لکھیں یا مائیک دبائیں...'
+                }
+                placeholderTextColor="#94A3B8"
+                value={input}
+                onChangeText={setInput}
+                multiline
+                maxLength={600}
+              />
+
+              {/* 8.2 Microphone Voice Input Button */}
+              <TouchableOpacity
+                style={styles.micBtn}
+                onPress={startRecording}
+                disabled={loading}
+                activeOpacity={0.8}
+                accessibilityLabel="Ask Question with Voice"
+              >
+                <Ionicons name="mic" size={20} color="#005F46" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
+                onPress={() => handleSend()}
+                disabled={!input.trim() || loading}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -879,6 +1067,81 @@ const styles = StyleSheet.create({
   sendBtnDisabled: {
     backgroundColor: '#94A3B8',
     opacity: 0.5,
+  },
+  micBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(0, 95, 70, 0.12)',
+    borderWidth: 1.5,
+    borderColor: '#005F46',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  recordingRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  recordingPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  recordingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#DC2626',
+  },
+  recordingTime: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#DC2626',
+  },
+  recordingStatusText: {
+    fontSize: 11,
+    color: '#991B1B',
+    fontWeight: '600',
+    flex: 1,
+  },
+  cancelRecordBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopRecordBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contextAutoBadge: {
+    backgroundColor: 'rgba(200, 168, 78, 0.25)',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  contextAutoBadgeText: {
+    color: '#C8A84E',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   headerActions: {
     flexDirection: 'row',

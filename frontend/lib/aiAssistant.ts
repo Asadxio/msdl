@@ -677,3 +677,39 @@ export async function askAiSabaqAssistant(
     language,
   };
 }
+
+// ─── Chat History Persistence ───────────────────────────────────────────────
+export const STORAGE_KEY_AI_CHAT = '@mslb_ai_chat_history_v1';
+
+export async function loadSavedAiChat(): Promise<ChatMessage[]> {
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const raw = await AsyncStorage.getItem(STORAGE_KEY_AI_CHAT);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('[AiAssistant] Failed to load saved chat history:', err);
+    return [];
+  }
+}
+
+export async function saveAiChat(messages: ChatMessage[]): Promise<void> {
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    // Persist up to the latest 50 messages to keep storage light and fast
+    const slice = messages.slice(-50);
+    await AsyncStorage.setItem(STORAGE_KEY_AI_CHAT, JSON.stringify(slice));
+  } catch (err) {
+    console.warn('[AiAssistant] Failed to save chat history:', err);
+  }
+}
+
+export async function clearSavedAiChat(): Promise<void> {
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    await AsyncStorage.removeItem(STORAGE_KEY_AI_CHAT);
+  } catch (err) {
+    console.warn('[AiAssistant] Failed to clear chat history:', err);
+  }
+}
