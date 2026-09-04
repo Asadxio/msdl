@@ -305,6 +305,8 @@ function VoiceNotePlayer({
 }
 
 const MessageBubble = React.memo(function MessageBubble({
+  isBroadcast,
+  canViewBroadcastReceipts,
   item,
   mine,
   showSender,
@@ -317,6 +319,8 @@ const MessageBubble = React.memo(function MessageBubble({
   onReport,
   onDelete,
 }: {
+  isBroadcast?: boolean;
+  canViewBroadcastReceipts?: boolean;
   item: MessageItem;
   mine: boolean;
   showSender: boolean;
@@ -446,6 +450,14 @@ const MessageBubble = React.memo(function MessageBubble({
 
         {/* Meta row: Time + Actions + Ticks */}
         <View style={styles.metaRow}>
+          {isBroadcast && canViewBroadcastReceipts && (
+            <View style={styles.broadcastReceiptTag}>
+              <Ionicons name="eye-outline" size={12} color={mine ? 'rgba(255,255,255,0.9)' : COLORS.primary} />
+              <Text style={[styles.broadcastReceiptText, mine && { color: 'rgba(255,255,255,0.9)' }]}>
+                {`Seen by ${item.read_by?.length || 0}`}
+              </Text>
+            </View>
+          )}
           <Text style={[styles.time, mine && { color: 'rgba(255,255,255,0.85)' }]}>{fmtTime(item)}</Text>
           {mine ? (
             <Ionicons
@@ -541,6 +553,12 @@ export default function ChatDetailScreen() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [targetPresence, setTargetPresence] = useState<{ is_online: boolean; last_seen?: any } | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [targetProfile, setTargetProfile] = useState<{ name: string; avatar: string; photo_url?: string; role?: string } | null>(null);
   const [chatNotFound, setChatNotFound] = useState(false);
   const [chatDocExists, setChatDocExists] = useState<boolean>(!id?.startsWith('direct_'));
@@ -588,6 +606,15 @@ export default function ChatDetailScreen() {
   const lastFlushAtRef = useRef(0);
   const lastSnapshotWasCacheRef = useRef(false);
   const lastAckedRef = useRef<string>('');
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (recordingRef.current) {
+        void recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (feedback) {
@@ -828,6 +855,7 @@ export default function ChatDetailScreen() {
   };
 
   const isAdmin = profile?.role === 'admin';
+  const isTeacher = profile?.role === 'teacher';
   const chatParticipants = useMemo(() => {
     if (Array.isArray(chat?.participants) && chat.participants.length > 0) {
       return chat.participants.filter((uid) => typeof uid === 'string');
@@ -1209,6 +1237,101 @@ export default function ChatDetailScreen() {
     }
   };
 
+    // Voice Note Recording Logic (6.1)
+    const startVoiceRecording = async () => {
+      if (!id || !user?.uid || !canSendMessages) return;
+      try {
+        const { status } = await Audio.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Microphone Permission Needed', 'Please allow microphone access to record voice notes.');
+          return;
+        }
+
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+
+        const { recording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
+        recordingRef.current = recording;
+        setIsRecording(true);
+        setRecordingDuration(0);
+
+        const startTime = Date.now();
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = setInterval(() => {
+          const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+          setRecordingDuration(elapsedSec);
+          // 30 seconds max limit
+          if (elapsedSec >= 30) {
+            void stopAndSendVoiceRecording();
+          }
+        }, 500);
+      } catch (err) {
+        console.warn('[ChatDetail] Error starting voice note recording:', err);
+        Alert.alert('Recording Error', 'Could not access device microphone.');
+        setIsRecording(false);
+      }
+    };
+
+    const stopAndSendVoiceRecording = async () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+
+      const rec = recordingRef.current;
+      recordingRef.current = null;
+      const durationSec = recordingDuration;
+      setIsRecording(false);
+      setRecordingDuration(0);
+
+      if (!rec) return;
+
+      try {
+        await rec.stopAndUnloadAsync();
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+        });
+
+        const uri = rec.getURI();
+        if (!uri) return;
+
+        if (durationSec < 1) {
+          Alert.alert('Recording too short', 'Please record for at least 1 second.');
+          return;
+        }
+
+        const fileName = `voice_note_${Date.now()}.m4a`;
+        await uploadAndSendMessage(uri, 'audio', fileName, durationSec, 'audio/m4a');
+      } catch (err) {
+        console.warn('[ChatDetail] Error stopping voice recording:', err);
+        setSendError('Failed to send voice note.');
+      }
+    };
+
+    const cancelVoiceRecording = async () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      const rec = recordingRef.current;
+      recordingRef.current = null;
+      setIsRecording(false);
+      setRecordingDuration(0);
+
+      if (!rec) return;
+      try {
+        await rec.stopAndUnloadAsync();
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+        });
+      } catch {}
+    };
+
     const pickAudio = async () => {
     setShowAttachments(false);
     if (!id || !user?.uid || !canSendMessages) return;
@@ -1461,10 +1584,17 @@ export default function ChatDetailScreen() {
     }
   }, [messages.length]);
 
-  const visibleMessages = useMemo(
-    () => messages.filter((m) => !m.deleted_for?.includes(user?.uid || '')),
-    [messages, user?.uid],
-  );
+  const visibleMessages = useMemo(() => {
+    let list = messages.filter((m) => !m.deleted_for?.includes(user?.uid || ''));
+    if (isSearchOpen && searchQuery.trim().length > 0) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((m) =>
+        (m.text && m.text.toLowerCase().includes(q)) ||
+        (m.media_name && m.media_name.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [isSearchOpen, messages, searchQuery, user?.uid]);
   const keyExtractor = useCallback((item: MessageItem) => item.id, []);
   const listFooter = useMemo(() => (loadingMore ? <ActivityIndicator size="small" color={COLORS.primary} /> : null), [loadingMore]);
   const listEmpty = useMemo(() => (
@@ -1522,6 +1652,8 @@ export default function ChatDetailScreen() {
         )}
         <TouchableOpacity activeOpacity={0.85} onLongPress={() => openMessageActions(item)}>
           <MessageBubble
+            isBroadcast={chat?.type === 'broadcast'}
+            canViewBroadcastReceipts={isAdmin || isTeacher}
             item={{ ...item, text: item.deleted_for_everyone ? 'This message was deleted.' : item.text }}
             mine={mine}
             showSender={!mine && chat?.type !== 'direct'}
@@ -1537,7 +1669,7 @@ export default function ChatDetailScreen() {
         </TouchableOpacity>
       </View>
     );
-  }, [chat?.type, chatParticipants.length, openMessageActions, retryMessage, scrollToQuotedMessage, toggleReaction, user?.uid, visibleMessages]);
+  }, [chat?.type, chatParticipants.length, isAdmin, isTeacher, openMessageActions, retryMessage, scrollToQuotedMessage, toggleReaction, user?.uid, visibleMessages]);
 
   if (loading) {
     return (
@@ -1641,6 +1773,18 @@ export default function ChatDetailScreen() {
           {othersTyping ? <Text style={styles.typingText}>Typing...</Text> : null}
         </View>
 
+        <ScalePressable
+          style={[styles.backBtn, isSearchOpen && { backgroundColor: COLORS.primary }]}
+          onPress={() => {
+            setIsSearchOpen((prev) => {
+              if (prev) setSearchQuery('');
+              return !prev;
+            });
+          }}
+          accessibilityLabel="Search messages"
+        >
+          <Ionicons name="search-outline" size={18} color={isSearchOpen ? '#fff' : COLORS.primary} />
+        </ScalePressable>
         <ScalePressable style={styles.backBtn} onPress={refreshMessages} disabled={manualRefreshing}>
           {manualRefreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
         </ScalePressable>
@@ -1664,7 +1808,7 @@ export default function ChatDetailScreen() {
             color={playThroughEarpiece ? '#D97706' : COLORS.primary}
           />
         </ScalePressable>
-                <ScalePressable style={styles.backBtn} onPress={() => { void toggleMuteChat(); }}>
+        <ScalePressable style={styles.backBtn} onPress={() => { void toggleMuteChat(); }}>
           <Ionicons name={(chat?.muted_by || []).includes(user?.uid || '') ? 'notifications-off-outline' : 'notifications-outline'} size={18} color={COLORS.primary} />
         </ScalePressable>
         {chat?.type === 'direct' ? (
@@ -1673,6 +1817,33 @@ export default function ChatDetailScreen() {
           </ScalePressable>
         ) : null}
       </View>
+
+      {/* In-Chat Search Bar (6.3) */}
+      {isSearchOpen && (
+        <View style={styles.searchBarContainer}>
+          <Ionicons name="search" size={16} color={COLORS.textMuted} style={{ marginRight: 6 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search messages..."
+            placeholderTextColor={COLORS.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+          />
+          {searchQuery.trim().length > 0 && (
+            <View style={styles.searchCountBadge}>
+              <Text style={styles.searchCountText}>
+                {`${visibleMessages.length} found`}
+              </Text>
+            </View>
+          )}
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {feedback && (
         <View style={styles.feedbackWrap}>
@@ -1720,7 +1891,7 @@ export default function ChatDetailScreen() {
           <View style={styles.actionSheetContainer}>
             {/* Quick Reactions Bar */}
             <View style={styles.reactionsBar}>
-              {['🤲', '🌸', '❤️', 'جزاک اللہ', 'ماشاء اللہ'].map((emoji) => (
+              {['🤲', '❤️', 'جزاک اللہ', 'ماشاء اللہ', 'آمین', 'الحمد للہ', '✅'].map((emoji) => (
                 <TouchableOpacity
                   key={emoji}
                   style={styles.reactionBtn}
@@ -1883,39 +2054,81 @@ export default function ChatDetailScreen() {
 
         {sendError ? <Text style={styles.sendError}>{sendError}</Text> : null}
         
-        <View style={styles.inputRow}>
-          {canSendMessages && (
-            <TouchableOpacity
-              style={styles.attachBtn}
-              activeOpacity={0.7}
-              onPress={() => setShowAttachments(true)}
-              disabled={uploadingMedia}
-              accessibilityLabel="Attach media or document"
-            >
-              <Ionicons name="add" size={24} color={COLORS.primary} />
-            </TouchableOpacity>
-          )}
+        {isRecording ? (
+          /* Voice Recording in Progress UI */
+          <View style={styles.recordingRow}>
+            <View style={styles.recordingIndicatorWrap}>
+              <View style={styles.recordingPulseDot} />
+              <Text style={styles.recordingTimerText}>
+                {`0:${recordingDuration < 10 ? '0' : ''}${recordingDuration} / 0:30`}
+              </Text>
+            </View>
 
-          <TextInput
-            style={[styles.input, isComposerBlocked && styles.inputDisabled]}
-            value={text}
-            onChangeText={onType}
-            placeholder={isComposerBlocked ? 'Only admins can send broadcast messages' : 'Type a message...'}
-            placeholderTextColor={COLORS.textMuted}
-            editable={!isComposerBlocked}
-            multiline
-          />
+            <View style={styles.recordingActions}>
+              <TouchableOpacity
+                style={styles.recordingCancelBtn}
+                onPress={() => void cancelVoiceRecording()}
+                accessibilityLabel="Cancel recording"
+              >
+                <Ionicons name="trash-outline" size={20} color="#B3261E" />
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.sendBtn, !canSend && { opacity: 0.5 }]}
-            activeOpacity={0.7}
-            onPress={() => { void send(); }}
-            disabled={!canSend}
-            accessibilityLabel="Send message"
-          >
-            <Ionicons name="send" size={18} color="#fff" />
-          </TouchableOpacity>
-        </View>
+              <TouchableOpacity
+                style={styles.recordingSendBtn}
+                onPress={() => void stopAndSendVoiceRecording()}
+                accessibilityLabel="Send voice note"
+              >
+                <Ionicons name="send" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.inputRow}>
+            {canSendMessages && (
+              <TouchableOpacity
+                style={styles.attachBtn}
+                activeOpacity={0.7}
+                onPress={() => setShowAttachments(true)}
+                disabled={uploadingMedia}
+                accessibilityLabel="Attach media or document"
+              >
+                <Ionicons name="add" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+            )}
+
+            <TextInput
+              style={[styles.input, isComposerBlocked && styles.inputDisabled]}
+              value={text}
+              onChangeText={onType}
+              placeholder={isComposerBlocked ? 'Only admins can send broadcast messages' : 'Type a message...'}
+              placeholderTextColor={COLORS.textMuted}
+              editable={!isComposerBlocked}
+              multiline
+            />
+
+            {text.trim().length > 0 ? (
+              <TouchableOpacity
+                style={[styles.sendBtn, !canSend && { opacity: 0.5 }]}
+                activeOpacity={0.7}
+                onPress={() => { void send(); }}
+                disabled={!canSend}
+                accessibilityLabel="Send message"
+              >
+                <Ionicons name="send" size={18} color="#fff" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.sendBtn, !canSendMessages && { opacity: 0.5 }]}
+                activeOpacity={0.7}
+                onPress={() => void startVoiceRecording()}
+                disabled={!canSendMessages || uploadingMedia}
+                accessibilityLabel="Record voice note"
+              >
+                <Ionicons name="mic" size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
     </View>
   );
@@ -2234,6 +2447,95 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textMuted,
     fontWeight: '600',
+  },
+  broadcastReceiptTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  broadcastReceiptText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.textMain,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  searchCountBadge: {
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    marginRight: 8,
+  },
+  searchCountText: {
+    fontSize: 11,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  recordingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: '#FEF2F2',
+  },
+  recordingIndicatorWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recordingPulseDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#EF4444',
+  },
+  recordingTimerText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  recordingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  recordingCancelBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingSendBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
