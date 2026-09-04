@@ -17,6 +17,9 @@ import { auth, db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { dispatchNotification } from '@/lib/dispatchNotification';
 import { ENROLLMENT_DOC_ID_SEPARATOR, allowsLegacyCourseAccessWhenEnrollmentMissing, getEnrollmentDocId, isActiveEnrollmentForUserCourse } from '@/lib/enrollments';
+import { dispatchLiveClass10MinReminder } from '@/lib/liveClassNotifications';
+
+export { dispatchLiveClass10MinReminder };
 
 export type LiveClassStatus = 'scheduled' | 'waiting_room' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'cancelled';
 
@@ -44,6 +47,7 @@ export type LiveClass = {
   active_speaker_uid?: string;
   recitation_queue?: RecitationQueueItem[];
   started_at?: { toDate?: () => Date } | null;
+  scheduled_start_at?: { toDate?: () => Date } | null;
   ended_at?: { toDate?: () => Date } | null;
   created_at?: { toDate?: () => Date } | null;
   updated_at?: { toDate?: () => Date } | null;
@@ -58,6 +62,7 @@ export type LiveClassCreateInput = {
   meetUrl: string;
   profile: UserProfile | null;
   purdahModeEnabled?: boolean;
+  scheduledStartAt?: Date | null;
 };
 
 export function normalizeLiveClass(id: string, data: any): LiveClass {

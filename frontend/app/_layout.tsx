@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { initPushNotifications, registerDevicePushToken } from '@/lib/pushNotifications';
+import { checkAndTriggerInactivityNudge } from '@/lib/inactivityNudge';
 import { validateConfig, getMissingConfigVars } from '@/lib/config';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
 import { markNotificationDelivered, markNotificationOpened } from '@/lib/notificationTelemetryWriter';
@@ -367,7 +368,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user?.uid) return;
     registerDevicePushToken(user.uid).catch(() => {});
-  }, [user?.uid]);
+    if (profile?.role === 'student') {
+      checkAndTriggerInactivityNudge(user.uid, profile?.name || '').catch(() => {});
+    }
+  }, [user?.uid, profile?.role, profile?.name]);
 
   useEffect(() => {
     if (!user?.uid) return () => {};

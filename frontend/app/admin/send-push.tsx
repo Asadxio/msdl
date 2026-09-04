@@ -45,10 +45,22 @@ type SentNotificationItem = {
 
 const QUICK_TEMPLATES = [
   {
+    label: '⏰ 10-Min Class Reminder',
+    title: '⏰ درس کا وقت قریب ہے (Class in 10 Mins)',
+    body: '🌸 Sabaq Reminder: Aapki live dars class 10 minute me shuru hone wali hai. Baraye meherbani tayyar rahein!',
+    channel: 'live_classes' as NotificationChannel,
+  },
+  {
     label: '🔴 Live Class Alert',
     title: '🔴 Live Class Starting Now',
     body: 'Your live interactive class session is now active. Please join the classroom on time.',
     channel: 'live_classes' as NotificationChannel,
+  },
+  {
+    label: '🌸 Sabaq / Inactivity Nudge',
+    title: '🌸 علم حاصل کرنا ہر مسلمان پر فرض ہے',
+    body: 'السلام علیکم! کافی دن ہو گئے آپ نے سبق نہیں پڑھا۔ آئیے آج کا سبق اور دینی تعلیم مکمل کریں۔ (Continue your sacred learning journey today.)',
+    channel: 'announcements' as NotificationChannel,
   },
   {
     label: '🎙️ Dars Recording',
@@ -69,6 +81,7 @@ const QUICK_TEMPLATES = [
     channel: 'announcements' as NotificationChannel,
   },
 ];
+
 
 export default function AdminSendPushScreen() {
   const insets = useSafeAreaInsets();
