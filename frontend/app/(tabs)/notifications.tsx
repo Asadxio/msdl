@@ -202,6 +202,7 @@ export default function NotificationsScreen() {
     }
   };
 
+  // 13.3 — Comprehensive Deep Link on Notification Item Tap
   const handlePressNotificationItem = (item: NotificationItem) => {
     if (user?.uid && !item.read?.[user.uid]) {
       void markAsRead(item);
@@ -213,15 +214,50 @@ export default function NotificationsScreen() {
     }
     const titleLower = item.title.toLowerCase();
     const msgLower = (item.message || '').toLowerCase();
-    if (titleLower.includes('live') || titleLower.includes('class') || msgLower.includes('live class')) {
+    const combined = `${titleLower} ${msgLower}`;
+
+    // Fee & Payments
+    if (combined.includes('payment') || combined.includes('fee') || combined.includes('receipt') || combined.includes('فیس')) {
+      router.push('/payment' as any);
+    }
+    // Attendance
+    else if (combined.includes('attendance') || combined.includes('absent') || combined.includes('present') || combined.includes('حاضری')) {
+      router.push('/(tabs)/attendance' as any);
+    }
+    // Prayer & Namaz
+    else if (combined.includes('prayer') || combined.includes('salah') || combined.includes('namaz') || combined.includes('azan') || combined.includes('نماز')) {
+      router.push('/prayer-times' as any);
+    }
+    // Certificates / Sanad
+    else if (combined.includes('certificate') || combined.includes('sanad') || combined.includes('سند') || combined.includes('completion')) {
+      router.push('/(tabs)/certificate' as any);
+    }
+    // Taharat Tracker
+    else if (combined.includes('taharat') || combined.includes('wudu') || combined.includes('ghusl') || combined.includes('طہارت')) {
+      router.push('/taharat-tracker' as any);
+    }
+    // Quran & Tilawat
+    else if (combined.includes('quran') || combined.includes('surah') || combined.includes('tilawat') || combined.includes('قرآن')) {
+      router.push('/quran' as any);
+    }
+    // Live Classes
+    else if (combined.includes('live') || combined.includes('class') || combined.includes('session') || combined.includes('کلاس')) {
       router.push('/live-class' as any);
-    } else if (titleLower.includes('recording') || titleLower.includes('audio') || titleLower.includes('dars')) {
+    }
+    // Recordings & Audio Dars
+    else if (combined.includes('recording') || combined.includes('audio') || combined.includes('dars') || combined.includes('ریکارڈنگ')) {
       router.push('/recordings' as any);
-    } else if (titleLower.includes('quiz') || titleLower.includes('sabaq') || titleLower.includes('assessment')) {
+    }
+    // Quizzes & Assessments
+    else if (combined.includes('quiz') || combined.includes('sabaq') || combined.includes('assessment') || combined.includes('امتحان')) {
       router.push('/(tabs)/quiz' as any);
-    } else if (titleLower.includes('library') || titleLower.includes('book') || titleLower.includes('pdf')) {
+    }
+    // Library & Islamic Books
+    else if (combined.includes('library') || combined.includes('book') || combined.includes('pdf') || combined.includes('کتاب')) {
       router.push('/(tabs)/library' as any);
-    } else if (titleLower.includes('course') || titleLower.includes('syllabus')) {
+    }
+    // Courses & Syllabus
+    else if (combined.includes('course') || combined.includes('syllabus') || combined.includes('کورس')) {
       router.push('/(tabs)/courses' as any);
     }
   };
@@ -245,13 +281,28 @@ export default function NotificationsScreen() {
       if (activeCategory !== 'All') {
         const cat = item.category || 'general';
         const titleLower = item.title.toLowerCase();
-        if (activeCategory === 'Announcements') matchesCategory = cat === 'announcement' || titleLower.includes('announcement');
-        else if (activeCategory === 'Courses') matchesCategory = titleLower.includes('course');
-        else if (activeCategory === 'Quiz') matchesCategory = titleLower.includes('quiz');
-        else if (activeCategory === 'Payments') matchesCategory = titleLower.includes('payment') || titleLower.includes('fee');
-        else if (activeCategory === 'Live Classes') matchesCategory = cat === 'class_reminder' || titleLower.includes('live') || titleLower.includes('class');
-        else if (activeCategory === 'Library') matchesCategory = titleLower.includes('library') || titleLower.includes('book');
-        else if (activeCategory === 'General') matchesCategory = cat === 'notification' && !titleLower.includes('payment') && !titleLower.includes('course');
+        const msgLower = (item.message || '').toLowerCase();
+        const c = `${titleLower} ${msgLower}`;
+
+        if (activeCategory === 'Fee (فیس)') {
+          matchesCategory = c.includes('payment') || c.includes('fee') || c.includes('receipt') || c.includes('فیس');
+        } else if (activeCategory === 'Prayer (نماز)') {
+          matchesCategory = c.includes('prayer') || c.includes('salah') || c.includes('namaz') || c.includes('azan') || c.includes('fajr') || c.includes('zuhr') || c.includes('asr') || c.includes('maghrib') || c.includes('isha') || c.includes('نماز');
+        } else if (activeCategory === 'Quiz (امتحان)') {
+          matchesCategory = c.includes('quiz') || c.includes('assessment') || c.includes('exam') || c.includes('test') || c.includes('امتحان');
+        } else if (activeCategory === 'Attendance (حاضری)') {
+          matchesCategory = c.includes('attendance') || c.includes('absent') || c.includes('present') || c.includes('حاضری');
+        } else if (activeCategory === 'Live Classes (لائیو کلاس)') {
+          matchesCategory = cat === 'class_reminder' || c.includes('live') || c.includes('class') || c.includes('session') || c.includes('کلاس');
+        } else if (activeCategory === 'Taharat (طہارت)') {
+          matchesCategory = c.includes('taharat') || c.includes('wudu') || c.includes('ghusl') || c.includes('طہارت');
+        } else if (activeCategory === 'Announcements (اعلانات)') {
+          matchesCategory = cat === 'announcement' || c.includes('announcement') || c.includes('اعلان');
+        } else if (activeCategory === 'Library (کتب خانہ)') {
+          matchesCategory = c.includes('library') || c.includes('book') || c.includes('pdf') || c.includes('کتاب');
+        } else if (activeCategory === 'Courses (کورسز)') {
+          matchesCategory = c.includes('course') || c.includes('syllabus') || c.includes('کورس');
+        }
       }
 
       return matchesSearch && matchesSegment && matchesCategory;
@@ -268,16 +319,26 @@ export default function NotificationsScreen() {
     return result;
   }, [items, searchQuery, activeCategory, readSegment, pinnedIds, user?.uid]);
 
+  // 13.1 — Mark all as read with immediate feedback & batch update
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const markAllAsRead = async () => {
-    if (!user?.uid) return;
+    if (!user?.uid || markingAllRead) return;
     const unread = items.filter(item => !item.read?.[user.uid]);
-    if (unread.length === 0) return;
+    if (unread.length === 0) {
+      setFeedback({ type: 'success', text: 'تمام اطلاعات پہلے سے پڑھی جا چکی ہیں (All notifications already read).' });
+      return;
+    }
+    setMarkingAllRead(true);
     try {
       await Promise.all(unread.map(item => updateDoc(doc(db, 'notifications', item.id), {
         [`read.${user.uid}`]: true,
       })));
+      setFeedback({ type: 'success', text: `سب پڑھ لیا گیا (${unread.length} notifications marked as read).` });
     } catch (err: unknown) {
       logFirestoreFailure({ collection: 'notifications', operation: 'update', query: `batch mark read` }, err);
+      Alert.alert('Error', 'Failed to mark all notifications as read.');
+    } finally {
+      setMarkingAllRead(false);
     }
   };
   useEffect(() => {
@@ -402,11 +463,27 @@ export default function NotificationsScreen() {
               </View>
             ) : null}
           </View>
-          {unreadCount > 0 ? (
-            <TouchableOpacity onPress={markAllAsRead}>
-              <Text style={styles.markAllReadText}>Mark all as read</Text>
-            </TouchableOpacity>
-          ) : null}
+          {/* 13.1: "Sab padhein (Mark all read)" prominent button */}
+          <TouchableOpacity
+            style={[styles.markAllReadBtn, (unreadCount === 0 || markingAllRead) && styles.markAllReadBtnDisabled]}
+            onPress={markAllAsRead}
+            disabled={markingAllRead || unreadCount === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Mark all notifications as read"
+          >
+            {markingAllRead ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Ionicons
+                name="checkmark-done-circle-outline"
+                size={16}
+                color={unreadCount > 0 ? COLORS.primary : COLORS.textMuted}
+              />
+            )}
+            <Text style={[styles.markAllReadText, unreadCount === 0 && styles.markAllReadTextDisabled]}>
+              سب پڑھیں (Mark all read)
+            </Text>
+          </TouchableOpacity>
         </View>
         <Text style={styles.headerSubtitle}>Latest updates and class reminders</Text>
         
@@ -444,7 +521,18 @@ export default function NotificationsScreen() {
           <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
             horizontal
             showsHorizontalScrollIndicator={false}
-            data={['All', 'Announcements', 'Courses', 'Quiz', 'Payments', 'Live Classes', 'Library', 'General']}
+            data={[
+              'All',
+              'Fee (فیس)',
+              'Prayer (نماز)',
+              'Quiz (امتحان)',
+              'Attendance (حاضری)',
+              'Live Classes (لائیو کلاس)',
+              'Taharat (طہارت)',
+              'Announcements (اعلانات)',
+              'Library (کتب خانہ)',
+              'Courses (کورسز)',
+            ]}
             keyExtractor={item => item}
             renderItem={({ item }) => (
               <TouchableOpacity 
@@ -700,7 +788,24 @@ const styles = StyleSheet.create({
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   refreshBtn: { width: 32, height: 32, borderRadius: RADIUS.xxl, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   headerSubtitle: { fontSize: 14, color: COLORS.textMuted, marginTop: 4 },
-  markAllReadText: { color: COLORS.primary, fontWeight: '600', fontSize: 13 },
+  markAllReadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+  },
+  markAllReadBtnDisabled: {
+    backgroundColor: 'transparent',
+    borderColor: COLORS.border,
+    opacity: 0.6,
+  },
+  markAllReadText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
+  markAllReadTextDisabled: { color: COLORS.textMuted, fontWeight: '500' },
   searchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: RADIUS.full, paddingHorizontal: SPACING.md, height: 44, marginTop: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 15, color: COLORS.textMain },
   categoriesRow: { flexDirection: 'row', gap: 8, marginTop: SPACING.md },
