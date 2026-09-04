@@ -4,7 +4,7 @@
  */
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { Share, Platform } from 'react-native';
+import { Share, Platform, Linking } from 'react-native';
 
 export interface FeeReceiptData {
   receiptId: string;
@@ -317,5 +317,86 @@ export async function exportAndShareReceipt(data: FeeReceiptData): Promise<void>
       title: `Fee Receipt - ${data.receiptId}`,
       message: `Official Fee Receipt from Madrasatu-s-Salikat Lil Banat\nReceipt No: ${data.receiptId}\nStudent: ${data.studentName}\nAmount: ₹${data.amount}\nStatus: ${data.status}\nDate: ${data.issueDateGregorian}`,
     });
+  }
+}
+
+
+/**
+ * Builds an authentic, professional Urdu / English Islamic Fee Receipt message for WhatsApp
+ */
+export function buildReceiptWhatsAppMessage(data: FeeReceiptData): string {
+  const currency = data.currency === 'USD' ? '$' : '₹';
+  const categoryTitle = formatCategoryLabel(data.category);
+
+  const lines: string[] = [
+    '🌸 *مدرسۃ السالکات للبنات - فیس وصولی رسید*',
+    'السلام علیکم ورحمۃ اللہ وبرکاتہ',
+    '',
+    'محترم والدین / سرپرست! طالبہ کی فیس باضابطہ موصول اور تصدیق (Approved) ہو چکی ہے:',
+    '',
+    `🧾 *رسید نمبر (Receipt No):* ${data.receiptId}`,
+    `👧 *طالبہ کا نام (Student):* ${data.studentName}`,
+  ];
+
+  if (data.courseName) {
+    lines.push(`📚 *کورس / کلاس (Course):* ${data.courseName}`);
+  }
+
+  lines.push(`💰 *فیس کی رقم (Amount Paid):* ${currency}${data.amount.toLocaleString()}`);
+  lines.push(`🏷️ *شعبہ / مد (Category):* ${categoryTitle}`);
+  lines.push(`💳 *ادائیگی کا طریقہ (Method):* ${data.paymentMethod || 'آن لائن / تصدیق شدہ'}`);
+  lines.push(`✅ *حیثیت (Status):* منظور شدہ (Approved & Verified)`);
+  lines.push(`📅 *تاریخ (Date):* ${data.issueDateGregorian}`);
+
+  if (data.transactionId) {
+    lines.push(`🔢 *ٹرانزیکشن آئی ڈی:* ${data.transactionId}`);
+  }
+
+  lines.push('');
+  lines.push('اللہ تعالیٰ آپ کے تعاون و صدقات کو قبول فرمائے اور طالبہ کے علم و عمل میں برکت عطا فرمائے۔ آمین!');
+  lines.push('');
+  lines.push('_شعبہ مالیات و فیس مینجمنٹ - مدرسۃ السالکات للبنات_');
+
+  return lines.join('\n');
+}
+
+/**
+ * Share Fee Receipt directly to WhatsApp / WhatsApp Status or specific parent phone number
+ */
+export async function shareReceiptToWhatsApp(
+  data: FeeReceiptData,
+  parentPhone?: string
+): Promise<boolean> {
+  const message = buildReceiptWhatsAppMessage(data);
+  const encoded = encodeURIComponent(message);
+
+  let url = `whatsapp://send?text=${encoded}`;
+  let webUrl = `https://api.whatsapp.com/send?text=${encoded}`;
+
+  if (parentPhone) {
+    const cleaned = parentPhone.replace(/[^0-9]/g, '');
+    if (cleaned.length >= 8) {
+      url = `whatsapp://send?phone=${cleaned}&text=${encoded}`;
+      webUrl = `https://wa.me/${cleaned}?text=${encoded}`;
+    }
+  }
+
+  try {
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+      return true;
+    } else {
+      await Linking.openURL(webUrl);
+      return true;
+    }
+  } catch (err) {
+    console.warn('[ReceiptGenerator] Could not open WhatsApp:', err);
+    // Fallback to native system share
+    await Share.share({
+      title: `Fee Receipt - ${data.receiptId}`,
+      message,
+    });
+    return false;
   }
 }

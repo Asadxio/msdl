@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import {
   exportAndShareReceipt,
+  shareReceiptToWhatsApp,
   formatCategoryLabel,
   type FeeReceiptData,
 } from '@/lib/receiptGenerator';
@@ -40,6 +41,14 @@ export const IslamicReceiptModal: React.FC<IslamicReceiptModalProps> = ({
       Alert.alert('Export Error', err?.message || 'Failed to export receipt.');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleWhatsAppShare = async () => {
+    try {
+      await shareReceiptToWhatsApp(receipt);
+    } catch (err: any) {
+      Alert.alert('WhatsApp Error', err?.message || 'Failed to open WhatsApp.');
     }
   };
 
@@ -150,16 +159,24 @@ export const IslamicReceiptModal: React.FC<IslamicReceiptModalProps> = ({
           {/* Action Buttons */}
           <View style={styles.actionsRow}>
             <TouchableOpacity
+              style={styles.whatsappBtn}
+              onPress={handleWhatsAppShare}
+            >
+              <Ionicons name="logo-whatsapp" size={18} color="#FFF" />
+              <Text style={styles.whatsappBtnText}>Send to Parent WhatsApp</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.shareBtn}
               onPress={handleExportShare}
               disabled={exporting}
             >
               {exporting ? (
-                <ActivityIndicator size="small" color="#FFF" />
+                <ActivityIndicator size="small" color="#005F46" />
               ) : (
                 <>
-                  <Ionicons name="share-social-outline" size={18} color="#FFF" />
-                  <Text style={styles.shareBtnText}>Share / Download Receipt</Text>
+                  <Ionicons name="download-outline" size={18} color="#005F46" />
+                  <Text style={styles.shareBtnText}>HTML Receipt</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -412,22 +429,43 @@ const styles = StyleSheet.create({
     lineHeight: 10,
   },
   actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: SPACING.lg,
-    marginTop: 4,
+    marginTop: 8,
+    gap: 10,
   },
-  shareBtn: {
+  whatsappBtn: {
+    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#005F46',
+    backgroundColor: '#25D366',
     borderRadius: RADIUS.full,
-    paddingVertical: 14,
+    paddingVertical: 13,
     gap: 8,
     ...SHADOWS.card,
   },
-  shareBtnText: {
-    fontSize: 14,
+  whatsappBtnText: {
+    fontSize: 13,
     fontWeight: '700',
     color: '#FFF',
+  },
+  shareBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  shareBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#005F46',
   },
 });

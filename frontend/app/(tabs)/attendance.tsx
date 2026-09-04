@@ -32,6 +32,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { filterTeacherAssignedCourses } from '@/lib/enrollments';
+import { exportAdminCsvAndShare } from '@/lib/adminExportService';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,21 @@ export default function AttendanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [exportingCsv, setExportingCsv] = useState(false);
+
+  const handleExportAttendanceCsv = async () => {
+    try {
+      setExportingCsv(true);
+      await exportAdminCsvAndShare('attendance');
+    } catch (err: any) {
+      Alert.alert(
+        'Export Failed',
+        err?.message || 'حاضری ایکسل شیٹ برآمد نہیں ہو سکی۔ براہ کرم دوبارہ کوشش کریں۔'
+      );
+    } finally {
+      setExportingCsv(false);
+    }
+  };
 
   // Determine available courses for the current user
   const availableCourses = useMemo(() => {
@@ -460,6 +476,22 @@ export default function AttendanceScreen() {
                 : `Your attendance record (${overallStudentPercent}% Present)`}
             </Text>
           </View>
+          {canMark && (
+            <TouchableOpacity
+              style={[styles.refreshBtn, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0', borderWidth: 1 }]}
+              onPress={handleExportAttendanceCsv}
+              disabled={exportingCsv}
+              accessibilityRole="button"
+              accessibilityLabel="Export Attendance to Excel"
+            >
+              {exportingCsv ? (
+                <ActivityIndicator size="small" color="#059669" />
+              ) : (
+                <Ionicons name="download-outline" size={16} color="#059669" />
+              )}
+              <Text style={[styles.refreshText, { color: '#059669', fontWeight: '700' }]}>Excel</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.refreshBtn}
             onPress={handleRefresh}

@@ -21,7 +21,8 @@ import { adminPaymentAction, adminRefundPayment } from '@/lib/paymentAdminFuncti
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { IslamicReceiptModal } from '@/components/IslamicReceiptModal';
-import type { FeeReceiptData } from '@/lib/receiptGenerator';
+import { shareReceiptToWhatsApp, type FeeReceiptData } from '@/lib/receiptGenerator';
+import { doc, getDoc } from 'firebase/firestore';
 
 type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
 
@@ -174,6 +175,86 @@ export default function AdminPaymentsScreen() {
     }
   };
 
+  const handleApprovePayment = async (payment: PaymentItem) => {
+    setUpdatingId(payment.id);
+    try {
+      await adminPaymentAction({
+        paymentId: payment.id,
+        action: 'approve',
+        note: adminNote || 'admin_approved',
+      });
+
+      // Fetch user contact info for WhatsApp receipt
+      let parentPhone = '';
+      try {
+        const uSnap = await getDoc(doc(db, 'users', payment.user_id));
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          parentPhone = String(uData.guardian_phone || uData.parent_phone || uData.whatsapp || uData.phone || '').trim();
+        }
+      } catch {}
+
+      const receiptData: FeeReceiptData = {
+        receiptId: `MSLB-REC-${payment.id.slice(-6).toUpperCase()}`,
+        studentName: payment.user_name || 'طالبہ',
+        studentId: payment.user_id,
+        courseName: payment.course_id,
+        amount: Number(payment.amount || 0),
+        category: payment.payment_type || payment.type || 'fees',
+        paymentMethod: payment.provider ? 'آن لائن / تصدیق شدہ' : 'فیس رسید',
+        transactionId: payment.provider_payment_id || payment.id,
+        issueDateGregorian: formatDate(payment) || new Date().toLocaleDateString(),
+        status: 'منظور شدہ (Approved & Verified)',
+      };
+
+      Alert.alert(
+        'Payment Approved! ✅',
+        `فیس کامیابی سے منظور ہو گئی۔ کیا آپ والدین کو WhatsApp پر باضابطہ رسید بھیجنا چاہتے ہیں؟`,
+        [
+          { text: 'بعد میں (Later)', style: 'cancel' },
+          {
+            text: 'WhatsApp رسید بھیجیں',
+            onPress: () => {
+              void shareReceiptToWhatsApp(receiptData, parentPhone);
+            },
+          },
+        ]
+      );
+
+      await loadPayments('reset');
+    } catch (err: any) {
+      Alert.alert('Action Failed', err?.message || 'Failed to approve payment.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleSendWhatsAppReceipt = async (payment: PaymentItem) => {
+    let parentPhone = '';
+    try {
+      const uSnap = await getDoc(doc(db, 'users', payment.user_id));
+      if (uSnap.exists()) {
+        const uData = uSnap.data();
+        parentPhone = String(uData.guardian_phone || uData.parent_phone || uData.whatsapp || uData.phone || '').trim();
+      }
+    } catch {}
+
+    const receiptData: FeeReceiptData = {
+      receiptId: `MSLB-REC-${payment.id.slice(-6).toUpperCase()}`,
+      studentName: payment.user_name || 'طالبہ',
+      studentId: payment.user_id,
+      courseName: payment.course_id,
+      amount: Number(payment.amount || 0),
+      category: payment.payment_type || payment.type || 'fees',
+      paymentMethod: payment.provider ? 'آن لائن / تصدیق شدہ' : 'فیس رسید',
+      transactionId: payment.provider_payment_id || payment.id,
+      issueDateGregorian: formatDate(payment) || new Date().toLocaleDateString(),
+      status: 'منظور شدہ (Approved & Verified)',
+    };
+
+    await shareReceiptToWhatsApp(receiptData, parentPhone);
+  };
+
   if (profile && !isAdmin) return null;
 
   return (
@@ -263,7 +344,38 @@ export default function AdminPaymentsScreen() {
                       <Text style={styles.receiptBtnText}>Official Receipt</Text>
                     </TouchableOpacity>
 
-                    {isSucceeded && item.provider_payment_id ? (
+                    {/* WhatsApp Fee Receipt Quick Button */}
+                    <TouchableOpacity
+                      style={styles.whatsappReceiptBtn}
+                      onPress={() => handleSendWhatsAppReceipt(item)}
+                    >
+                      <Ionicons name="logo-whatsapp" size={14} color="#059669" />
+                      <Text style={styles.whatsappReceiptBtnText}>WhatsApp</Text>
+                    </TouchableOpacity>
+
+                    {isPending ? (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.approveBtn, updatingId === item.id && styles.disabledBtn]}
+                          onPress={() => handleApprovePayment(item)}
+                          disabled={updatingId === item.id}
+                        >
+                          {updatingId === item.id ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                          ) : (
+                            <Text style={styles.approveBtnText}>Approve</Text>
+                          )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]}
+                          onPress={() => handleLegacyReject(item.id)}
+                          disabled={updatingId === item.id}
+                        >
+                          <Text style={styles.rejectText}>Reject</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : isSucceeded && item.provider_payment_id ? (
                       <TouchableOpacity
                         style={[styles.refundBtn, updatingId === item.id && styles.disabledBtn]}
                         onPress={() => handleRefund(item)}
@@ -274,14 +386,6 @@ export default function AdminPaymentsScreen() {
                         ) : (
                           <Text style={styles.refundText}>Issue Refund</Text>
                         )}
-                      </TouchableOpacity>
-                    ) : isPending ? (
-                      <TouchableOpacity
-                        style={[styles.rejectBtn, updatingId === item.id && styles.disabledBtn]}
-                        onPress={() => handleLegacyReject(item.id)}
-                        disabled={updatingId === item.id}
-                      >
-                        <Text style={styles.rejectText}>Reject Pending</Text>
                       </TouchableOpacity>
                     ) : null}
                   </View>
@@ -357,6 +461,36 @@ const styles = StyleSheet.create({
   refundBtn: { flex: 1, backgroundColor: '#FEE2E2', borderRadius: RADIUS.md, paddingVertical: 8, alignItems: 'center' },
   refundText: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
   rejectBtn: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: RADIUS.md, paddingVertical: 8, alignItems: 'center' },
+  whatsappReceiptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  whatsappReceiptBtnText: {
+    color: '#059669',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  approveBtn: {
+    flex: 1,
+    backgroundColor: '#059669',
+    borderRadius: RADIUS.md,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  approveBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   rejectText: { color: COLORS.textMuted, fontWeight: '600', fontSize: 13 },
   disabledBtn: { opacity: 0.6 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },

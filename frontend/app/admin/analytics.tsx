@@ -2,7 +2,7 @@ import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,6 +16,7 @@ import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { exportAdminCsvAndShare, ExportType } from '@/lib/adminExportService';
 
 type AnalyticsMetrics = {
   // Users
@@ -84,6 +85,21 @@ export default function AdminAnalyticsScreen() {
   const [error, setError] = useState('');
   const [metrics, setMetrics] = useState<AnalyticsMetrics>(EMPTY_METRICS);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [exportingType, setExportingType] = useState<ExportType | null>(null);
+
+  const handleExport = async (type: ExportType) => {
+    try {
+      setExportingType(type);
+      await exportAdminCsvAndShare(type);
+    } catch (err: any) {
+      Alert.alert(
+        'Export Failed',
+        err?.message || 'ایکسل شیٹ برآمد کرنے میں ناکامی ہوئی۔ براہ کرم دوبارہ کوشش کریں۔'
+      );
+    } finally {
+      setExportingType(null);
+    }
+  };
 
   const loadAnalytics = useCallback(async () => {
     if (!lastRefreshed) setLoading(true);
@@ -253,6 +269,50 @@ export default function AdminAnalyticsScreen() {
         refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
 
+          {/* 1-CLICK EXCEL / CSV EXPORT */}
+          <SectionHeader title="1-Click Reports & Excel Export (ایکسل شیٹس)" icon="download-outline" />
+          <View style={styles.exportRow}>
+            <TouchableOpacity
+              style={[styles.exportCard, { borderColor: '#10B981', backgroundColor: '#ECFDF5' }]}
+              onPress={() => handleExport('attendance')}
+              disabled={exportingType !== null}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.exportIconBox, { backgroundColor: '#10B981' }]}>
+                {exportingType === 'attendance' ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="document-text" size={20} color="#FFFFFF" />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.exportTitle}>حاضری رجسٹر (Attendance)</Text>
+                <Text style={styles.exportSub}>1-Click Excel/CSV download for all students</Text>
+              </View>
+              <Ionicons name="share-outline" size={18} color="#059669" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.exportCard, { borderColor: '#8B5CF6', backgroundColor: '#F5F3FF' }]}
+              onPress={() => handleExport('quiz_marks')}
+              disabled={exportingType !== null}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.exportIconBox, { backgroundColor: '#8B5CF6' }]}>
+                {exportingType === 'quiz_marks' ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="ribbon" size={20} color="#FFFFFF" />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.exportTitle}>امتحانی نتائج (Quiz Marks)</Text>
+                <Text style={styles.exportSub}>1-Click Excel/CSV of all scores & grades</Text>
+              </View>
+              <Ionicons name="share-outline" size={18} color="#7C3AED" />
+            </TouchableOpacity>
+          </View>
+
           {/* USERS */}
           <SectionHeader title="Users" icon="people-outline" />
           <View style={styles.row}>
@@ -399,4 +459,31 @@ const styles = StyleSheet.create({
   metricLabel: { color: COLORS.textMuted, fontSize: 12, fontWeight: '600' },
   metricValue: { color: COLORS.primary, fontSize: 22, fontWeight: '800' },
   metricSub: { color: COLORS.textMuted, fontSize: 11, marginTop: 2 },
+  exportRow: { gap: 10, marginBottom: 4 },
+  exportCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: SPACING.md,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1.5,
+    ...SHADOWS.card,
+  },
+  exportIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exportTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    marginBottom: 2,
+  },
+  exportSub: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
 });
