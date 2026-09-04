@@ -40,6 +40,9 @@ import { ReportReasonModal } from "@/components/ReportReasonModal";
 import { submitUgcReport, type ReportReason } from "@/lib/ugcReports";
 import { getListenerMetrics, stableQueryKey, subscribeDeduped } from "@/lib/queryPerformance";
 import { trackPerformanceMetric } from "@/lib/performanceEngine";
+import * as DocumentPicker from "expo-document-picker";
+import { Audio, type AVPlaybackStatus } from "expo-av";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
 type StatusComment = {
   id: string;
@@ -59,7 +62,9 @@ type StatusItem = {
   role: "teacher" | "student" | "admin";
   text: string;
   media_url?: string;
-  media_type?: "image" | "video" | "";
+  media_type?: "image" | "video" | "audio" | "";
+  audio_title?: string;
+  duration_ms?: number;
   created_at?: { toDate?: () => Date };
   likes?: string[];
   comments?: StatusComment[];
@@ -96,6 +101,11 @@ export default function StatusScreen() {
   );
   const [updatingId, setUpdatingId] = useState("");
   const [statusMediaUrl, setStatusMediaUrl] = useState("");
+  const [selectedAudio, setSelectedAudio] = useState<{ uri: string; name: string; size?: number } | null>(null);
+  const [audioTitle, setAudioTitle] = useState("تلاوت کلام پاک / Tilawat");
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const [audience, setAudience] = useState<"everyone" | "teachers" | "students">("students");
   const [seenTracker, setSeenTracker] = useState<Record<string, boolean>>({});
   const [commentsByStatus, setCommentsByStatus] = useState<Record<string, StatusComment[]>>({});
@@ -103,6 +113,13 @@ export default function StatusScreen() {
   const [reportStatusTarget, setReportStatusTarget] = useState<StatusItem | null>(null);
   const prefetchQueueRef = useRef<string[]>([]);
   const prefetchInFlightRef = useRef(0);
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const q = query(
@@ -146,7 +163,11 @@ export default function StatusScreen() {
                 ? "video"
                 : data.media_type === "image"
                   ? "image"
-                  : "",
+                  : data.media_type === "audio"
+                    ? "audio"
+                    : "",
+            audio_title: typeof data.audio_title === "string" ? data.audio_title : undefined,
+            duration_ms: typeof data.duration_ms === "number" ? data.duration_ms : undefined,
             created_at: data.created_at || null,
             likes: Array.isArray(data.likes) ? data.likes : [],
             comments: Array.isArray(data.comments) ? data.comments : [],
@@ -169,32 +190,119 @@ export default function StatusScreen() {
     return unsub;
   }, [profile?.role, user?.uid]);
 
+  const toggleFeedAudio = async (item: StatusItem) => {
+    if (!item.media_url) return;
+    try {
+      if (playingAudioId === item.id && soundRef.current) {
+        await soundRef.current.stopAsync().catch(() => {});
+        await soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+        setPlayingAudioId(null);
+        return;
+      }
+
+      if (soundRef.current) {
+        await soundRef.current.stopAsync().catch(() => {});
+        await soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
+
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: item.media_url },
+        { shouldPlay: true },
+        (status: AVPlaybackStatus) => {
+          if (!status.isLoaded) {
+            if (status.error) setPlayingAudioId(null);
+            return;
+          }
+          if (status.didJustFinish) {
+            setPlayingAudioId(null);
+          }
+        }
+      );
+
+      soundRef.current = sound;
+      setPlayingAudioId(item.id);
+    } catch (err) {
+      console.warn("[Status] Audio playback error", err);
+      Alert.alert("چلانے میں مسئلہ", "آڈیو لوڈ نہیں ہو سکی۔");
+      setPlayingAudioId(null);
+    }
+  };
+
+  const pickAudioStatus = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ["audio/*"],
+        copyToCacheDirectory: true,
+      });
+      if (res.canceled || !res.assets || !res.assets[0]) return;
+      const asset = res.assets[0];
+      if (asset.size && asset.size > 20 * 1024 * 1024) {
+        Alert.alert("فائل بڑی ہے", "آڈیو فائل 20MB سے کم ہونی چاہیے (30 سیکنڈ تلاوت/نعت)۔");
+        return;
+      }
+      setSelectedAudio({
+        uri: asset.uri,
+        name: asset.name || "Tilawat_30s.m4a",
+        size: asset.size,
+      });
+    } catch (err: any) {
+      Alert.alert("آڈیو سلیکشن میں مسئلہ", err?.message || "آڈیو منتخب نہ ہو سکی۔");
+    }
+  };
+
   const postStatus = async () => {
     if (__DEV__) {
       console.log("[Status] Post button clicked");
     }
     if (!canPostStatus || !user?.uid || !profile) return;
-    if (!statusText.trim() && !statusMediaUrl.trim()) {
-      Alert.alert("Missing content", "Please add text or a media URL.");
+    if (!statusText.trim() && !statusMediaUrl.trim() && !selectedAudio) {
+      Alert.alert("Missing content", "براہ کرم تحریر، آڈیو یا میڈیا لنک شامل کریں۔");
       return;
     }
     setPosting(true);
     try {
-      let mediaType: "" | "image" | "video" = "";
-      const url = statusMediaUrl.trim();
-      if (url) {
-        if (!url.startsWith("https://")) {
+      let mediaType: "" | "image" | "video" | "audio" = "";
+      let finalMediaUrl = statusMediaUrl.trim();
+
+      if (selectedAudio) {
+        setUploadingAudio(true);
+        const resp = await fetch(selectedAudio.uri);
+        const blob = await resp.blob();
+        const cleanName = selectedAudio.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(-40);
+        const filePath = `status_updates/${user.uid}/${Date.now()}_${cleanName}`;
+        const refObj = storageRef(getStorage(), filePath);
+        await uploadBytes(refObj, blob, { contentType: "audio/mp4" });
+        finalMediaUrl = await getDownloadURL(refObj);
+        mediaType = "audio";
+      } else if (finalMediaUrl) {
+        if (!finalMediaUrl.startsWith("https://")) {
           throw new Error("Media URL must be a valid HTTPS link.");
         }
-        mediaType = url.match(/\.(mp4|mov|webm)$/i) ? "video" : "image";
+        if (finalMediaUrl.match(/\.(mp3|m4a|aac|wav|ogg)$/i)) {
+          mediaType = "audio";
+        } else if (finalMediaUrl.match(/\.(mp4|mov|webm)$/i)) {
+          mediaType = "video";
+        } else {
+          mediaType = "image";
+        }
       }
+
       await addDoc(collection(db, "status_updates"), {
         user_id: user.uid,
-        user_name: profile.name || "Teacher",
+        user_name: profile.name || (profile.role === "admin" ? "مدیر اعلیٰ" : "معلمہ محترمہ"),
         role: profile.role === "admin" ? "admin" : "teacher",
         text: statusText.trim(),
-        media_url: url,
+        media_url: finalMediaUrl,
         media_type: mediaType,
+        audio_title: mediaType === "audio" ? (audioTitle.trim() || "تلاوت کلام پاک / Tilawat") : "",
+        duration_ms: mediaType === "audio" ? 30000 : 5000,
         likes: [],
         comments: [],
         audience,
@@ -207,11 +315,14 @@ export default function StatusScreen() {
       });
       setStatusText("");
       setStatusMediaUrl("");
+      setSelectedAudio(null);
+      setAudioTitle("تلاوت کلام پاک / Tilawat");
     } catch (error: any) {
       console.log("[Status] postStatus ERROR", error);
       Alert.alert("Post failed", error?.message || "Could not post status right now.");
     } finally {
       setPosting(false);
+      setUploadingAudio(false);
     }
   };
 
@@ -422,6 +533,33 @@ export default function StatusScreen() {
             placeholderTextColor={COLORS.textMuted}
             autoCapitalize="none"
           />
+          {selectedAudio ? (
+            <View style={styles.selectedAudioCard}>
+              <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Ionicons name="musical-notes" size={20} color="#059669" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.selectedAudioTitle} numberOfLines={1}>
+                    {selectedAudio.name} (30s Status)
+                  </Text>
+                  <TextInput
+                    style={[styles.input, { minHeight: 36, paddingVertical: 4, marginTop: 4 }]}
+                    value={audioTitle}
+                    onChangeText={setAudioTitle}
+                    placeholder="عنوان: تلاوت / نعت رسول ﷺ"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setSelectedAudio(null)} style={{ padding: 4 }}>
+                <Ionicons name="close-circle" size={22} color={COLORS.error} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.audioPickBtn} onPress={pickAudioStatus}>
+              <Ionicons name="mic" size={18} color="#059669" />
+              <Text style={styles.audioPickBtnText}>آڈیو تلاوت / نعت کا 30-سیکنڈ سٹیٹس لگائیں</Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.row}>
             {(["everyone", "students", "teachers"] as const).map((a) => (
               <TouchableOpacity key={a} style={styles.ghostBtn} onPress={() => setAudience(a)}>
@@ -437,7 +575,7 @@ export default function StatusScreen() {
             {posting ? (
               <ActivityIndicator size="small" color={COLORS.primary} />
             ) : (
-              <Text style={styles.primaryBtnText}>Post Status</Text>
+              <Text style={styles.primaryBtnText}>{uploadingAudio ? "Uploading Tilawat..." : "Post Status"}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -463,7 +601,15 @@ export default function StatusScreen() {
           renderItem={({ item }) => (
             <View style={styles.card}>
               {void markViewed(item)}
-              <Text style={styles.cardName}>{item.user_name}</Text>
+              <View style={styles.authorRow}>
+                <Text style={styles.cardName}>{item.user_name}</Text>
+                {(item.role === "teacher" || item.role === "admin") ? (
+                  <View style={styles.ustaadhaBadge}>
+                    <Ionicons name="shield-checkmark" size={13} color="#059669" />
+                    <Text style={styles.ustaadhaBadgeText}>مستند معلمہ (Ustaadha)</Text>
+                  </View>
+                ) : null}
+              </View>
               <TouchableOpacity style={styles.ghostBtn} onPress={() => router.push({ pathname: "/status-player", params: { itemsJson: JSON.stringify(visibleItems), start: String(visibleItems.findIndex((x) => x.id === item.id)) } } as never)}>
                 <Text style={styles.ghostBtnText}>Open story</Text>
               </TouchableOpacity>
@@ -479,6 +625,30 @@ export default function StatusScreen() {
                       color={COLORS.primary}
                     />
                     <Text style={styles.cardMeta}>Video status</Text>
+                  </View>
+                ) : item.media_type === "audio" ? (
+                  <View style={styles.audioStatusCard}>
+                    <View style={styles.audioIconBox}>
+                      <Ionicons name="musical-note" size={24} color="#059669" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.audioStatusTitle}>
+                        {item.audio_title || "تلاوت کلام پاک / Tilawat Status"}
+                      </Text>
+                      <Text style={styles.audioStatusSub}>
+                        30 سیکنڈ آڈیو تلاوت و نصیحت • مستند معلمہ
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.playAudioBtn}
+                      onPress={() => toggleFeedAudio(item)}
+                    >
+                      <Ionicons
+                        name={playingAudioId === item.id ? "pause" : "play"}
+                        size={20}
+                        color="#ffffff"
+                      />
+                    </TouchableOpacity>
                   </View>
                 ) : (
                   <Image
@@ -720,4 +890,100 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceAlt,
   },
   videoBadge: { flexDirection: "row", alignItems: "center", gap: 6 },
+  authorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  ustaadhaBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  ustaadhaBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#059669",
+  },
+  audioPickBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    borderRadius: RADIUS.lg,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.md,
+  },
+  audioPickBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#059669",
+  },
+  selectedAudioCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+    borderRadius: RADIUS.lg,
+    padding: 10,
+  },
+  selectedAudioTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#166534",
+  },
+  audioStatusCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0FDF4",
+    borderRadius: RADIUS.lg,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    marginVertical: 4,
+  },
+  audioIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#DCFCE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioStatusTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#166534",
+  },
+  audioStatusSub: {
+    fontSize: 11,
+    color: "#15803D",
+    marginTop: 2,
+  },
+  playAudioBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#059669",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+
 });
