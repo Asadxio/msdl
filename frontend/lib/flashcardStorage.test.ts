@@ -17,6 +17,11 @@ import {
   toggleCardMastery,
   getFlashcardsByCategory,
   MASTERED_CARDS_STORAGE_KEY,
+  recordCardReview,
+  loadCardSRSRecords,
+  sortCardsBySRS,
+  addCustomAiFlashcards,
+  loadCustomAiFlashcards,
 } from './flashcardStorage';
 import { ISLAMIC_FLASHCARDS, FLASHCARD_CATEGORIES } from '../constants/flashcardData';
 
@@ -60,5 +65,44 @@ describe('Interactive Islamic Flashcards Storage & Logic', () => {
 
   it('uses consistent AsyncStorage persistence key', () => {
     expect(MASTERED_CARDS_STORAGE_KEY).toBe('@msdl_mastered_flashcards');
+  });
+
+  it('records SRS reviews and updates mastery level appropriately', async () => {
+    const res1 = await recordCardReview('card_1', 'know');
+    expect(res1.record.level).toBe(1);
+    expect(res1.record.correctCount).toBe(1);
+
+    const res2 = await recordCardReview('card_1', 'dont_know');
+    expect(res2.record.level).toBe(1); // floor at 1 for reviewed card
+
+    // Multiple successful reviews elevate card to mastered
+    await recordCardReview('card_2', 'know');
+    await recordCardReview('card_2', 'know');
+    await recordCardReview('card_2', 'know');
+    const resMastered = await recordCardReview('card_2', 'know');
+    expect(resMastered.record.level).toBe(4);
+    expect(resMastered.isMastered).toBe(true);
+
+    const records = await loadCardSRSRecords();
+    expect(records['card_2']).toBeDefined();
+
+    // SRS sorting puts non-mastered or new cards ahead of mastered cards
+    const sorted = sortCardsBySRS(ISLAMIC_FLASHCARDS, records);
+    expect(sorted.length).toBe(ISLAMIC_FLASHCARDS.length);
+  });
+
+  it('persists and loads custom AI flashcards', async () => {
+    const newCard = {
+      id: 'custom_1',
+      category: 'fiqh' as const,
+      categoryTitle: 'فقہ',
+      topic: 'ٹیسٹ موضوع',
+      frontText: 'عربی متن',
+      backTranslation: 'ترجمہ',
+      reference: 'بخاری',
+    };
+    await addCustomAiFlashcards([newCard]);
+    const loaded = await loadCustomAiFlashcards();
+    expect(loaded.some((c) => c.id === 'custom_1')).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,10 @@ import {
   Animated,
   Platform,
   Dimensions,
+  PanResponder,
+  Modal,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -21,7 +25,14 @@ import {
   loadMasteredCardIds,
   toggleCardMastery,
   getFlashcardsByCategory,
+  loadCardSRSRecords,
+  recordCardReview,
+  sortCardsBySRS,
+  loadCustomAiFlashcards,
+  addCustomAiFlashcards,
+  CardSRSRecord,
 } from '@/lib/flashcardStorage';
+import { generateAiFlashcards } from '@/lib/aiFlashcardGenerator';
 import { goBackOrReplace } from '@/lib/navigation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -36,21 +47,45 @@ export default function FlashcardsScreen() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [masteredIds, setMasteredIds] = useState<string[]>([]);
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
+  const [srsRecords, setSrsRecords] = useState<Record<string, CardSRSRecord>>({});
+  const [srsSmartMode, setSrsSmartMode] = useState<boolean>(true);
+  const [customAiCards, setCustomAiCards] = useState<IslamicFlashcard[]>([]);
+
+  // AI Modal State
+  const [aiModalVisible, setAiModalVisible] = useState<boolean>(false);
+  const [aiTopic, setAiTopic] = useState<string>('Salah / Namaz');
+  const [generatingAi, setGeneratingAi] = useState<boolean>(false);
 
   // Flip Animation ref
   const animatedValue = useRef(new Animated.Value(0)).current;
 
+  // 10.3 PanResponder Swipe Gesture Animation
+  const pan = useRef(new Animated.ValueXY()).current;
+  const isDraggingRef = useRef(false);
+
   useEffect(() => {
-    const list = getFlashcardsByCategory(activeCategory);
+    Promise.all([
+      loadMasteredCardIds(),
+      loadCardSRSRecords(),
+      loadCustomAiFlashcards(),
+    ]).then(([mastered, srs, custom]) => {
+      setMasteredIds(mastered);
+      setSrsRecords(srs);
+      setCustomAiCards(custom);
+    });
+  }, []);
+
+  useEffect(() => {
+    let list = getFlashcardsByCategory(activeCategory, customAiCards);
+    if (srsSmartMode) {
+      list = sortCardsBySRS(list, srsRecords);
+    }
     setCards(list);
     setCurrentIndex(0);
     setIsFlipped(false);
     animatedValue.setValue(0);
-  }, [activeCategory]);
-
-  useEffect(() => {
-    loadMasteredCardIds().then(setMasteredIds);
-  }, []);
+    pan.setValue({ x: 0, y: 0 });
+  }, [activeCategory, srsSmartMode, customAiCards]);
 
   const flipCard = () => {
     if (isFlipped) {
@@ -82,6 +117,25 @@ export default function FlashcardsScreen() {
     outputRange: ['180deg', '360deg'],
   });
 
+  // Swipe gesture interpolations
+  const rotateCard = pan.x.interpolate({
+    inputRange: [-SCREEN_WIDTH * 1.5, 0, SCREEN_WIDTH * 1.5],
+    outputRange: ['-25deg', '0deg', '25deg'],
+    extrapolate: 'clamp',
+  });
+
+  const rightStampOpacity = pan.x.interpolate({
+    inputRange: [15, 90],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const leftStampOpacity = pan.x.interpolate({
+    inputRange: [-90, -15],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
   const frontAnimatedStyle = {
     transform: [{ rotateY: frontInterpolate }],
   };
@@ -89,6 +143,77 @@ export default function FlashcardsScreen() {
   const backAnimatedStyle = {
     transform: [{ rotateY: backInterpolate }],
   };
+
+  // 10.3 Card Swipe Completion Handlers
+  const handleSwipeComplete = (direction: 'right' | 'left') => {
+    const card = cards[currentIndex];
+    const toX = direction === 'right' ? SCREEN_WIDTH + 80 : -SCREEN_WIDTH - 80;
+
+    Animated.timing(pan, {
+      toValue: { x: toX, y: 0 },
+      duration: 220,
+      useNativeDriver: true,
+    }).start(async () => {
+      pan.setValue({ x: 0, y: 0 });
+      if (isFlipped) {
+        animatedValue.setValue(0);
+        setIsFlipped(false);
+      }
+
+      if (card) {
+        // Record review in 10.1 SRS
+        const res = await recordCardReview(card.id, direction === 'right' ? 'know' : 'dont_know');
+        setSrsRecords((prev) => ({ ...prev, [card.id]: res.record }));
+
+        const updatedMastered = await loadMasteredCardIds();
+        setMasteredIds(updatedMastered);
+      }
+
+      // Advance to next card
+      setCurrentIndex((prev) => {
+        if (prev < cards.length - 1) return prev + 1;
+        return 0; // loop back to first for continuous practice
+      });
+    });
+  };
+
+  // PanResponder configuration
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const isHorizontal = Math.abs(gestureState.dx) > 12 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+        return isHorizontal;
+      },
+      onPanResponderGrant: () => {
+        isDraggingRef.current = true;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        pan.setValue({ x: gestureState.dx, y: gestureState.dy * 0.4 });
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        setTimeout(() => {
+          isDraggingRef.current = false;
+        }, 80);
+
+        if (gestureState.dx > 100) {
+          // Swipe Right: Mastered / Know
+          handleSwipeComplete('right');
+        } else if (gestureState.dx < -100) {
+          // Swipe Left: Needs Practice / Don't Know
+          handleSwipeComplete('left');
+        } else {
+          // Spring back to center
+          Animated.spring(pan, {
+            toValue: { x: 0, y: 0 },
+            friction: 6,
+            tension: 40,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   const handleNext = () => {
     if (currentIndex < cards.length - 1) {
@@ -113,12 +238,32 @@ export default function FlashcardsScreen() {
 
   const currentCard = cards[currentIndex] || cards[0];
   const isCurrentMastered = currentCard && masteredIds.includes(currentCard.id);
+  const currentCardSRS = currentCard ? srsRecords[currentCard.id] : null;
 
   const handleToggleMastered = async () => {
     if (!currentCard) return;
     const res = await toggleCardMastery(currentCard.id);
     const updated = await loadMasteredCardIds();
     setMasteredIds(updated);
+    const srs = await loadCardSRSRecords();
+    setSrsRecords(srs);
+  };
+
+  // 10.2 Generate AI Cards Handler
+  const handleGenerateAiDeck = async () => {
+    setGeneratingAi(true);
+    try {
+      const generated = await generateAiFlashcards({ topic: aiTopic, count: 4 });
+      const updatedCustom = await addCustomAiFlashcards(generated);
+      setCustomAiCards(updatedCustom);
+      setActiveCategory('custom_ai');
+      setAiModalVisible(false);
+      Alert.alert('ماشاءاللہ', `AI نے "${aiTopic}" کے نئے کارڈز کامیابی سے تیار کر دیے!`);
+    } catch {
+      Alert.alert('خطا', 'AI کارڈز تیار کرنے میں مسئلہ پیش آیا۔');
+    } finally {
+      setGeneratingAi(false);
+    }
   };
 
   const masteredInActiveDeck = cards.filter((c) => masteredIds.includes(c.id)).length;
@@ -139,18 +284,56 @@ export default function FlashcardsScreen() {
           <Text style={styles.arabicHeader}>Islamic Flashcards</Text>
           <Text style={styles.headerSubtitle}>Memorize Duas, Hadiths & Fiqh Rules</Text>
         </View>
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={handleShuffle}
-          accessibilityLabel="Shuffle cards"
-        >
-          <Ionicons name="shuffle-outline" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* 10.2 AI Generator Button */}
+          <TouchableOpacity
+            style={[styles.headerBtn, { backgroundColor: '#C8A84E' }]}
+            onPress={() => setAiModalVisible(true)}
+            accessibilityLabel="Generate AI Flashcards"
+          >
+            <Ionicons name="sparkles" size={18} color="#002E23" />
+          </TouchableOpacity>
+
+          {/* 10.1 SRS Smart Mode Toggle */}
+          <TouchableOpacity
+            style={[styles.headerBtn, srsSmartMode && { backgroundColor: '#10B981' }]}
+            onPress={() => setSrsSmartMode(!srsSmartMode)}
+            accessibilityLabel="Toggle SRS Smart Review"
+          >
+            <Ionicons name="sync-circle" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={handleShuffle}
+            accessibilityLabel="Shuffle cards"
+          >
+            <Ionicons name="shuffle-outline" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Category Tabs */}
       <View style={styles.categoryTabsWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryTabsScroll}>
+          {customAiCards.length > 0 && (
+            <TouchableOpacity
+              style={[styles.categoryTab, activeCategory === 'custom_ai' && styles.categoryTabSelected]}
+              onPress={() => setActiveCategory('custom_ai')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="sparkles"
+                size={14}
+                color={activeCategory === 'custom_ai' ? '#002E23' : '#C8A84E'}
+              />
+              <Text style={[styles.categoryTabText, activeCategory === 'custom_ai' && styles.categoryTabTextSelected]}>
+                AI Cards ({customAiCards.length})
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {FLASHCARD_CATEGORIES.map((cat) => {
             const isSelected = activeCategory === cat.id;
             return (
@@ -187,80 +370,139 @@ export default function FlashcardsScreen() {
         </View>
       </View>
 
-      {/* Main Flashcard Viewport */}
+      {/* Main Flashcard Viewport with 10.3 PanResponder Swipe Gestures */}
       <View style={styles.cardContainer}>
         {currentCard ? (
-          <TouchableOpacity activeOpacity={1} onPress={flipCard} style={styles.touchArea}>
-            {/* FRONT FACE */}
-            <Animated.View style={[styles.card, styles.frontCard, frontAnimatedStyle]}>
-              <View style={styles.cardTopBar}>
-                <View style={styles.topicBadge}>
-                  <Text style={styles.topicBadgeText}>{currentCard.topic}</Text>
-                </View>
-                <View style={styles.cardCounter}>
-                  <Text style={styles.cardCounterText}>{currentIndex + 1} / {cards.length}</Text>
-                </View>
-              </View>
-
-              <View style={styles.cardBody}>
-                <Text style={styles.bismillahTiny}>Bismillahir-Rahmanir-Rahim</Text>
-                <Text style={styles.arabicTextLarge}>{currentCard.frontText}</Text>
-                {currentCard.frontSubtitle && (
-                  <Text style={styles.frontSubtitleText}>{currentCard.frontSubtitle}</Text>
-                )}
-              </View>
-
-              {/* FLIP HINT */}
-              <View style={styles.cardFooter}>
-                <Ionicons name="sync-outline" size={16} color="#005F46" />
-                <Text style={styles.flipHintText}>Tap Card to Flip & View Meaning</Text>
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={[
+              styles.touchArea,
+              {
+                transform: [
+                  { translateX: pan.x },
+                  { translateY: pan.y },
+                  { rotate: rotateCard },
+                ],
+              },
+            ]}
+          >
+            {/* 10.3 Swipe Stamp Badges */}
+            <Animated.View style={[styles.swipeStamp, styles.swipeStampRight, { opacity: rightStampOpacity }]}>
+              <View style={styles.stampInnerRight}>
+                <Ionicons name="checkmark-circle" size={26} color="#16A34A" />
+                <Text style={styles.stampTextRight}>یاد ہو گیا (KNEW IT)</Text>
               </View>
             </Animated.View>
 
-            {/* BACK FACE */}
-            <Animated.View style={[styles.card, styles.backCard, backAnimatedStyle]}>
-              <View style={styles.cardTopBar}>
-                <View style={[styles.topicBadge, { backgroundColor: '#FEF3C7' }]}>
-                  <Text style={[styles.topicBadgeText, { color: '#B45309' }]}>Meaning & Guidance</Text>
-                </View>
-                <View style={styles.cardCounter}>
-                  <Text style={styles.cardCounterText}>
-                    {currentIndex + 1} / {cards.length}
-                  </Text>
-                </View>
-              </View>
-
-              <ScrollView style={styles.backScroll} showsVerticalScrollIndicator={false}>
-                <Text style={styles.backTranslationText}>{currentCard.backTranslation}</Text>
-
-                {currentCard.backRoman && (
-                  <View style={styles.romanBox}>
-                    <Text style={styles.romanLabel}>Roman Pronunciation:</Text>
-                    <Text style={styles.romanText}>{currentCard.backRoman}</Text>
-                  </View>
-                )}
-
-                {currentCard.backExplanation && (
-                  <View style={styles.explanationBox}>
-                    <Ionicons name="bulb-outline" size={14} color="#005F46" />
-                    <Text style={styles.explanationText}>{currentCard.backExplanation}</Text>
-                  </View>
-                )}
-
-                {currentCard.reference && (
-                  <View style={styles.refBox}>
-                    <Ionicons name="book" size={14} color="#C8A84E" />
-                    <Text style={styles.refText}>{currentCard.reference}</Text>
-                  </View>
-                )}
-              </ScrollView>
-
-              <View style={styles.cardBottomBar}>
-                <Ionicons name="sync-outline" size={16} color="#005F46" />
-                <Text style={styles.flipHintText}>Tap to Return to Arabic Word</Text>
+            <Animated.View style={[styles.swipeStamp, styles.swipeStampLeft, { opacity: leftStampOpacity }]}>
+              <View style={styles.stampInnerLeft}>
+                <Ionicons name="close-circle" size={26} color="#DC2626" />
+                <Text style={styles.stampTextLeft}>دوبارہ دہرائیں (PRACTICE)</Text>
               </View>
             </Animated.View>
-          </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => {
+                if (!isDraggingRef.current) flipCard();
+              }}
+              style={{ width: '100%', height: '100%' }}
+            >
+              {/* FRONT FACE */}
+              <Animated.View style={[styles.card, styles.frontCard, frontAnimatedStyle]}>
+                <View style={styles.cardTopBar}>
+                  <View style={styles.topicBadge}>
+                    <Text style={styles.topicBadgeText}>{currentCard.topic}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {/* 10.1 SRS Retention Stage Badge */}
+                    {currentCardSRS && (
+                      <View style={[
+                        styles.srsLevelBadge,
+                        currentCardSRS.level >= 4
+                          ? styles.srsLevelMastered
+                          : currentCardSRS.level >= 2
+                          ? styles.srsLevelLearning
+                          : styles.srsLevelWeak
+                      ]}>
+                        <Text style={styles.srsLevelText}>
+                          {currentCardSRS.level >= 4 ? 'پکا یاد' : currentCardSRS.level >= 2 ? 'جاری' : 'کمزور'}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.cardCounter}>
+                      <Text style={styles.cardCounterText}>{currentIndex + 1} / {cards.length}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.cardBody}>
+                  <Text style={styles.bismillahTiny}>Bismillahir-Rahmanir-Rahim</Text>
+                  <Text style={styles.arabicTextLarge}>{currentCard.frontText}</Text>
+                  {currentCard.frontSubtitle && (
+                    <Text style={styles.frontSubtitleText}>{currentCard.frontSubtitle}</Text>
+                  )}
+                </View>
+
+                {/* FLIP HINT & GESTURE HINT */}
+                <View style={styles.cardFooter}>
+                  <View style={styles.gestureHintRow}>
+                    <Text style={styles.gestureHintText}>👈 Swipe Left: دہرائیں</Text>
+                    <View style={styles.footerDot} />
+                    <Text style={styles.gestureHintText}>Swipe Right: یاد ہے 👉</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <Ionicons name="sync-outline" size={14} color="#005F46" />
+                    <Text style={styles.flipHintText}>Tap Card to Flip & View Meaning</Text>
+                  </View>
+                </View>
+              </Animated.View>
+
+              {/* BACK FACE */}
+              <Animated.View style={[styles.card, styles.backCard, backAnimatedStyle]}>
+                <View style={styles.cardTopBar}>
+                  <View style={[styles.topicBadge, { backgroundColor: '#FEF3C7' }]}>
+                    <Text style={[styles.topicBadgeText, { color: '#B45309' }]}>Meaning & Guidance</Text>
+                  </View>
+                  <View style={styles.cardCounter}>
+                    <Text style={styles.cardCounterText}>
+                      {currentIndex + 1} / {cards.length}
+                    </Text>
+                  </View>
+                </View>
+
+                <ScrollView style={styles.backScroll} showsVerticalScrollIndicator={false}>
+                  <Text style={styles.backTranslationText}>{currentCard.backTranslation}</Text>
+
+                  {currentCard.backRoman && (
+                    <View style={styles.romanBox}>
+                      <Text style={styles.romanLabel}>Roman Pronunciation:</Text>
+                      <Text style={styles.romanText}>{currentCard.backRoman}</Text>
+                    </View>
+                  )}
+
+                  {currentCard.backExplanation && (
+                    <View style={styles.explanationBox}>
+                      <Ionicons name="bulb-outline" size={14} color="#005F46" />
+                      <Text style={styles.explanationText}>{currentCard.backExplanation}</Text>
+                    </View>
+                  )}
+
+                  {currentCard.reference && (
+                    <View style={styles.refBox}>
+                      <Ionicons name="book" size={14} color="#C8A84E" />
+                      <Text style={styles.refText}>{currentCard.reference}</Text>
+                    </View>
+                  )}
+                </ScrollView>
+
+                <View style={styles.cardBottomBar}>
+                  <Ionicons name="sync-outline" size={16} color="#005F46" />
+                  <Text style={styles.flipHintText}>Tap to Return to Arabic Word</Text>
+                </View>
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
         ) : (
           <View style={styles.emptyCard}>
             <Ionicons name="albums-outline" size={48} color="#94A3B8" />
@@ -308,6 +550,80 @@ export default function FlashcardsScreen() {
           />
         </TouchableOpacity>
       </View>
+
+      {/* 10.2 AI Flashcard Generator Modal */}
+      <Modal
+        visible={aiModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAiModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="sparkles" size={20} color="#C8A84E" />
+                <Text style={styles.modalTitle}>AI Flashcard Deck Maker</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAiModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalDesc}>
+              Select an Islamic course topic to generate high-yield memorization cards instantly with Arabic text, Urdu meanings, and authentic references:
+            </Text>
+
+            <View style={styles.topicOptionsList}>
+              {[
+                'Salah / Namaz',
+                'Fasting / Roza',
+                'Zakat & Charity',
+                'Tajweed Rules',
+                'Seerah & Akhlaq',
+              ].map((topic) => {
+                const isSelected = aiTopic === topic;
+                return (
+                  <TouchableOpacity
+                    key={topic}
+                    style={[styles.topicOptionBtn, isSelected && styles.topicOptionBtnSelected]}
+                    onPress={() => setAiTopic(topic)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                      size={18}
+                      color={isSelected ? '#005F46' : '#94A3B8'}
+                    />
+                    <Text style={[styles.topicOptionText, isSelected && styles.topicOptionTextSelected]}>
+                      {topic}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.generateAiSubmitBtn, generatingAi && { opacity: 0.7 }]}
+              onPress={handleGenerateAiDeck}
+              disabled={generatingAi}
+              activeOpacity={0.85}
+            >
+              {generatingAi ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator size="small" color="#002E23" />
+                  <Text style={styles.generateAiSubmitBtnText}>Generating Authentic Cards...</Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="sparkles" size={18} color="#002E23" />
+                  <Text style={styles.generateAiSubmitBtnText}>Generate 4 Cards (کارڈز بنائیں)</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -649,5 +965,173 @@ const styles = StyleSheet.create({
   },
   masteryBtnTextActive: {
     color: '#FFFFFF',
+  },
+
+  // 10.3 Swipe Stamp Badges & Overlays
+  swipeStamp: {
+    position: 'absolute',
+    top: 30,
+    zIndex: 999,
+    padding: 8,
+  },
+  swipeStampRight: {
+    left: 20,
+  },
+  swipeStampLeft: {
+    right: 20,
+  },
+  stampInnerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 2.5,
+    borderColor: '#16A34A',
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    transform: [{ rotate: '-15deg' }],
+    ...SHADOWS.card,
+  },
+  stampTextRight: {
+    color: '#16A34A',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  stampInnerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 2.5,
+    borderColor: '#DC2626',
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    transform: [{ rotate: '15deg' }],
+    ...SHADOWS.card,
+  },
+  stampTextLeft: {
+    color: '#DC2626',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  // 10.1 SRS Stage Badge
+  srsLevelBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  srsLevelMastered: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC',
+  },
+  srsLevelLearning: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  srsLevelWeak: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+  },
+  srsLevelText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+
+  // Gesture Hint
+  gestureHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  gestureHintText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  footerDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#CBD5E1',
+  },
+
+  // 10.2 AI Flashcard Maker Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: RADIUS.xxl,
+    borderTopRightRadius: RADIUS.xxl,
+    padding: SPACING.lg,
+    gap: 14,
+    ...SHADOWS.card,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#002E23',
+  },
+  modalDesc: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 18,
+  },
+  topicOptionsList: {
+    gap: 8,
+    marginVertical: 4,
+  },
+  topicOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  topicOptionBtnSelected: {
+    borderColor: '#005F46',
+    backgroundColor: '#E8F5EE',
+  },
+  topicOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  topicOptionTextSelected: {
+    color: '#005F46',
+    fontWeight: '800',
+  },
+  generateAiSubmitBtn: {
+    backgroundColor: '#C8A84E',
+    borderRadius: RADIUS.full,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    ...SHADOWS.card,
+  },
+  generateAiSubmitBtnText: {
+    color: '#002E23',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
