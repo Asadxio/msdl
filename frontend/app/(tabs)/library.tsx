@@ -18,7 +18,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getBookProgress } from '@/lib/libraryStorage';
+import {
+  getBookProgress,
+  getAllBooksProgress,
+  getBookReadCounts,
+  type BookReadingProgress,
+} from '@/lib/libraryStorage';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData, Book } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
@@ -28,6 +33,14 @@ import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/comp
 
 const RECENTLY_VIEWED_KEY = 'library_recently_viewed_v1';
 const MAX_RECENTLY_VIEWED = 10;
+
+// Teacher recommended foundational books
+const TEACHER_RECOMMENDED_TITLES = [
+  'Risala Roohi Sharif',
+  'Misbah-ul-Insha',
+  'Qirat Course',
+  'Uroos ul Adab',
+];
 
 async function getRecentlyViewed(): Promise<string[]> {
   try {
@@ -68,9 +81,30 @@ const BOOK_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Tafseer: 'reader',
 };
 
-function BookCard({ book, isAdmin, lastPage, onDelete, onOpen }: { book: Book; isAdmin: boolean; lastPage?: number; onDelete: (book: Book) => void; onOpen: (book: Book) => void }) {
+function BookCard({
+  book,
+  isAdmin,
+  progress,
+  isRecommended,
+  rank,
+  onDelete,
+  onOpen,
+}: {
+  book: Book;
+  isAdmin: boolean;
+  progress?: BookReadingProgress;
+  isRecommended?: boolean;
+  rank?: number;
+  onDelete: (book: Book) => void;
+  onOpen: (book: Book) => void;
+}) {
   const catColor = CATEGORY_COLORS[book.category] || { bg: COLORS.surfaceAlt, text: COLORS.textMuted };
   const iconName = BOOK_ICONS[book.category] || 'book';
+
+  const lastPage = progress?.lastPage || 1;
+  const totalPages = progress?.totalPages || 100;
+  const hasStarted = lastPage > 1;
+  const progressPercent = hasStarted ? Math.min(100, Math.round((lastPage / totalPages) * 100)) : 0;
 
   return (
     <ScalePressable
@@ -80,19 +114,25 @@ function BookCard({ book, isAdmin, lastPage, onDelete, onOpen }: { book: Book; i
     >
       <View style={[styles.coverArea, { backgroundColor: catColor.bg }]}>
         <Ionicons name={iconName} size={36} color={catColor.text} />
+        {rank && rank <= 3 ? (
+          <View style={[styles.rankBadge, rank === 1 ? styles.rank1Badge : rank === 2 ? styles.rank2Badge : styles.rank3Badge]}>
+            <Text style={styles.rankBadgeText}>#{rank}</Text>
+          </View>
+        ) : isRecommended ? (
+          <View style={styles.recommendedBadge}>
+            <Ionicons name="star" size={10} color="#92400E" />
+            <Text style={styles.recommendedBadgeText}>Recommended</Text>
+          </View>
+        ) : null}
       </View>
+
       <View style={styles.cardBody}>
         <Text style={styles.bookTitle} numberOfLines={2}>{book.title}</Text>
+
         <View style={styles.bookMetaRow}>
           <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
             <Text style={[styles.categoryText, { color: catColor.text }]}>{book.category}</Text>
           </View>
-          {lastPage && lastPage > 1 ? (
-            <View style={styles.cardBookmarkBadge}>
-              <Ionicons name="bookmark" size={10} color={COLORS.primary} />
-              <Text style={styles.cardBookmarkText}>p.{lastPage}</Text>
-            </View>
-          ) : null}
           {isAdmin && (
             <TouchableOpacity
               style={styles.deleteBtn}
@@ -104,6 +144,21 @@ function BookCard({ book, isAdmin, lastPage, onDelete, onOpen }: { book: Book; i
             </TouchableOpacity>
           )}
         </View>
+
+        {/* 7.1 Reading Progress Bar per book */}
+        {hasStarted ? (
+          <View style={styles.cardProgressContainer}>
+            <View style={styles.cardProgressBarTrack}>
+              <View style={[styles.cardProgressBarFill, { width: `${progressPercent}%` }]} />
+            </View>
+            <View style={styles.cardProgressStatsRow}>
+              <Text style={styles.cardProgressText}>
+                p. {lastPage}/{totalPages}
+              </Text>
+              <Text style={styles.cardProgressPercentText}>{progressPercent}%</Text>
+            </View>
+          </View>
+        ) : null}
       </View>
     </ScalePressable>
   );
@@ -119,28 +174,28 @@ export default function LibraryScreen() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState<string>('all'); // 'all' | 'popular' | 'recommended' | categoryId
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
-  const [bookProgressMap, setBookProgressMap] = useState<Record<string, number>>({});
+  const [bookProgressMap, setBookProgressMap] = useState<Record<string, BookReadingProgress>>({});
+  const [bookReadCounts, setBookReadCounts] = useState<Record<string, number>>({});
   const refreshSpin = useRef(new Animated.Value(0)).current;
 
-  // Load recently viewed IDs on mount
+  // Load recently viewed IDs, read progress, and popularity rankings on mount & when books change
   useEffect(() => {
-    getRecentlyViewed().then(async (ids) => {
-      setRecentlyViewedIds(ids);
-      const map: Record<string, number> = {};
-      for (const id of ids) {
-        const prog = await getBookProgress(id);
-        if (prog?.lastPage) {
-          map[id] = prog.lastPage;
-        }
-      }
-      setBookProgressMap(map);
-    }).catch(() => {});
+    getRecentlyViewed().then(setRecentlyViewedIds).catch(() => {});
+    getBookReadCounts().then(setBookReadCounts).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!books.length) return;
+    const bookIds = books.map((b) => b.id);
+    getAllBooksProgress(bookIds)
+      .then(setBookProgressMap)
+      .catch(() => {});
+  }, [books]);
 
   const handleOpenBook = useCallback((book: Book) => {
     router.push(`/book/${book.id}`);
@@ -148,6 +203,8 @@ export default function LibraryScreen() {
       .then(() => getRecentlyViewed())
       .then(setRecentlyViewedIds)
       .catch(() => {});
+    // Refresh read counts
+    getBookReadCounts().then(setBookReadCounts).catch(() => {});
   }, [router]);
 
   const recentlyViewedBooks = useMemo(
@@ -157,6 +214,29 @@ export default function LibraryScreen() {
       .slice(0, 6),
     [recentlyViewedIds, books],
   );
+
+  // 7.3 Most Read / Popular Books ranking
+  const popularBookIds = useMemo(() => {
+    return Object.entries(bookReadCounts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([id]) => id);
+  }, [bookReadCounts]);
+
+  const bookRankMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    popularBookIds.forEach((id, index) => {
+      map[id] = index + 1;
+    });
+    return map;
+  }, [popularBookIds]);
+
+  const teacherRecommendedBooks = useMemo(() => {
+    return books.filter((b) =>
+      TEACHER_RECOMMENDED_TITLES.some(
+        (rec) => b.title.toLowerCase().includes(rec.toLowerCase())
+      )
+    );
+  }, [books]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -199,11 +279,11 @@ export default function LibraryScreen() {
     try {
       const ok = await refetchBooks();
       await fetchCategoriesOnce();
+      const readCounts = await getBookReadCounts();
+      setBookReadCounts(readCounts);
       if (!ok) throw new Error('library refresh failed');
     } catch {
       setFeedback({ type: 'error', text: 'Unable to refresh library. Please try again.' });
-    } finally {
-      
     }
   };
 
@@ -222,13 +302,33 @@ export default function LibraryScreen() {
     return unsub;
   }, []);
 
-  const filteredBooks = useMemo(() => books.filter((book) => {
-    const matchSearch = !debouncedSearch
-      || book.title.toLowerCase().includes(debouncedSearch)
-      || book.category.toLowerCase().includes(debouncedSearch);
-    const matchCategory = !selectedCategoryId || book.category_id === selectedCategoryId;
-    return matchSearch && matchCategory;
-  }), [books, debouncedSearch, selectedCategoryId]);
+  const filteredBooks = useMemo(() => {
+    let list = books.filter((book) => {
+      const matchSearch = !debouncedSearch
+        || book.title.toLowerCase().includes(debouncedSearch)
+        || book.category.toLowerCase().includes(debouncedSearch);
+      return matchSearch;
+    });
+
+    if (selectedFilter === 'popular') {
+      // Sort by read counts descending
+      list = [...list].sort((a, b) => {
+        const countA = bookReadCounts[a.id] || 0;
+        const countB = bookReadCounts[b.id] || 0;
+        return countB - countA;
+      });
+    } else if (selectedFilter === 'recommended') {
+      list = list.filter((b) =>
+        TEACHER_RECOMMENDED_TITLES.some(
+          (rec) => b.title.toLowerCase().includes(rec.toLowerCase())
+        )
+      );
+    } else if (selectedFilter !== 'all') {
+      list = list.filter((b) => b.category_id === selectedFilter);
+    }
+
+    return list;
+  }, [books, debouncedSearch, selectedFilter, bookReadCounts]);
 
   const handleDeleteBook = (book: Book) => {
     Alert.alert('Archive Book', `Move "${book.title}" to archive? You can restore later from Firestore backups.`, [
@@ -301,12 +401,44 @@ export default function LibraryScreen() {
           onChangeText={setSearch}
         />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          <TouchableOpacity style={[styles.filterChip, !selectedCategoryId && styles.filterChipActive]} onPress={() => setSelectedCategoryId('')}>
-            <Text style={[styles.filterChipText, !selectedCategoryId && styles.filterChipTextActive]}>All</Text>
+          {/* All */}
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
+            onPress={() => setSelectedFilter('all')}
+          >
+            <Text style={[styles.filterChipText, selectedFilter === 'all' && styles.filterChipTextActive]}>All</Text>
           </TouchableOpacity>
+
+          {/* 7.3 Popular Books ranking filter */}
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'popular' && styles.filterChipActive, styles.popularChip]}
+            onPress={() => setSelectedFilter('popular')}
+          >
+            <Text style={[styles.filterChipText, selectedFilter === 'popular' && styles.filterChipTextActive]}>
+              🔥 Popular
+            </Text>
+          </TouchableOpacity>
+
+          {/* 7.3 Teacher Recommended filter */}
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'recommended' && styles.filterChipActive, styles.recommendedChip]}
+            onPress={() => setSelectedFilter('recommended')}
+          >
+            <Text style={[styles.filterChipText, selectedFilter === 'recommended' && styles.filterChipTextActive]}>
+              ⭐ Recommended
+            </Text>
+          </TouchableOpacity>
+
+          {/* Category Chips */}
           {categories.map((cat) => (
-            <TouchableOpacity key={cat.id} style={[styles.filterChip, selectedCategoryId === cat.id && styles.filterChipActive]} onPress={() => setSelectedCategoryId(cat.id)}>
-              <Text style={[styles.filterChipText, selectedCategoryId === cat.id && styles.filterChipTextActive]}>{cat.name}</Text>
+            <TouchableOpacity
+              key={cat.id}
+              style={[styles.filterChip, selectedFilter === cat.id && styles.filterChipActive]}
+              onPress={() => setSelectedFilter(cat.id)}
+            >
+              <Text style={[styles.filterChipText, selectedFilter === cat.id && styles.filterChipTextActive]}>
+                {cat.name}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -345,29 +477,72 @@ export default function LibraryScreen() {
           refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          ListHeaderComponent={recentlyViewedBooks.length > 0 && !debouncedSearch ? (
-            <View style={styles.recentlyViewedSection}>
-              <Text style={styles.recentlyViewedTitle}>Recently Viewed</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentlyViewedRow}>
-                {recentlyViewedBooks.map((book) => {
-                  const catColor = CATEGORY_COLORS[book.category] || { bg: COLORS.surfaceAlt, text: COLORS.textMuted };
-                  return (
-                    <TouchableOpacity
-                      key={book.id}
-                      style={[styles.recentChip, { backgroundColor: catColor.bg }]}
-                      onPress={() => { void handleOpenBook(book); }}
-                    >
-                      <Ionicons name={BOOK_ICONS[book.category] || 'book'} size={14} color={catColor.text} />
-                      <Text style={[styles.recentChipText, { color: catColor.text }]} numberOfLines={1}>
-                        {book.title}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+          ListHeaderComponent={
+            <View>
+              {/* Recently Viewed (when not searching) */}
+              {recentlyViewedBooks.length > 0 && !debouncedSearch ? (
+                <View style={styles.recentlyViewedSection}>
+                  <Text style={styles.recentlyViewedTitle}>Recently Viewed</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentlyViewedRow}>
+                    {recentlyViewedBooks.map((book) => {
+                      const catColor = CATEGORY_COLORS[book.category] || { bg: COLORS.surfaceAlt, text: COLORS.textMuted };
+                      return (
+                        <TouchableOpacity
+                          key={book.id}
+                          style={[styles.recentChip, { backgroundColor: catColor.bg }]}
+                          onPress={() => { void handleOpenBook(book); }}
+                        >
+                          <Ionicons name={BOOK_ICONS[book.category] || 'book'} size={14} color={catColor.text} />
+                          <Text style={[styles.recentChipText, { color: catColor.text }]} numberOfLines={1}>
+                            {book.title}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              {/* 7.3 Teacher Recommended Section Showcase banner */}
+              {selectedFilter === 'all' && !debouncedSearch && teacherRecommendedBooks.length > 0 ? (
+                <View style={styles.recommendedSection}>
+                  <View style={styles.recommendedHeaderRow}>
+                    <Ionicons name="star" size={14} color="#D97706" />
+                    <Text style={styles.recommendedHeaderTitle}>Teacher Recommended (اساتذہ کی پسند)</Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recommendedRow}>
+                    {teacherRecommendedBooks.map((recBook) => (
+                      <TouchableOpacity
+                        key={recBook.id}
+                        style={styles.recommendedCard}
+                        onPress={() => handleOpenBook(recBook)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.recommendedIconBox}>
+                          <Ionicons name="book" size={20} color="#92400E" />
+                        </View>
+                        <View style={styles.recommendedCardContent}>
+                          <Text style={styles.recommendedCardTitle} numberOfLines={1}>{recBook.title}</Text>
+                          <Text style={styles.recommendedCardCategory}>{recBook.category}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
             </View>
-          ) : null}
-          renderItem={({ item }) => <BookCard book={item} isAdmin={isAdmin} lastPage={bookProgressMap[item.id]} onDelete={handleDeleteBook} onOpen={handleOpenBook} />}
+          }
+          renderItem={({ item }) => (
+            <BookCard
+              book={item}
+              isAdmin={isAdmin}
+              progress={bookProgressMap[item.id]}
+              isRecommended={TEACHER_RECOMMENDED_TITLES.some((t) => item.title.toLowerCase().includes(t.toLowerCase()))}
+              rank={selectedFilter === 'popular' ? bookRankMap[item.id] : undefined}
+              onDelete={handleDeleteBook}
+              onOpen={handleOpenBook}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
@@ -492,4 +667,145 @@ const styles = StyleSheet.create({
     maxWidth: 180,
   },
   recentChipText: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
+
+  // 7.1 & 7.3 Library Enhancements Styles
+  popularChip: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FFFBEB',
+  },
+  recommendedChip: {
+    borderColor: '#D97706',
+    backgroundColor: '#FEF3C7',
+  },
+  rankBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  rank1Badge: {
+    backgroundColor: '#FEF08A',
+  },
+  rank2Badge: {
+    backgroundColor: '#E2E8F0',
+  },
+  rank3Badge: {
+    backgroundColor: '#FED7AA',
+  },
+  rankBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#1E293B',
+  },
+  recommendedBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  recommendedBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  cardProgressContainer: {
+    marginTop: 8,
+    gap: 4,
+  },
+  cardProgressBarTrack: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+  },
+  cardProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#005F46',
+    borderRadius: RADIUS.full,
+  },
+  cardProgressStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardProgressText: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+  },
+  cardProgressPercentText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#005F46',
+  },
+
+  // Recommended showcase banner
+  recommendedSection: {
+    marginBottom: SPACING.md,
+    backgroundColor: '#FFFBEB',
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    gap: 8,
+  },
+  recommendedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recommendedHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#92400E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  recommendedRow: {
+    gap: 8,
+  },
+  recommendedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.lg,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    gap: 8,
+    maxWidth: 200,
+  },
+  recommendedIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recommendedCardContent: {
+    flex: 1,
+  },
+  recommendedCardTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  recommendedCardCategory: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
 });

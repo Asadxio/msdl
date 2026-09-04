@@ -24,7 +24,13 @@ import {
   saveBookProgress,
   getLibraryTheme,
   saveLibraryTheme,
+  getBookNotes,
+  addBookNote,
+  deleteBookNote,
+  incrementBookReadCount,
   type ReadingTheme,
+  type BookNote,
+  type NoteHighlightColor,
 } from '@/lib/libraryStorage';
 
 const THEME_CONFIG: Record<ReadingTheme, { bg: string; text: string; headerBg: string; border: string; webCss: string; status: 'dark-content' | 'light-content' }> = {
@@ -54,6 +60,13 @@ const THEME_CONFIG: Record<ReadingTheme, { bg: string; text: string; headerBg: s
   },
 };
 
+const NOTE_COLOR_MAP: Record<NoteHighlightColor, { bg: string; border: string; text: string; label: string }> = {
+  yellow: { bg: '#FEF9C3', border: '#EAB308', text: '#854D0E', label: 'Zard (Yellow)' },
+  green: { bg: '#DCFCE7', border: '#22C55E', text: '#166534', label: 'Sabz (Green)' },
+  blue: { bg: '#DBEAFE', border: '#3B82F6', text: '#1E40AF', label: 'Neela (Blue)' },
+  pink: { bg: '#FCE7F3', border: '#EC4899', text: '#9D174D', label: 'Gulabi (Pink)' },
+};
+
 export default function BookViewerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -64,21 +77,35 @@ export default function BookViewerScreen() {
   const [webViewErrorMessage, setWebViewErrorMessage] = useState('Unable to preview this file.');
   const [isReading, setIsReading] = useState(false);
 
-  // Reading Enhancements: Theme & Page Progress
+  // Reading Enhancements: Theme & Page Progress (7.1)
   const [readingTheme, setReadingTheme] = useState<ReadingTheme>('light');
   const [lastReadPage, setLastReadPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(100);
   const [targetPageInput, setTargetPageInput] = useState<string>('1');
+  const [totalPagesInput, setTotalPagesInput] = useState<string>('100');
   const [showPageJumpModal, setShowPageJumpModal] = useState<boolean>(false);
   const [showThemeModal, setShowThemeModal] = useState<boolean>(false);
+  const [showTotalPagesModal, setShowTotalPagesModal] = useState<boolean>(false);
+
+  // 7.2 Highlights & Notes state
+  const [showNotesModal, setShowNotesModal] = useState<boolean>(false);
+  const [bookNotes, setBookNotes] = useState<BookNote[]>([]);
+  const [noteTextInput, setNoteTextInput] = useState<string>('');
+  const [selectedNoteColor, setSelectedNoteColor] = useState<NoteHighlightColor>('yellow');
+  const [isSavingNote, setIsSavingNote] = useState<boolean>(false);
   const webViewRef = useRef<WebView>(null);
 
   useEffect(() => {
     if (!id) return;
-    // Load persisted progress and theme
+    // Load persisted progress, theme, and notes
     getBookProgress(id).then((progress) => {
       if (progress) {
         setLastReadPage(progress.lastPage || 1);
         setTargetPageInput(String(progress.lastPage || 1));
+        if (progress.totalPages && progress.totalPages > 0) {
+          setTotalPages(progress.totalPages);
+          setTotalPagesInput(String(progress.totalPages));
+        }
         if (progress.theme) setReadingTheme(progress.theme);
       } else {
         getLibraryTheme().then((theme) => {
@@ -86,6 +113,9 @@ export default function BookViewerScreen() {
         });
       }
     });
+
+    getBookNotes(id).then(setBookNotes);
+    incrementBookReadCount(id).catch(() => {});
   }, [id]);
 
   if (booksLoading) {
@@ -156,7 +186,7 @@ export default function BookViewerScreen() {
     setShowThemeModal(false);
     await saveLibraryTheme(theme);
     if (id) {
-      await saveBookProgress(id, lastReadPage, theme);
+      await saveBookProgress(id, lastReadPage, theme, totalPages);
     }
   };
 
@@ -165,7 +195,7 @@ export default function BookViewerScreen() {
     setLastReadPage(validPage);
     setShowPageJumpModal(false);
     if (id) {
-      await saveBookProgress(id, validPage, readingTheme);
+      await saveBookProgress(id, validPage, readingTheme, totalPages);
     }
     // Inject JS into WebView to scroll/jump to page if Google viewer is loaded
     const script = `
@@ -182,6 +212,41 @@ export default function BookViewerScreen() {
     `;
     webViewRef.current?.injectJavaScript(script);
   };
+
+  const handleSaveTotalPages = async (pages: number) => {
+    const validTotal = Math.max(1, pages);
+    setTotalPages(validTotal);
+    setShowTotalPagesModal(false);
+    if (id) {
+      await saveBookProgress(id, lastReadPage, readingTheme, validTotal);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!id || !noteTextInput.trim()) return;
+    setIsSavingNote(true);
+    try {
+      const newNote = await addBookNote(id, {
+        page: lastReadPage,
+        color: selectedNoteColor,
+        text: noteTextInput.trim(),
+      });
+      setBookNotes((prev) => [newNote, ...prev]);
+      setNoteTextInput('');
+    } catch {
+      // ignore
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!id) return;
+    await deleteBookNote(id, noteId);
+    setBookNotes((prev) => prev.filter((n) => n.id !== noteId));
+  };
+
+  const progressPercentage = Math.min(100, Math.round((lastReadPage / Math.max(1, totalPages)) * 100));
 
   // JavaScript injected for Theme Filter (Night / Sepia / Normal)
   const injectedCssJs = `
@@ -238,6 +303,21 @@ export default function BookViewerScreen() {
 
         {isReading ? (
           <View style={styles.topBarActions}>
+            {/* Notes & Highlights Button (7.2) */}
+            <TouchableOpacity
+              style={[styles.iconActionBtn, { backgroundColor: readingTheme === 'night' ? '#2A2A2A' : '#EDE8DC' }]}
+              onPress={() => setShowNotesModal(true)}
+              activeOpacity={0.7}
+              accessibilityLabel="Book Notes and Highlights"
+            >
+              <Ionicons name="document-text-outline" size={19} color={currentTheme.text} />
+              {bookNotes.length > 0 && (
+                <View style={styles.noteCountBadge}>
+                  <Text style={styles.noteCountBadgeText}>{bookNotes.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.iconActionBtn, { backgroundColor: readingTheme === 'night' ? '#2A2A2A' : '#EDE8DC' }]}
               onPress={() => setShowThemeModal(true)}
@@ -274,14 +354,47 @@ export default function BookViewerScreen() {
               </Text>
             )}
 
-            {/* Last Read Bookmark Badge */}
-            {lastReadPage > 1 && (
-              <View style={styles.lastReadCard}>
-                <Ionicons name="bookmark" size={16} color={COLORS.primary} />
-                <Text style={styles.lastReadText}>
-                  Aakhri martaba aap <Text style={{ fontWeight: '700' }}>Safah {lastReadPage}</Text> par the
-                </Text>
+            {/* Reading Progress Bar (7.1) */}
+            <View style={styles.detailsProgressCard}>
+              <View style={styles.detailsProgressHeader}>
+                <View style={styles.detailsProgressTitleRow}>
+                  <Ionicons name="bookmarks-outline" size={16} color={COLORS.primary} />
+                  <Text style={styles.detailsProgressTitle}>Reading Progress (پڑھنے کی پیش رفت)</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setTotalPagesInput(String(totalPages));
+                    setShowTotalPagesModal(true);
+                  }}
+                >
+                  <Text style={styles.detailsSetTotalText}>Total: {totalPages} p. ✏️</Text>
+                </TouchableOpacity>
               </View>
+
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: `${progressPercentage}%` }]} />
+              </View>
+
+              <View style={styles.detailsProgressStatsRow}>
+                <Text style={styles.detailsProgressPageText}>
+                  Page <Text style={{ fontWeight: '800', color: COLORS.primary }}>{lastReadPage}</Text> of {totalPages}
+                </Text>
+                <Text style={styles.detailsProgressPercentText}>{progressPercentage}% completed</Text>
+              </View>
+            </View>
+
+            {/* Notes Quick Summary in Details (7.2) */}
+            {bookNotes.length > 0 && (
+              <TouchableOpacity
+                style={styles.detailsNotesCard}
+                onPress={() => setShowNotesModal(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="pencil-outline" size={16} color="#B45309" />
+                <Text style={styles.detailsNotesText}>
+                  <Text style={{ fontWeight: '700' }}>{bookNotes.length}</Text> Saved Notes & Highlights ➔
+                </Text>
+              </TouchableOpacity>
             )}
           </View>
           
@@ -339,7 +452,9 @@ export default function BookViewerScreen() {
               activeOpacity={0.7}
             >
               <Ionicons name="book-outline" size={14} color={COLORS.primary} />
-              <Text style={[styles.pageIndicatorText, { color: currentTheme.text }]}>Page {lastReadPage}</Text>
+              <Text style={[styles.pageIndicatorText, { color: currentTheme.text }]}>
+                {lastReadPage}/{totalPages} ({progressPercentage}%)
+              </Text>
               <Ionicons name="create-outline" size={12} color={COLORS.textMuted} />
             </TouchableOpacity>
 
@@ -352,6 +467,15 @@ export default function BookViewerScreen() {
               <Ionicons name="chevron-forward" size={16} color={currentTheme.text} />
             </TouchableOpacity>
 
+            {/* Quick Notes button inside actionRow */}
+            <TouchableOpacity
+              style={[styles.miniReaderBtn, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border }]}
+              onPress={() => setShowNotesModal(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="create" size={14} color="#D97706" />
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.miniReaderBtn, styles.downloadBtnAlt]}
               onPress={handleDownload}
@@ -359,6 +483,11 @@ export default function BookViewerScreen() {
             >
               <Ionicons name="download-outline" size={14} color="#FFFFFF" />
             </TouchableOpacity>
+          </View>
+
+          {/* Inline Reader Progress Bar (7.1) */}
+          <View style={styles.readerProgressBarTrack}>
+            <View style={[styles.readerProgressBarFill, { width: `${progressPercentage}%` }]} />
           </View>
 
           {webViewLoading && (
@@ -517,6 +646,180 @@ export default function BookViewerScreen() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Set Total Pages Modal (7.1) */}
+      <Modal
+        visible={showTotalPagesModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTotalPagesModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowTotalPagesModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Total Pages (کل صفحات)</Text>
+            <Text style={styles.modalSubtitle}>Is kitaab ke kul kitne safhaat hain:</Text>
+
+            <TextInput
+              style={styles.pageInput}
+              value={totalPagesInput}
+              onChangeText={setTotalPagesInput}
+              keyboardType="number-pad"
+              placeholder="e.g. 120"
+              placeholderTextColor={COLORS.textMuted}
+              autoFocus
+              selectTextOnFocus
+            />
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowTotalPagesModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalConfirmBtn}
+                onPress={() => {
+                  const t = parseInt(totalPagesInput.trim(), 10);
+                  if (!isNaN(t) && t >= 1) {
+                    handleSaveTotalPages(t);
+                  }
+                }}
+              >
+                <Text style={styles.modalConfirmText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Book Notes & Highlights Drawer/Modal (7.2) */}
+      <Modal
+        visible={showNotesModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowNotesModal(false)}
+      >
+        <View style={styles.notesModalBackdrop}>
+          <View style={[styles.notesModalContent, { paddingBottom: insets.bottom + 16 }]}>
+            {/* Header */}
+            <View style={styles.notesModalHeader}>
+              <View>
+                <Text style={styles.notesModalTitle}>Notes & Highlights (نوٹس اور نکات)</Text>
+                <Text style={styles.notesModalSubtitle}>Safah {lastReadPage} ke liye naya note ya highlight darj karein</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.notesModalCloseBtn}
+                onPress={() => setShowNotesModal(false)}
+              >
+                <Ionicons name="close" size={22} color={COLORS.textMain} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Note Composer */}
+            <View style={styles.notesComposerCard}>
+              <View style={styles.notesColorPickerRow}>
+                <Text style={styles.notesColorLabel}>Tag Color:</Text>
+                {(['yellow', 'green', 'blue', 'pink'] as NoteHighlightColor[]).map((c) => {
+                  const cfg = NOTE_COLOR_MAP[c];
+                  const isSel = selectedNoteColor === c;
+                  return (
+                    <TouchableOpacity
+                      key={c}
+                      style={[styles.colorChip, { backgroundColor: cfg.bg, borderColor: cfg.border }, isSel && styles.colorChipActive]}
+                      onPress={() => setSelectedNoteColor(c)}
+                    >
+                      <View style={[styles.colorDot, { backgroundColor: cfg.border }]} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TextInput
+                style={styles.notesTextInput}
+                placeholder={`Safah ${lastReadPage} par ahem nukta ya note likhein...`}
+                placeholderTextColor={COLORS.textMuted}
+                value={noteTextInput}
+                onChangeText={setNoteTextInput}
+                multiline
+                numberOfLines={3}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveNoteBtn, (!noteTextInput.trim() || isSavingNote) && styles.saveNoteBtnDisabled]}
+                onPress={handleAddNote}
+                disabled={!noteTextInput.trim() || isSavingNote}
+              >
+                {isSavingNote ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                    <Text style={styles.saveNoteBtnText}>Save Note on Page {lastReadPage}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Saved Notes List */}
+            <View style={styles.notesListHeaderRow}>
+              <Text style={styles.notesListTitle}>Saved Notes ({bookNotes.length})</Text>
+            </View>
+
+            <ScrollView style={styles.notesScrollView} showsVerticalScrollIndicator={false}>
+              {bookNotes.length === 0 ? (
+                <View style={styles.notesEmptyBox}>
+                  <Ionicons name="document-text-outline" size={32} color={COLORS.border} />
+                  <Text style={styles.notesEmptyText}>Abhi tak koi note ya highlight shamil nahi kiya gaya.</Text>
+                </View>
+              ) : (
+                bookNotes.map((item) => {
+                  const colorCfg = NOTE_COLOR_MAP[item.color] || NOTE_COLOR_MAP.yellow;
+                  return (
+                    <View
+                      key={item.id}
+                      style={[styles.noteItemCard, { borderLeftColor: colorCfg.border, backgroundColor: colorCfg.bg }]}
+                    >
+                      <View style={styles.noteItemHeader}>
+                        <TouchableOpacity
+                          style={styles.notePageBadge}
+                          onPress={() => {
+                            setShowNotesModal(false);
+                            if (isReading) {
+                              handleJumpToPage(item.page);
+                            } else {
+                              setIsReading(true);
+                              handleJumpToPage(item.page);
+                            }
+                          }}
+                        >
+                          <Ionicons name="bookmark" size={12} color={colorCfg.text} />
+                          <Text style={[styles.notePageBadgeText, { color: colorCfg.text }]}>Safah {item.page} ➔</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => handleDeleteNote(item.id)}
+                          style={styles.noteDeleteBtn}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="trash-outline" size={15} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+
+                      <Text style={[styles.noteItemContent, { color: colorCfg.text }]}>{item.text}</Text>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -762,5 +1065,274 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.textMain,
+  },
+
+  // 7.1 & 7.2 Enhancements Styles
+  noteCountBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#D97706',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  noteCountBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  detailsProgressCard: {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: SPACING.md,
+    gap: 8,
+  },
+  detailsProgressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailsProgressTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  detailsProgressTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  detailsSetTotalText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  progressBarTrack: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#E2E8F0',
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#005F46',
+    borderRadius: RADIUS.full,
+  },
+  detailsProgressStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailsProgressPageText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  detailsProgressPercentText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#005F46',
+  },
+  detailsNotesCard: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: RADIUS.lg,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  detailsNotesText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  readerProgressBarTrack: {
+    width: '100%',
+    height: 3,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  readerProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#C8A84E',
+  },
+
+  // Notes Modal / Drawer
+  notesModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  notesModalContent: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADIUS.xxl,
+    borderTopRightRadius: RADIUS.xxl,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    maxHeight: '82%',
+    ...SHADOWS.card,
+  },
+  notesModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: SPACING.md,
+  },
+  notesModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+  },
+  notesModalSubtitle: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  notesModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notesComposerCard: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 10,
+    marginBottom: SPACING.md,
+  },
+  notesColorPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notesColorLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    marginRight: 4,
+  },
+  colorChip: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colorChipActive: {
+    transform: [{ scale: 1.15 }],
+  },
+  colorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  notesTextInput: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    padding: SPACING.sm + 2,
+    fontSize: 13,
+    color: COLORS.textMain,
+    textAlignVertical: 'top',
+    minHeight: 56,
+  },
+  saveNoteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#005F46',
+    borderRadius: RADIUS.full,
+    paddingVertical: 10,
+  },
+  saveNoteBtnDisabled: {
+    opacity: 0.45,
+  },
+  saveNoteBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  notesListHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  notesListTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  notesScrollView: {
+    maxHeight: 280,
+  },
+  notesEmptyBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap: 6,
+  },
+  notesEmptyText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+  },
+  noteItemCard: {
+    borderLeftWidth: 4,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    gap: 6,
+  },
+  noteItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  notePageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  notePageBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  noteDeleteBtn: {
+    padding: 2,
+  },
+  noteItemContent: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
   },
 });
