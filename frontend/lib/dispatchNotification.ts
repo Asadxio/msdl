@@ -227,7 +227,7 @@ async function sendPushViaBackend(params: {
           event_type: params.data.type || 'announcement',
         }),
       }),
-      20000
+      6000
     );
 
     if (!res.ok) {

@@ -86,10 +86,22 @@ class StatusCheck(BaseModel):
 class StatusCheckCreate(BaseModel):
     client_name: str
 
+_SERVER_START_TIME = time.time()
+
 # Add your routes to the router instead of directly to app
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "uptime_sec": int(time.time() - _SERVER_START_TIME),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "mongo_available": db is not None,
+        "firebase_available": firebase_db is not None,
+    }
+
+@api_router.get("/health")
+async def api_health():
+    return await health()
 
 @api_router.get("/")
 async def root():
@@ -97,21 +109,56 @@ async def root():
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate, request: Request, authorization: str | None = Header(default=None)):
-    if db is None:
-        raise HTTPException(status_code=500, detail="MongoDB not configured")
     uid, _ = _require_authenticated_request(request, authorization, "status_create", 10, 60)
     status_dict = input.model_dump()
     status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.model_dump())
+    # Primary: MongoDB if configured and connected
+    if db is not None:
+        try:
+            _ = await db.status_checks.insert_one(status_obj.model_dump())
+            return status_obj
+        except Exception as mongo_err:
+            logger.warning("MongoDB status insert error, falling back to Firestore: %s", mongo_err)
+    # Fallback: Firestore
+    if firebase_db is not None:
+        try:
+            firebase_db.collection("status_checks").document(status_obj.id).set({
+                "id": status_obj.id,
+                "client_name": status_obj.client_name,
+                "timestamp": status_obj.timestamp.isoformat(),
+                "created_by_uid": uid,
+            })
+            return status_obj
+        except Exception as fb_err:
+            logger.warning("Firestore status_checks fallback error: %s", fb_err)
     return status_obj
 
 @api_router.get("/status", response_model=List[StatusCheck])
 async def get_status_checks(request: Request, authorization: str | None = Header(default=None)):
-    if db is None:
-        raise HTTPException(status_code=500, detail="MongoDB not configured")
     _, _ = _require_capability(request, authorization, {"admin", "super_admin"}, "status_list")
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
+    if db is not None:
+        try:
+            status_checks = await db.status_checks.find().to_list(100)
+            return [StatusCheck(**status_check) for status_check in status_checks]
+        except Exception as mongo_err:
+            logger.warning("MongoDB status fetch error, falling back to Firestore: %s", mongo_err)
+    if firebase_db is not None:
+        try:
+            docs = firebase_db.collection("status_checks").limit(100).stream()
+            res = []
+            for d in docs:
+                dt = d.to_dict()
+                ts_val = dt.get("timestamp")
+                ts_dt = datetime.fromisoformat(ts_val) if isinstance(ts_val, str) else datetime.utcnow()
+                res.append(StatusCheck(
+                    id=dt.get("id", d.id),
+                    client_name=dt.get("client_name", "unknown"),
+                    timestamp=ts_dt,
+                ))
+            return res
+        except Exception as fb_err:
+            logger.warning("Firestore status_checks read error: %s", fb_err)
+    return []
 
 def _env_list(name: str, default: str = "") -> list[str]:
     raw = os.environ.get(name, default)

@@ -1,0 +1,33 @@
+name: 24/7 Zero-Cold-Start Keep-Alive Engine
+
+on:
+  schedule:
+    # Runs every 12 minutes (Render sleeps after 15m)
+    - cron: '*/12 * * * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub UI
+
+jobs:
+  ping-keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping MSLB Render Backend
+        run: |
+          echo "Pinging MSLB backend health..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "https://msdl-backend.onrender.com/health" || true)
+          echo "Render Backend HTTP Status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Backend is warm, alive and responding instantly!"
+          else
+            echo "⚠️ Backend was cold/sleeping or rebooting (Status: $STATUS). Waking it up..."
+            # Retry once after 5 seconds to ensure wake-up completed
+            sleep 5
+            RETRY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "https://msdl-backend.onrender.com/health" || true)
+            echo "Woken up. Retry Status: $RETRY_STATUS"
+          fi
+
+      - name: Ping Madrasa Public Website
+        run: |
+          echo "Checking Madrasa website health..."
+          WEB_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://asadxio.github.io/madrasa-website/" || true)
+          echo "Website HTTP Status: $WEB_STATUS"
