@@ -1719,5 +1719,17 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
     }
+
+    match /admission_inquiries/{inquiryId} {
+
+      allow read: if isAdmin();
+      allow create: if request.resource.data.student_name is string
+        && request.resource.data.student_name.size() > 0
+        && request.resource.data.whatsapp_number is string
+        && request.resource.data.whatsapp_number.size() >= 7
+        && request.resource.data.created_at is timestamp;
+      allow update, delete: if isAdmin();
+    }
   }
 }
+
