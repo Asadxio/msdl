@@ -108,3 +108,44 @@ export async function createRoleNotification(
     return false;
   }
 }
+
+/**
+ * Dispatches a one-time welcome push & in-app notification to a newly registered student.
+ * Idempotent via dedupeId `welcome:${userId}` — guaranteed to run strictly once per user.
+ */
+export async function dispatchWelcomeNotification(
+  userId: string,
+  studentName?: string
+): Promise<boolean> {
+  const safeUid = String(userId || '').trim();
+  if (!safeUid) return false;
+
+  const displayName = String(studentName || '').trim() || 'طالبہ';
+  const title = '🌸 مدرسۃ السالکات میں خوش آمدید';
+  const body = `السلام علیکم ${displayName}! مدرسۃ السالکات میں آپ کا خیر مقدم ہے۔ آپ کا دینی تعلیمی سفر شروع ہو چکا ہے۔ اپنے کورسز اور اسباق دیکھیں۔`;
+
+  try {
+    await dispatchNotification({
+      channel: 'announcements',
+      event: 'system_alert',
+      title,
+      body,
+      recipientIds: [safeUid],
+      actorId: 'system',
+      route: { pathname: '/(tabs)/courses' },
+      data: {
+        sound: 'default',
+        channelId: 'announcements',
+        category: 'welcome',
+        screen: '/(tabs)/courses',
+      },
+      dedupeId: `welcome:${safeUid}`,
+      sendToAll: false,
+    });
+    return true;
+  } catch (error) {
+    console.log('[Notifications] dispatchWelcomeNotification ERROR', error);
+    return false;
+  }
+}
+

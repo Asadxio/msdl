@@ -29,6 +29,7 @@ import {
 } from '@/lib/emailVerificationAnalytics';
 import { trackEvent } from '@/lib/analytics';
 import { VERIFICATION_ACTION_CODE_SETTINGS, PASSWORD_RESET_ACTION_CODE_SETTINGS } from '@/lib/emailVerificationSettings';
+import { dispatchWelcomeNotification } from '@/lib/notifications';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
@@ -553,6 +554,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       void markSignupCompleted(cred.user.uid);
+      void dispatchWelcomeNotification(cred.user.uid, safeName).catch((err) => {
+        debugError('[SIGNUP_DEBUG] Welcome notification dispatch failed:', err);
+      });
       setShowSignupVerificationPrompt(false);
       setSignupVerificationFlowActive(false);
       await fetchProfile(cred.user.uid);
