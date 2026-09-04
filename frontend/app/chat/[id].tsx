@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Clipboard from 'expo-clipboard';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { Audio, type AVPlaybackStatus } from 'expo-av';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -152,11 +153,163 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+
+function VoiceNotePlayer({
+  mediaUrl,
+  durationSec,
+  mine,
+  isUploading,
+  playThroughEarpiece,
+}: {
+  mediaUrl?: string;
+  durationSec?: number;
+  mine: boolean;
+  isUploading?: boolean;
+  playThroughEarpiece?: boolean;
+}) {
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [positionMs, setPositionMs] = useState(0);
+  const [durationMs, setDurationMs] = useState((durationSec || 0) * 1000);
+
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(() => {});
+      }
+    };
+  }, [sound]);
+
+  const togglePlayback = async () => {
+    if (!mediaUrl || isUploading) return;
+
+    if (sound) {
+      if (isPlaying) {
+        await sound.pauseAsync().catch(() => {});
+        setIsPlaying(false);
+      } else {
+        await sound.playAsync().catch(() => {});
+        setIsPlaying(true);
+      }
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        playThroughEarpieceAndroid: !!playThroughEarpiece,
+      });
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: mediaUrl },
+        { shouldPlay: true },
+        (status: AVPlaybackStatus) => {
+          if (!status.isLoaded) {
+            if (status.error) {
+              setIsPlaying(false);
+              setIsLoading(false);
+            }
+            return;
+          }
+          setPositionMs(status.positionMillis || 0);
+          if (status.durationMillis) {
+            setDurationMs(status.durationMillis);
+          }
+          setIsPlaying(status.isPlaying);
+          if (status.didJustFinish) {
+            setIsPlaying(false);
+            setPositionMs(0);
+          }
+        }
+      );
+
+      setSound(newSound);
+      setIsPlaying(true);
+    } catch {
+      Alert.alert('Playback Error', 'Could not play voice note.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSeek = async (ratio: number) => {
+    if (!sound || !durationMs) return;
+    const seekTo = Math.max(0, Math.min(durationMs, durationMs * ratio));
+    await sound.setPositionAsync(seekTo).catch(() => {});
+    setPositionMs(seekTo);
+  };
+
+  const formatSec = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const progressPercent = durationMs > 0 ? Math.min(100, Math.max(0, (positionMs / durationMs) * 100)) : 0;
+
+  return (
+    <View style={[styles.voiceNoteWrap, mine && styles.voiceNoteWrapMine]}>
+      <TouchableOpacity
+        style={[styles.voicePlayBtn, mine && styles.voicePlayBtnMine]}
+        onPress={togglePlayback}
+        activeOpacity={0.7}
+        disabled={isUploading || isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color={mine ? '#fff' : COLORS.primary} />
+        ) : (
+          <Ionicons
+            name={isPlaying ? 'pause' : 'play'}
+            size={20}
+            color={mine ? '#fff' : COLORS.primary}
+          />
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.voiceProgressWrap}>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.voiceBarTrack}
+          onPress={(e) => {
+            const width = 140;
+            const x = Math.max(0, Math.min(width, e.nativeEvent.locationX));
+            handleSeek(x / width);
+          }}
+        >
+          <View
+            style={[
+              styles.voiceBarFill,
+              mine && styles.voiceBarFillMine,
+              { width: `${progressPercent}%` },
+            ]}
+          />
+        </TouchableOpacity>
+
+        <View style={styles.voiceTimeRow}>
+          <Text style={[styles.voiceTimeText, mine && { color: 'rgba(255,255,255,0.85)' }]}>
+            {isPlaying || positionMs > 0 ? formatSec(positionMs) : (durationMs > 0 ? formatSec(durationMs) : '0:00')}
+          </Text>
+          <Ionicons
+            name="mic"
+            size={12}
+            color={mine ? 'rgba(255,255,255,0.7)' : COLORS.textMuted}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const MessageBubble = React.memo(function MessageBubble({
   item,
   mine,
   showSender,
   seenByOthers,
+  playThroughEarpiece,
   onReactionPress,
   onReplySnippetPress,
   onImagePress,
@@ -168,6 +321,7 @@ const MessageBubble = React.memo(function MessageBubble({
   mine: boolean;
   showSender: boolean;
   seenByOthers: boolean;
+  playThroughEarpiece?: boolean;
   onReactionPress?: (emoji: string) => void;
   onReplySnippetPress?: (replyToId?: string) => void;
   onImagePress?: (imageUrl: string) => void;
@@ -245,6 +399,17 @@ const MessageBubble = React.memo(function MessageBubble({
           </TouchableOpacity>
         ) : null}
 
+                {/* Voice Note / Audio Player */}
+        {item.message_type === 'audio' && item.media_url ? (
+          <VoiceNotePlayer
+            mediaUrl={item.media_url}
+            durationSec={item.media_size}
+            mine={mine}
+            isUploading={isUploading}
+            playThroughEarpiece={playThroughEarpiece}
+          />
+        ) : null}
+
         {/* Document Attachment Card */}
         {item.message_type === 'document' && item.media_url ? (
           <View style={[styles.documentCard, mine && styles.documentCardMine]}>
@@ -286,7 +451,7 @@ const MessageBubble = React.memo(function MessageBubble({
             <Ionicons
               name={tickIcon}
               size={13}
-              color={isFailed ? '#F87171' : isSeen ? '#FDE047' : 'rgba(255,255,255,0.85)'}
+              color={isFailed ? '#F87171' : isSeen ? '#38BDF8' : 'rgba(255,255,255,0.85)'}
             />
           ) : null}
         </View>
@@ -367,6 +532,7 @@ export default function ChatDetailScreen() {
   const [isSendingText, setIsSendingText] = useState(false);
   const [sendError, setSendError] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [playThroughEarpiece, setPlayThroughEarpiece] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [reportTarget, setReportTarget] = useState<MessageItem | null>(null);
   const [replyTarget, setReplyTarget] = useState<MessageItem | null>(null);
@@ -871,7 +1037,7 @@ export default function ChatDetailScreen() {
 
   const uploadAndSendMessage = async (
     localUri: string,
-    type: 'image' | 'document',
+    type: 'image' | 'document' | 'audio',
     fileName: string,
     fileSize: number,
     mimeType?: string,
@@ -977,7 +1143,7 @@ export default function ChatDetailScreen() {
         });
 
         await updateDoc(chatDocRef, {
-          last_message: type === 'image' ? '📷 Photo' : `📄 ${fileName}`,
+          last_message: type === 'image' ? '📷 Photo' : type === 'audio' ? '🎤 Voice Note' : `📄 ${fileName}`,
           last_sender_id: user.uid,
           updated_at: serverTimestamp(),
           ...unreadUpdates,
@@ -997,7 +1163,7 @@ export default function ChatDetailScreen() {
 
   const retryMessage = useCallback(async (msgItem: MessageItem) => {
     if (!id || !user?.uid) return;
-    if (msgItem.message_type === 'image' || msgItem.message_type === 'document') {
+    if (msgItem.message_type === 'image' || msgItem.message_type === 'document' || msgItem.message_type === 'audio') {
       if (msgItem.media_url) {
         await uploadAndSendMessage(msgItem.media_url, msgItem.message_type, msgItem.media_name || 'file', msgItem.media_size || 0);
       }
@@ -1040,6 +1206,22 @@ export default function ChatDetailScreen() {
       await uploadAndSendMessage(uploadUri, 'image', asset.fileName || 'image.jpg', asset.fileSize || 0, 'image/jpeg');
     } catch {
       setSendError('Could not attach photo.');
+    }
+  };
+
+    const pickAudio = async () => {
+    setShowAttachments(false);
+    if (!id || !user?.uid || !canSendMessages) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['audio/*'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      const asset = result.assets[0];
+      await uploadAndSendMessage(asset.uri, 'audio', asset.name || 'voice_note.m4a', asset.size || 0, asset.mimeType || 'audio/m4a');
+    } catch {
+      setSendError('Could not attach voice note / audio.');
     }
   };
 
@@ -1344,6 +1526,7 @@ export default function ChatDetailScreen() {
             mine={mine}
             showSender={!mine && chat?.type !== 'direct'}
             seenByOthers={seenByOthers}
+            playThroughEarpiece={playThroughEarpiece}
             onReactionPress={(emoji) => toggleReaction(item, emoji)}
             onReplySnippetPress={(replyToId) => scrollToQuotedMessage(replyToId)}
             onImagePress={(imgUrl) => setPreviewImageUrl(imgUrl)}
@@ -1461,7 +1644,27 @@ export default function ChatDetailScreen() {
         <ScalePressable style={styles.backBtn} onPress={refreshMessages} disabled={manualRefreshing}>
           {manualRefreshing ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
         </ScalePressable>
-        <ScalePressable style={styles.backBtn} onPress={() => { void toggleMuteChat(); }}>
+        <ScalePressable
+          style={[styles.backBtn, playThroughEarpiece && { backgroundColor: '#FEF3C7' }]}
+          onPress={() => {
+            const next = !playThroughEarpiece;
+            setPlayThroughEarpiece(next);
+            Audio.setAudioModeAsync({
+              playsInSilentModeIOS: true,
+              staysActiveInBackground: false,
+              playThroughEarpieceAndroid: next,
+            }).catch(() => {});
+            setFeedback({ type: 'success', text: next ? 'Audio: Earpiece mode (Private)' : 'Audio: Speaker mode (Loud)' });
+          }}
+          accessibilityLabel="Toggle speaker or earpiece mode"
+        >
+          <Ionicons
+            name={playThroughEarpiece ? 'headset' : 'volume-high-outline'}
+            size={18}
+            color={playThroughEarpiece ? '#D97706' : COLORS.primary}
+          />
+        </ScalePressable>
+                <ScalePressable style={styles.backBtn} onPress={() => { void toggleMuteChat(); }}>
           <Ionicons name={(chat?.muted_by || []).includes(user?.uid || '') ? 'notifications-off-outline' : 'notifications-outline'} size={18} color={COLORS.primary} />
         </ScalePressable>
         {chat?.type === 'direct' ? (
@@ -1517,7 +1720,7 @@ export default function ChatDetailScreen() {
           <View style={styles.actionSheetContainer}>
             {/* Quick Reactions Bar */}
             <View style={styles.reactionsBar}>
-              {['👍', '❤️', '😂', '😢', '😮', '🙏'].map((emoji) => (
+              {['🤲', '🌸', '❤️', 'جزاک اللہ', 'ماشاء اللہ'].map((emoji) => (
                 <TouchableOpacity
                   key={emoji}
                   style={styles.reactionBtn}
@@ -1883,8 +2086,8 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   actionSheetContainer: { backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   reactionsBar: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: COLORS.surfaceAlt, paddingVertical: 10, paddingHorizontal: 8, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
-  reactionBtn: { padding: 6 },
-  reactionBtnEmoji: { fontSize: 24 },
+  reactionBtn: { paddingHorizontal: 8, paddingVertical: 6, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  reactionBtnEmoji: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
   actionOptionsList: { gap: 6 },
   actionOptionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 8 },
   actionOptionText: { fontSize: 15, fontWeight: '600', color: COLORS.textMain },
@@ -1975,6 +2178,61 @@ const styles = StyleSheet.create({
   },
   presenceOnline: {
     color: '#059669',
+    fontWeight: '600',
+  },
+  voiceNoteWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.md,
+    marginTop: 4,
+    minWidth: 200,
+  },
+  voiceNoteWrapMine: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  voicePlayBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.card,
+  },
+  voicePlayBtnMine: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  voiceProgressWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  voiceBarTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    overflow: 'hidden',
+    width: '100%',
+  },
+  voiceBarFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+  },
+  voiceBarFillMine: {
+    backgroundColor: '#fff',
+  },
+  voiceTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  voiceTimeText: {
+    fontSize: 11,
+    color: COLORS.textMuted,
     fontWeight: '600',
   },
 });
