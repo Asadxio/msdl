@@ -20,6 +20,8 @@ import {
   CERTIFICATE_THEMES,
   type CertificateThemeKey,
   shareCertificatePngFile,
+  shareCertificateImageFile,
+  shareCertificateToWhatsApp,
 } from '@/lib/certificateImageGenerator';
 import { getSanadQrCodeUrl } from '@/lib/sanadVerification';
 
@@ -37,10 +39,23 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
   const router = useRouter();
   const [selectedTheme, setSelectedTheme] = useState<CertificateThemeKey>('emerald');
   const [sharing, setSharing] = useState(false);
+  const [sharingImage, setSharingImage] = useState(false);
 
   if (!certificate) return null;
 
   const currentTheme = CERTIFICATE_THEMES[selectedTheme] || CERTIFICATE_THEMES.emerald;
+
+  // 11.2 — Social Image Export (.svg vector image)
+  const handleShareImage = async () => {
+    setSharingImage(true);
+    try {
+      await shareCertificateImageFile(certificate, selectedTheme);
+    } catch (err: any) {
+      Alert.alert('Image Export Error', err?.message || 'Failed to export certificate image.');
+    } finally {
+      setSharingImage(false);
+    }
+  };
 
   const handleShare = async () => {
     setSharing(true);
@@ -53,38 +68,10 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
     }
   };
 
+  // 11.1 — Direct WhatsApp Share
   const handleWhatsAppShare = async () => {
     try {
-      const verifyUrl = `https://mslb.app/verify-sanad?id=${encodeURIComponent(certificate.certificateId)}`;
-      const shareText = `🌸 الحمد لله رب العالمين!
-
-ہماری بیٹی *${certificate.studentName}* نے *مدرسۃ السالکات للبنات* کے کورس/کوئز *${certificate.quizCategory}* میں شاندار کامیابی حاصل کر کے سند (Official Sanad) حاصل کی ہے۔
-
-📊 حاصل کردہ نمبر: *${certificate.score} / ${certificate.totalQuestions}* (${certificate.percentage}%)
-🏅 درجہ / گریڈ: *${certificate.gradeLabel}*
-📜 سند نمبر: *${certificate.certificateId}*
-
-🔗 سند کی آن لائن لائیو تصدیق (Live Verification Link):
-${verifyUrl}
-
-مدرسۃ السالکات للبنات (Madrasatu-s-Salikat Lil Banat)`;
-
-      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
-      const canOpen = await Linking.canOpenURL(whatsappUrl).catch(() => false);
-      if (canOpen) {
-        await Linking.openURL(whatsappUrl);
-      } else {
-        const webWhatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
-        const canOpenWeb = await Linking.canOpenURL(webWhatsappUrl).catch(() => false);
-        if (canOpenWeb) {
-          await Linking.openURL(webWhatsappUrl);
-        } else {
-          await Share.share({
-            title: `Sanad - ${certificate.studentName}`,
-            message: shareText,
-          });
-        }
-      }
+      await shareCertificateToWhatsApp(certificate);
     } catch (err: any) {
       Alert.alert('WhatsApp Error', err?.message || 'Failed to open WhatsApp.');
     }
@@ -241,7 +228,7 @@ ${verifyUrl}
 
             {/* ─── Share / Download & Verification Actions ─── */}
             <View style={styles.actionsContainer}>
-              {/* Direct WhatsApp Share / Status Button */}
+              {/* 11.1: Direct WhatsApp Share / Status Button */}
               <TouchableOpacity
                 style={styles.whatsAppShareBtn}
                 onPress={handleWhatsAppShare}
@@ -249,6 +236,23 @@ ${verifyUrl}
               >
                 <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
                 <Text style={styles.whatsAppShareBtnText}>Share on WhatsApp / Status (واٹس ایپ شیئر)</Text>
+              </TouchableOpacity>
+
+              {/* 11.2: Export as Image Button (Social Media Vector Image) */}
+              <TouchableOpacity
+                style={[styles.imageExportBtn, { borderColor: currentTheme.secondaryColor }]}
+                onPress={handleShareImage}
+                disabled={sharingImage}
+                activeOpacity={0.88}
+              >
+                {sharingImage ? (
+                  <ActivityIndicator size="small" color="#D97706" />
+                ) : (
+                  <>
+                    <Ionicons name="image" size={18} color="#D97706" />
+                    <Text style={styles.imageExportBtnText}>Export as Image (تصویر ڈاؤنلوڈ / سوشل شیئر)</Text>
+                  </>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -580,6 +584,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#FFF',
+  },
+  imageExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1.5,
+    borderRadius: RADIUS.full,
+    paddingVertical: 13,
+    gap: 8,
+    ...SHADOWS.card,
+  },
+  imageExportBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#B45309',
   },
   shareBtn: {
     flexDirection: 'row',

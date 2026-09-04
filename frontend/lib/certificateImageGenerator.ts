@@ -6,7 +6,7 @@ import { MSLB_LOGO_BASE64 } from './mslbLogoBase64';
 import type { QuizCertificateData } from './quizCertificate';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { Platform } from 'react-native';
+import { Platform, Linking, Share } from 'react-native';
 
 export type CertificateThemeKey = 'emerald' | 'ivory' | 'parchment' | 'midnight';
 
@@ -316,6 +316,212 @@ export function generateCertificateHtml(cert: QuizCertificateData, themeKey: Cer
 }
 
 /**
+ * Generates a high-resolution Vector SVG image representing the complete Islamic Sanad Certificate
+ * 11.2: Native vector image export compatible with social apps, image viewers, and printing
+ */
+export function generateCertificateSvg(cert: QuizCertificateData, themeKey: CertificateThemeKey = 'emerald'): string {
+  const theme = CERTIFICATE_THEMES[themeKey] || CERTIFICATE_THEMES.emerald;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https%3A%2F%2Fmslb.app%2Fverify-sanad%3Fid%3D${encodeURIComponent(cert.certificateId)}`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1050" width="800" height="1050">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="${theme.paperColor}" stop-opacity="1" />
+    </radialGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="800" height="1050" fill="${theme.bgColor}"/>
+
+  <!-- Certificate Paper with Outer Golden Border -->
+  <rect x="30" y="30" width="740" height="990" rx="16" fill="${theme.paperColor}" stroke="${theme.borderColor}" stroke-width="8" filter="url(#shadow)"/>
+
+  <!-- Inner Ornamental Frame -->
+  <rect x="48" y="48" width="704" height="954" rx="10" fill="url(#bgGrad)" stroke="${theme.primaryColor}" stroke-width="2.5"/>
+
+  <!-- Corner Islamic Ornaments -->
+  <path d="M 54 84 L 54 54 L 84 54" fill="none" stroke="${theme.secondaryColor}" stroke-width="3.5" />
+  <path d="M 746 84 L 746 54 L 716 54" fill="none" stroke="${theme.secondaryColor}" stroke-width="3.5" />
+  <path d="M 54 966 L 54 996 L 84 996" fill="none" stroke="${theme.secondaryColor}" stroke-width="3.5" />
+  <path d="M 746 966 L 746 996 L 716 996" fill="none" stroke="${theme.secondaryColor}" stroke-width="3.5" />
+
+  <!-- Bismillah Calligraphy -->
+  <text x="400" y="105" text-anchor="middle" font-family="Traditional Arabic, Scheherazade, Amiri, serif" font-size="24" font-weight="bold" fill="${theme.primaryColor}">
+    بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم
+  </text>
+
+  <!-- Madrasa Crest Image -->
+  <image href="${MSLB_LOGO_BASE64}" x="355" y="125" width="90" height="90" preserveAspectRatio="xMidYMid meet" />
+
+  <!-- Madrasa Title English & Arabic -->
+  <text x="400" y="242" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="20" font-weight="900" letter-spacing="1.5" fill="${theme.primaryColor}">
+    MADRASATU-S-SALIKAT LIL BANAT
+  </text>
+  <text x="400" y="268" text-anchor="middle" font-family="Traditional Arabic, Scheherazade, Amiri, serif" font-size="18" font-weight="bold" fill="${theme.secondaryColor}">
+    مدرسۃ السالکات للبنات
+  </text>
+
+  <!-- Certificate Ribbon Header -->
+  <rect x="220" y="292" width="360" height="30" rx="4" fill="none" stroke="${theme.secondaryColor}" stroke-width="1.5" />
+  <text x="400" y="312" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="12" font-weight="bold" letter-spacing="3" fill="${theme.secondaryColor}">
+    CERTIFICATE OF ACADEMIC EXCELLENCE
+  </text>
+
+  <!-- Presented To Notice -->
+  <text x="400" y="360" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="14" font-style="italic" fill="#64748B">
+    This is proudly awarded to
+  </text>
+
+  <!-- Student Name -->
+  <text x="400" y="420" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="34" font-weight="900" fill="${theme.primaryColor}">
+    ${cert.studentName}
+  </text>
+  <line x1="250" y1="435" x2="550" y2="435" stroke="${theme.secondaryColor}" stroke-width="2.5" />
+
+  <!-- Body Description -->
+  <text x="400" y="480" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="15" fill="${theme.textColor}">
+    for successfully completing and demonstrating mastery in
+  </text>
+  <text x="400" y="510" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="18" font-weight="bold" fill="${theme.primaryColor}">
+    ${cert.quizCategory}
+  </text>
+  <text x="400" y="540" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="14" fill="${theme.textColor}">
+    with sincere dedication and excellence in authentic Islamic studies.
+  </text>
+
+  <!-- Score & Grade Pill -->
+  <rect x="230" y="575" width="340" height="42" rx="21" fill="#ECFDF5" stroke="#10B981" stroke-width="1.8" />
+  <text x="400" y="602" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="15" font-weight="bold" fill="#065F46">
+    Score: ${cert.score}/${cert.totalQuestions} (${cert.percentage}%) • ${cert.gradeLabel}
+  </text>
+
+  <!-- Divider Line -->
+  <line x1="80" y1="675" x2="720" y2="675" stroke="#CBD5E1" stroke-width="1.5" stroke-dasharray="6,6" />
+
+  <!-- Footer Left: Issue Dates & Serial -->
+  <text x="90" y="730" font-family="-apple-system, Roboto, sans-serif" font-size="12" fill="#64748B">Date of Issue:</text>
+  <text x="90" y="750" font-family="-apple-system, Roboto, sans-serif" font-size="13" font-weight="bold" fill="#1E293B">${cert.issueDateGregorian}</text>
+  <text x="90" y="770" font-family="Traditional Arabic, sans-serif" font-size="13" font-weight="bold" fill="${theme.secondaryColor}">${cert.issueDateHijri}</text>
+  <text x="90" y="805" font-family="monospace" font-size="11" font-weight="bold" fill="${theme.primaryColor}">Serial: ${cert.certificateId}</text>
+
+  <!-- Footer Center: Official Seal & QR Code -->
+  <circle cx="400" cy="740" r="38" fill="none" stroke="${theme.secondaryColor}" stroke-width="2.5" stroke-dasharray="4,2"/>
+  <circle cx="400" cy="740" r="33" fill="none" stroke="${theme.secondaryColor}" stroke-width="1.2"/>
+  <text x="400" y="730" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" font-weight="900" fill="${theme.secondaryColor}">★ MSLB ★</text>
+  <text x="400" y="743" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" font-weight="900" fill="${theme.secondaryColor}">OFFICIAL</text>
+  <text x="400" y="756" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" font-weight="900" fill="${theme.secondaryColor}">SEAL</text>
+  
+  <image href="${qrUrl}" x="368" y="795" width="64" height="64" />
+  <text x="400" y="875" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" font-weight="bold" fill="#64748B">Scan to Verify Sanad</text>
+
+  <!-- Footer Right: Signature Directorate -->
+  <line x1="570" y1="770" x2="710" y2="770" stroke="#94A3B8" stroke-width="1.5" />
+  <text x="640" y="790" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="13" font-weight="bold" fill="${theme.primaryColor}">Academic Directorate</text>
+  <text x="640" y="810" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="11" fill="#64748B">Madrasatu-s-Salikat</text>
+  <text x="640" y="828" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="10" fill="#059669">✓ Officially Verified</text>
+</svg>`;
+}
+
+/**
+ * 11.2: Exports and shares certificate in native Vector Image (.svg) format
+ * Directly attachable to social media, WhatsApp status, messaging apps, and image viewers.
+ */
+export async function shareCertificateImageFile(cert: QuizCertificateData, themeKey: CertificateThemeKey = 'emerald'): Promise<void> {
+  const svg = generateCertificateSvg(cert, themeKey);
+  const cleanId = cert.certificateId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileName = `MSLB_Sanad_${cleanId}.svg`;
+
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') {
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+    }
+    return;
+  }
+
+  try {
+    const file = new File(Paths.document, fileName);
+    file.write(svg);
+
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'image/svg+xml',
+        dialogTitle: `Official Sanad Image - ${cert.studentName}`,
+        UTI: 'public.svg-image',
+      });
+    } else {
+      await Share.share({
+        title: `Official Sanad - ${cert.studentName}`,
+        message: `Madrasatu-s-Salikat Lil Banat Official Sanad Certificate for ${cert.studentName}\nVerify: https://mslb.app/verify-sanad?id=${encodeURIComponent(cert.certificateId)}`,
+      });
+    }
+  } catch (err: unknown) {
+    console.warn('[shareCertificateImageFile] Share error:', err);
+  }
+}
+
+/**
+ * 11.1: Directly shares certificate celebration text & live verification link to WhatsApp
+ */
+export async function shareCertificateToWhatsApp(cert: QuizCertificateData): Promise<boolean> {
+  const verifyUrl = `https://mslb.app/verify-sanad?id=${encodeURIComponent(cert.certificateId)}`;
+  const shareText = `🌸 *الحمد لله رب العالمين!*
+
+ہماری بیٹی *${cert.studentName}* نے *مدرسۃ السالکات للبنات* کے شعبہ تعلیم میں شاندار کامیابی حاصل کر کے باضابطہ سند (Official Sanad) حاصل کی ہے۔
+
+📜 *کورس / مضمون:* ${cert.quizCategory}
+📊 *حاصل کردہ نمبر:* *${cert.score} / ${cert.totalQuestions}* (${cert.percentage}%)
+🏅 *درجہ / گریڈ:* *${cert.gradeLabel}*
+🔢 *سند نمبر (Serial ID):* \`${cert.certificateId}\`
+📅 *تاریخ:* ${cert.issueDateGregorian} (${cert.issueDateHijri})
+
+🔗 *سند کی آن لائن تصدیق (Live Sanad Verification):*
+${verifyUrl}
+
+_مدرسۃ السالکات للبنات (Madrasatu-s-Salikat Lil Banat)_
+_Nurturing Knowledge & Faith_`;
+
+  const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
+  const webWhatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+
+  try {
+    const canOpen = await Linking.canOpenURL(whatsappUrl).catch(() => false);
+    if (canOpen) {
+      await Linking.openURL(whatsappUrl);
+      return true;
+    } else {
+      const canOpenWeb = await Linking.canOpenURL(webWhatsappUrl).catch(() => false);
+      if (canOpenWeb) {
+        await Linking.openURL(webWhatsappUrl);
+        return true;
+      } else {
+        await Share.share({
+          title: `Official Sanad - ${cert.studentName}`,
+          message: shareText,
+        });
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn('[shareCertificateToWhatsApp] Error:', err);
+    await Share.share({
+      title: `Official Sanad - ${cert.studentName}`,
+      message: shareText,
+    });
+    return false;
+  }
+}
+
+/**
  * Saves and launches native OS image share sheet
  */
 export async function shareCertificatePngFile(cert: QuizCertificateData, themeKey: CertificateThemeKey = 'emerald'): Promise<void> {
@@ -349,3 +555,4 @@ export async function shareCertificatePngFile(cert: QuizCertificateData, themeKe
     console.warn('[shareCertificatePngFile] Share error:', err);
   }
 }
+

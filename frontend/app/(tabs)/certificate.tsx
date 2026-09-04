@@ -13,6 +13,7 @@ import { useData, type Course } from '@/context/DataContext';
 import { useRouter } from 'expo-router';
 import { IslamicCertificateModal } from '@/components/IslamicCertificateModal';
 import type { QuizCertificateData } from '@/lib/quizCertificate';
+import { shareCertificateImageFile, shareCertificateToWhatsApp } from '@/lib/certificateImageGenerator';
 
 type Certificate = {
   id: string;
@@ -106,22 +107,43 @@ export default function CertificateScreen() {
 
   const eligible = useMemo(() => quizAttempts > 0 && attendancePct >= 75, [quizAttempts, attendancePct]);
 
+  const buildCertData = (cert: Certificate): QuizCertificateData => ({
+    certificateId: cert.certificate_id || cert.id,
+    userId: user?.uid || '',
+    studentName: cert.user_name || profile?.name || 'Student',
+    quizCategory: cert.quiz_category || cert.course_name || 'Islamic Knowledge',
+    score: cert.score || 10,
+    totalQuestions: cert.total_questions || 10,
+    percentage: cert.percentage || 100,
+    issueDateGregorian: cert.completion_date || new Date().toLocaleDateString('en-GB'),
+    issueDateHijri: cert.hijri_date || '1447 AH',
+    gradeLabel: cert.grade_label || 'Certified with Distinction',
+    createdAtMs: Date.now(),
+  });
+
   const handleOpenCertPreview = (cert: Certificate) => {
-    const certData: QuizCertificateData = {
-      certificateId: cert.certificate_id || cert.id,
-      userId: user?.uid || '',
-      studentName: cert.user_name || profile?.name || 'Student',
-      quizCategory: cert.quiz_category || cert.course_name || 'Islamic Knowledge',
-      score: cert.score || 10,
-      totalQuestions: cert.total_questions || 10,
-      percentage: cert.percentage || 100,
-      issueDateGregorian: cert.completion_date || new Date().toLocaleDateString('en-GB'),
-      issueDateHijri: cert.hijri_date || '1447 AH',
-      gradeLabel: cert.grade_label || 'Certified with Distinction',
-      createdAtMs: Date.now(),
-    };
-    setPreviewCert(certData);
+    setPreviewCert(buildCertData(cert));
     setPreviewVisible(true);
+  };
+
+  // 11.1 — Direct WhatsApp Share from certificate card
+  const handleDirectWhatsApp = async (cert: Certificate) => {
+    try {
+      const data = buildCertData(cert);
+      await shareCertificateToWhatsApp(data);
+    } catch {
+      Alert.alert('Error', 'Could not share to WhatsApp right now.');
+    }
+  };
+
+  // 11.2 — Direct Image Export (.svg vector image) from certificate card
+  const handleDirectImageExport = async (cert: Certificate) => {
+    try {
+      const data = buildCertData(cert);
+      await shareCertificateImageFile(data, 'emerald');
+    } catch {
+      Alert.alert('Error', 'Could not export certificate image right now.');
+    }
   };
 
   const generateCertificate = async () => {
@@ -134,8 +156,46 @@ export default function CertificateScreen() {
       // Stage E: switched from FastAPI fetch to Firebase callable
       // FastAPI route /certificates/generate remains active for rollback
       const certData = await getCertificate(selectedCourseId);
-      const certText = `Certificate of Completion\n\nAwarded to: ${profile.name}\nCourse: ${course.name}\nCertificate ID: ${certData.certificateId}\nDate: ${new Date().toDateString()}`;
-      await Share.share({ message: certText });
+      
+      const newlyCreatedCert: QuizCertificateData = {
+        certificateId: certData.certificateId,
+        userId: user?.uid || '',
+        studentName: profile.name,
+        quizCategory: course.name,
+        score: 10,
+        totalQuestions: 10,
+        percentage: 100,
+        issueDateGregorian: new Date().toLocaleDateString('en-GB'),
+        issueDateHijri: '1447 AH',
+        gradeLabel: 'Certified with Distinction',
+        createdAtMs: Date.now(),
+      };
+
+      Alert.alert(
+        'Sanad Awarded! 🎓✨',
+        `مبارک ہو! آپ کی سند کامیابی کے ساتھ جاری کر دی گئی ہے۔ آپ اسے کس طرح شیئر کرنا چاہیں گے؟`,
+        [
+          {
+            text: 'Preview & Theme',
+            onPress: () => {
+              setPreviewCert(newlyCreatedCert);
+              setPreviewVisible(true);
+            },
+          },
+          {
+            text: 'WhatsApp Share',
+            onPress: () => {
+              void shareCertificateToWhatsApp(newlyCreatedCert);
+            },
+          },
+          {
+            text: 'Export Image',
+            onPress: () => {
+              void shareCertificateImageFile(newlyCreatedCert);
+            },
+          },
+        ]
+      );
     } catch {
       Alert.alert('Failed', 'Could not generate certificate right now.');
     } finally {
@@ -340,14 +400,37 @@ export default function CertificateScreen() {
                         <Text style={styles.certDateText}>{cert.completion_date || 'Completed'}</Text>
                       </View>
                     </View>
-                    <TouchableOpacity
-                      style={styles.certShareBtn}
-                      onPress={() => handleOpenCertPreview(cert)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`View and Share certificate for ${cert.course_name}`}
-                    >
-                      <Ionicons name="eye-outline" size={20} color="#0FA958" />
-                    </TouchableOpacity>
+                    <View style={styles.certActionsCol}>
+                      {/* 11.1: Direct WhatsApp Share */}
+                      <TouchableOpacity
+                        style={styles.certWhatsAppBtn}
+                        onPress={() => handleDirectWhatsApp(cert)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Share certificate for ${cert.course_name} on WhatsApp`}
+                      >
+                        <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+                      </TouchableOpacity>
+
+                      {/* 11.2: Direct Image Export */}
+                      <TouchableOpacity
+                        style={styles.certImageExportBtn}
+                        onPress={() => handleDirectImageExport(cert)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Export certificate image for ${cert.course_name}`}
+                      >
+                        <Ionicons name="image-outline" size={18} color="#D97706" />
+                      </TouchableOpacity>
+
+                      {/* View & Preview Modal */}
+                      <TouchableOpacity
+                        style={styles.certShareBtn}
+                        onPress={() => handleOpenCertPreview(cert)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View and customize certificate for ${cert.course_name}`}
+                      >
+                        <Ionicons name="eye-outline" size={18} color="#0FA958" />
+                      </TouchableOpacity>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -654,14 +737,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
   },
-  certShareBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#EEF2FF',
+  certActionsCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
+  },
+  certWhatsAppBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+  },
+  certImageExportBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  certShareBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   /* Empty State */
