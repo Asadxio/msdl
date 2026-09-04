@@ -52,6 +52,7 @@ import {
   validateAudioLessonFile,
   type AudioLesson,
 } from "@/lib/audioLessons";
+import { saveDarsPlaybackPosition, loadDarsPlaybackPosition } from "@/lib/quranStorage";
 
 
 
@@ -172,6 +173,8 @@ export default function CourseDetailScreen() {
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioPosition, setAudioPosition] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [audioSpeed, setAudioSpeed] = useState(1.0);
+  const audioSpeedRef = useRef(1.0);
   const audioSoundRef = useRef<Audio.Sound | null>(null);
 
   const course = courses.find((c) => c.id === courseId);
@@ -383,16 +386,27 @@ export default function CourseDetailScreen() {
     try {
       if (activeAudioLesson?.id !== lesson.id) {
         await audioSoundRef.current?.unloadAsync().catch(() => {});
+        const saved = await loadDarsPlaybackPosition(lesson.id);
+        const startMillis = saved && saved.positionSeconds > 3 ? saved.positionSeconds * 1000 : 0;
+        const currentRate = saved?.speed || audioSpeedRef.current || 1.0;
+        setAudioSpeed(currentRate);
+        audioSpeedRef.current = currentRate;
+
         const { sound } = await Audio.Sound.createAsync(
           { uri: lesson.audio_url },
-          { shouldPlay: true },
+          { shouldPlay: true, positionMillis: startMillis },
           (status) => {
             if (!status.isLoaded) return;
             setAudioPlaying(status.isPlaying);
-            setAudioPosition(Math.round((status.positionMillis || 0) / 1000));
+            const posSec = Math.round((status.positionMillis || 0) / 1000);
+            setAudioPosition(posSec);
             setAudioDuration(Math.round((status.durationMillis || lesson.duration * 1000 || 0) / 1000));
+            if (posSec > 2) {
+              void saveDarsPlaybackPosition(lesson.id, posSec, audioSpeedRef.current);
+            }
           },
         );
+        await sound.setRateAsync(currentRate, true).catch(() => {});
         audioSoundRef.current = sound;
         setActiveAudioLesson(lesson);
         setAudioPlaying(true);
@@ -401,6 +415,20 @@ export default function CourseDetailScreen() {
       await audioSoundRef.current?.playAsync();
     } catch (e: any) {
       Alert.alert("Playback failed", e?.message || "Could not stream this audio lesson.");
+    }
+  };
+
+  const handleCycleAudioSpeed = async () => {
+    const speeds = [1.0, 1.25, 1.5, 2.0];
+    const currentIndex = speeds.indexOf(audioSpeed);
+    const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
+    setAudioSpeed(nextSpeed);
+    audioSpeedRef.current = nextSpeed;
+    if (audioSoundRef.current) {
+      await audioSoundRef.current.setRateAsync(nextSpeed, true).catch(() => {});
+    }
+    if (activeAudioLesson) {
+      void saveDarsPlaybackPosition(activeAudioLesson.id, audioPosition, nextSpeed);
     }
   };
 
@@ -1167,6 +1195,9 @@ export default function CourseDetailScreen() {
                       <TouchableOpacity style={styles.audioControlBtn} onPress={() => seekAudioLesson(15)}>
                         <Text style={styles.audioControlText}>15s</Text>
                         <Ionicons name="play-forward" size={18} color={COLORS.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.audioSpeedBtn} onPress={handleCycleAudioSpeed}>
+                        <Text style={styles.audioSpeedBtnText}>{audioSpeed}x</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.audioControlBtn} onPress={() => downloadAudioLesson(activeAudioLesson)}>
                         <Ionicons name="download-outline" size={18} color={COLORS.primary} />
@@ -2341,6 +2372,21 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   audioControlText: { color: COLORS.primary, fontWeight: "800", fontSize: 12 },
+  audioSpeedBtn: {
+    minHeight: 34,
+    borderRadius: RADIUS.full,
+    backgroundColor: `${COLORS.primary}15`,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}40`,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioSpeedBtnText: {
+    color: COLORS.primary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
   audioMainControlBtn: {
     width: 48, height: 48, borderRadius: 24,
     alignItems: "center",

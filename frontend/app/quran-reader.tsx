@@ -17,6 +17,9 @@ import {
   addBookmark, incrementKhatamAyats,
   loadFontSize, loadShowRoman,
   removeBookmark, saveFontSize, saveLastRead, saveShowRoman,
+  saveQuranAudioPlayback, loadQuranAudioPlayback,
+  savePreferredAudioSpeed, loadPreferredAudioSpeed,
+  type QuranAudioPlaybackState,
 } from '@/lib/quranStorage';
 import { getSurahByNumber } from '@/constants/quranSurahs';
 
@@ -36,12 +39,16 @@ export default function QuranReaderScreen() {
   const [bookmarkedAyats, setBookmarkedAyats] = useState<Set<number>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
 
-  // Audio Player State
+  // Audio Player & Speed / Resume State
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [playingAyatNum, setPlayingAyatNum] = useState<number | null>(null); // null = full surah or none
   const [isFullSurahPlaying, setIsFullSurahPlaying] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [resumeCandidate, setResumeCandidate] = useState<QuranAudioPlaybackState | null>(null);
+  const [dismissResumeBanner, setDismissResumeBanner] = useState(false);
+  const playbackSpeedRef = useRef(1.0);
 
   const scrollRef = useRef<ScrollView>(null);
   const ayatHeights = useRef<Record<number, number>>({});
@@ -74,9 +81,21 @@ export default function QuranReaderScreen() {
   }, []);
 
   useEffect(() => {
-    Promise.all([loadShowRoman(), loadFontSize()]).then(([roman, size]) => {
+    Promise.all([
+      loadShowRoman(),
+      loadFontSize(),
+      loadPreferredAudioSpeed(),
+      loadQuranAudioPlayback(surahNum),
+    ]).then(([roman, size, speed, savedPos]) => {
       setShowRoman(roman);
       setFontSize(size);
+      if (speed) {
+        setPlaybackSpeed(speed);
+        playbackSpeedRef.current = speed;
+      }
+      if (savedPos && (savedPos.ayatNumber > 1 || savedPos.positionMillis > 2000)) {
+        setResumeCandidate(savedPos);
+      }
     });
     return () => {
       if (soundRef.current) {
@@ -84,7 +103,19 @@ export default function QuranReaderScreen() {
         soundRef.current = null;
       }
     };
-  }, []);
+  }, [surahNum]);
+
+  const handleCycleSpeed = async () => {
+    const speeds = [1.0, 1.25, 1.5, 2.0];
+    const currentIndex = speeds.indexOf(playbackSpeed);
+    const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
+    setPlaybackSpeed(nextSpeed);
+    playbackSpeedRef.current = nextSpeed;
+    await savePreferredAudioSpeed(nextSpeed);
+    if (soundRef.current) {
+      await soundRef.current.setRateAsync(nextSpeed, true).catch(() => {});
+    }
+  };
 
   const loadSurah = useCallback(async () => {
     setStatus('loading');
@@ -157,12 +188,23 @@ export default function QuranReaderScreen() {
         { uri: audioUrl },
         { shouldPlay: true }
       );
+      await newSound.setRateAsync(playbackSpeedRef.current, true).catch(() => {});
 
       soundRef.current = newSound;
       setSound(newSound);
 
       newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
         if (!playbackStatus.isLoaded) return;
+        if (playbackStatus.positionMillis && playbackStatus.positionMillis > 1000) {
+          void saveQuranAudioPlayback({
+            surahNumber: surahNum,
+            ayatNumber: ayatNum,
+            positionMillis: playbackStatus.positionMillis,
+            durationMillis: playbackStatus.durationMillis || 0,
+            playbackRate: playbackSpeedRef.current,
+            timestamp: Date.now(),
+          });
+        }
         if (playbackStatus.didJustFinish) {
           const currentData = surahDataRef.current;
           const total = currentData?.totalAyat || surahMeta?.totalAyat || 0;
@@ -204,6 +246,7 @@ export default function QuranReaderScreen() {
         { uri: audioUrl },
         { shouldPlay: true }
       );
+      await newSound.setRateAsync(playbackSpeedRef.current, true).catch(() => {});
 
       soundRef.current = newSound;
       setSound(newSound);
@@ -213,6 +256,16 @@ export default function QuranReaderScreen() {
 
       newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
         if (!playbackStatus.isLoaded) return;
+        if (playbackStatus.positionMillis && playbackStatus.positionMillis > 2000) {
+          void saveQuranAudioPlayback({
+            surahNumber: surahNum,
+            ayatNumber: 1,
+            positionMillis: playbackStatus.positionMillis,
+            durationMillis: playbackStatus.durationMillis || 0,
+            playbackRate: playbackSpeedRef.current,
+            timestamp: Date.now(),
+          });
+        }
         if (playbackStatus.didJustFinish) {
           setIsPlayingAudio(false);
           setIsFullSurahPlaying(false);
@@ -268,6 +321,41 @@ export default function QuranReaderScreen() {
           <Ionicons name="options-outline" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {/* Resume Playback Banner ("Jahan chora tha wahan se shuru") */}
+      {resumeCandidate && !dismissResumeBanner && !isPlayingAudio && (
+        <View style={styles.resumeBanner}>
+          <View style={styles.resumeInfo}>
+            <View style={styles.resumeIconWrap}>
+              <Ionicons name="play" size={14} color="#002E23" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.resumeTitle}>جہاں سے چھوڑا تھا وہیں سے سنیں</Text>
+              <Text style={styles.resumeSubtitle}>
+                Resume: Verse {resumeCandidate.ayatNumber} of {surahMeta?.englishName || 'Surah'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.resumeActions}>
+            <TouchableOpacity
+              style={styles.resumeBtn}
+              onPress={() => {
+                setDismissResumeBanner(true);
+                void playAyatAudio(resumeCandidate.ayatNumber);
+              }}
+            >
+              <Ionicons name="play" size={13} color="#FFFFFF" />
+              <Text style={styles.resumeBtnText}>سنیں (Play)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.resumeDismissBtn}
+              onPress={() => setDismissResumeBanner(true)}
+            >
+              <Ionicons name="close" size={16} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Top Controls Bar */}
       <View style={styles.statusBar}>
@@ -469,6 +557,38 @@ export default function QuranReaderScreen() {
               />
             </TouchableOpacity>
 
+            {/* Speed Selector Button */}
+            <TouchableOpacity
+              style={styles.floatingSpeedBtn}
+              onPress={handleCycleSpeed}
+              accessibilityLabel={`Playback speed ${playbackSpeed}x. Tap to change.`}
+            >
+              <Text style={styles.floatingSpeedText}>{playbackSpeed}x</Text>
+            </TouchableOpacity>
+
+            {/* 1-Click Bookmark Active Verse */}
+            {playingAyatNum !== null && (
+              <TouchableOpacity
+                style={[
+                  styles.floatingAutoBtn,
+                  bookmarkedAyats.has(playingAyatNum) && styles.floatingAutoBtnActive,
+                ]}
+                onPress={async () => {
+                  const targetAyat = surahData?.ayats.find((a) => a.number === playingAyatNum);
+                  if (targetAyat) {
+                    await handleBookmarkToggle(targetAyat);
+                  }
+                }}
+                accessibilityLabel="Bookmark currently playing verse"
+              >
+                <Ionicons
+                  name={bookmarkedAyats.has(playingAyatNum) ? "bookmark" : "bookmark-outline"}
+                  size={14}
+                  color={bookmarkedAyats.has(playingAyatNum) ? '#002E23' : '#FFFFFF'}
+                />
+              </TouchableOpacity>
+            )}
+
             {/* Auto Advance Toggle */}
             <TouchableOpacity
               style={[styles.floatingAutoBtn, autoAdvance && styles.floatingAutoBtnActive]}
@@ -648,5 +768,81 @@ const styles = StyleSheet.create({
   },
   floatingAutoBtnActive: {
     backgroundColor: '#C8A84E',
+  },
+  floatingSpeedBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: 'rgba(200, 168, 78, 0.25)',
+    borderWidth: 1,
+    borderColor: '#C8A84E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingSpeedText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#C8A84E',
+  },
+  resumeBanner: {
+    marginHorizontal: SPACING.md,
+    marginBottom: 8,
+    backgroundColor: '#003D2E',
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#C8A84E',
+    gap: 8,
+  },
+  resumeInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  resumeIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#C8A84E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resumeTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#C8A84E',
+  },
+  resumeSubtitle: {
+    fontSize: 10,
+    color: '#94A3B8',
+  },
+  resumeActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  resumeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#005F46',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#C8A84E',
+    gap: 4,
+  },
+  resumeBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  resumeDismissBtn: {
+    padding: 4,
   },
 });

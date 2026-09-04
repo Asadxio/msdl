@@ -249,3 +249,74 @@ export async function loadShowRoman(): Promise<boolean> {
 export async function saveShowRoman(show: boolean): Promise<void> {
   await AsyncStorage.setItem(QURAN_SHOW_ROMAN_KEY, show.toString());
 }
+
+// ─── Audio Playback State & Speed Preferences ────────────────────────────────
+export const QURAN_AUDIO_PLAYBACK_PREFIX = '@msdl_quran_audio_pos_';
+export const QURAN_AUDIO_SPEED_KEY = '@msdl_quran_audio_speed';
+export const DARS_AUDIO_PLAYBACK_PREFIX = '@msdl_dars_audio_pos_';
+
+export interface QuranAudioPlaybackState {
+  surahNumber: number;
+  ayatNumber: number;
+  positionMillis: number;
+  durationMillis?: number;
+  playbackRate: number;
+  timestamp: number;
+}
+
+export async function saveQuranAudioPlayback(state: QuranAudioPlaybackState): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      QURAN_AUDIO_PLAYBACK_PREFIX + state.surahNumber,
+      JSON.stringify(state)
+    );
+  } catch (e) {
+    console.warn('saveQuranAudioPlayback error:', e);
+  }
+}
+
+export async function loadQuranAudioPlayback(surahNumber: number): Promise<QuranAudioPlaybackState | null> {
+  try {
+    const raw = await AsyncStorage.getItem(QURAN_AUDIO_PLAYBACK_PREFIX + surahNumber);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function savePreferredAudioSpeed(speed: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(QURAN_AUDIO_SPEED_KEY, speed.toString());
+  } catch (e) {
+    console.warn('savePreferredAudioSpeed error:', e);
+  }
+}
+
+export async function loadPreferredAudioSpeed(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(QURAN_AUDIO_SPEED_KEY);
+    return raw ? parseFloat(raw) : 1.0;
+  } catch (e) {
+    return 1.0;
+  }
+}
+
+export async function saveDarsPlaybackPosition(lessonId: string, positionSeconds: number, speed: number = 1.0): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      DARS_AUDIO_PLAYBACK_PREFIX + lessonId,
+      JSON.stringify({ positionSeconds, speed, timestamp: Date.now() })
+    );
+  } catch (e) {
+    console.warn('saveDarsPlaybackPosition error:', e);
+  }
+}
+
+export async function loadDarsPlaybackPosition(lessonId: string): Promise<{ positionSeconds: number; speed: number } | null> {
+  try {
+    const raw = await AsyncStorage.getItem(DARS_AUDIO_PLAYBACK_PREFIX + lessonId);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
