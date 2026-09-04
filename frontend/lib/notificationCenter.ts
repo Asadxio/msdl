@@ -72,6 +72,7 @@ export function dedupeNotificationEvent(key: string): boolean {
 export function resolveRouteFromNotificationData(data: Record<string, unknown>): string | null {
   const directUrl = String(data.url || data.route || '').trim();
   if (directUrl && directUrl.startsWith('/')) return directUrl;
+  if (data.type === 'prayer_alarm') return '/prayer-times';
   const callId = String(data.call_id || '').trim();
   if (callId) return `/call/${callId}`;
   const chatId = String(data.chat_id || '').trim();

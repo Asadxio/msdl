@@ -45,6 +45,13 @@ import {
   QazaRecord,
   DEFAULT_QAZA_RECORD,
 } from '@/lib/prayerStorage';
+import {
+  loadPrayerAlarmsConfig,
+  savePrayerAlarmsConfig,
+  scheduleOfflinePrayerAlarms,
+  DEFAULT_PRAYER_ALARMS_CONFIG,
+  type PrayerAlarmsConfig,
+} from '@/lib/prayerAlarmService';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const BG       = '#01150E';
@@ -131,6 +138,7 @@ export default function PrayerTimesScreen() {
   const [solarAlt, setSolarAlt]           = useState(0);
   const [sunAz, setSunAz]                 = useState(0);
   const [qazaTarget, setQazaTarget]       = useState(2);
+  const [alarmConfig, setAlarmConfig]   = useState<PrayerAlarmsConfig>(DEFAULT_PRAYER_ALARMS_CONFIG);
   const pulseAnim                         = useRef(new Animated.Value(1)).current;
   const cdRef                             = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -148,11 +156,12 @@ export default function PrayerTimesScreen() {
     (async () => {
       const st = await loadPrayerSettings();
       const qz = await loadQazaRecord();
+      const ac = await loadPrayerAlarmsConfig();
       if (!alive) return;
       setSettings(st); setLocationTab(st.locationMode); setMethodOverride(st.method);
       setShafaqType(st.shafaqType || 'abyad'); setAsrFactor(st.asrFactor || 2);
       setManualLat(st.latitude.toString()); setManualLng(st.longitude.toString());
-      setManualAlt((st.altitude || 0).toString()); setQaza(qz);
+      setManualAlt((st.altitude || 0).toString()); setQaza(qz); setAlarmConfig(ac);
     })();
     const unsub = subscribeToPrayerSettings(s => { if (alive) setSettings(s); });
     return () => { alive = false; unsub(); };
@@ -216,7 +225,31 @@ export default function PrayerTimesScreen() {
     if (m)   setMethodOverride(nm);
     if (sh)  setShafaqType(ns);
     if (asr) setAsrFactor(na);
-    await savePrayerSettings({ ...settings, method: nm as any, shafaqType: ns, asrFactor: na });
+    const updated = { ...settings, method: nm as any, shafaqType: ns, asrFactor: na };
+    await savePrayerSettings(updated);
+    void scheduleOfflinePrayerAlarms(updated, alarmConfig).catch(() => {});
+  };
+
+  const handleToggleAlarm = async (key: keyof Omit<PrayerAlarmsConfig, 'reminderMinutesBefore'>) => {
+    const nextConfig = { ...alarmConfig, [key]: !alarmConfig[key] };
+    setAlarmConfig(nextConfig);
+    await savePrayerAlarmsConfig(nextConfig);
+    const count = await scheduleOfflinePrayerAlarms(settings, nextConfig);
+    if (key === 'enabled') {
+      Alert.alert(
+        nextConfig.enabled ? 'Prayer Alarms Enabled' : 'Prayer Alarms Disabled',
+        nextConfig.enabled
+          ? `Alhamdulillah! ${count} offline prayer alerts have been scheduled on your device.`
+          : 'Offline prayer notifications have been turned off.'
+      );
+    }
+  };
+
+  const handleSetReminderMinutes = async (mins: number) => {
+    const nextConfig = { ...alarmConfig, reminderMinutesBefore: mins };
+    setAlarmConfig(nextConfig);
+    await savePrayerAlarmsConfig(nextConfig);
+    await scheduleOfflinePrayerAlarms(settings, nextConfig);
   };
 
   const calcSettings = useMemo(() => {
@@ -446,9 +479,25 @@ export default function PrayerTimesScreen() {
                             </Text>
                           )}
                         </View>
-                        <View style={s.cdPill}>
-                          <Ionicons name="timer-outline" size={14} color={GOLD} />
-                          <Text style={s.cdTxt}>{countdown}</Text>
+                        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                          <View style={s.cdPill}>
+                            <Ionicons name="timer-outline" size={14} color={GOLD} />
+                            <Text style={s.cdTxt}>{countdown}</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={[s.alarmStatusPill, alarmConfig.enabled && s.alarmStatusPillActive]}
+                            onPress={() => setSettingsModal(true)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons
+                              name={alarmConfig.enabled ? 'notifications' : 'notifications-off-outline'}
+                              size={12}
+                              color={alarmConfig.enabled ? '#003D2B' : W50}
+                            />
+                            <Text style={[s.alarmStatusPillTxt, alarmConfig.enabled && s.alarmStatusPillTxtActive]}>
+                              {alarmConfig.enabled ? 'الارم چالو' : 'الارم بند'}
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
                     )}
@@ -697,6 +746,80 @@ export default function PrayerTimesScreen() {
               <TouchableOpacity onPress={() => setSettingsModal(false)} style={{ padding: 4 }}><Ionicons name="close" size={22} color={W} /></TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={{ gap: 12, padding: SPACING.lg }} showsVerticalScrollIndicator={false}>
+              {/* ─── Offline Prayer Alarms (نماز الارم) ─── */}
+              <View style={s.alarmSectionCard}>
+                <View style={s.alarmHdrRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.alarmSectionTitle}>🔔 Offline Prayer Alarms (نماز الارم)</Text>
+                    <Text style={s.alarmSectionSub}>Internet band hone par bhi device level par notification baje</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[s.alarmMasterToggle, alarmConfig.enabled && s.alarmMasterToggleActive]}
+                    onPress={() => handleToggleAlarm('enabled')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[s.alarmMasterToggleText, alarmConfig.enabled && s.alarmMasterToggleTextActive]}>
+                      {alarmConfig.enabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {alarmConfig.enabled && (
+                  <View style={{ marginTop: 10, gap: 8 }}>
+                    <Text style={s.settLabel}>Reminder Timing (الارم کا وقت)</Text>
+                    <View style={s.reminderPillsRow}>
+                      {[
+                        { mins: 0, label: 'At Exact Time (عین وقت)' },
+                        { mins: 10, label: '10 min before' },
+                        { mins: 15, label: '15 min before' },
+                      ].map((item) => {
+                        const sel = (alarmConfig.reminderMinutesBefore || 0) === item.mins;
+                        return (
+                          <TouchableOpacity
+                            key={item.mins}
+                            style={[s.reminderPill, sel && s.reminderPillActive]}
+                            onPress={() => handleSetReminderMinutes(item.mins)}
+                          >
+                            <Text style={[s.reminderPillTxt, sel && s.reminderPillTxtActive]}>
+                              {item.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={s.settLabel}>Individual Prayer Alerts (مخصوص نمازیں)</Text>
+                    <View style={s.prayerTogglesGrid}>
+                      {[
+                        { key: 'fajr' as const, name: 'فجر (Fajr)' },
+                        { key: 'zuhr' as const, name: 'ظہر (Zuhr)' },
+                        { key: 'asr' as const, name: 'عصر (Asr)' },
+                        { key: 'maghrib' as const, name: 'مغرب (Maghrib)' },
+                        { key: 'isha' as const, name: 'عشاء (Isha)' },
+                      ].map((p) => {
+                        const active = alarmConfig[p.key] !== false;
+                        return (
+                          <TouchableOpacity
+                            key={p.key}
+                            style={[s.prayerToggleChip, active && s.prayerToggleChipActive]}
+                            onPress={() => handleToggleAlarm(p.key)}
+                          >
+                            <Ionicons
+                              name={active ? 'notifications' : 'notifications-off-outline'}
+                              size={14}
+                              color={active ? GOLD : W50}
+                            />
+                            <Text style={[s.prayerToggleChipTxt, active && s.prayerToggleChipTxtActive]}>
+                              {p.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+              </View>
+
               <Text style={s.settLabel}>Calculation Method</Text>
               {(['auto','muslimWorldLeague','egyptian','karachi','ummAlQura','northAmerica'] as const).map(key => {
                 const label = key === 'auto' ? 'Auto (Location Based)' : (PRAYER_METHODS[key]?.method || key);
@@ -826,6 +949,30 @@ const s = StyleSheet.create({
   prevLabel:        { fontSize: 10, color: W50, fontWeight: '600', marginTop: 4 },
   cdPill:           { flexDirection: 'row', alignItems: 'center', backgroundColor: GOLD_BG, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8, gap: 6, borderWidth: 1, borderColor: GOLD_BDR },
   cdTxt:            { fontSize: 15, fontWeight: '900', color: GOLD },
+  alarmStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: W20,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  alarmStatusPillActive: {
+    backgroundColor: GOLD,
+    borderColor: GOLD_LT,
+  },
+  alarmStatusPillTxt: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: W50,
+  },
+  alarmStatusPillTxtActive: {
+    color: '#003D2B',
+    fontWeight: '900',
+  },
   makruhAlert:      { flexDirection: 'row', alignItems: 'center', gap: 12 },
   makruhDot:        { width: 10, height: 10, borderRadius: 5, backgroundColor: RED },
   makruhAlertTitle: { fontSize: 15, fontWeight: '900', color: RED },
@@ -949,4 +1096,108 @@ const s = StyleSheet.create({
   fieldLbl:     { fontSize: 11, fontWeight: '700', color: W50, marginBottom: 4 },
   settBtn:      { height: 48, backgroundColor: GOLD, borderRadius: RADIUS.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   settBtnTxt:   { color: BG, fontSize: 14, fontWeight: '900' },
+
+  // Alarm section styles
+  alarmSectionCard: {
+    backgroundColor: 'rgba(0, 46, 35, 0.7)',
+    borderRadius: RADIUS.lg,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: GOLD,
+    marginBottom: 4,
+  },
+  alarmHdrRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  alarmSectionTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: GOLD_LT,
+  },
+  alarmSectionSub: {
+    fontSize: 10,
+    color: W80,
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  alarmMasterToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: W20,
+    borderWidth: 1,
+    borderColor: W50,
+  },
+  alarmMasterToggleActive: {
+    backgroundColor: GOLD,
+    borderColor: GOLD,
+  },
+  alarmMasterToggleText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: W50,
+  },
+  alarmMasterToggleTextActive: {
+    color: BG,
+  },
+  reminderPillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  reminderPill: {
+    flex: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+    borderRadius: RADIUS.sm,
+    backgroundColor: W20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  reminderPillActive: {
+    backgroundColor: GOLD_BG,
+    borderColor: GOLD,
+  },
+  reminderPillTxt: {
+    fontSize: 10,
+    color: W50,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  reminderPillTxtActive: {
+    color: GOLD_LT,
+    fontWeight: '900',
+  },
+  prayerTogglesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  prayerToggleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: RADIUS.full,
+    backgroundColor: W20,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  prayerToggleChipActive: {
+    backgroundColor: GOLD_BG,
+    borderColor: GOLD_BDR,
+  },
+  prayerToggleChipTxt: {
+    fontSize: 11,
+    color: W50,
+    fontWeight: '700',
+  },
+  prayerToggleChipTxtActive: {
+    color: GOLD_LT,
+    fontWeight: '800',
+  },
 });

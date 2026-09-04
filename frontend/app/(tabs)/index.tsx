@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { calculatePrayerTimes, getPrayerCalculationSettings, getPrayerWindow, PrayerTime } from '@/lib/prayerTimes';
 import { loadPrayerSettings, PrayerSettings, subscribeToPrayerSettings } from '@/lib/prayerStorage';
+import { scheduleOfflinePrayerAlarms } from '@/lib/prayerAlarmService';
 import { DAILY_WISDOM, MASNOON_DUAS, HADITHS, MOTIVATIONAL_QUOTES } from '@/constants/wisdomData';
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
@@ -71,9 +72,16 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    loadPrayerSettings().then(setPrayerSettings);
-    const unsub = subscribeToPrayerSettings(setPrayerSettings);
-    const interval = setInterval(() => setNow(new Date()), 60000);
+    loadPrayerSettings().then((st) => {
+      setPrayerSettings(st);
+      void scheduleOfflinePrayerAlarms(st).catch(() => {});
+    });
+    const unsub = subscribeToPrayerSettings((st) => {
+      setPrayerSettings(st);
+      void scheduleOfflinePrayerAlarms(st).catch(() => {});
+    });
+    // Update every 10 seconds for accurate countdown timer display
+    const interval = setInterval(() => setNow(new Date()), 10000);
     
     Notifications.getBadgeCountAsync().then(count => setBadgeCount(count)).catch(() => {});
 
@@ -108,6 +116,34 @@ export default function HomeScreen() {
   const currentPrayer = prayerWindow.current;
   const nextPrayer = prayerWindow.next;
   const progressRatio = prayerWindow.progress;
+
+  // Urdu Next Namaz Countdown (e.g. "عصر کا وقت 35 منٹ میں شروع ہوگا")
+  const nextPrayerCountdownUrdu = useMemo(() => {
+    if (!nextPrayer) return '';
+    const msDiff = nextPrayer.time.getTime() - now.getTime();
+    if (msDiff <= 0) return '';
+    const totalMinutes = Math.max(1, Math.round(msDiff / 60000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    const urduPrayerNames: Record<string, string> = {
+      Fajr: 'فجر',
+      Sunrise: 'طلوعِ آفتاب',
+      Zuhr: 'ظہر',
+      Asr: 'عصر',
+      Maghrib: 'مغرب',
+      Isha: 'عشاء',
+    };
+    const nameUrdu = urduPrayerNames[nextPrayer.name] || nextPrayer.name;
+
+    if (hours > 0 && minutes > 0) {
+      return `${nameUrdu} کا وقت ${hours} گھنٹے ${minutes} منٹ میں شروع ہوگا`;
+    } else if (hours > 0) {
+      return `${nameUrdu} کا وقت ${hours} گھنٹے میں شروع ہوگا`;
+    } else {
+      return `${nameUrdu} کا وقت ${minutes} منٹ میں شروع ہوگا`;
+    }
+  }, [nextPrayer, now]);
 
   const resume = useMemo(() => getResumeLearning(), [getResumeLearning]);
   const activeCourseProgress = useMemo(() => {
@@ -399,6 +435,21 @@ export default function HomeScreen() {
                 <View style={styles.progressTrack}>
                    <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
                 </View>
+
+                {/* Urdu Next Namaz Countdown Banner */}
+                {!!nextPrayerCountdownUrdu && (
+                  <TouchableOpacity
+                    style={styles.prayerCountdownBanner}
+                    onPress={() => router.push('/prayer-times')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="timer" size={16} color="#C8A84E" />
+                    <Text style={styles.prayerCountdownText}>
+                      {nextPrayerCountdownUrdu}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={14} color="#C8A84E" />
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               <View style={styles.prayerFallbackBox}>
@@ -1029,6 +1080,26 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: COLORS.secondary,
     borderRadius: 3,
+  },
+  prayerCountdownBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0, 46, 35, 0.85)',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(200, 168, 78, 0.4)',
+    gap: 8,
+  },
+  prayerCountdownText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FDE68A',
+    flex: 1,
+    textAlign: 'center',
   },
   prayerFallbackBox: {
     backgroundColor: 'rgba(255,255,255,0.1)',
