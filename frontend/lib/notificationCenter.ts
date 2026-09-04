@@ -1,6 +1,5 @@
 import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { sendPushToAllUsers, sendPushToUserIds } from '@/lib/pushNotifications';
 import { logger } from '@/lib/logger';
 
 export type NotificationChannel =
@@ -158,29 +157,6 @@ export async function createNotificationRecord(input: {
   return true;
 }
 
-export async function dispatchNotification(input: {
-  channel: NotificationChannel;
-  type: AppNotificationType;
-  title: string;
-  message: string;
-  user_ids: string[];
-  data?: Record<string, unknown>;
-  dedupe_id: string;
-  send_to_all?: boolean;
-}): Promise<void> {
-  const userIds = Array.from(new Set(input.user_ids.filter(Boolean)));
-  const data = { ...(input.data || {}), type: input.type, push_dedupe_id: input.dedupe_id };
-  if (input.send_to_all) {
-    await sendPushToAllUsers({ title: input.title, body: input.message, data }).catch(() => {});
-    return;
-  }
-  const allowed: string[] = [];
-  for (const uid of userIds) {
-    if (await shouldDeliverNotification(uid, input.channel, data)) allowed.push(uid);
-  }
-  if (allowed.length === 0) return;
-  await sendPushToUserIds(allowed, { title: input.title, body: input.message, data }).catch((err) => logger.warn('dispatchNotification push failed', err));
-}
 
 export function getCurrentUserId(): string {
   return String(auth.currentUser?.uid || '');

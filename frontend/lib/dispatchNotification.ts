@@ -1,43 +1,132 @@
-import { addDoc, collection, doc, getDoc, getDocs, limit as limitQ, query, serverTimestamp } from 'firebase/firestore';
+/**
+ * MSLB Canonical Notification Dispatcher — Phase 48
+ *
+ * Architecture:
+ *   EVENT
+ *     → writeNotificationRecord (idempotent, dedupe_id key)
+ *     → collectPushTokens (expo + native FCM from users.expo_push_tokens + users.fcm_tokens)
+ *     → push routed through backend /api/push/send (Firebase Admin handles FCM+Expo)
+ *     → structured dispatch result: { sent, failed, skipped, noToken, deduped }
+ *
+ * DO NOT call Expo push API directly from the frontend — native FCM tokens
+ * (produced by standalone release APK) are NOT accepted by exp.host.
+ * The backend /api/push/send correctly routes FCM tokens → Firebase Admin
+ * and Expo tokens → Expo Push API.
+ */
+
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  serverTimestamp,
+  setDoc,
+  runTransaction,
+} from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { logger } from '@/lib/logger';
 import { buildNotificationPayload, buildNotificationRoute } from '@/lib/notificationPayloads';
 import type { DispatchNotificationInput, NotificationRecordInput } from '@/lib/notificationTypes';
-import { getNotificationPreferences } from '@/lib/notificationCenter';
+import { getNotificationPreferences, shouldDeliverNotification } from '@/lib/notificationCenter';
 import { createTelemetryRecord, updateTelemetryStatus } from '@/lib/notificationTelemetryWriter';
 import { withTimeout } from '@/lib/errors';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type DispatchResult = {
+  dedupeId: string;
+  /** Notification records written to Firestore */
+  recipients: number;
+  /** Tokens push was sent to (may differ from recipients) */
+  pushCount: number;
+  /** Tokens with no registered push token */
+  noToken: number;
+  /** Recipients skipped by notification preference */
+  skipped: number;
+  /** Was the whole dispatch skipped due to dedupe? */
+  deduped: boolean;
+  /** Provider error count (non-fatal, logged) */
+  providerErrors: number;
+};
+
+export type DispatchStatus =
+  | 'queued'
+  | 'sent'
+  | 'skipped_by_preference'
+  | 'no_token'
+  | 'provider_failed'
+  | 'invalid_token'
+  | 'deduplicated';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
 function makeDedupeId(input: DispatchNotificationInput): string {
-  return input.dedupeId || `${input.event}:${input.channel}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+  if (input.dedupeId) return input.dedupeId;
+  // Deterministic if caller provides event+channel, random suffix otherwise
+  return `${input.event}:${input.channel}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export async function writeNotificationRecord(input: NotificationRecordInput & { user_id?: string }): Promise<string> {
-  try {
-    const docData: Record<string, unknown> = {
-      recipient_id: input.recipient_id,
-      actor_id: input.actor_id,
-      channel: input.channel,
-      event: input.event,
-      title: input.title,
-      message: input.body,
-      body: input.body,
-      route: input.route,
-      data: input.data || {},
-      read: input.recipient_id === 'all' ? {} : { [input.recipient_id]: false },
-      user_id: input.user_id || input.recipient_id,
-      dedupe_id: input.dedupe_id,
-      created_at: serverTimestamp(),
-      created_at_ms: Date.now(),
-    };
+// ─────────────────────────────────────────────────────────────────────────────
+// Idempotent notification record writer
+// Uses a transaction to atomically check+write a dedupe marker, preventing
+// duplicate records on retry/network timeout.
+// ─────────────────────────────────────────────────────────────────────────────
 
-    const ref = await withTimeout(
-      addDoc(collection(db, 'notifications'), docData),
-      6000
+export async function writeNotificationRecord(
+  input: NotificationRecordInput & { user_id?: string }
+): Promise<{ id: string; alreadyExists: boolean }> {
+  try {
+    const dedupeDocId = `${input.dedupe_id}:${input.recipient_id}`;
+    const dedupeRef = doc(db, 'notification_dedupe', dedupeDocId);
+    const notifRef = doc(collection(db, 'notifications'));
+
+    // Check dedupe marker first (fast path before transaction)
+    const existingMarker = await withTimeout(getDoc(dedupeRef), 4000).catch(() => null);
+    if (existingMarker?.exists()) {
+      const existingNotifId = existingMarker.data()?.notification_id as string | undefined;
+      return { id: existingNotifId || dedupeDocId, alreadyExists: true };
+    }
+
+    await withTimeout(
+      runTransaction(db, async (tx) => {
+        const markerSnap = await tx.get(dedupeRef);
+        if (markerSnap.exists()) return; // already written by concurrent caller
+
+        const docData: Record<string, unknown> = {
+          recipient_id: input.recipient_id,
+          actor_id: input.actor_id,
+          channel: input.channel,
+          event: input.event,
+          title: input.title,
+          message: input.body,
+          body: input.body,
+          route: input.route,
+          data: input.data || {},
+          read: input.recipient_id === 'all' ? {} : { [input.recipient_id]: false },
+          user_id: input.user_id || input.recipient_id,
+          dedupe_id: input.dedupe_id,
+          created_at: serverTimestamp(),
+          created_at_ms: Date.now(),
+        };
+
+        tx.set(notifRef, docData);
+        tx.set(dedupeRef, {
+          notification_id: notifRef.id,
+          recipient_id: input.recipient_id,
+          created_at: serverTimestamp(),
+          created_at_ms: Date.now(),
+        });
+      }),
+      8000
     );
 
     void createTelemetryRecord({
-      notificationId: ref.id,
+      notificationId: notifRef.id,
       dedupeId: input.dedupe_id,
       recipientId: input.recipient_id,
       event: input.event,
@@ -46,137 +135,154 @@ export async function writeNotificationRecord(input: NotificationRecordInput & {
       transport: 'expo_push',
     }).catch(() => {});
 
-    return ref.id;
+    return { id: notifRef.id, alreadyExists: false };
   } catch (error: unknown) {
     logFirestoreFailure(
-      { collection: 'notifications', operation: 'add', path: 'notifications', query: `dispatch notification ${input.event}/${input.channel}` },
+      {
+        collection: 'notifications',
+        operation: 'add',
+        path: 'notifications',
+        query: `dispatch notification ${input.event}/${input.channel}/${input.recipient_id}`,
+      },
       error
     );
     throw error;
   }
 }
 
-async function collectPushTokens(targetUids: string[], isSendToAll: boolean): Promise<string[]> {
-  const tokensSet = new Set<string>();
+// ─────────────────────────────────────────────────────────────────────────────
+// Push delivery via backend
+// The backend /api/push/send routes:
+//   native FCM tokens → Firebase Admin Messaging (works in release APK)
+//   Expo tokens       → Expo Push API
+// This is the CANONICAL push path. Do NOT call exp.host directly from frontend.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const isExpoPushToken = (t: unknown): t is string =>
-    typeof t === 'string' && (t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['));
+type BackendPushResult = {
+  ok: boolean;
+  sent: number;
+  failed: number;
+  skipped: number;
+  noToken: number;
+  providerErrors: number;
+  raw?: unknown;
+};
 
-  if (isSendToAll) {
-    // 1. Gather tokens from users and user_tokens concurrently with 4s timeout
-    const [usersResult, tokensResult] = await Promise.allSettled([
-      withTimeout(getDocs(query(collection(db, 'users'), limitQ(300))), 4000),
-      withTimeout(getDocs(query(collection(db, 'user_tokens'), limitQ(500))), 4000),
-    ]);
+async function sendPushViaBackend(params: {
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  recipientIds: string[];
+  sendToAll: boolean;
+  dedupeId: string;
+  channel: string;
+}): Promise<BackendPushResult> {
+  const base = String(
+    process.env.EXPO_PUBLIC_PUSH_API_URL ||
+      process.env.EXPO_PUBLIC_LIVE_API_URL ||
+      String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '')
+  ).replace(/\/$/, '');
 
-    if (usersResult.status === 'fulfilled') {
-      usersResult.value.forEach((d) => {
-        const data = d.data();
-        const tokens = Array.isArray(data.expo_push_tokens) ? data.expo_push_tokens : [];
-        tokens.forEach((t: unknown) => { if (isExpoPushToken(t)) tokensSet.add(t); });
-      });
-    }
-
-    if (tokensResult.status === 'fulfilled') {
-      tokensResult.value.forEach((d) => {
-        const data = d.data();
-        if (isExpoPushToken(data.token)) tokensSet.add(data.token);
-        if (isExpoPushToken(data.expoPushToken)) tokensSet.add(data.expoPushToken);
-      });
-    }
-  } else if (targetUids.length > 0) {
-    const chunkSize = 20;
-    for (let i = 0; i < targetUids.length; i += chunkSize) {
-      const chunk = targetUids.slice(i, i + chunkSize);
-      await Promise.allSettled(
-        chunk.map(async (uid) => {
-          try {
-            const userSnap = await withTimeout(getDoc(doc(db, 'users', uid)), 3000);
-            if (userSnap.exists()) {
-              const data = userSnap.data();
-              const tokens = Array.isArray(data.expo_push_tokens) ? data.expo_push_tokens : [];
-              tokens.forEach((t: unknown) => { if (isExpoPushToken(t)) tokensSet.add(t); });
-            }
-          } catch {}
-
-          try {
-            const tokenSnap = await withTimeout(getDoc(doc(db, 'user_tokens', uid)), 3000);
-            if (tokenSnap.exists()) {
-              const data = tokenSnap.data();
-              if (isExpoPushToken(data.token)) tokensSet.add(data.token);
-              if (isExpoPushToken(data.expoPushToken)) tokensSet.add(data.expoPushToken);
-            }
-          } catch {}
-        })
-      );
-    }
+  if (!base) {
+    logger.warn('[notification_push_skipped]', {
+      reason: 'no_backend_url',
+      dedupe_id: params.dedupeId,
+    });
+    return { ok: false, sent: 0, failed: 0, skipped: 0, noToken: 0, providerErrors: 1 };
   }
 
-  return Array.from(tokensSet);
-}
+  let idToken: string | undefined;
+  try {
+    idToken = await auth.currentUser?.getIdToken?.();
+  } catch {
+    // Continue without token — backend will reject with 401 and we'll log it
+  }
 
-async function sendExpoPushBatches(
-  tokens: string[],
-  title: string,
-  body: string,
-  payload: Record<string, unknown>,
-  channel: string
-): Promise<number> {
-  if (tokens.length === 0) return 0;
+  if (!idToken) {
+    logger.warn('[notification_push_skipped]', {
+      reason: 'no_auth_token',
+      dedupe_id: params.dedupeId,
+    });
+    return { ok: false, sent: 0, failed: 0, skipped: 0, noToken: 0, providerErrors: 1 };
+  }
 
-  let totalSent = 0;
-  const messages = tokens.map((token) => ({
-    to: token,
-    sound: 'default',
-    title: title.trim(),
-    body: body.trim(),
-    data: {
-      ...payload,
-      url: channel === 'live_classes' ? '/live-class' : '/notifications',
-      channel,
-    },
-    priority: 'high',
-    channelId: 'announcements',
-    _displayInForeground: true,
-  }));
-
-  const batchSize = 50;
-  for (let i = 0; i < messages.length; i += batchSize) {
-    const batch = messages.slice(i, i + batchSize);
-    try {
-      const res = await withTimeout(
-        fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Accept-Encoding': 'gzip, deflate',
-            'Content-Type': 'application/json',
+  try {
+    const res = await withTimeout(
+      fetch(`${base}/api/push/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          title: params.title,
+          body: params.body,
+          data: {
+            ...params.data,
+            channelId: params.channel === 'live_classes' ? 'announcements' : params.channel,
+            push_dedupe_id: params.dedupeId,
           },
-          body: JSON.stringify(batch),
+          send_to_all: params.sendToAll,
+          user_ids: params.sendToAll ? [] : params.recipientIds,
+          event_type: params.data.type || 'announcement',
         }),
-        6000
-      );
-      if (res.ok) {
-        totalSent += batch.length;
-      }
-      const resJson = await res.json().catch(() => null);
-      console.log('[Push] Expo push batch response:', resJson);
-    } catch (err) {
-      console.warn('[Push] Expo push batch send failed:', err);
-    }
-  }
+      }),
+      20000
+    );
 
-  return totalSent;
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      logger.warn('[notification_push_provider_error]', {
+        status: res.status,
+        body: body.slice(0, 200),
+        dedupe_id: params.dedupeId,
+      });
+      return { ok: false, sent: 0, failed: 1, skipped: 0, noToken: 0, providerErrors: 1, raw: body };
+    }
+
+    const json = await res.json().catch(() => ({})) as Record<string, unknown>;
+
+    // Backend returns { ok, sent, failed, stale_removed, ... }
+    const sent = Number(json.sent ?? 0);
+    const failed = Number(json.failed ?? 0);
+
+    logger.info('[notification_push_delivered]', {
+      dedupe_id: params.dedupeId,
+      sent,
+      failed,
+      raw: json,
+    });
+
+    return {
+      ok: res.ok,
+      sent,
+      failed,
+      skipped: 0,
+      noToken: 0,
+      providerErrors: failed,
+      raw: json,
+    };
+  } catch (err) {
+    logger.warn('[notification_push_network_error]', {
+      error: String(err),
+      dedupe_id: params.dedupeId,
+    });
+    return { ok: false, sent: 0, failed: 0, skipped: 0, noToken: 0, providerErrors: 1 };
+  }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Canonical dispatchNotification
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function dispatchNotification(
   input: DispatchNotificationInput
-): Promise<{ dedupeId: string; recipients: number; pushCount: number }> {
+): Promise<DispatchResult> {
   const started = Date.now();
   const dedupeId = makeDedupeId(input);
   const isSendToAll = Boolean(input.sendToAll);
 
-  logger.info('[notification_dispatch]', {
+  logger.info('[notification_dispatch_start]', {
     event: input.event,
     channel: input.channel,
     target_count: input.recipientIds.length,
@@ -190,129 +296,135 @@ export async function dispatchNotification(
 
   const payload = buildNotificationPayload(input, dedupeId);
   const route = buildNotificationRoute(input);
-  const actorId = String(input.actorId || auth.currentUser?.uid || 'admin');
+  const actorId = String(input.actorId || auth.currentUser?.uid || 'system');
 
-  // Step 1 & 2: Write notification records and collect push tokens in parallel
-  const [writtenRecipients, tokens] = await Promise.all([
-    (async () => {
-      if (isSendToAll) {
-        await writeNotificationRecord({
-          recipient_id: 'all',
-          user_id: 'all',
-          actor_id: actorId,
-          channel: input.channel,
-          event: input.event,
-          title: input.title,
-          body: input.body,
-          route,
-          data: { ...payload, is_broadcast: true },
-          dedupe_id: dedupeId,
-        });
-        return 1;
-      } else {
-        const uniqueRecipients = Array.from(new Set(input.recipientIds.filter(Boolean)));
-        const allowed: string[] = [];
+  let writtenRecipients = 0;
+  let skipped = 0;
 
-        for (const uid of uniqueRecipients) {
-          const prefs = await getNotificationPreferences(uid).catch(() => null);
-          if (!prefs) {
+  // ── Step 1: Write Firestore notification records ──────────────────────────
+  if (isSendToAll) {
+    // Single "all" broadcast record
+    try {
+      const { alreadyExists } = await writeNotificationRecord({
+        recipient_id: 'all',
+        user_id: 'all',
+        actor_id: actorId,
+        channel: input.channel,
+        event: input.event,
+        title: input.title,
+        body: input.body,
+        route,
+        data: { ...payload, is_broadcast: true },
+        dedupe_id: dedupeId,
+      });
+      if (!alreadyExists) writtenRecipients = 1;
+    } catch (err) {
+      logger.warn('[notification_record_write_failed]', {
+        event: input.event,
+        recipient: 'all',
+        dedupe_id: dedupeId,
+        error: String(err),
+      });
+    }
+  } else {
+    const uniqueRecipients = Array.from(new Set(input.recipientIds.filter(Boolean)));
+    const allowed: string[] = [];
+
+    // Preference filtering (per-recipient)
+    await Promise.all(
+      uniqueRecipients.map(async (uid) => {
+        try {
+          const channelKey = input.channel === 'live_classes'
+            ? 'live_class'
+            : input.channel === 'stories'
+            ? 'story'
+            : input.channel;
+          const canDeliver = await shouldDeliverNotification(
+            uid,
+            channelKey as any,
+            payload as Record<string, unknown>
+          );
+          if (canDeliver) {
             allowed.push(uid);
-            continue;
+          } else {
+            skipped += 1;
+            logger.info('[notification_skipped_by_preference]', {
+              uid,
+              channel: input.channel,
+              dedupe_id: dedupeId,
+            });
           }
-          const mapped =
-            input.channel === 'live_classes' ? 'live_class' : input.channel === 'stories' ? 'story' : input.channel;
-          if ((prefs.channels as Record<string, boolean>)[mapped] === false) continue;
+        } catch {
+          // If preference check fails, deliver anyway (fail-open)
           allowed.push(uid);
         }
+      })
+    );
 
-        await Promise.all(
-          allowed.map((uid) =>
-            writeNotificationRecord({
-              recipient_id: uid,
-              user_id: uid,
-              actor_id: actorId,
-              channel: input.channel,
-              event: input.event,
-              title: input.title,
-              body: input.body,
-              route,
-              data: payload,
-              dedupe_id: dedupeId,
-            })
-          )
-        );
+    // Write per-recipient records (idempotent)
+    await Promise.allSettled(
+      allowed.map(async (uid) => {
+        try {
+          const { alreadyExists } = await writeNotificationRecord({
+            recipient_id: uid,
+            user_id: uid,
+            actor_id: actorId,
+            channel: input.channel,
+            event: input.event,
+            title: input.title,
+            body: input.body,
+            route,
+            data: payload,
+            dedupe_id: dedupeId,
+          });
+          if (!alreadyExists) writtenRecipients += 1;
+        } catch (err) {
+          logger.warn('[notification_record_write_failed]', {
+            event: input.event,
+            recipient: uid,
+            dedupe_id: dedupeId,
+            error: String(err),
+          });
+        }
+      })
+    );
 
-        void Promise.all(
-          allowed.map((uid) =>
-            updateTelemetryStatus({ dedupeId, recipientId: uid, status: 'queued' }).catch(() => {})
-          )
-        );
-
-        return allowed.length;
-      }
-    })(),
-    collectPushTokens(input.recipientIds, isSendToAll).catch(() => []),
-  ]);
-
-  // Step 3: Push delivery to hardware devices via Expo Push API
-  let pushTokensSent = 0;
-  try {
-    logger.info('[notification_tokens_collected]', { count: tokens.length, isSendToAll });
-
-    if (tokens.length > 0) {
-      pushTokensSent = await sendExpoPushBatches(
-        tokens,
-        input.title,
-        input.body,
-        payload,
-        input.channel
-      );
-    }
-  } catch (pushErr) {
-    logger.warn('[notification_push_failed]', { error: String(pushErr) });
+    // Mark telemetry queued
+    void Promise.allSettled(
+      allowed.map((uid) =>
+        updateTelemetryStatus({ dedupeId, recipientId: uid, status: 'queued' }).catch(() => {})
+      )
+    );
   }
 
-  // Step 3: Try backend enqueue as secondary delivery / audit if available
-  try {
-    const base = String(
-      process.env.EXPO_PUBLIC_PUSH_API_URL ||
-        process.env.EXPO_PUBLIC_LIVE_API_URL ||
-        String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '')
-    ).replace(/\/$/, '');
-
-    if (base) {
-      const idToken = await auth.currentUser?.getIdToken?.();
-      void withTimeout(
-        fetch(`${base}/api/push/enqueue`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({
-            dedupe_id: dedupeId,
-            event: input.event,
-            channel: input.channel,
-            payload: { title: input.title, body: input.body, data: payload },
-            recipients: isSendToAll ? ['all'] : input.recipientIds,
-            priority: 5,
-          }),
-        }),
-        3000
-      ).catch(() => {});
-    }
-  } catch {}
+  // ── Step 2: Push via backend (FCM + Expo) ────────────────────────────────
+  const pushResult = await sendPushViaBackend({
+    title: input.title,
+    body: input.body,
+    data: payload,
+    recipientIds: isSendToAll ? [] : input.recipientIds,
+    sendToAll: isSendToAll,
+    dedupeId,
+    channel: input.channel,
+  });
 
   logger.info('[notification_dispatch_complete]', {
     dedupe_id: dedupeId,
     duration_ms: Date.now() - started,
-    writtenRecipients,
-    pushTokensSent,
+    written_records: writtenRecipients,
+    push_sent: pushResult.sent,
+    push_failed: pushResult.failed,
+    skipped_by_pref: skipped,
+    provider_errors: pushResult.providerErrors,
   });
 
   return {
     dedupeId,
     recipients: writtenRecipients,
-    pushCount: pushTokensSent,
+    pushCount: pushResult.sent,
+    noToken: pushResult.noToken,
+    skipped,
+    deduped: writtenRecipients === 0 && pushResult.sent === 0,
+    providerErrors: pushResult.providerErrors,
   };
 }

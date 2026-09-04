@@ -379,55 +379,104 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return () => tokenSub.remove();
   }, [user?.uid]);
 
-  // Direct Firebase Realtime Notification Trigger (Zero Expo Middleman)
+  // Foreground Realtime Notification Trigger — covers all 3 notification shapes:
+  //   1. user_id == uid  (direct)
+  //   2. user_id == 'all' (broadcast)
+  //   3. user_id == 'role_targeted' (role or user_id list targeting)
+  // Fires a local banner for any NEW notification that arrives while app is open.
+  // Deduped by document ID to prevent duplicate banners.
   useEffect(() => {
     if (!user?.uid) return () => {};
     const sessionStart = Date.now();
     const seenNotifIds = new Set<string>();
 
+    function fireLocalBanner(docData: Record<string, unknown>, docId: string): void {
+      if (seenNotifIds.has(docId)) return;
+      seenNotifIds.add(docId);
+      const createdAt = (docData.created_at_ms as number) ||
+        ((docData.created_at as any)?.toMillis ? (docData.created_at as any).toMillis() : 0);
+      // Only banner for notifications that arrived in this session (±3s clock skew)
+      if (createdAt < sessionStart - 3000) return;
+      // Do not self-notify
+      if (String(docData.actor_id || '') === (user?.uid ?? '')) return;
+      const route = String(
+        (docData.route as string | undefined) ||
+        ((docData.channel as string) === 'live_classes' ? '/live-class' : '/notifications')
+      );
+      void Notifications.scheduleNotificationAsync({
+        content: {
+          title: String(docData.title || 'Madrasatu-s-Salikat Notice'),
+          body: String((docData.message as string | undefined) || (docData.body as string | undefined) || ''),
+          sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          data: {
+            ...((docData.data as Record<string, unknown>) || {}),
+            url: route,
+            channel: docData.channel || 'announcements',
+          },
+        },
+        trigger: null,
+      }).catch(() => {});
+    }
+
+    function makeDocListener(q: ReturnType<typeof query>) {
+      return onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            fireLocalBanner(change.doc.data() as Record<string, unknown>, change.doc.id);
+          }
+        });
+      }, (err) => {
+        console.log('[Notifications] realtime listener error:', err);
+      });
+    }
+
     try {
-      const q = query(
+      // Query 1: direct + broadcast (user_id IN [uid, 'all'])
+      const q1 = query(
         collection(db, 'notifications'),
         where('user_id', 'in', [user.uid, 'all']),
         orderBy('created_at', 'desc'),
         limit(20)
       );
+      const unsub1 = makeDocListener(q1);
 
-      const unsub = onSnapshot(q, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const docData = change.doc.data();
-            const createdAt = docData.created_at_ms || (docData.created_at?.toMillis ? docData.created_at.toMillis() : 0);
-            if (createdAt >= sessionStart - 3000 && !seenNotifIds.has(change.doc.id)) {
-              seenNotifIds.add(change.doc.id);
-              if (docData.actor_id !== user.uid) {
-                void Notifications.scheduleNotificationAsync({
-                  content: {
-                    title: String(docData.title || 'Madrasatu-s-Salikat Notice'),
-                    body: String(docData.message || docData.body || ''),
-                    sound: 'default',
-                    priority: Notifications.AndroidNotificationPriority.MAX,
-                    data: {
-                      ...(docData.data || {}),
-                      url: docData.route || (docData.channel === 'live_classes' ? '/live-class' : '/notifications'),
-                      channel: docData.channel || 'announcements',
-                    },
-                  },
-                  trigger: null,
-                }).catch(() => {});
-              }
-            }
-          }
-        });
-      }, (err) => {
-        console.log('[Notifications] realtime listener note:', err);
-      });
+      // Query 2: role_targeted (needs role from profile, safe to skip if no profile yet)
+      const role = profile?.role;
+      const unsub2 = role
+        ? makeDocListener(
+            query(
+              collection(db, 'notifications'),
+              where('user_id', '==', 'role_targeted'),
+              where('target_roles', 'array-contains', role),
+              orderBy('created_at', 'desc'),
+              limit(10)
+            )
+          )
+        : null;
 
-      return () => unsub();
+      // Query 3: role_targeted by explicit user ID list
+      const unsub3 = makeDocListener(
+        query(
+          collection(db, 'notifications'),
+          where('user_id', '==', 'role_targeted'),
+          where('target_user_ids', 'array-contains', user.uid),
+          orderBy('created_at', 'desc'),
+          limit(10)
+        )
+      );
+
+      return () => {
+        unsub1();
+        unsub2?.();
+        unsub3();
+      };
     } catch {
       return () => {};
     }
-  }, [user?.uid]);
+  }, [user?.uid, profile?.role]);
+
+
 
   useEffect(() => {
     try {

@@ -105,7 +105,7 @@ export default function AdminSendPushScreen() {
   const [previewVisible, setPreviewVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
-  const [dispatchResult, setDispatchResult] = useState<{ recipients: number; pushCount: number } | null>(null);
+  const [dispatchResult, setDispatchResult] = useState<{ recipients: number; pushCount: number; skipped: number; providerErrors: number; noToken: number; deduped: boolean } | null>(null);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
@@ -301,19 +301,25 @@ export default function AdminSendPushScreen() {
 
       setDispatchResult(res);
       setSuccessModalVisible(true);
-      const pushNote = res.pushCount > 0
-        ? `${res.pushCount} phone push notification(s) dispatched`
-        : 'In-app feed active (0 push-registered phones found)';
-      setStatusMessage({
-        text: `✅ Broadcast sent! ${pushNote}.`,
-        isError: false,
-      });
+
+      // Build detailed result message
+      const parts: string[] = [];
+      if (res.pushCount > 0) parts.push(`✅ Sent: ${res.pushCount} device(s)`);
+      if (res.providerErrors > 0) parts.push(`❌ Failed: ${res.providerErrors}`);
+      if (res.skipped > 0) parts.push(`⏭ Skipped (preference): ${res.skipped}`);
+      if (res.noToken > 0) parts.push(`📵 No token: ${res.noToken}`);
+      if (res.pushCount === 0 && res.providerErrors === 0 && res.skipped === 0) {
+        parts.push('In-app feed updated (0 push-registered phones found)');
+      }
+      const resultText = parts.length > 0 ? parts.join(' | ') : '✅ Broadcast dispatched';
+      setStatusMessage({ text: resultText, isError: res.pushCount === 0 && res.providerErrors > 0 });
 
       setTitle('');
       setBody('');
       setSelectedIds([]);
       setUserIdsText('');
       void fetchHistory();
+
     } catch (err: any) {
       console.warn('[AdminSendPush] Dispatch failed:', err);
       const isTimeout = String(err?.message || '').toLowerCase().includes('timed out');
