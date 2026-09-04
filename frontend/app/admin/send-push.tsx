@@ -19,11 +19,19 @@ import { goBackOrReplace } from '@/lib/navigation';
 import { collection, getDocs, query, where, orderBy, limit as limitQ, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { RADIUS, SPACING, COLORS, SHADOWS } from '@/constants/theme';
-import { dispatchNotification } from '@/lib/dispatchNotification';
+import { dispatchNotification, type DispatchResult } from '@/lib/dispatchNotification';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { withTimeout } from '@/lib/errors';
+import * as Clipboard from 'expo-clipboard';
+import {
+  fetchCourseEnrolledContacts,
+  buildCourseWhatsAppMessage,
+  openWhatsAppBroadcast,
+  openWhatsAppDirectStudent,
+  type EnrolledStudentContact,
+} from '@/lib/whatsappBatch';
 import type { NotificationChannel } from '@/lib/notificationTypes';
 
 type TargetMode = 'all' | 'class' | 'teachers' | 'custom';
@@ -118,7 +126,13 @@ export default function AdminSendPushScreen() {
   const [previewVisible, setPreviewVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
-  const [dispatchResult, setDispatchResult] = useState<{ recipients: number; pushCount: number; skipped: number; providerErrors: number; noToken: number; deduped: boolean } | null>(null);
+  const [dispatchResult, setDispatchResult] = useState<DispatchResult | null>(null);
+  const [whatsappModalVisible, setWhatsappModalVisible] = useState(false);
+  const [batchContacts, setBatchContacts] = useState<EnrolledStudentContact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [customDarsLink, setCustomDarsLink] = useState('');
+  const [customDarsTime, setCustomDarsTime] = useState('');
+  const [copiedNotice, setCopiedNotice] = useState(false);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
@@ -242,6 +256,50 @@ export default function AdminSendPushScreen() {
       }
     }
   }, [targetMode, selectedCourseId, courses, teachers, selectedIds.length, userIdsText, totalUsersCount, totalDevicesCount]);
+
+  // Handle open WhatsApp batch modal
+  const handleOpenWhatsAppModal = async () => {
+    const activeCourse = courses.find((c) => c.id === selectedCourseId);
+    setCopiedNotice(false);
+    setWhatsappModalVisible(true);
+
+    if (selectedCourseId) {
+      setLoadingContacts(true);
+      try {
+        const contacts = await fetchCourseEnrolledContacts(selectedCourseId);
+        setBatchContacts(contacts);
+      } catch (err) {
+        console.warn('[AdminSendPush] Failed to load contacts:', err);
+      } finally {
+        setLoadingContacts(false);
+      }
+    } else {
+      setBatchContacts([]);
+    }
+  };
+
+  const getComputedWhatsAppNotice = () => {
+    const activeCourse = courses.find((c) => c.id === selectedCourseId);
+    return buildCourseWhatsAppMessage({
+      courseName: activeCourse?.name || title.trim() || 'تمام کورسز',
+      teacherName: profile?.name || 'استادہ',
+      meetUrl: customDarsLink.trim(),
+      classTime: customDarsTime.trim(),
+      customNote: body.trim() || undefined,
+    });
+  };
+
+  const handleCopyWhatsAppNotice = async () => {
+    const text = getComputedWhatsAppNotice();
+    await Clipboard.setStringAsync(text);
+    setCopiedNotice(true);
+    setTimeout(() => setCopiedNotice(false), 2500);
+  };
+
+  const handleTriggerWhatsAppBroadcast = async () => {
+    const text = getComputedWhatsAppNotice();
+    await openWhatsAppBroadcast(text);
+  };
 
   // Handle prepare broadcast
   const handleInitiateSend = () => {
@@ -669,6 +727,15 @@ export default function AdminSendPushScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.btnWhatsApp}
+          onPress={handleOpenWhatsAppModal}
+          disabled={sending}
+        >
+          <Ionicons name="logo-whatsapp" size={18} color="#FFF" />
+          <Text style={styles.btnWhatsAppText}>WhatsApp</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.btnPrimary, (!isFormValid || sending) && styles.btnPrimaryDisabled]}
           onPress={handleInitiateSend}
           disabled={sending || !isFormValid}
@@ -794,9 +861,112 @@ export default function AdminSendPushScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* WhatsApp Batch Messaging Modal */}
+      <Modal visible={whatsappModalVisible} transparent animationType="slide" onRequestClose={() => setWhatsappModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.confirmModalBox, { maxHeight: '88%' }]}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: '#25D36620' }]}>
+              <Ionicons name="logo-whatsapp" size={38} color="#25D366" />
+            </View>
+            <Text style={styles.confirmTitle}>WhatsApp Batch Notice</Text>
+            <Text style={styles.confirmSubtitle}>
+              {selectedCourseId
+                ? `Course Batch: "${courses.find((c) => c.id === selectedCourseId)?.name || 'Selected Class'}"`
+                : 'Share general Madrasa dars link & notice via WhatsApp'}
+            </Text>
+
+            <ScrollView style={{ width: '100%', maxHeight: 320, marginVertical: SPACING.sm }} showsVerticalScrollIndicator={false}>
+              {/* Optional live class / meet link input */}
+              <Text style={[styles.inputLabel, { marginTop: 4 }]}>🔗 Live Class / Meet Link (Optional)</Text>
+              <TextInput
+                value={customDarsLink}
+                onChangeText={setCustomDarsLink}
+                style={[styles.input, { height: 42, marginBottom: 8 }]}
+                placeholder="https://meet.google.com/abc-defg-hij"
+                placeholderTextColor={COLORS.textMuted}
+                autoCapitalize="none"
+              />
+
+              {/* Optional Class Time */}
+              <Text style={styles.inputLabel}>⏰ Dars Time (e.g. 5:00 PM / بعد نماز عصر)</Text>
+              <TextInput
+                value={customDarsTime}
+                onChangeText={setCustomDarsTime}
+                style={[styles.input, { height: 42, marginBottom: 8 }]}
+                placeholder="Today at 5:00 PM"
+                placeholderTextColor={COLORS.textMuted}
+              />
+
+              {/* Message Preview Box */}
+              <Text style={[styles.inputLabel, { marginTop: 6 }]}>Message Preview for WhatsApp:</Text>
+              <View style={styles.waPreviewBox}>
+                <Text style={styles.waPreviewText}>{getComputedWhatsAppNotice()}</Text>
+              </View>
+
+              {/* Enrolled Students Summary */}
+              {selectedCourseId && (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={[styles.inputLabel, { marginBottom: 6 }]}>
+                    👥 Enrolled Students ({loadingContacts ? 'Loading...' : `${batchContacts.length} total`}):
+                  </Text>
+                  {loadingContacts ? (
+                    <ActivityIndicator size="small" color="#25D366" style={{ marginVertical: 8 }} />
+                  ) : batchContacts.length === 0 ? (
+                    <Text style={styles.emptyHistoryText}>No students actively enrolled in this course yet.</Text>
+                  ) : (
+                    batchContacts.map((contact) => (
+                      <View key={contact.uid} style={styles.contactItemRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.contactName}>{contact.name}</Text>
+                          <Text style={styles.contactDetail}>
+                            {contact.phone || contact.guardianPhone || contact.email}
+                          </Text>
+                        </View>
+                        {(contact.phone || contact.guardianPhone) && (
+                          <TouchableOpacity
+                            style={styles.directWaBtn}
+                            onPress={() => {
+                              const p = contact.phone || contact.guardianPhone || '';
+                              void openWhatsAppDirectStudent(p, getComputedWhatsAppNotice());
+                            }}
+                          >
+                            <Ionicons name="logo-whatsapp" size={16} color="#FFF" />
+                            <Text style={styles.directWaBtnText}>Chat</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Actions: Broadcast to Group / Copy Message */}
+            <View style={{ width: '100%', gap: 8, marginTop: 8 }}>
+              <TouchableOpacity style={styles.waBroadcastBtn} onPress={handleTriggerWhatsAppBroadcast}>
+                <Ionicons name="logo-whatsapp" size={20} color="#FFF" />
+                <Text style={styles.waBroadcastBtnText}>Open in WhatsApp / Share to Group</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.waCopyBtn} onPress={handleCopyWhatsAppNotice}>
+                <Ionicons name={copiedNotice ? "checkmark-circle" : "copy-outline"} size={18} color={COLORS.primary} />
+                <Text style={styles.waCopyBtnText}>
+                  {copiedNotice ? 'Copied to Clipboard!' : 'Copy Formatted Notice'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => setWhatsappModalVisible(false)}>
+                <Text style={styles.confirmCancelText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   mainContainer: {
@@ -1377,4 +1547,98 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFF',
   },
+  btnWhatsApp: {
+    flex: 1.1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: RADIUS.lg,
+    backgroundColor: '#25D366',
+    ...SHADOWS.card,
+  },
+  btnWhatsAppText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  waPreviewBox: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: 8,
+  },
+  waPreviewText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#166534',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  contactItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  contactName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  contactDetail: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  directWaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#25D366',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+  },
+  directWaBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  waBroadcastBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#25D366',
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    ...SHADOWS.card,
+  },
+  waBroadcastBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  waCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+  },
+  waCopyBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
 });
+
