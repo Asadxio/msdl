@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getBookProgress } from '@/lib/libraryStorage';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData, Book } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
@@ -67,7 +68,7 @@ const BOOK_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Tafseer: 'reader',
 };
 
-function BookCard({ book, isAdmin, onDelete, onOpen }: { book: Book; isAdmin: boolean; onDelete: (book: Book) => void; onOpen: (book: Book) => void }) {
+function BookCard({ book, isAdmin, lastPage, onDelete, onOpen }: { book: Book; isAdmin: boolean; lastPage?: number; onDelete: (book: Book) => void; onOpen: (book: Book) => void }) {
   const catColor = CATEGORY_COLORS[book.category] || { bg: COLORS.surfaceAlt, text: COLORS.textMuted };
   const iconName = BOOK_ICONS[book.category] || 'book';
 
@@ -86,6 +87,12 @@ function BookCard({ book, isAdmin, onDelete, onOpen }: { book: Book; isAdmin: bo
           <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
             <Text style={[styles.categoryText, { color: catColor.text }]}>{book.category}</Text>
           </View>
+          {lastPage && lastPage > 1 ? (
+            <View style={styles.cardBookmarkBadge}>
+              <Ionicons name="bookmark" size={10} color={COLORS.primary} />
+              <Text style={styles.cardBookmarkText}>p.{lastPage}</Text>
+            </View>
+          ) : null}
           {isAdmin && (
             <TouchableOpacity
               style={styles.deleteBtn}
@@ -117,11 +124,22 @@ export default function LibraryScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
+  const [bookProgressMap, setBookProgressMap] = useState<Record<string, number>>({});
   const refreshSpin = useRef(new Animated.Value(0)).current;
 
   // Load recently viewed IDs on mount
   useEffect(() => {
-    getRecentlyViewed().then(setRecentlyViewedIds).catch(() => {});
+    getRecentlyViewed().then(async (ids) => {
+      setRecentlyViewedIds(ids);
+      const map: Record<string, number> = {};
+      for (const id of ids) {
+        const prog = await getBookProgress(id);
+        if (prog?.lastPage) {
+          map[id] = prog.lastPage;
+        }
+      }
+      setBookProgressMap(map);
+    }).catch(() => {});
   }, []);
 
   const handleOpenBook = useCallback((book: Book) => {
@@ -349,7 +367,7 @@ export default function LibraryScreen() {
               </ScrollView>
             </View>
           ) : null}
-          renderItem={({ item }) => <BookCard book={item} isAdmin={isAdmin} onDelete={handleDeleteBook} onOpen={handleOpenBook} />}
+          renderItem={({ item }) => <BookCard book={item} isAdmin={isAdmin} lastPage={bookProgressMap[item.id]} onDelete={handleDeleteBook} onOpen={handleOpenBook} />}
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
@@ -447,6 +465,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   categoryText: { fontSize: 11, fontWeight: '700' },
+  cardBookmarkBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(2, 132, 199, 0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  cardBookmarkText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
   deleteBtn: {
     width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#FEF2F2',
