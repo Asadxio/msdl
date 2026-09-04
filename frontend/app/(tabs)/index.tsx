@@ -60,6 +60,10 @@ export default function HomeScreen() {
 
   // Animation ref for subtle footer fade-in
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  // Blinking badge pulse animation for pending lesson
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Interval ref — dynamic (1s when namaz < 5 min, 10s otherwise)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -80,9 +84,7 @@ export default function HomeScreen() {
       setPrayerSettings(st);
       void scheduleOfflinePrayerAlarms(st).catch(() => {});
     });
-    // Update every 10 seconds for accurate countdown timer display
-    const interval = setInterval(() => setNow(new Date()), 10000);
-    
+
     Notifications.getBadgeCountAsync().then(count => setBadgeCount(count)).catch(() => {});
 
     Animated.timing(fadeAnim, {
@@ -91,11 +93,21 @@ export default function HomeScreen() {
       useNativeDriver: true,
     }).start();
 
+    // Pulse animation for pending lesson indicator (blinking dot)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+
     return () => {
       unsub();
-      clearInterval(interval);
     };
-  }, [fadeAnim]);
+  }, [fadeAnim, pulseAnim]);
+
+  // 1.4 — Dynamic countdown interval: 1s when namaz < 5 min, 10s otherwise
+  // 1.4 — Dynamic countdown interval managed via a separate effect AFTER prayerWindow is available
 
   const randomWisdom = useMemo(() => DAILY_WISDOM[Math.floor(Math.random() * DAILY_WISDOM.length)], []);
   const randomDua = useMemo(() => MASNOON_DUAS[Math.floor(Math.random() * MASNOON_DUAS.length)], []);
@@ -144,6 +156,19 @@ export default function HomeScreen() {
       return `${nameUrdu} کا وقت ${minutes} منٹ میں شروع ہوگا`;
     }
   }, [nextPrayer, now]);
+
+  // 1.4 — Dynamic interval: 1s when next namaz < 5 min, 10s otherwise
+  const nextPrayerTimestamp = nextPrayer?.time?.getTime() ?? null;
+  useEffect(() => {
+    const getIntervalMs = () => {
+      if (!nextPrayerTimestamp) return 10000;
+      const diff = nextPrayerTimestamp - Date.now();
+      return diff > 0 && diff < 5 * 60 * 1000 ? 1000 : 10000;
+    };
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => setNow(new Date()), getIntervalMs());
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [nextPrayerTimestamp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resume = useMemo(() => getResumeLearning(), [getResumeLearning]);
   const activeCourseProgress = useMemo(() => {
@@ -211,6 +236,20 @@ export default function HomeScreen() {
       },
     ];
   }, [resume, lessonProgress, quizAttemptsCount, currentPrayer, nextPrayer]);
+
+  // 1.1 — Time-based Islamic greeting
+  const islamicGreeting = useMemo(() => {
+    const hour = now.getHours();
+    if (hour >= 4 && hour < 7)  return 'صُبْحُكَ خَيْر'; // Fajr/Subah: Good Morning
+    if (hour >= 7 && hour < 12) return 'السَّلَامُ عَلَيْكُم'; // Morning greeting
+    if (hour >= 12 && hour < 15) return 'مَرْحَبًا';          // Zuhr: Welcome
+    if (hour >= 15 && hour < 19) return 'مَسَاءُ الخَيْر';   // Asr/Sham: Good Evening
+    if (hour >= 19 && hour < 22) return 'مَسَاءُ النُّور';   // Maghrib/Isha
+    return 'لَيْلَةٌ مُبَارَكَة';                           // Late night: Blessed night
+  }, [now]);
+
+  // 1.2 — Is current lesson still pending (not completed)?
+  const isLessonPending = !!resume && !(lessonProgress[resume.lessonId]?.completed);
 
   const isLocationUnavailable = !prayerSettings || !prayerSettings.city || prayerSettings.city === 'Location unavailable' || prayerSettings.state === 'Permission needed';
 
@@ -317,7 +356,8 @@ export default function HomeScreen() {
         {/* Section 2: Student Identity Card */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeInfo}>
-            <Text style={styles.welcomeBackText}>Student Portal</Text>
+            {/* 1.1 — Time-based Islamic greeting */}
+            <Text style={styles.islamicGreetingText}>{islamicGreeting}</Text>
             <Text style={styles.userName} numberOfLines={1}>{profile?.name || 'Student'}</Text>
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>
@@ -358,6 +398,24 @@ export default function HomeScreen() {
              <Text style={styles.arabicTextLarge}>{randomWisdom.arabic}</Text>
              <Text style={styles.translationText}>&quot;{randomWisdom.translation}&quot;</Text>
              <Text style={styles.referenceText}>— {randomWisdom.reference}</Text>
+             {/* 1.3 — WhatsApp Share button */}
+             <TouchableOpacity
+               style={styles.wisdomShareBtn}
+               onPress={() => {
+                 const msg = `${randomWisdom.arabic}\n\n"${randomWisdom.translation}"\n— ${randomWisdom.reference}\n\n🕌 Madrasatu-s-Salikat Lil Banat`;
+                 const encodedMsg = encodeURIComponent(msg);
+                 Linking.openURL(`whatsapp://send?text=${encodedMsg}`).catch(() =>
+                   Linking.openURL(`https://wa.me/?text=${encodedMsg}`)
+                 );
+               }}
+               activeOpacity={0.75}
+               accessible={true}
+               accessibilityRole="button"
+               accessibilityLabel="Share Daily Wisdom on WhatsApp"
+             >
+               <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+               <Text style={styles.wisdomShareBtnText}>واٹس ایپ پر شیئر کریں</Text>
+             </TouchableOpacity>
           </View>
         </View>
 
@@ -533,12 +591,21 @@ export default function HomeScreen() {
                accessibilityLabel={`Continue ${resume.courseName}, lesson ${resume.lessonTitle}`}
             >
                <View style={styles.continueHeaderRow}>
-                 <View style={styles.resumeIconBox}>
-                   <Ionicons name="play" size={20} color={COLORS.surface} />
+                 {/* 1.2 — Blinking pending badge on icon when lesson is not yet done */}
+                 <View style={styles.resumeIconWrapper}>
+                   <View style={styles.resumeIconBox}>
+                     <Ionicons name="play" size={20} color={COLORS.surface} />
+                   </View>
+                   {isLessonPending && (
+                     <Animated.View style={[styles.pendingPulseDot, { opacity: pulseAnim }]} />
+                   )}
                  </View>
                  <View style={styles.resumeTextCol}>
                    <Text style={styles.resumeCourseName}>{resume.courseName}</Text>
                    <Text style={styles.resumeLessonName}>{resume.lessonTitle}</Text>
+                   {isLessonPending && (
+                     <Text style={styles.pendingLessonLabel}>⏳ Sabaq mukammal nahi hua</Text>
+                   )}
                  </View>
                </View>
                <View style={styles.progressBarContainer}>
@@ -1514,5 +1581,58 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     backgroundColor: COLORS.surfaceAlt,
+  },
+  // ── Home Screen Improvements ─────────────────────────────────────────────
+  // 1.1 Islamic Greeting
+  islamicGreetingText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.secondary,
+    letterSpacing: 0.3,
+    marginBottom: 2,
+    writingDirection: 'rtl',
+  },
+  // 1.2 Pending lesson badge styles
+  resumeIconWrapper: {
+    position: 'relative',
+    width: 44,
+    height: 44,
+  },
+  pendingPulseDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#F59E0B', // amber — "pending" warning color
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+  },
+  pendingLessonLabel: {
+    fontSize: 10,
+    color: '#D97706',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  // 1.3 Daily Wisdom WhatsApp share button
+  wisdomShareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(37,211,102,0.10)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(37,211,102,0.25)',
+  },
+  wisdomShareBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#128C7E',
+    writingDirection: 'rtl',
   },
 });
