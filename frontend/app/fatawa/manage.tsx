@@ -10,6 +10,8 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -178,85 +180,95 @@ export default function TeacherFatawaManageScreen() {
         onRequestClose={() => setSelectedQ(null)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalArabicTitle}>SCHOLARLY RULING & VERDICT</Text>
-                <Text style={styles.modalTitle}>Compose Shariah Verdict</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={() => setSelectedQ(null)}
-              >
-                <Ionicons name="close" size={22} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            {selectedQ && (
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
-                {/* Question Snapshot */}
-                <View style={styles.qSnapshot}>
-                  <Text style={styles.qSnapshotTitle}>{selectedQ.title}</Text>
-                  <Text style={styles.qSnapshotBody}>{selectedQ.question}</Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingWrap}
+          >
+            <View style={[styles.modalCard, { paddingBottom: Math.max(SPACING.lg, insets.bottom + 12) }]}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalArabicTitle}>SCHOLARLY RULING & VERDICT</Text>
+                  <Text style={styles.modalTitle}>Compose Shariah Verdict</Text>
                 </View>
-
-                {/* Answer Input */}
-                <Text style={styles.inputLabel}>Scholarly Verdict / Guidance:</Text>
-                <TextInput
-                  style={styles.textAreaInput}
-                  placeholder="In the Name of Allah... The Answer & Guidance:"
-                  placeholderTextColor="#94A3B8"
-                  value={answerText}
-                  onChangeText={setAnswerText}
-                  multiline
-                  numberOfLines={6}
-                  textAlignVertical="top"
-                />
-
-                {/* Reference Input */}
-                <Text style={styles.inputLabel}>Juristic Reference (Kitab / Page):</Text>
-                <TextInput
-                  style={styles.titleInput}
-                  placeholder="e.g. Bahishti Zewar Part 2 / Fatawa Shami Vol 1"
-                  placeholderTextColor="#94A3B8"
-                  value={refKitab}
-                  onChangeText={setRefKitab}
-                />
-
-                {/* Public Toggle */}
-                <View style={styles.toggleRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.toggleTitle}>Publish to Public Library</Text>
-                    <Text style={styles.toggleSub}>
-                      Student identity is kept completely private and masked.
-                    </Text>
-                  </View>
-                  <Switch
-                    value={isPublic}
-                    onValueChange={setIsPublic}
-                    trackColor={{ false: '#CBD5E1', true: '#005F46' }}
-                    thumbColor={isPublic ? '#C8A84E' : '#F1F5F9'}
-                  />
-                </View>
-
-                {/* Submit Answer Button */}
                 <TouchableOpacity
-                  style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
-                  onPress={handleAnswerSubmit}
-                  disabled={submitting}
+                  style={styles.closeBtn}
+                  onPress={() => setSelectedQ(null)}
+                  accessibilityLabel="Close dialog"
                 >
-                  {submitting ? (
-                    <ActivityIndicator color={'#FFFFFF'} />
-                  ) : (
-                    <>
-                      <Ionicons name="checkmark-done" size={18} color={'#FFFFFF'} />
-                      <Text style={styles.submitBtnText}>Authenticate & Dispatch Fatwa</Text>
-                    </>
-                  )}
+                  <Ionicons name="close" size={22} color="#64748B" />
                 </TouchableOpacity>
-              </ScrollView>
-            )}
-          </View>
+              </View>
+
+              {selectedQ && (
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.modalScroll}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {/* Question Snapshot */}
+                  <View style={styles.qSnapshot}>
+                    <Text style={styles.qSnapshotTitle}>{selectedQ.title}</Text>
+                    <Text style={styles.qSnapshotBody}>{selectedQ.question}</Text>
+                  </View>
+
+                  {/* Answer Input */}
+                  <Text style={styles.inputLabel}>Scholarly Verdict / Guidance:</Text>
+                  <TextInput
+                    style={styles.textAreaInput}
+                    placeholder="In the Name of Allah... The Answer & Guidance:"
+                    placeholderTextColor="#94A3B8"
+                    value={answerText}
+                    onChangeText={setAnswerText}
+                    multiline
+                    numberOfLines={6}
+                    textAlignVertical="top"
+                  />
+
+                  {/* Reference Input */}
+                  <Text style={styles.inputLabel}>Juristic Reference (Kitab / Page):</Text>
+                  <TextInput
+                    style={styles.titleInput}
+                    placeholder="e.g. Bahishti Zewar Part 2 / Fatawa Shami Vol 1"
+                    placeholderTextColor="#94A3B8"
+                    value={refKitab}
+                    onChangeText={setRefKitab}
+                  />
+
+                  {/* Public Toggle */}
+                  <View style={styles.toggleRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.toggleTitle}>Publish to Public Library</Text>
+                      <Text style={styles.toggleSub}>
+                        Student identity is kept completely private and masked.
+                      </Text>
+                    </View>
+                    <Switch
+                      value={isPublic}
+                      onValueChange={setIsPublic}
+                      trackColor={{ false: '#CBD5E1', true: '#005F46' }}
+                      thumbColor={isPublic ? '#C8A84E' : '#F1F5F9'}
+                    />
+                  </View>
+
+                  {/* Submit Answer Button */}
+                  <TouchableOpacity
+                    style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
+                    onPress={handleAnswerSubmit}
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color={'#FFFFFF'} />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-done" size={18} color={'#FFFFFF'} />
+                        <Text style={styles.submitBtnText}>Authenticate & Dispatch Fatwa</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </ScrollView>
+              )}
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -430,6 +442,10 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  keyboardAvoidingWrap: {
+    width: '100%',
     justifyContent: 'flex-end',
   },
   modalCard: {

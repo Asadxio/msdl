@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -292,7 +293,7 @@ export default function DarUlIftaaScreen() {
                 <TouchableOpacity
                   key={q.id}
                   style={styles.questionCard}
-                  onPress={() => router.push(/fatawa/ as any)}
+                  onPress={() => router.push(`/fatawa/${q.id}` as any)}
                   activeOpacity={0.8}
                 >
                   <View style={styles.cardHeader}>
@@ -358,7 +359,7 @@ export default function DarUlIftaaScreen() {
                 <TouchableOpacity
                   key={q.id}
                   style={styles.questionCard}
-                  onPress={() => router.push(/fatawa/ as any)}
+                  onPress={() => router.push(`/fatawa/${q.id}` as any)}
                   activeOpacity={0.8}
                 >
                   <View style={styles.cardHeader}>
@@ -391,7 +392,10 @@ export default function DarUlIftaaScreen() {
 
       {/* Floating Ask Button */}
       <TouchableOpacity
-        style={styles.floatingAskBtn}
+        style={[
+          styles.floatingAskBtn,
+          { bottom: Math.max(24, insets.bottom + 16) }
+        ]}
         onPress={() => setModalVisible(true)}
         activeOpacity={0.85}
         accessibilityLabel="Ask a question"
@@ -408,96 +412,106 @@ export default function DarUlIftaaScreen() {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalArabicTitle}>DAR-UL-IFTAA CONSULTATION</Text>
-                <Text style={styles.modalTitle}>Submit Your Fiqh Question</Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingWrap}
+          >
+            <View style={[styles.modalCard, { paddingBottom: Math.max(SPACING.lg, insets.bottom + 12) }]}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalArabicTitle}>DAR-UL-IFTAA CONSULTATION</Text>
+                  <Text style={styles.modalTitle}>Submit Your Fiqh Question</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.closeBtn}
+                  onPress={() => setModalVisible(false)}
+                  accessibilityLabel="Close dialog"
+                >
+                  <Ionicons name="close" size={22} color="#64748B" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={() => setModalVisible(false)}
-              >
-                <Ionicons name="close" size={22} color="#64748B" />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
-              {/* Category Picker */}
-              <Text style={styles.inputLabel}>Select Category:</Text>
-              <View style={styles.catGrid}>
-                {categoriesList.map((cat) => {
-                  const selected = askCategory === cat.key;
-                  return (
-                    <TouchableOpacity
-                      key={cat.key}
-                      style={[styles.catGridItem, selected && styles.catGridItemSelected]}
-                      onPress={() => setAskCategory(cat.key)}
-                    >
-                      <Ionicons
-                        name={cat.icon as any}
-                        size={16}
-                        color={selected ? '#FFFFFF' : COLORS.primary}
-                      />
-                      <Text
-                        style={[styles.catGridText, selected && styles.catGridTextSelected]}
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.modalScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Category Picker */}
+                <Text style={styles.inputLabel}>Select Category:</Text>
+                <View style={styles.catGrid}>
+                  {categoriesList.map((cat) => {
+                    const selected = askCategory === cat.key;
+                    return (
+                      <TouchableOpacity
+                        key={cat.key}
+                        style={[styles.catGridItem, selected && styles.catGridItemSelected]}
+                        onPress={() => setAskCategory(cat.key)}
                       >
-                        {cat.arabicTitle}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                        <Ionicons
+                          name={cat.icon as any}
+                          size={16}
+                          color={selected ? '#FFFFFF' : COLORS.primary}
+                        />
+                        <Text
+                          style={[styles.catGridText, selected && styles.catGridTextSelected]}
+                        >
+                          {cat.arabicTitle}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-              {/* Title Input */}
-              <Text style={styles.inputLabel}>Question Title:</Text>
-              <TextInput
-                style={styles.titleInput}
-                placeholder="e.g. Ruling regarding doubt during Salah"
-                placeholderTextColor="#94A3B8"
-                value={askTitle}
-                onChangeText={setAskTitle}
-                maxLength={80}
-              />
+                {/* Title Input */}
+                <Text style={styles.inputLabel}>Question Title:</Text>
+                <TextInput
+                  style={styles.titleInput}
+                  placeholder="e.g. Ruling regarding doubt during Salah"
+                  placeholderTextColor="#94A3B8"
+                  value={askTitle}
+                  onChangeText={setAskTitle}
+                  maxLength={80}
+                />
 
-              {/* Detail Input */}
-              <Text style={styles.inputLabel}>Detailed Question:</Text>
-              <TextInput
-                style={styles.textAreaInput}
-                placeholder="Please describe your question in detail..."
-                placeholderTextColor="#94A3B8"
-                value={askQuestion}
-                onChangeText={setAskQuestion}
-                multiline
-                numberOfLines={5}
-                textAlignVertical="top"
-              />
+                {/* Detail Input */}
+                <Text style={styles.inputLabel}>Detailed Question:</Text>
+                <TextInput
+                  style={styles.textAreaInput}
+                  placeholder="Please describe your question in detail..."
+                  placeholderTextColor="#94A3B8"
+                  value={askQuestion}
+                  onChangeText={setAskQuestion}
+                  multiline
+                  numberOfLines={5}
+                  textAlignVertical="top"
+                />
 
-              {/* Privacy Notice */}
-              <View style={styles.modalPurdahNotice}>
-                <Ionicons name="shield-checkmark" size={16} color="#005F46" />
-                <Text style={styles.modalPurdahText}>
-                  Your inquiry is delivered directly to certified scholars. Your details are kept strictly confidential.
-                </Text>
-              </View>
+                {/* Privacy Notice */}
+                <View style={styles.modalPurdahNotice}>
+                  <Ionicons name="shield-checkmark" size={16} color="#005F46" />
+                  <Text style={styles.modalPurdahText}>
+                    Your inquiry is delivered directly to certified scholars. Your details are kept strictly confidential.
+                  </Text>
+                </View>
 
-              {/* Submit Button */}
-              <TouchableOpacity
-                style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
-                onPress={handleAskSubmit}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Ionicons name="paper-plane" size={18} color="#FFFFFF" />
-                    <Text style={styles.submitBtnText}>Submit to Dar-ul-Iftaa</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
+                {/* Submit Button */}
+                <TouchableOpacity
+                  style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
+                  onPress={handleAskSubmit}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="paper-plane" size={18} color="#FFFFFF" />
+                      <Text style={styles.submitBtnText}>Submit to Dar-ul-Iftaa</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -813,12 +827,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
+  keyboardAvoidingWrap: {
+    width: '100%',
+    justifyContent: 'flex-end',
+  },
   modalCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
     padding: SPACING.lg,
-    maxHeight: '85%',
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
