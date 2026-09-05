@@ -778,6 +778,200 @@ export default function ManageAcademicsScreen() {
     ]);
   };
 
+  const populateOfficialAcademics = () => {
+    Alert.alert(
+      'Feed Official Curriculum & Teachers',
+      'This will populate the 4 official Teachers (Sumra Fatma, Firdouse Banu, Afnaz Razviya, Anjum Razviya) and 5 Classes (Rabiya, Ula, Aaidadiya, Salisa, Qirat) along with starter modules and lessons. Proceed?',
+      [
+        { text: 'Cancel' },
+        {
+          text: 'Populate Data',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+
+              // 1. Official Teachers Seed List
+              const teachersSeed = [
+                {
+                  name: 'Sumra Fatma',
+                  title: 'Head of Academics & Senior Lecturer (Alimah)',
+                  photo_url: '',
+                  assigned_courses: ['Rabiya', 'Ula', 'Aaidadiya', 'Salisa'],
+                  courses: ['Rabiya', 'Ula', 'Aaidadiya', 'Salisa'],
+                },
+                {
+                  name: 'Firdouse Banu',
+                  title: 'Senior Teacher of Islamic Studies & Tarbiyah',
+                  photo_url: '',
+                  assigned_courses: ['Ula', 'Salisa'],
+                  courses: ['Ula', 'Salisa'],
+                },
+                {
+                  name: 'Afnaz Razviya',
+                  title: 'Senior Qariyah & Tajweed-ul-Quran Specialist',
+                  photo_url: '',
+                  assigned_courses: ['Qirat'],
+                  courses: ['Qirat'],
+                },
+                {
+                  name: 'Anjum Razviya',
+                  title: 'Lecturer in Fiqh-o-Usool & Arabic Literature',
+                  photo_url: '',
+                  assigned_courses: ['Rabiya', 'Aaidadiya'],
+                  courses: ['Rabiya', 'Aaidadiya'],
+                },
+              ];
+
+              const teacherNameToId: Record<string, string> = {};
+
+              // Check existing teachers or add them
+              for (const t of teachersSeed) {
+                const existing = teachers.find((curr) => curr.name.trim().toLowerCase() === t.name.trim().toLowerCase());
+                if (existing) {
+                  teacherNameToId[t.name] = existing.id;
+                  await updateDoc(doc(db, 'teachers', existing.id), {
+                    title: t.title,
+                    assigned_courses: t.assigned_courses,
+                    courses: t.courses,
+                    updated_at: serverTimestamp(),
+                  });
+                } else {
+                  const ref = await addDoc(collection(db, 'teachers'), {
+                    ...t,
+                    created_at: serverTimestamp(),
+                    updated_at: serverTimestamp(),
+                  });
+                  teacherNameToId[t.name] = ref.id;
+                }
+              }
+
+              // 2. Official Classes / Courses Seed List
+              const coursesSeed = [
+                {
+                  name: 'Rabiya',
+                  teacher_name: 'Sumra Fatma',
+                  teacher_id: teacherNameToId['Sumra Fatma'] || '',
+                  schedule: 'Mon to Thu',
+                  class_time: '10:00 AM',
+                  meet_link: '',
+                  description: 'Is level mein students ko basic Islamic knowledge, zaroori masail aur achhi Islami aadaton ki buniyad sikhayi jayegi.',
+                  moduleTitle: 'Bab 1: Buniyadi Islami Aqaid wa Masail',
+                  lessonTitle: 'Sabaq 1: Taaruf wa Ibtidai Deeniyat',
+                },
+                {
+                  name: 'Ula',
+                  teacher_name: 'Sumra Fatma',
+                  teacher_id: teacherNameToId['Sumra Fatma'] || '',
+                  schedule: 'Mon to Thu',
+                  class_time: '11:00 AM',
+                  meet_link: '',
+                  description: 'Is class mein students apni Islami maloomat ko mazboot karenge aur deen ki buniyadi taleem ko behtar samjhenge.',
+                  moduleTitle: 'Bab 1: Fiqh wa Sunnat ki Taleem',
+                  lessonTitle: 'Sabaq 1: Kitab-ut-Taharah (Wudu wa Taharat ke Masail)',
+                },
+                {
+                  name: 'Aaidadiya',
+                  teacher_name: 'Sumra Fatma',
+                  teacher_id: teacherNameToId['Sumra Fatma'] || '',
+                  schedule: 'Mon to Fri',
+                  class_time: '02:00 PM',
+                  meet_link: '',
+                  description: 'Is level mein students ki Islami maloomat aur samajh ko mazeed mazboot kiya jayega aur unki taleem ko behtar direction di jayegi.',
+                  moduleTitle: 'Bab 1: Arbi Zaban wa Deeni Maloomat',
+                  lessonTitle: 'Sabaq 1: Taaruf wa Ahmiyat-e-Ilm',
+                },
+                {
+                  name: 'Salisa',
+                  teacher_name: 'Firdouse Banu',
+                  teacher_id: teacherNameToId['Firdouse Banu'] || '',
+                  schedule: 'Mon to Fri',
+                  class_time: '03:30 PM',
+                  meet_link: '',
+                  description: 'Is class mein students ko Islami taleem ki mazeed gehrai se samajh di jayegi aur pehle seekhe hue ilm ko mazboot kiya jayega.',
+                  moduleTitle: 'Bab 1: Usool wa Dars-e-Deen',
+                  lessonTitle: 'Sabaq 1: Tafheem-e-Deen wa Masail-e-Zindagi',
+                },
+                {
+                  name: 'Qirat',
+                  teacher_name: 'Afnaz Razviya',
+                  teacher_id: teacherNameToId['Afnaz Razviya'] || '',
+                  schedule: 'Daily (Morning & Evening)',
+                  class_time: '08:00 AM',
+                  meet_link: '',
+                  description: 'Is course mein Quran-e-Kareem ki sahi tilawat, makharij, pronunciation aur behtar fluency par tawajjoh di jayegi.',
+                  moduleTitle: 'Bab 1: Makharij-ul-Huroof wa Tajweed',
+                  lessonTitle: 'Sabaq 1: Huroof-e-Tahajji aur unke Sahi Makharij',
+                },
+              ];
+
+              for (const c of coursesSeed) {
+                const existing = courses.find((curr) => curr.name.trim().toLowerCase() === c.name.trim().toLowerCase());
+                let courseId = existing?.id;
+
+                const courseData = {
+                  name: c.name,
+                  teacher_name: c.teacher_name,
+                  teacher_id: c.teacher_id,
+                  schedule: c.schedule,
+                  class_time: c.class_time,
+                  meet_link: '',
+                  description: c.description,
+                  subjects: [],
+                  updated_at: serverTimestamp(),
+                };
+
+                if (existing) {
+                  await updateDoc(doc(db, 'courses', existing.id), courseData);
+                } else {
+                  const ref = await addDoc(collection(db, 'courses'), {
+                    ...courseData,
+                    created_at: serverTimestamp(),
+                  });
+                  courseId = ref.id;
+
+                  // Create initial Module & Lesson for this course
+                  const modRef = await addDoc(collection(db, 'modules'), {
+                    course_id: courseId,
+                    title: c.moduleTitle,
+                    order: 1,
+                    created_at: serverTimestamp(),
+                    updated_at: serverTimestamp(),
+                  });
+
+                  await addDoc(collection(db, 'lessons'), {
+                    course_id: courseId,
+                    module_id: modRef.id,
+                    title: c.lessonTitle,
+                    order: 1,
+                    description: `Awwaleen Sabaq for ${c.name}`,
+                    duration_minutes: 30,
+                    created_at: serverTimestamp(),
+                    updated_at: serverTimestamp(),
+                  });
+                }
+              }
+
+              // Create notification for students
+              await createRoleNotificationAsAdmin(profile, {
+                title: 'Official Madrasa Curriculum Updated',
+                message: 'New classes (Rabiya, Ula, Aaidadiya, Salisa, Qirat) are now active in Courses.',
+                roles: ['student'],
+                category: 'new_course',
+              }).catch(() => {});
+
+              await fetchData();
+              Alert.alert('Academics Populated', 'Successfully populated 4 Teachers and 5 Official Classes with curriculum!');
+            } catch (err: any) {
+              Alert.alert('Population Failed', err?.message || 'Could not populate data.');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (profile && !isAdmin) return null;
 
   return (
@@ -801,6 +995,25 @@ export default function ManageAcademicsScreen() {
           </View>
         ) : null}
         {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+
+        {/* 1-Click Feed Official Curriculum & Teachers Button */}
+        <TouchableOpacity
+          style={styles.populateBannerBtn}
+          onPress={populateOfficialAcademics}
+          disabled={actionLoading}
+          activeOpacity={0.8}
+        >
+          <View style={styles.populateBannerIconWrap}>
+            <Ionicons name="sparkles" size={20} color="#D4AF37" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.populateBannerTitle}>Feed Official Curriculum & Faculty</Text>
+            <Text style={styles.populateBannerSubtitle}>
+              1-Click auto-create 4 Teachers (Sumra Fatma, etc.) & 5 Classes (Rabiya, Ula, Aaidadiya, Salisa, Qirat)
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#D4AF37" />
+        </TouchableOpacity>
 
         <View style={styles.lmsBanner}>
           <View style={styles.lmsBannerHeader}>
@@ -1562,5 +1775,43 @@ const styles = StyleSheet.create({
   studentChipTextSelected: {
     color: '#FFF',
     fontWeight: '700',
+  },
+  populateBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#064E3B',
+    padding: 14,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1.5,
+    borderColor: '#D4AF37',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  populateBannerIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(212,175,55,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.4)',
+  },
+  populateBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.3,
+  },
+  populateBannerSubtitle: {
+    fontSize: 11,
+    color: '#E2E8F0',
+    marginTop: 2,
+    lineHeight: 15,
   },
 });
