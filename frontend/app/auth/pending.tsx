@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator,
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { sendEmailVerification } from 'firebase/auth';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -96,6 +96,15 @@ export default function PendingScreen() {
     logger.info('Navigation triggered', { reason: 'email-verified', route: '/' });
     console.log('[EmailVerification] Navigation triggered', { route: '/' });
     
+    // Ensure token is fresh before Firestore updates so email_verified claim is present in token
+    if (auth.currentUser) {
+      try {
+        await auth.currentUser.getIdToken(true);
+      } catch (tokenErr) {
+        console.warn('Token refresh before navigation failed:', tokenErr);
+      }
+    }
+
     // Ensure profile status in Firestore is marked approved for email-verified students
     if (auth.currentUser?.uid && profile?.role === 'student' && profile?.status === 'pending') {
       try {
@@ -103,6 +112,12 @@ export default function PendingScreen() {
           status: 'approved',
           updated_at: serverTimestamp(),
         });
+        await updateDoc(doc(db, 'public_profiles', auth.currentUser.uid), {
+          status: 'approved',
+          searchable: true,
+          is_active: true,
+          updated_at: serverTimestamp(),
+        }).catch(() => {});
       } catch (e) {
         console.warn('Auto-approval status update:', e);
       }
@@ -143,6 +158,12 @@ export default function PendingScreen() {
       logger.info('Verification status updated', { source, uid: currentUser.uid, emailVerified: verified });
       console.log('[EmailVerification] Verification status updated', { source, emailVerified: verified });
 
+      if (verified) {
+        try {
+          await auth.currentUser?.getIdToken(true);
+        } catch {}
+      }
+
       if (!mountedRef.current) return verified;
       setFreshEmailVerified(verified);
       await refreshUserRef.current();
@@ -180,11 +201,30 @@ export default function PendingScreen() {
       refreshVerificationStatus('poll');
     }, VERIFICATION_POLL_MS);
 
+    // Realtime listener on Firestore user profile: instant navigation when Admin approves!
+    let profileUnsub: (() => void) | null = null;
+    if (currentUser?.uid) {
+      profileUnsub = onSnapshot(doc(db, 'users', currentUser.uid), async (snap) => {
+        if (!mountedRef.current) return;
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data?.status === 'approved') {
+            logger.info('User status updated to approved in Firestore, triggering immediate navigation');
+            setMessage({ type: 'success', text: 'Account approved! Redirecting...' });
+            await navigateAfterVerified();
+          }
+        }
+      }, (err) => {
+        logger.warn('Pending screen profile listener error:', err);
+      });
+    }
+
     return () => {
       mountedRef.current = false;
       stopPolling();
+      if (profileUnsub) profileUnsub();
     };
-  }, [refreshVerificationStatus, stopPolling]);
+  }, [refreshVerificationStatus, stopPolling, navigateAfterVerified]);
 
   const handleCheck = async () => {
     if (busy) return;

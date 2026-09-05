@@ -241,6 +241,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!auth.currentUser) return false;
     try {
       await auth.currentUser.reload();
+      if (auth.currentUser.emailVerified) {
+        try {
+          await auth.currentUser.getIdToken(true);
+        } catch {}
+      }
       logger.info('Auth user refreshed', { uid: auth.currentUser.uid, emailVerified: auth.currentUser.emailVerified });
       setUser({ ...auth.currentUser, emailVerified: auth.currentUser.emailVerified } as User);
       return true;
@@ -361,6 +366,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // After email verification detected
               if (firebaseUser.emailVerified && nextProfile.status === 'pending' && nextProfile.role === 'student') {
                 try {
+                  await firebaseUser.getIdToken(true);
                   await updateDoc(doc(db, 'users', firebaseUser.uid), {
                     status: 'approved',
                     updated_at: serverTimestamp(),
@@ -368,8 +374,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   // Also update public_profiles
                   await updateDoc(doc(db, 'public_profiles', firebaseUser.uid), {
                     status: 'approved',
+                    searchable: true,
+                    is_active: true,
                     updated_at: serverTimestamp(),
-                  });
+                  }).catch(() => {});
                   nextProfile.status = 'approved';
                 } catch (e) {
                   // Non-fatal; user can re-login to retry
@@ -564,8 +572,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: safeName,
           role: safeRole,
           status: 'pending',
-          searchable: true,
-          is_active: true,
+          searchable: false,
+          is_active: false,
           photo_url: '',
           avatar: 'person',
           updated_at: serverTimestamp(),
