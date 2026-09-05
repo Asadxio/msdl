@@ -22,6 +22,7 @@ import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { startupLog } from '@/lib/startup';
 import { normalizeRole, type AppRole, type OnboardingRole } from '@/lib/roles';
+import { isOwnerEmail, isFounderEmail } from '@/lib/founderPolicy';
 import {
   markSignupCompleted,
   markVerificationEmailSent,
@@ -134,20 +135,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const validateProfileData = (raw: any, uid: string, source: string): { profile: UserProfile; issue: ProfileIssue } => {
     const rawRole = raw?.role;
     const rawStatus = String(raw?.status || '').trim().toLowerCase();
-    const role = normalizeRole(rawRole, source);
-    const status = ['pending', 'approved', 'deactivated', 'rejected', 'suspended'].includes(rawStatus) ? rawStatus as UserProfile['status'] : 'pending';
+    const rawEmail = String(raw?.email || '').trim().toLowerCase();
+    const isOwner = isOwnerEmail(rawEmail);
+
+    const role = isOwner ? 'super_admin' : normalizeRole(rawRole, source);
+    const status = isOwner
+      ? 'approved'
+      : (['pending', 'approved', 'deactivated', 'rejected', 'suspended'].includes(rawStatus) ? rawStatus as UserProfile['status'] : 'pending');
+
     const profileData = {
       ...(raw as UserProfile),
       uid: raw?.uid || uid,
-      name: String(raw?.name || '').trim(),
-      email: String(raw?.email || '').trim().toLowerCase(),
+      name: String(raw?.name || '').trim() || (isOwner ? 'Administrator' : ''),
+      email: rawEmail,
       role,
       status,
+      ...(isOwner ? { founder: true } : {}),
     } as UserProfile;
 
     let issue: ProfileIssue = null;
-    if (!rawRole || role !== String(rawRole).trim().toLowerCase()) issue = 'role_missing';
-    if (!profileData.name || !profileData.email || !rawStatus || status !== rawStatus) issue = issue || 'profile_incomplete';
+    if (!isOwner) {
+      if (!rawRole || role !== String(rawRole).trim().toLowerCase()) issue = 'role_missing';
+      if (!profileData.name || !profileData.email || !rawStatus || status !== rawStatus) issue = issue || 'profile_incomplete';
+    }
     return { profile: profileData, issue };
   };
 
@@ -294,6 +304,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
               if (!snap.exists()) {
                 startupLog('Profile loaded', { exists: false, fromCache: snap.metadata.fromCache });
+                if (isOwnerEmail(firebaseUser.email)) {
+                  try {
+                    await setDoc(doc(db, 'users', firebaseUser.uid), {
+                      name: firebaseUser.displayName || 'Owner',
+                      email: firebaseUser.email.trim().toLowerCase(),
+                      role: 'super_admin',
+                      status: 'approved',
+                      founder: true,
+                      created_at: serverTimestamp(),
+                      updated_at: serverTimestamp(),
+                    });
+                    return;
+                  } catch (initErr) {
+                    logger.warn('[AuthContext] Failed to initialize owner user document:', initErr);
+                  }
+                }
                 setProfile(null);
                 setProfileIssue('missing_profile_document');
                 trackEvent('missing_profile_document', { uid: firebaseUser.uid, timestamp: Date.now(), source: 'snapshot', platform: Platform.OS }, `missing-profile-${firebaseUser.uid}-${Date.now()}`);
@@ -310,6 +336,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   setUser({ ...firebaseUser, emailVerified: firebaseUser.emailVerified } as User);
                 } catch (reloadErr) {
                   // Non-fatal — cached token will still be used
+                }
+              }
+
+              // Self-healing for Owner: ensure Firestore doc has super_admin, approved, and founder: true
+              if (isOwnerEmail(firebaseUser.email)) {
+                const snapData = snap.data() || {};
+                if (snapData.role !== 'super_admin' || snapData.status !== 'approved' || !snapData.founder) {
+                  try {
+                    await setDoc(doc(db, 'users', firebaseUser.uid), {
+                      name: snapData.name || firebaseUser.displayName || 'Owner',
+                      email: firebaseUser.email.trim().toLowerCase(),
+                      role: 'super_admin',
+                      status: 'approved',
+                      founder: true,
+                      updated_at: serverTimestamp(),
+                    }, { merge: true });
+                  } catch (healErr) {
+                    logger.warn('[AuthContext] Failed to self-heal owner user document:', healErr);
+                  }
                 }
               }
 

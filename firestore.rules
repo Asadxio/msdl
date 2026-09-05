@@ -5,16 +5,20 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isOwner() {
+      return isSignedIn() && request.auth.token.email.lower() == 'sumraftm@gmail.com';
+    }
+
     function isVerified() {
-      return isSignedIn()
+      return isOwner() || (isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']);
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
 
     function isApprovedVerifiedUser() {
-      return isSignedIn()
+      return isOwner() || (isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']);
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
 
 
@@ -27,7 +31,7 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return (isVerified()
+      return isOwner() || (isVerified()
         && roleOf(request.auth.uid) == 'super_admin'
         && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
@@ -37,20 +41,20 @@ service cloud.firestore {
     }
 
     function isModerator() {
-      return (isVerified()
+      return isOwner() || (isVerified()
         && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin'])
         && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
 
     function isAdmin() {
-      return (isVerified()
+      return isOwner() || isSuperAdmin() || (isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) in ['admin', 'super_admin']
         && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
     }
 
     function isTeacherOrAdmin() {
-      return (isVerified()
+      return isOwner() || isAdmin() || (isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) in ['teacher', 'assistant_teacher', 'admin', 'super_admin', 'moderator']
         && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
@@ -175,7 +179,7 @@ service cloud.firestore {
         && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name is string)
         && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone is string)
         && (!('founder' in request.resource.data) || request.resource.data.founder is bool)
-        && (request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
+        && (isOwner() || request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
         && ((request.resource.data.role == 'assistant_teacher') ? isAdmin() : true)
         && (!resource.data.get('founder', false) || isSuperAdmin());
