@@ -550,17 +550,19 @@ export default function CourseDetailScreen() {
       }
       if (meetLink && meetLink.trim().length > 0) {
         Alert.alert(
-          "Live class not active",
-          "No live class is currently active. Would you like to join via Google Meet?",
+          "Live Class Status",
+          "Interactive classroom is currently offline. Your teacher has also provided an external Google Meet link for this course.\n\nWould you like to open Google Meet now?",
           [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Meet", onPress: () => { void openExternalLink(meetLink); } },
+            { text: "Wait for Live Class", style: "cancel" },
+            { text: "Open Google Meet", onPress: () => { void openExternalLink(meetLink); } },
           ],
         );
       } else {
-        Alert.alert("Join Class", "Live class will be started by teacher.", [
-          { text: "OK", style: "default" },
-        ]);
+        Alert.alert(
+          "Live Classroom Offline",
+          "There is no active live session at the moment. When your Ustaadha starts the interactive live class, you will receive an instant notification.",
+          [{ text: "OK", style: "default" }],
+        );
       }
     } catch (e) {
       console.log("[CourseDetail] handleJoinClass ERROR:", e);
@@ -883,39 +885,76 @@ export default function CourseDetailScreen() {
                 </View>
               </View>
 
-              {/* Google Meet Live Class Launcher Card */}
+              {/* Live Classroom & Conference Card */}
               <View style={styles.infoCard} testID="course-detail-meet-link">
                 <View style={styles.infoCardHeader}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
+                  <View style={[styles.iconCircle, { backgroundColor: activeLiveClass ? '#DCFCE7' : '#FEF2F2' }]}>
                     <Ionicons
-                      name="videocam"
+                      name={activeLiveClass ? "radio" : "videocam"}
                       size={20}
-                      color="#EF4444"
+                      color={activeLiveClass ? "#16A34A" : "#EF4444"}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.infoCardTitle}>Online Interactive Classroom</Text>
-                    <Text style={styles.infoCardSubValue}>Live video and audio conferencing</Text>
+                    <Text style={styles.infoCardTitle}>
+                      {activeLiveClass ? "Interactive Classroom (Live Now)" : "Live Classroom & Conferencing"}
+                    </Text>
+                    <Text style={styles.infoCardSubValue}>
+                      {activeLiveClass
+                        ? "Ustaadha is currently teaching inside the app"
+                        : "Purdah audio recitation board with Meet backup"}
+                    </Text>
                   </View>
                 </View>
                 <TouchableOpacity
-                  style={styles.launchMeetBtn}
+                  style={[styles.launchMeetBtn, activeLiveClass ? { backgroundColor: '#16A34A' } : { backgroundColor: COLORS.primary }]}
                   onPress={() => {
                     if (isLockedForStudent) {
                       Alert.alert("Class Enrollment Required", "Please enroll in this class to attend live conferencing sessions.");
                       return;
                     }
-                    if (meetLink) {
-                      void openExternalLink(meetLink);
+                    if (activeLiveClass?.id) {
+                      safePushLiveClass(activeLiveClass.id);
+                    } else if (meetLink) {
+                      Alert.alert(
+                        "Live Classroom Offline",
+                        "Interactive app classroom is currently offline. Would you like to open the external Google Meet backup link?",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Open Meet", onPress: () => { void openExternalLink(meetLink); } },
+                        ]
+                      );
                     } else {
-                      Alert.alert("Class Link", "Live link will be activated when class starts.");
+                      Alert.alert("Classroom Offline", "Interactive class will be activated when your teacher starts the session.");
                     }
                   }}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="open-outline" size={18} color="#FFF" />
-                  <Text style={styles.launchMeetBtnText}>Launch Live Class Room</Text>
+                  <Ionicons name={activeLiveClass ? "radio" : "school-outline"} size={18} color="#FFF" />
+                  <Text style={styles.launchMeetBtnText}>
+                    {activeLiveClass ? "Enter In-App Live Classroom" : "Check Live Classroom"}
+                  </Text>
                 </TouchableOpacity>
+
+                {meetLink ? (
+                  <TouchableOpacity
+                    style={styles.meetBackupLinkBtn}
+                    onPress={() => {
+                      if (isLockedForStudent) {
+                        Alert.alert("Class Enrollment Required", "Please enroll in this class to attend live conferencing sessions.");
+                        return;
+                      }
+                      void openExternalLink(meetLink);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="logo-google" size={13} color={COLORS.primary} />
+                    <Text style={styles.meetBackupLinkText}>
+                      Open External Google Meet Link
+                    </Text>
+                    <Ionicons name="open-outline" size={12} color={COLORS.primary} />
+                  </TouchableOpacity>
+                ) : null}
               </View>
 
               {/* Academic Subjects & Faculty Assigned Card */}
@@ -1039,13 +1078,28 @@ export default function CourseDetailScreen() {
                 {/* Live Session Banner */}
                 <View style={styles.liveClassBanner}>
                   <View style={styles.liveClassBannerHeader}>
-                    <View style={styles.pulseDot} />
-                    <Text style={styles.liveClassBannerTitle}>{activeLiveClass ? "Live Session in Progress" : "Class Starting Soon"}</Text>
+                    <View style={[styles.pulseDot, !activeLiveClass && { backgroundColor: '#F59E0B' }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.liveClassBannerTitle}>
+                        {activeLiveClass ? "Live Session in Progress" : "Interactive Purdah Classroom"}
+                      </Text>
+                      <View style={styles.classroomBadgeRow}>
+                        <View style={styles.purdahSafeBadge}>
+                          <Ionicons name="shield-checkmark" size={11} color="#065F46" />
+                          <Text style={styles.purdahSafeBadgeText}>Purdah Protected (Audio-Only)</Text>
+                        </View>
+                        {activeLiveClass ? (
+                          <View style={styles.liveNowPill}>
+                            <Text style={styles.liveNowPillText}>TEACHER ONLINE</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
                   </View>
                   <Text style={styles.liveClassBannerSub}>
                     {activeLiveClass
-                      ? "Your Ustaadha is currently live in the classroom. Tap below to join now."
-                      : "The live class session is scheduled to begin shortly."}
+                      ? "Your Ustaadha is currently teaching inside the app classroom. Tap below to join interactive recitation and Tajweed whiteboard."
+                      : "Interactive classroom is currently offline. When your Ustaadha starts class, enrolled students will receive an instant notification."}
                   </Text>
                   <View style={styles.liveClassActions}>
                     {isReviewer ? (
@@ -1060,18 +1114,35 @@ export default function CourseDetailScreen() {
                         ) : (
                           <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
                         )}
-                        <Text style={styles.joinBtnText}>{activeLiveClass ? "Open Live Class" : "Start Live Class"}</Text>
+                        <Text style={styles.joinBtnText}>{activeLiveClass ? "Enter Live Classroom" : "Start Live Class"}</Text>
                       </TouchableOpacity>
                     ) : null}
                     <TouchableOpacity
-                      style={[styles.joinBtn, activeLiveClass && styles.liveNowBtn]}
+                      style={[styles.joinBtn, activeLiveClass ? styles.liveNowBtn : styles.offlineClassBtn]}
                       testID="banner-join-class-btn"
                       activeOpacity={0.8}
                       onPress={handleJoinClass}
                     >
-                      <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={20} color="#FFFFFF" />
-                      <Text style={styles.joinBtnText}>{activeLiveClass ? "Join Live Class" : "Join Class"}</Text>
+                      <Ionicons name={activeLiveClass ? "radio" : "school-outline"} size={20} color="#FFFFFF" />
+                      <Text style={styles.joinBtnText}>
+                        {activeLiveClass ? "Join Live Classroom Now" : "Class Status: Offline"}
+                      </Text>
                     </TouchableOpacity>
+
+                    {/* Secondary Discrete Option: External Google Meet (Backup Link) */}
+                    {meetLink ? (
+                      <TouchableOpacity
+                        style={styles.meetBackupLinkBtn}
+                        onPress={() => { void openExternalLink(meetLink); }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="logo-google" size={14} color={COLORS.primary} />
+                        <Text style={styles.meetBackupLinkText}>
+                          Open External Google Meet (Alternative / Backup)
+                        </Text>
+                        <Ionicons name="open-outline" size={12} color={COLORS.primary} />
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 </View>
 
@@ -1681,17 +1752,19 @@ export default function CourseDetailScreen() {
                 activeOpacity={0.85}
               >
                 <Ionicons name="logo-google" size={16} color="#FFF" />
-                <Text style={styles.meetQuickActionText}>Join Google Meet</Text>
+                <Text style={styles.meetQuickActionText}>Google Meet</Text>
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
-              style={[styles.mainJoinActionBtn, activeLiveClass && styles.liveNowBtn]}
+              style={[styles.mainJoinActionBtn, activeLiveClass ? styles.liveNowBtn : styles.offlineClassBtn]}
               testID="join-class-btn"
               activeOpacity={0.88}
               onPress={handleJoinClass}
             >
-              <Ionicons name={activeLiveClass ? "radio" : "videocam"} size={18} color="#FFFFFF" />
-              <Text style={styles.mainJoinActionText}>{activeLiveClass ? "Join Live Class Now" : "Enter Classroom"}</Text>
+              <Ionicons name={activeLiveClass ? "radio" : "school-outline"} size={18} color="#FFFFFF" />
+              <Text style={styles.mainJoinActionText}>
+                {activeLiveClass ? "Join Live Classroom Now" : "Classroom (Offline)"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1913,8 +1986,11 @@ export default function CourseDetailScreen() {
                 <Ionicons name="close" size={24} color={COLORS.textMuted} />
               </TouchableOpacity>
             </View>
-            <Text style={{ color: COLORS.textMuted, marginBottom: 16 }}>
-              Enter the Google Meet link for this session.
+            <Text style={{ color: COLORS.textMuted, marginBottom: 12, fontSize: 13, lineHeight: 18 }}>
+              Starting this session launches the built-in <Text style={{ fontWeight: '700', color: COLORS.primary }}>Purdah Interactive Classroom</Text> (with Tajweed board & live recitations).
+            </Text>
+            <Text style={{ color: COLORS.textSecondary, marginBottom: 14, fontSize: 12 }}>
+              Paste your Google Meet link below (used as the optional screen-share and audio bridge):
             </Text>
             <TextInput
               style={styles.startClassModalInput}
@@ -2300,6 +2376,57 @@ const styles = StyleSheet.create({
     ...SHADOWS.card,
   },
   liveNowBtn: { backgroundColor: "#16A34A" },
+  offlineClassBtn: { backgroundColor: "#64748B" },
+  meetBackupLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    borderRadius: RADIUS.full,
+    marginTop: 4,
+  },
+  meetBackupLinkText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  classroomBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+    marginTop: 3,
+  },
+  purdahSafeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  purdahSafeBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#065F46",
+  },
+  liveNowPill: {
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  liveNowPillText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
   meetFallbackBtn: { alignItems: "center", paddingVertical: 8 },
   meetFallbackText: { color: COLORS.textMuted, fontSize: 12, fontWeight: "700" },
   disabledBtn: { opacity: 0.65 },

@@ -694,20 +694,22 @@ export default function LiveClassroomScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.meetBridgeBtn, joining && { opacity: 0.7 }]}
-            onPress={handleJoinExternalMeet}
-            disabled={joining}
-          >
-            {joining ? (
-              <ActivityIndicator color={COLORS.primary} size="small" />
-            ) : (
-              <>
-                <Ionicons name="share-social-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.meetBridgeBtnText}>Open Screen Share / Google Meet Bridge</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {liveClass?.meet_url ? (
+            <TouchableOpacity
+              style={[styles.meetBridgeBtn, joining && { opacity: 0.7 }]}
+              onPress={handleJoinExternalMeet}
+              disabled={joining}
+            >
+              {joining ? (
+                <ActivityIndicator color={COLORS.primary} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={16} color={COLORS.primary} />
+                  <Text style={styles.meetBridgeBtnText}>External Screen Share / Meet Bridge</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : null}
 
           {isTeacher && (
             <TouchableOpacity style={styles.dangerBtn} onPress={handleEndClass}>
