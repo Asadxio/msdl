@@ -108,11 +108,17 @@ export default function ManageAcademicsScreen() {
   const [subjectDraftTeacherId, setSubjectDraftTeacherId] = useState('');
   const [subjectDraftSchedule, setSubjectDraftSchedule] = useState('');
 
+  // Starter Curriculum state (Module 1 & Lesson 1 shortcut)
+  const [starterModuleTitle, setStarterModuleTitle] = useState('Bab 1 / Module 1: Introduction & Fundamentals');
+  const [starterLessonTitle, setStarterLessonTitle] = useState('Sabaq 1: Taaruf wa Ibtida (Overview)');
+  const [starterLessonUrl, setStarterLessonUrl] = useState('');
+
   // Teacher management state
   const [teacherName, setTeacherName] = useState('');
   const [teacherTitle, setTeacherTitle] = useState('');
   const [teacherPhoto, setTeacherPhoto] = useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   
   // Recording state
@@ -467,15 +473,49 @@ export default function ManageAcademicsScreen() {
         await updateDoc(doc(db, 'courses', editingCourseId), payload);
         createAdminLog(profile, { action: 'course_update', performed_by: profile?.email || profile?.name || 'admin', target_id: editingCourseId, details: payload.name }).catch(() => {});
       } else {
-        await addDoc(collection(db, 'courses'), {
+        const newCourseRef = await addDoc(collection(db, 'courses'), {
           ...payload,
           created_at: serverTimestamp(),
         });
+        const createdCourseId = newCourseRef.id;
         createAdminLog(profile, { action: 'course_create', performed_by: profile?.email || profile?.name || 'admin', details: payload.name }).catch(() => {});
+
+        // Auto-provision initial Module and Lesson so curriculum is immediately ready
+        if (starterModuleTitle.trim()) {
+          try {
+            const moduleRef = await addDoc(collection(db, 'modules'), {
+              course_id: createdCourseId,
+              title: starterModuleTitle.trim(),
+              order: 1,
+              created_at: serverTimestamp(),
+              updated_at: serverTimestamp(),
+            });
+
+            if (starterLessonTitle.trim()) {
+              await addDoc(collection(db, 'lessons'), {
+                course_id: createdCourseId,
+                module_id: moduleRef.id,
+                title: starterLessonTitle.trim(),
+                order: 1,
+                description: `Awwaleen Sabaq for ${payload.name}`,
+                content_url: starterLessonUrl.trim() || undefined,
+                duration_minutes: 30,
+                created_at: serverTimestamp(),
+                updated_at: serverTimestamp(),
+              });
+            }
+          } catch (starterErr) {
+            console.warn('[manage-academics] Failed to create starter curriculum:', starterErr);
+          }
+        }
       }
 
       setCourseForm(INITIAL_COURSE);
       setEditingCourseId(null);
+      setStarterModuleTitle('Bab 1 / Module 1: Introduction & Fundamentals');
+      setStarterLessonTitle('Sabaq 1: Taaruf wa Ibtida (Overview)');
+      setStarterLessonUrl('');
+
 
       // Trigger announcements in background (don't block UI)
       const announcementMessage = `${payload.name} - ${payload.schedule}${payload.class_time ? ` at ${payload.class_time}` : ''}`;
@@ -894,6 +934,47 @@ export default function ManageAcademicsScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Starter Curriculum & First Lesson Shortcut (Only when creating new course) */}
+          {!editingCourseId && (
+            <View style={[styles.subSectionBox, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+              <View style={styles.subSectionHeader}>
+                <Ionicons name="sparkles-outline" size={18} color="#15803D" />
+                <Text style={[styles.subSectionTitle, { color: '#15803D' }]}>Initial Syllabus & Lesson Shortcut (Recommended)</Text>
+              </View>
+              <Text style={[styles.helper, { color: '#166534', marginBottom: 8 }]}>
+                Course add karte hi student ko empty "Curriculum preparing" na dikhe, iske liye pehla Module aur Sabaq automatic ready ho jayega.
+              </Text>
+
+              <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 }}>Module / Chapter 1 Title:</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: '#FFF', marginBottom: 8 }]}
+                placeholder="e.g. Bab 1 / Module 1: Introduction & Fundamentals"
+                placeholderTextColor={COLORS.textMuted}
+                value={starterModuleTitle}
+                onChangeText={setStarterModuleTitle}
+              />
+
+              <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 }}>Lesson / Sabaq 1 Title:</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: '#FFF', marginBottom: 8 }]}
+                placeholder="e.g. Sabaq 1: Taaruf wa Ibtida (Overview)"
+                placeholderTextColor={COLORS.textMuted}
+                value={starterLessonTitle}
+                onChangeText={setStarterLessonTitle}
+              />
+
+              <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 }}>Lesson PDF / Video URL (Optional):</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: '#FFF', marginBottom: 4 }]}
+                placeholder="https://drive.google.com/... or https://youtube.com/..."
+                placeholderTextColor={COLORS.textMuted}
+                value={starterLessonUrl}
+                onChangeText={setStarterLessonUrl}
+                autoCapitalize="none"
+              />
+            </View>
+          )}
+
           <TouchableOpacity style={[styles.primaryBtn, actionLoading && styles.disabledBtn]} onPress={saveCourse} disabled={actionLoading}>
             {actionLoading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={styles.primaryBtnText}>{editingCourseId ? 'Update Course' : 'Add Course'}</Text>}
           </TouchableOpacity>
@@ -902,6 +983,7 @@ export default function ManageAcademicsScreen() {
               <Text style={styles.secondaryBtnText}>Cancel Edit</Text>
             </TouchableOpacity>
           )}
+
 
           {courses.length === 0 ? <Text style={styles.helper}>No courses added yet.</Text> : courses.map((course) => (
             <View key={course.id} style={styles.itemRow}>
