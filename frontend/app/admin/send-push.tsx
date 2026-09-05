@@ -829,17 +829,41 @@ export default function AdminSendPushScreen() {
         </View>
       </Modal>
 
-      {/* Success Result Modal */}
+      {/* Result Modal */}
       <Modal visible={successModalVisible} transparent animationType="fade" onRequestClose={() => setSuccessModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalBox}>
-            <View style={[styles.confirmIconWrap, { backgroundColor: '#10B98120' }]}>
-              <Ionicons name="checkmark-circle" size={44} color="#10B981" />
-            </View>
-            <Text style={styles.confirmTitle}>Broadcast Dispatched!</Text>
-            <Text style={styles.confirmSubtitle}>
-              Your notification has been broadcast successfully across the Madrasa.
-            </Text>
+            {dispatchResult && dispatchResult.pushCount === 0 && dispatchResult.providerErrors > 0 ? (
+              <>
+                <View style={[styles.confirmIconWrap, { backgroundColor: '#EF444420' }]}>
+                  <Ionicons name="alert-circle" size={44} color="#EF4444" />
+                </View>
+                <Text style={styles.confirmTitle}>Push Delivery Issue</Text>
+                <Text style={styles.confirmSubtitle}>
+                  In-app feed was published, but lockscreen push delivery failed for all devices.
+                </Text>
+              </>
+            ) : dispatchResult && dispatchResult.providerErrors > 0 ? (
+              <>
+                <View style={[styles.confirmIconWrap, { backgroundColor: '#F59E0B20' }]}>
+                  <Ionicons name="warning" size={44} color="#F59E0B" />
+                </View>
+                <Text style={styles.confirmTitle}>Broadcast Partially Delivered</Text>
+                <Text style={styles.confirmSubtitle}>
+                  Notification sent to active devices, but some devices encountered delivery errors.
+                </Text>
+              </>
+            ) : (
+              <>
+                <View style={[styles.confirmIconWrap, { backgroundColor: '#10B98120' }]}>
+                  <Ionicons name="checkmark-circle" size={44} color="#10B981" />
+                </View>
+                <Text style={styles.confirmTitle}>Broadcast Dispatched!</Text>
+                <Text style={styles.confirmSubtitle}>
+                  Your notification has been broadcast successfully across the Madrasa.
+                </Text>
+              </>
+            )}
 
             <View style={styles.confirmDetailsBox}>
               <Text style={styles.confirmDetailRow}>
@@ -850,6 +874,12 @@ export default function AdminSendPushScreen() {
                 <Text style={{ fontWeight: '700' }}>📱 Push Dispatches: </Text>
                 {dispatchResult?.pushCount || 0} device(s) alerted directly
               </Text>
+              {dispatchResult && dispatchResult.providerErrors > 0 && (
+                <Text style={[styles.confirmDetailRow, { color: '#DC2626', marginTop: 4 }]}>
+                  <Text style={{ fontWeight: '700' }}>⚠️ Push Errors: </Text>
+                  {dispatchResult.providerErrors} device(s) failed delivery
+                </Text>
+              )}
             </View>
 
             <TouchableOpacity

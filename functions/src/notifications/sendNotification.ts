@@ -36,13 +36,38 @@ interface NotificationRequest {
 
 async function getTokensForUids(uids: string[]): Promise<{ uid: string; token: string }[]> {
   const results: { uid: string; token: string }[] = [];
+  const seen = new Set<string>();
+
   await Promise.allSettled(
     uids.map(async (uid) => {
+      // 1. Check user_tokens collection
       const snap = await collections.userTokens().doc(uid).get();
-      if (!snap.exists) return;
-      const d = snap.data()!;
-      const token: string = d.token ?? d.fcmToken ?? "";
-      if (token) results.push({ uid, token });
+      if (snap.exists) {
+        const d = snap.data()!;
+        const primary = d.expoPushToken || d.token || d.fcmToken || "";
+        if (primary && typeof primary === "string" && !seen.has(primary)) {
+          seen.add(primary);
+          results.push({ uid, token: primary.trim() });
+          return;
+        }
+      }
+
+      // 2. Fallback: check users collection doc (expo_push_tokens / fcm_tokens)
+      const userDoc = await collections.users().doc(uid).get();
+      if (userDoc.exists) {
+        const uData = userDoc.data()!;
+        const expoList: string[] = Array.isArray(uData.expo_push_tokens) ? uData.expo_push_tokens : [];
+        const fcmList: string[] = Array.isArray(uData.fcm_tokens) ? uData.fcm_tokens : [];
+        const combined = [...expoList, ...fcmList].filter((t) => typeof t === "string" && t.trim());
+        for (const token of combined) {
+          const t = token.trim();
+          if (!seen.has(t)) {
+            seen.add(t);
+            results.push({ uid, token: t });
+            break; // One active token per user
+          }
+        }
+      }
     })
   );
   return results;
@@ -103,16 +128,15 @@ export const sendNotification = onCall(
       return { success: true, sent: 0, failed: 0, noToken: 0 };
     }
 
-    // 4. Fetch FCM tokens for all recipients
+    // 4. Fetch push tokens for all recipients (both user_tokens doc and users doc)
     const tokenEntries = await getTokensForUids(recipientUids);
     const noToken = recipientUids.length - tokenEntries.length;
 
     if (tokenEntries.length === 0) {
-      logger.warn(`[sendNotification] No FCM tokens found for ${recipientUids.length} recipients`);
+      logger.warn(`[sendNotification] No push tokens found for ${recipientUids.length} recipients`);
       return { success: true, sent: 0, failed: 0, noToken };
     }
 
-    // 5. Send via Firebase Admin Messaging (batched, max 500 per call)
     const messageData: Record<string, string> = {};
     if (payload.data) {
       for (const [k, v] of Object.entries(payload.data)) {
@@ -122,10 +146,73 @@ export const sendNotification = onCall(
 
     let sent = 0;
     let failed = 0;
-    const BATCH_SIZE = 500;
 
-    for (let i = 0; i < tokenEntries.length; i += BATCH_SIZE) {
-      const batch = tokenEntries.slice(i, i + BATCH_SIZE);
+    // Separate tokens by provider: Expo Push API vs Native Firebase Cloud Messaging (FCM)
+    const expoTokens: { uid: string; token: string }[] = [];
+    const fcmTokens: { uid: string; token: string }[] = [];
+
+    for (const entry of tokenEntries) {
+      const t = entry.token.trim();
+      if (t.startsWith("ExponentPushToken[") || t.startsWith("ExpoPushToken[")) {
+        expoTokens.push({ uid: entry.uid, token: t });
+      } else {
+        fcmTokens.push({ uid: entry.uid, token: t });
+      }
+    }
+
+    logger.info(`[sendNotification] Dispatching: expoCount=${expoTokens.length}, fcmCount=${fcmTokens.length}`);
+
+    // 5A. Send Expo Push tokens via Expo Push API (batched in chunks of 100)
+    const EXPO_BATCH_SIZE = 100;
+    for (let i = 0; i < expoTokens.length; i += EXPO_BATCH_SIZE) {
+      const batch = expoTokens.slice(i, i + EXPO_BATCH_SIZE);
+      const messages = batch.map(({ token }) => ({
+        to: token,
+        sound: "default",
+        title: payload.title,
+        body: payload.body,
+        data: messageData,
+        channelId: messageData.channelId || "default",
+        priority: "high",
+      }));
+
+      try {
+        const response = await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Accept-encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(messages),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          logger.error(`[sendNotification] Expo push API HTTP error status=${response.status}`, errText);
+          failed += batch.length;
+        } else {
+          const resJson: any = await response.json();
+          const tickets: any[] = resJson.data || [];
+          tickets.forEach((ticket, idx) => {
+            if (ticket.status === "ok") {
+              sent++;
+            } else {
+              failed++;
+              logger.warn(`[sendNotification] Expo ticket error uid=${batch[idx]?.uid}:`, ticket.message || ticket.details);
+            }
+          });
+        }
+      } catch (err) {
+        logger.error("[sendNotification] Expo push fetch error", err);
+        failed += batch.length;
+      }
+    }
+
+    // 5B. Send Native FCM tokens via Firebase Admin Messaging (batched in chunks of 500)
+    const FCM_BATCH_SIZE = 500;
+    for (let i = 0; i < fcmTokens.length; i += FCM_BATCH_SIZE) {
+      const batch = fcmTokens.slice(i, i + FCM_BATCH_SIZE);
       const messages = batch.map(({ token }) => ({
         token,
         notification: { title: payload.title, body: payload.body },
@@ -138,14 +225,13 @@ export const sendNotification = onCall(
         sent += batchResponse.successCount;
         failed += batchResponse.failureCount;
 
-        // Log per-token failures (invalid tokens, etc.)
         batchResponse.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            logger.warn(`[sendNotification] Token failed uid=${batch[idx].uid}`, resp.error?.message);
+            logger.warn(`[sendNotification] FCM token failed uid=${batch[idx].uid}:`, resp.error?.message);
           }
         });
       } catch (err) {
-        logger.error("[sendNotification] Batch send failed", err);
+        logger.error("[sendNotification] FCM batch send failed", err);
         failed += batch.length;
       }
     }
@@ -160,6 +246,8 @@ export const sendNotification = onCall(
         sent,
         failed,
         noToken,
+        expoCount: expoTokens.length,
+        fcmCount: fcmTokens.length,
         sentByUid: admin.uid,
         sentAtMs: Date.now(),
         status: "sent",
