@@ -332,7 +332,17 @@ export default function QuranReaderScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.headerBtn} onPress={async () => { await stopCurrentAudio(); goBackOrReplace(router, '/quran'); }}>
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => {
+            stopCurrentAudio().catch(() => {});
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/quran');
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator,
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { sendEmailVerification } from 'firebase/auth';
-import { doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -233,7 +233,32 @@ export default function PendingScreen() {
     setChecking(true);
     setMessage(null);
     try {
+      const currentUser = auth.currentUser;
+      if (currentUser?.uid) {
+        // Self-heal role if role is missing or document needs default role
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const snap = await getDoc(userDocRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            const updates: Record<string, any> = {};
+            if (!data.role) {
+              updates.role = 'student';
+            }
+            if (currentUser.emailVerified && data.status === 'pending' && (data.role === 'student' || !data.role)) {
+              updates.status = 'approved';
+            }
+            if (Object.keys(updates).length > 0) {
+              updates.updated_at = serverTimestamp();
+              await updateDoc(userDocRef, updates);
+            }
+          }
+        } catch (healErr) {
+          console.warn('[pending] Role auto-heal non-fatal error:', healErr);
+        }
+      }
       await refreshVerificationStatus('manual', true);
+      await refreshProfileRef.current().catch(() => {});
     } finally {
       if (mountedRef.current) setChecking(false);
     }

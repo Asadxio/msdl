@@ -94,13 +94,17 @@ export async function acceptLegalDocs(userId: string, keys: LegalDocKey[]): Prom
     policy_bundle_version: `${LEGAL_DOCS.terms.version}|${LEGAL_DOCS.privacy.version}|${LEGAL_DOCS.community.version}`,
   }, { merge: true });
 
-  await setDoc(doc(collection(db, 'legal_audit_events')), {
-    user_id: userId,
-    event: 'legal_acceptance',
-    accepted_docs: keys,
-    accepted_versions: keys.map((k) => `${k}:${LEGAL_DOCS[k].version}`),
-    created_at: serverTimestamp(),
-  });
+  try {
+    await setDoc(doc(collection(db, 'legal_audit_events')), {
+      user_id: userId,
+      event: 'legal_acceptance',
+      accepted_docs: keys,
+      accepted_versions: keys.map((k) => `${k}:${LEGAL_DOCS[k].version}`),
+      created_at: serverTimestamp(),
+    });
+  } catch (auditErr) {
+    console.warn('[legal] Non-fatal: legal_audit_events write skipped or failed:', auditErr);
+  }
 }
 
 export async function createPrivacyRequest(userId: string, type: 'deletion' | 'export', reason: string): Promise<void> {

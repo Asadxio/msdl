@@ -31,6 +31,7 @@ import {
 import { trackEvent } from '@/lib/analytics';
 import { VERIFICATION_ACTION_CODE_SETTINGS, PASSWORD_RESET_ACTION_CODE_SETTINGS } from '@/lib/emailVerificationSettings';
 import { dispatchWelcomeNotification } from '@/lib/notifications';
+import { LEGAL_DOCS } from '@/lib/legal';
 
 const AUTH_STARTUP_WATCHDOG_MS = 5000;
 const PROFILE_LOOKUP_TIMEOUT_MS = 8000;
@@ -546,15 +547,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Record auditable legal acceptance & parental consent document
         await setDoc(doc(db, 'users', cred.user.uid, 'compliance', 'legal_acceptance'), {
           accepted: {
-            terms: { version: '2026.1', acceptedAt: serverTimestamp() },
-            privacy: { version: '2026.1', acceptedAt: serverTimestamp() },
-            community: { version: '2026.1', acceptedAt: serverTimestamp() },
+            terms: { version: LEGAL_DOCS.terms.version, acceptedAt: serverTimestamp() },
+            privacy: { version: LEGAL_DOCS.privacy.version, acceptedAt: serverTimestamp() },
+            community: { version: LEGAL_DOCS.community.version, acceptedAt: serverTimestamp() },
             ...(complianceData?.is_minor ? {
-              minor_guardian_consent: { version: '2026.1', acceptedAt: serverTimestamp() },
+              minor_guardian_consent: { version: LEGAL_DOCS.terms.version, acceptedAt: serverTimestamp() },
             } : {}),
           },
           acceptance_updated_at: serverTimestamp(),
-          policy_bundle_version: '2026.1',
+          policy_bundle_version: `${LEGAL_DOCS.terms.version}|${LEGAL_DOCS.privacy.version}|${LEGAL_DOCS.community.version}`,
           is_minor: Boolean(complianceData?.is_minor),
           age_bracket: complianceData?.age_bracket || (complianceData?.is_minor ? 'under_18' : '18_plus'),
           ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
