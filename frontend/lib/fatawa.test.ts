@@ -103,4 +103,14 @@ describe('Fatawa & Dar-ul-Iftaa Module', () => {
       })
     ).resolves.not.toThrow();
   });
+
+  it('provides subscribeToQuestionsForTeacher supporting status and category filtering', () => {
+    const { subscribeToQuestionsForTeacher, subscribeToPendingQuestionsForTeacher } = require('./fatawa');
+    expect(typeof subscribeToQuestionsForTeacher).toBe('function');
+    expect(typeof subscribeToPendingQuestionsForTeacher).toBe('function');
+
+    const cb = jest.fn();
+    const unsub = subscribeToQuestionsForTeacher({ status: 'pending', category: 'taharat' }, cb);
+    expect(typeof unsub).toBe('function');
+  });
 });

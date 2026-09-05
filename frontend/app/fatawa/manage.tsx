@@ -20,9 +20,11 @@ import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import {
   FATAWA_CATEGORIES,
+  FatawaCategoryKey,
   FatawaQuestion,
+  TeacherFatawaFilter,
   answerFatawaQuestion,
-  subscribeToPendingQuestionsForTeacher,
+  subscribeToQuestionsForTeacher,
 } from '@/lib/fatawa';
 import { goBackOrReplace } from '@/lib/navigation';
 
@@ -36,8 +38,18 @@ export default function TeacherFatawaManageScreen() {
     profile?.role === 'admin' ||
     profile?.role === 'super_admin';
 
-  const [pendingQuestions, setPendingQuestions] = useState<FatawaQuestion[]>([]);
+  const [questions, setQuestions] = useState<FatawaQuestion[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filters & Search
+  const [statusFilter, setStatusFilter] = useState<TeacherFatawaFilter>('pending');
+  const [categoryFilter, setCategoryFilter] = useState<FatawaCategoryKey | 'all'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Counts
+  const [pendingCount, setPendingCount] = useState(0);
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Answering Modal State
   const [selectedQ, setSelectedQ] = useState<FatawaQuestion | null>(null);
@@ -48,8 +60,14 @@ export default function TeacherFatawaManageScreen() {
 
   useEffect(() => {
     setLoading(true);
-    const unsub = subscribeToPendingQuestionsForTeacher((data) => {
-      setPendingQuestions(data);
+    // Subscribe to all questions to compute dynamic badge counts and filter smoothly
+    const unsub = subscribeToQuestionsForTeacher({ status: 'all' }, (data) => {
+      setQuestions(data);
+      const pending = data.filter((q) => q.status === 'pending').length;
+      const answered = data.filter((q) => q.status === 'answered').length;
+      setPendingCount(pending);
+      setAnsweredCount(answered);
+      setTotalCount(data.length);
       setLoading(false);
     });
 
@@ -58,9 +76,9 @@ export default function TeacherFatawaManageScreen() {
 
   const handleOpenAnswer = (q: FatawaQuestion) => {
     setSelectedQ(q);
-    setAnswerText('');
-    setRefKitab('');
-    setIsPublic(false);
+    setAnswerText(q.answer || '');
+    setRefKitab(q.reference_kitab || '');
+    setIsPublic(Boolean(q.is_public));
   };
 
   const handleAnswerSubmit = async () => {
@@ -102,6 +120,35 @@ export default function TeacherFatawaManageScreen() {
     );
   }
 
+  // Filter inquiries based on current filters
+  const displayedQuestions = questions.filter((q) => {
+    // 1. Status Filter
+    if (statusFilter !== 'all' && q.status !== statusFilter) {
+      return false;
+    }
+
+    // 2. Category Filter
+    if (categoryFilter !== 'all' && q.category !== categoryFilter) {
+      return false;
+    }
+
+    // 3. Search Query
+    if (searchQuery.trim()) {
+      const queryLower = searchQuery.toLowerCase().trim();
+      const matchTitle = (q.title || '').toLowerCase().includes(queryLower);
+      const matchQuestion = (q.question || '').toLowerCase().includes(queryLower);
+      const matchStudent = (q.student_name || '').toLowerCase().includes(queryLower);
+      const matchAnswer = (q.answer || '').toLowerCase().includes(queryLower);
+      if (!matchTitle && !matchQuestion && !matchStudent && !matchAnswer) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const categoriesList = (Object.keys(FATAWA_CATEGORIES) as FatawaCategoryKey[]);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -115,35 +162,158 @@ export default function TeacherFatawaManageScreen() {
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.arabicHeader}>FACULTY DAR-UL-IFTAA DESK</Text>
-          <Text style={styles.headerTitle}>Ustaadha Masail Console</Text>
+          <Text style={styles.headerTitle}>Ustaadha Masail & Fatawa Console</Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.statsBanner}>
-        <Ionicons name="mail-unread-outline" size={18} color="#C8A84E" />
-        <Text style={styles.statsText}>
-          Pending Inquiries: {pendingQuestions.length}
-        </Text>
+      {/* Filter Tabs: Pending (Default), Answered, All */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tabButton, statusFilter === 'pending' && styles.activeTabButton]}
+          onPress={() => setStatusFilter('pending')}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="hourglass-outline"
+            size={14}
+            color={statusFilter === 'pending' ? '#FFFFFF' : '#94A3B8'}
+          />
+          <Text style={[styles.tabText, statusFilter === 'pending' && styles.activeTabText]}>
+            Pending
+          </Text>
+          {pendingCount > 0 && (
+            <View style={[styles.tabBadge, statusFilter === 'pending' && styles.activeTabBadge]}>
+              <Text style={[styles.tabBadgeText, statusFilter === 'pending' && styles.activeTabBadgeText]}>
+                {pendingCount}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabButton, statusFilter === 'answered' && styles.activeTabButton]}
+          onPress={() => setStatusFilter('answered')}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="checkmark-circle-outline"
+            size={14}
+            color={statusFilter === 'answered' ? '#FFFFFF' : '#94A3B8'}
+          />
+          <Text style={[styles.tabText, statusFilter === 'answered' && styles.activeTabText]}>
+            Answered
+          </Text>
+          <View style={[styles.tabBadge, statusFilter === 'answered' && styles.activeTabBadge]}>
+            <Text style={[styles.tabBadgeText, statusFilter === 'answered' && styles.activeTabBadgeText]}>
+              {answeredCount}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabButton, statusFilter === 'all' && styles.activeTabButton]}
+          onPress={() => setStatusFilter('all')}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="list-outline"
+            size={14}
+            color={statusFilter === 'all' ? '#FFFFFF' : '#94A3B8'}
+          />
+          <Text style={[styles.tabText, statusFilter === 'all' && styles.activeTabText]}>
+            All
+          </Text>
+          <View style={[styles.tabBadge, statusFilter === 'all' && styles.activeTabBadge]}>
+            <Text style={[styles.tabBadgeText, statusFilter === 'all' && styles.activeTabBadgeText]}>
+              {totalCount}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search-outline" size={18} color="#94A3B8" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by title, question, or student name..."
+          placeholderTextColor="#64748B"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="while-editing"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Category Chips Scroll */}
+      <View style={styles.categoryChipsWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryChipsScroll}>
+          <TouchableOpacity
+            style={[styles.catChip, categoryFilter === 'all' && styles.activeCatChip]}
+            onPress={() => setCategoryFilter('all')}
+          >
+            <Text style={[styles.catChipText, categoryFilter === 'all' && styles.activeCatChipText]}>
+              All Topics
+            </Text>
+          </TouchableOpacity>
+
+          {categoriesList.map((key) => {
+            const item = FATAWA_CATEGORIES[key];
+            const isSelected = categoryFilter === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[styles.catChip, isSelected && styles.activeCatChip]}
+                onPress={() => setCategoryFilter(key)}
+              >
+                <Ionicons
+                  name={item.icon as any}
+                  size={12}
+                  color={isSelected ? '#FFFFFF' : '#CBD5E1'}
+                />
+                <Text style={[styles.catChipText, isSelected && styles.activeCatChipText]}>
+                  {item.arabicTitle}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Inquiries List */}
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.centerBox}>
             <ActivityIndicator size="large" color={COLORS.primary} />
             <Text style={styles.loadingText}>Loading inquiries...</Text>
           </View>
-        ) : pendingQuestions.length === 0 ? (
+        ) : displayedQuestions.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Ionicons name="checkmark-done-circle-outline" size={54} color="#007A58" />
-            <Text style={styles.emptyTitle}>All Inquiries Answered ✓</Text>
+            <Ionicons
+              name={statusFilter === 'pending' ? 'checkmark-done-circle-outline' : 'search-outline'}
+              size={54}
+              color={statusFilter === 'pending' ? '#007A58' : '#64748B'}
+            />
+            <Text style={styles.emptyTitle}>
+              {statusFilter === 'pending'
+                ? 'No Pending Inquiries ✓'
+                : 'No Inquiries Found'}
+            </Text>
             <Text style={styles.emptySubtitle}>
-              There are currently no unanswered questions pending.
+              {statusFilter === 'pending'
+                ? 'MashaAllah! All incoming questions have been addressed.'
+                : 'Try adjusting your search criteria or category filter.'}
             </Text>
           </View>
         ) : (
-          pendingQuestions.map((q) => {
+          displayedQuestions.map((q) => {
             const cat = FATAWA_CATEGORIES[q.category] || FATAWA_CATEGORIES.general;
+            const isAnswered = q.status === 'answered';
 
             return (
               <View key={q.id} style={styles.questionCard}>
@@ -152,19 +322,73 @@ export default function TeacherFatawaManageScreen() {
                     <Ionicons name={cat.icon as any} size={14} color={COLORS.primary} />
                     <Text style={styles.categoryBadgeText}>{cat.arabicTitle}</Text>
                   </View>
-                  <Text style={styles.studentBadge}>Inquirer: {q.student_name}</Text>
+
+                  <View style={styles.headerRightWrap}>
+                    <View
+                      style={[
+                        styles.statusPill,
+                        isAnswered ? styles.statusPillAnswered : styles.statusPillPending,
+                      ]}
+                    >
+                      <Ionicons
+                        name={isAnswered ? 'checkmark-circle' : 'hourglass'}
+                        size={11}
+                        color={isAnswered ? '#007A58' : '#C8A84E'}
+                      />
+                      <Text
+                        style={[
+                          styles.statusPillText,
+                          isAnswered ? styles.statusPillTextAnswered : styles.statusPillTextPending,
+                        ]}
+                      >
+                        {isAnswered ? 'Answered' : 'Pending'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.studentInfoRow}>
+                  <Ionicons name="person-outline" size={13} color="#64748B" />
+                  <Text style={styles.studentBadge}>Taliba: {q.student_name}</Text>
                 </View>
 
                 <Text style={styles.cardTitle}>{q.title}</Text>
                 <Text style={styles.cardBody}>{q.question}</Text>
 
+                {/* If already answered, show scholars answer snapshot */}
+                {isAnswered && q.answer && (
+                  <View style={styles.answeredBox}>
+                    <View style={styles.answeredHeader}>
+                      <Ionicons name="shield-checkmark" size={14} color="#005F46" />
+                      <Text style={styles.answeredByText}>
+                        Answered by: {q.answered_by_name || 'Muftiah'}
+                      </Text>
+                    </View>
+                    <Text style={styles.answeredContent} numberOfLines={3}>
+                      {q.answer}
+                    </Text>
+                    {q.reference_kitab && (
+                      <Text style={styles.answeredReference}>
+                        Reference: {q.reference_kitab}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {/* Action button */}
                 <TouchableOpacity
-                  style={styles.answerBtn}
+                  style={[styles.answerBtn, isAnswered && styles.editAnswerBtn]}
                   onPress={() => handleOpenAnswer(q)}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="pencil" size={16} color={'#FFFFFF'} />
-                  <Text style={styles.answerBtnText}>Draft Answer</Text>
+                  <Ionicons
+                    name={isAnswered ? 'create-outline' : 'pencil'}
+                    size={16}
+                    color={'#FFFFFF'}
+                  />
+                  <Text style={styles.answerBtnText}>
+                    {isAnswered ? 'Update Ruling / Answer' : 'Draft Scholarly Answer'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             );
@@ -331,22 +555,104 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
   },
-  statsBanner: {
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: RADIUS.md,
+    padding: 4,
+    marginHorizontal: SPACING.md,
+    marginTop: 8,
+    gap: 6,
+  },
+  tabButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(200, 168, 78, 0.16)',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: RADIUS.sm,
+    gap: 6,
+  },
+  activeTabButton: {
+    backgroundColor: '#005F46',
     borderWidth: 1,
     borderColor: '#C8A84E',
-    marginHorizontal: SPACING.md,
-    marginVertical: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: RADIUS.md,
-    gap: 8,
   },
-  statsText: {
+  tabText: {
     fontSize: 12,
-    color: '#C8A84E',
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  activeTabText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  tabBadge: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: RADIUS.full,
+  },
+  activeTabBadge: {
+    backgroundColor: '#C8A84E',
+  },
+  tabBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#E2E8F0',
+  },
+  activeTabBadgeText: {
+    color: '#002E23',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: RADIUS.md,
+    marginHorizontal: SPACING.md,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 38,
+    color: '#FFFFFF',
+    fontSize: 13,
+  },
+  categoryChipsWrapper: {
+    marginVertical: 8,
+  },
+  categoryChipsScroll: {
+    paddingHorizontal: SPACING.md,
+    gap: 6,
+  },
+  catChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  activeCatChip: {
+    backgroundColor: '#005F46',
+    borderColor: '#C8A84E',
+  },
+  catChipText: {
+    fontSize: 11,
+    color: '#CBD5E1',
+    fontWeight: '600',
+  },
+  activeCatChipText: {
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   scrollContent: {
@@ -395,6 +701,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerRightWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -408,6 +718,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: COLORS.primary,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  statusPillPending: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusPillAnswered: {
+    backgroundColor: '#E8F5EE',
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  statusPillTextPending: {
+    color: '#B45309',
+  },
+  statusPillTextAnswered: {
+    color: '#007A58',
+  },
+  studentInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   studentBadge: {
     fontSize: 11,
@@ -424,6 +764,36 @@ const styles = StyleSheet.create({
     color: '#334155',
     lineHeight: 18,
   },
+  answeredBox: {
+    backgroundColor: '#F0FDF4',
+    borderLeftWidth: 3,
+    borderLeftColor: '#007A58',
+    borderRadius: RADIUS.sm,
+    padding: 10,
+    gap: 4,
+    marginVertical: 4,
+  },
+  answeredHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  answeredByText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#005F46',
+  },
+  answeredContent: {
+    fontSize: 12,
+    color: '#1E293B',
+    lineHeight: 17,
+  },
+  answeredReference: {
+    fontSize: 10,
+    color: '#64748B',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
   answerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -433,6 +803,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     gap: 6,
     marginTop: 4,
+  },
+  editAnswerBtn: {
+    backgroundColor: '#047857',
   },
   answerBtnText: {
     color: '#FFFFFF',

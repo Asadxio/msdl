@@ -350,6 +350,13 @@ service cloud.firestore {
             && request.resource.data.target_roles.hasOnly(['teacher'])
           )
           || (
+            isApprovedVerifiedUser()
+            && request.resource.data.user_id == 'role_targeted'
+            && request.resource.data.category == 'fatawa_question_asked'
+            && request.resource.data.target_roles is list
+            && request.resource.data.target_roles.hasOnly(['teacher'])
+          )
+          || (
             isTeacherOrAdmin()
             && request.resource.data.user_id == 'role_targeted'
             && request.resource.data.category == 'live_class_started'

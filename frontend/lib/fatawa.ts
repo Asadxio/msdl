@@ -127,6 +127,33 @@ export async function askFatawaQuestion(params: {
   };
 
   await setDoc(newDocRef, payload);
+
+  // Notify teachers/Dar-ul-Ifta scholars about the new question
+  try {
+    const notifRef = doc(collection(db, 'notifications'));
+    const dedupeId = `fatwa_ask:${newDocRef.id}:${Date.now()}`;
+    await setDoc(notifRef, {
+      id: notifRef.id,
+      user_id: 'role_targeted',
+      target_roles: ['teacher'],
+      recipient_id: 'all_teachers',
+      actor_id: params.userId,
+      category: 'fatawa_question_asked',
+      channel: 'announcements',
+      event: 'system_alert',
+      title: 'نیا فقہی سوال (New Dar-ul-Ifta Question)',
+      message: `ایک طالبہ نے دار الافتاء میں نیا سوال پوچھا ہے: "${title}"`,
+      body: `ایک طالبہ نے دار الافتاء میں نیا سوال پوچھا ہے: "${title}"`,
+      route: '/fatawa/manage',
+      read: {},
+      dedupe_id: dedupeId,
+      created_at: serverTimestamp(),
+      created_at_ms: Date.now(),
+    });
+  } catch (err) {
+    console.warn('[Fatawa] Teacher notification dispatch failed:', err);
+  }
+
   return newDocRef.id;
 }
 
@@ -194,29 +221,54 @@ export function subscribeToPublicFatawa(
   );
 }
 
-export function subscribeToPendingQuestionsForTeacher(
+export type TeacherFatawaFilter = 'all' | 'pending' | 'answered';
+
+export function subscribeToQuestionsForTeacher(
+  options: {
+    status?: TeacherFatawaFilter;
+    category?: FatawaCategoryKey | 'all';
+  },
   callback: (questions: FatawaQuestion[]) => void
 ): () => void {
+  // Query all questions ordered by creation descending so scholars have full visibility
   const q = query(
     collection(db, 'fatawa_questions'),
-    where('status', '==', 'pending'),
-    orderBy('created_at', 'asc')
+    orderBy('created_at', 'desc')
   );
 
   return onSnapshot(
     q,
     (snapshot) => {
-      const list: FatawaQuestion[] = [];
+      const all: FatawaQuestion[] = [];
       snapshot.forEach((docSnap) => {
-        list.push(docSnap.data() as FatawaQuestion);
+        all.push(docSnap.data() as FatawaQuestion);
       });
-      callback(list);
+
+      const filtered = all.filter((item) => {
+        // Status filter
+        if (options.status && options.status !== 'all') {
+          if (item.status !== options.status) return false;
+        }
+        // Category filter
+        if (options.category && options.category !== 'all') {
+          if (item.category !== options.category) return false;
+        }
+        return true;
+      });
+
+      callback(filtered);
     },
     (err) => {
-      console.warn('[Fatawa] Error fetching pending questions:', err);
+      console.warn('[Fatawa] Error fetching questions for teacher:', err);
       callback([]);
     }
   );
+}
+
+export function subscribeToPendingQuestionsForTeacher(
+  callback: (questions: FatawaQuestion[]) => void
+): () => void {
+  return subscribeToQuestionsForTeacher({ status: 'pending' }, callback);
 }
 
 export async function answerFatawaQuestion(params: {
@@ -251,16 +303,24 @@ export async function answerFatawaQuestion(params: {
     if (qData.student_id) {
       try {
         const notifRef = doc(collection(db, 'notifications'));
+        const dedupeId = `fatwa_ans:${params.questionId}:${Date.now()}`;
         await setDoc(notifRef, {
           id: notifRef.id,
           recipient_id: qData.student_id,
           user_id: qData.student_id,
+          actor_id: params.teacherUid,
+          channel: 'announcements',
+          event: 'system_alert',
           type: 'fatwa_answered',
+          category: 'fatwa_answered',
           title: 'شرعی مسئلہ کا جواب (Fatwa Answered)',
+          message: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
           body: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
           route: `/fatawa/${params.questionId}`,
-          read: false,
+          read: { [qData.student_id]: false },
+          dedupe_id: dedupeId,
           created_at: serverTimestamp(),
+          created_at_ms: Date.now(),
         });
       } catch (err) {
         console.warn('[Fatawa] Notification write skipped:', err);
