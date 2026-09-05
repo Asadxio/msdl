@@ -138,30 +138,33 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
       console.log('[Notifications] getDevicePushTokenAsync ERROR', devErr);
     }
 
-    const primaryToken = token || nativeFcmToken;
-    console.log('[Notifications] Device push token result', { hasToken: Boolean(primaryToken), hasExpo: Boolean(token), hasNative: Boolean(nativeFcmToken) });
+    // For standalone APK/Android native builds, prefer native FCM token directly
+    // so push notifications are delivered straight via Firebase Admin SDK without Expo relay dependence.
+    const primaryToken = nativeFcmToken || token;
+    console.log('[Notifications] Device push token result', { hasToken: Boolean(primaryToken), hasNative: Boolean(nativeFcmToken), hasExpo: Boolean(token) });
     if (!primaryToken) return null;
 
     const userPatch: Record<string, unknown> = {
       fcm_token_updated_at: serverTimestamp(),
     };
-    if (token) {
-      userPatch.expo_push_tokens = arrayUnion(token);
-    }
     if (nativeFcmToken) {
       userPatch.fcm_tokens = arrayUnion(nativeFcmToken);
+    }
+    if (token) {
+      userPatch.expo_push_tokens = arrayUnion(token);
     }
 
     await withTimeout(setDoc(doc(db, 'users', userId), userPatch, { merge: true }), 5000).catch(() => {});
 
     await withTimeout(setDoc(doc(db, 'user_tokens', userId), {
       token: primaryToken,
-      expoPushToken: token || primaryToken,
       fcmToken: nativeFcmToken || primaryToken,
+      expoPushToken: token || primaryToken,
       userId,
       platform: Device.osName || 'android',
       updatedAt: serverTimestamp(),
     }, { merge: true }), 5000).catch(() => {});
+
 
     console.log('[Notifications] Device push token saved');
 

@@ -40,38 +40,57 @@ async function getTokensForUids(uids: string[]): Promise<{ uid: string; token: s
 
   await Promise.allSettled(
     uids.map(async (uid) => {
-      // 1. Check user_tokens collection
+      let chosenToken = "";
+
+      // 1. Check user_tokens collection doc
       const snap = await collections.userTokens().doc(uid).get();
       if (snap.exists) {
         const d = snap.data()!;
-        const primary = d.expoPushToken || d.token || d.fcmToken || "";
-        if (primary && typeof primary === "string" && !seen.has(primary)) {
-          seen.add(primary);
-          results.push({ uid, token: primary.trim() });
-          return;
+        // Prefer native FCM token directly because Firebase Admin can deliver directly to Android without Expo FCM credentials
+        const fcmCandidate = (typeof d.fcmToken === "string" && d.fcmToken.trim()) ? d.fcmToken.trim() : "";
+        const tokenCandidate = (typeof d.token === "string" && d.token.trim()) ? d.token.trim() : "";
+        const expoCandidate = (typeof d.expoPushToken === "string" && d.expoPushToken.trim()) ? d.expoPushToken.trim() : "";
+
+        // If fcmToken is a native token (not ExponentPushToken), use it first!
+        if (fcmCandidate && !fcmCandidate.startsWith("ExponentPushToken[") && !fcmCandidate.startsWith("ExpoPushToken[")) {
+          chosenToken = fcmCandidate;
+        } else if (tokenCandidate && !tokenCandidate.startsWith("ExponentPushToken[") && !tokenCandidate.startsWith("ExpoPushToken[")) {
+          chosenToken = tokenCandidate;
+        } else if (expoCandidate) {
+          chosenToken = expoCandidate;
+        } else if (tokenCandidate) {
+          chosenToken = tokenCandidate;
         }
       }
 
-      // 2. Fallback: check users collection doc (expo_push_tokens / fcm_tokens)
-      const userDoc = await collections.users().doc(uid).get();
-      if (userDoc.exists) {
-        const uData = userDoc.data()!;
-        const expoList: string[] = Array.isArray(uData.expo_push_tokens) ? uData.expo_push_tokens : [];
-        const fcmList: string[] = Array.isArray(uData.fcm_tokens) ? uData.fcm_tokens : [];
-        const combined = [...expoList, ...fcmList].filter((t) => typeof t === "string" && t.trim());
-        for (const token of combined) {
-          const t = token.trim();
-          if (!seen.has(t)) {
-            seen.add(t);
-            results.push({ uid, token: t });
-            break; // One active token per user
+      // 2. Fallback: check users collection doc (fcm_tokens / expo_push_tokens)
+      if (!chosenToken || chosenToken.startsWith("ExponentPushToken[") || chosenToken.startsWith("ExpoPushToken[")) {
+        const userDoc = await collections.users().doc(uid).get();
+        if (userDoc.exists) {
+          const uData = userDoc.data()!;
+          const fcmList: string[] = Array.isArray(uData.fcm_tokens) ? uData.fcm_tokens : [];
+          const expoList: string[] = Array.isArray(uData.expo_push_tokens) ? uData.expo_push_tokens : [];
+
+          // Look for any native FCM token first
+          const nativeFcm = fcmList.find((t) => typeof t === "string" && t.trim() && !t.startsWith("ExponentPushToken[") && !t.startsWith("ExpoPushToken["));
+          if (nativeFcm) {
+            chosenToken = nativeFcm.trim();
+          } else if (!chosenToken) {
+            const anyToken = [...expoList, ...fcmList].find((t) => typeof t === "string" && t.trim());
+            if (anyToken) chosenToken = anyToken.trim();
           }
         }
+      }
+
+      if (chosenToken && !seen.has(chosenToken)) {
+        seen.add(chosenToken);
+        results.push({ uid, token: chosenToken });
       }
     })
   );
   return results;
 }
+
 
 async function getUidsForRole(role: string): Promise<string[]> {
   const snap = await db.collection("users")
