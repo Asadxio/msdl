@@ -14,7 +14,7 @@ export async function createNotificationAsAdmin(
   profile: UserProfile | null,
   payload: NotificationPayload
 ): Promise<boolean> {
-  if (profile?.role !== 'admin') return false;
+  if (profile?.role !== 'admin' && profile?.role !== 'super_admin') return false;
   const title = payload.title.trim();
   const message = payload.message.trim();
   const userId = (payload.user_id || 'all').trim() || 'all';
@@ -45,7 +45,7 @@ export async function createRoleNotificationAsAdmin(
   profile: UserProfile | null,
   payload: NotificationPayload & { roles: ('student' | 'teacher')[]; category?: string }
 ): Promise<boolean> {
-  if (profile?.role !== 'admin') return false;
+  if (profile?.role !== 'admin' && profile?.role !== 'super_admin') return false;
   const title = payload.title.trim();
   const message = payload.message.trim();
   const safeRoles = Array.isArray(payload.roles) ? payload.roles : [];
