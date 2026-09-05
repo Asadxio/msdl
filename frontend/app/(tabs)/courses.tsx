@@ -6,12 +6,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY, getCourseImage } from '@/constants/theme';
 import { useData, Course } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { EmptyState, FadeInView, ScalePressable } from '@/components/ui';
 import { getPerformanceState, registerPerformanceSurface, trackPerformanceMetric } from '@/lib/performanceEngine';
+
 
 const CourseCard = memo(function CourseCard({ course, index }: { course: Course; index: number }) {
   const router = useRouter();
@@ -114,6 +115,17 @@ export default function CoursesScreen() {
   const router = useRouter();
   const { profile } = useAuth();
   const { courses, loading, refetch, getCourseProgress, isEnrolledInCourse, enrolledCourses } = useData();
+
+  // Auto-fetch fresh courses whenever screen is opened / focused
+  useFocusEffect(
+    useCallback(() => {
+      if (refetch) {
+        refetch();
+      }
+    }, [refetch])
+  );
+
+
   const safeCourses = useMemo(() => (Array.isArray(courses) ? courses : []), [courses]);
   const [academicTab, setAcademicTab] = useState<'enrolled' | 'catalog'>('enrolled');
   const [search, setSearch] = useState('');

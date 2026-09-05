@@ -438,10 +438,14 @@ export default function ManageAcademicsScreen() {
       Alert.alert('Missing', 'Course name is required');
       return;
     }
-    const normalizedMeetLink = normalizeMeetUrl(courseForm.meet_link);
-    if (!normalizedMeetLink || !isValidHttpsUrl(normalizedMeetLink)) {
-      Alert.alert('Invalid Meet Link', 'Please add a valid http/https class link (Google Meet/Drive/YouTube links are supported).');
-      return;
+
+    let normalizedMeetLink = '';
+    if (courseForm.meet_link && courseForm.meet_link.trim()) {
+      normalizedMeetLink = normalizeMeetUrl(courseForm.meet_link);
+      if (!isValidHttpsUrl(normalizedMeetLink)) {
+        Alert.alert('Invalid Meet Link', 'Please add a valid http/https class link (Google Meet/Drive/YouTube links are supported).');
+        return;
+      }
     }
 
     const payload = {
@@ -458,33 +462,40 @@ export default function ManageAcademicsScreen() {
 
     try {
       setActionLoading(true);
+      const isEditing = Boolean(editingCourseId);
       if (editingCourseId) {
         await updateDoc(doc(db, 'courses', editingCourseId), payload);
-        await createAdminLog(profile, { action: 'course_update', performed_by: profile?.email || profile?.name || 'admin', target_id: editingCourseId, details: payload.name }).catch(() => {});
+        createAdminLog(profile, { action: 'course_update', performed_by: profile?.email || profile?.name || 'admin', target_id: editingCourseId, details: payload.name }).catch(() => {});
       } else {
         await addDoc(collection(db, 'courses'), {
           ...payload,
           created_at: serverTimestamp(),
         });
-        await createAdminLog(profile, { action: 'course_create', performed_by: profile?.email || profile?.name || 'admin', details: payload.name }).catch(() => {});
+        createAdminLog(profile, { action: 'course_create', performed_by: profile?.email || profile?.name || 'admin', details: payload.name }).catch(() => {});
       }
+
       setCourseForm(INITIAL_COURSE);
       setEditingCourseId(null);
+
+      // Trigger announcements in background (don't block UI)
       const announcementMessage = `${payload.name} - ${payload.schedule}${payload.class_time ? ` at ${payload.class_time}` : ''}`;
-      await createNotificationAsAdmin(profile, {
-        title: editingCourseId ? 'Class Schedule Updated' : 'New Class Scheduled',
+      createNotificationAsAdmin(profile, {
+        title: isEditing ? 'Class Schedule Updated' : 'New Class Scheduled',
         message: announcementMessage,
         user_id: 'all',
       }).catch((err) => console.warn('[manage-academics] Announcement notification failed:', err));
-      if (!editingCourseId) {
-        await createRoleNotificationAsAdmin(profile, {
+
+      if (!isEditing) {
+        createRoleNotificationAsAdmin(profile, {
           title: 'New Course Available',
           message: `${payload.name} has been added. Open Courses to enroll now.`,
           roles: ['student'],
           category: 'new_course',
         }).catch((err) => console.warn('[manage-academics] Role notification failed:', err));
       }
+
       await fetchData();
+      Alert.alert('Success', isEditing ? 'Course updated successfully!' : 'Course added successfully!');
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'courses', operation: editingCourseId ? 'update' : 'add', path: editingCourseId ? `courses/${editingCourseId}` : 'courses', query: editingCourseId ? 'update course' : 'create course', role: profile?.role, status: profile?.status }, error);
       Alert.alert('Save Failed', 'Could not save course. Please try again.');

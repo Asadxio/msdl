@@ -314,7 +314,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   try {
                     await setDoc(doc(db, 'users', firebaseUser.uid), {
                       name: firebaseUser.displayName || 'Owner',
-                      email: firebaseUser.email.trim().toLowerCase(),
+                      email: (firebaseUser.email || '').trim().toLowerCase(),
                       role: 'super_admin',
                       status: 'approved',
                       founder: true,
@@ -352,12 +352,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   try {
                     await setDoc(doc(db, 'users', firebaseUser.uid), {
                       name: snapData.name || firebaseUser.displayName || 'Owner',
-                      email: firebaseUser.email.trim().toLowerCase(),
+                      email: (firebaseUser.email || '').trim().toLowerCase(),
                       role: 'super_admin',
                       status: 'approved',
                       founder: true,
                       updated_at: serverTimestamp(),
                     }, { merge: true });
+
                   } catch (healErr) {
                     logger.warn('[AuthContext] Failed to self-heal owner user document:', healErr);
                   }
