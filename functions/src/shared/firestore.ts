@@ -6,6 +6,9 @@
  */
 import { db } from "../config/admin";
 
+// Re-export db for modules that need raw collection access (e.g., sendNotification role queries)
+export { db };
+
 export const collections = {
   users: () => db.collection("users"),
   courses: () => db.collection("courses"),
@@ -19,6 +22,7 @@ export const collections = {
   enrollments: () => db.collection("enrollments"),
   subscriptions: () => db.collection("subscriptions"),
   certificates: () => db.collection("certificates"),
+  certificateVerifications: () => db.collection("certificate_verifications"),
   notifications: () => db.collection("notifications"),
   userTokens: () => db.collection("user_tokens"),
   statusChecks: () => db.collection("status_checks"),

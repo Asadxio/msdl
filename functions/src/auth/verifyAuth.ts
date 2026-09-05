@@ -46,6 +46,13 @@ export async function requireAuthenticatedUser(
 
   const userData = userSnap.data()!;
   const role = (userData.role ?? "student") as UserRole;
+  const status = (userData.status ?? "pending") as string;
+
+  // Reject deactivated or rejected users — they must not access any Cloud Functions
+  if (status === "deactivated" || status === "rejected") {
+    logger.warn(`[requireAuthenticatedUser] Access denied: uid=${uid} status=${status}`);
+    throw unauthenticatedError();
+  }
 
   return { uid, email, role };
 }

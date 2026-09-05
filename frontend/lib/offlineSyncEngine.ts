@@ -121,11 +121,7 @@ async function dispatchAction(action: OfflineAction): Promise<void> {
   // centralized route handler; preserve feature compatibility by delegating to existing APIs
   switch (action.type) {
     case 'analytics': {
-      const token = await auth.currentUser?.getIdToken();
-      await fetch(apiUrl('/analytics/ingest'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
-        body: JSON.stringify({ events: [action.payload] }),
-      });
+      // Remote analytics ingestion eliminated; locally recorded
       return;
     }
     default:

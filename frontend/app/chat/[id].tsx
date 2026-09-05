@@ -4,11 +4,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, AppState,
   KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Alert, Image, Modal,
+  PanResponder, Animated,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import {
   arrayRemove, arrayUnion, collection, deleteField, doc, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, startAfter, updateDoc, where,
 } from 'firebase/firestore';
@@ -30,7 +32,7 @@ import { logChatMetric } from '@/lib/chatTelemetry';
 import { ReportReasonModal } from '@/components/ReportReasonModal';
 import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
-import { canSendMessage, canDeleteMessageForEveryone, canAddReaction } from '@/lib/chatPermissions';
+import { canSendMessage, canDeleteMessageForEveryone, canDeleteMessageForEveryoneWithWindow, canAddReaction } from '@/lib/chatPermissions';
 
 type ChatMeta = {
   id: string;
@@ -304,6 +306,110 @@ function VoiceNotePlayer({
   );
 }
 
+/**
+ * Swipeable Message Container for Swipe-to-Reply
+ */
+const SwipeableMessageRow = React.memo(function SwipeableMessageRow({
+  children,
+  onSwipeReply,
+  onLongPress,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onSwipeReply: () => void;
+  onLongPress: () => void;
+  disabled?: boolean;
+}) {
+  const panX = useRef(new Animated.Value(0)).current;
+  const replyTriggeredRef = useRef(false);
+
+  const panResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        if (disabled) return false;
+        // Only horizontal swipe to right (dx > 12) without major vertical displacement
+        return gestureState.dx > 12 && Math.abs(gestureState.dy) < 18;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (disabled) return;
+        if (gestureState.dx > 0) {
+          const clamped = Math.min(gestureState.dx, 70);
+          panX.setValue(clamped);
+          if (clamped >= 50 && !replyTriggeredRef.current) {
+            replyTriggeredRef.current = true;
+            try {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            } catch {}
+          }
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (disabled) return;
+        if (gestureState.dx >= 50 || replyTriggeredRef.current) {
+          onSwipeReply();
+        }
+        replyTriggeredRef.current = false;
+        Animated.spring(panX, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 4,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        replyTriggeredRef.current = false;
+        Animated.spring(panX, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    });
+  }, [disabled, onSwipeReply, panX]);
+
+  const replyIconOpacity = panX.interpolate({
+    inputRange: [0, 25, 50],
+    outputRange: [0, 0.4, 1],
+    extrapolate: 'clamp',
+  });
+
+  const replyIconScale = panX.interpolate({
+    inputRange: [0, 40, 55],
+    outputRange: [0.6, 0.9, 1.15],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View style={styles.swipeableContainer}>
+      <Animated.View
+        style={[
+          styles.swipeReplyIconWrap,
+          {
+            opacity: replyIconOpacity,
+            transform: [{ scale: replyIconScale }],
+          },
+        ]}
+      >
+        <View style={styles.swipeReplyCircle}>
+          <Ionicons name="arrow-undo" size={16} color="#fff" />
+        </View>
+      </Animated.View>
+
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={{ transform: [{ translateX: panX }] }}
+      >
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onLongPress={onLongPress}
+          delayLongPress={260}
+        >
+          {children}
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+});
+
 const MessageBubble = React.memo(function MessageBubble({
   isBroadcast,
   canViewBroadcastReceipts,
@@ -365,13 +471,19 @@ const MessageBubble = React.memo(function MessageBubble({
         {/* Quoted reply snippet */}
         {item.reply_snippet ? (
           <TouchableOpacity
-            style={[styles.bubbleReply, mine && { backgroundColor: 'rgba(255,255,255,0.18)', borderLeftColor: '#fff' }]}
+            style={[styles.bubbleReply, mine && styles.bubbleReplyMine]}
             onPress={() => onReplySnippetPress?.(item.reply_to)}
-            activeOpacity={0.7}
+            activeOpacity={0.75}
           >
-            <Text style={[styles.bubbleReplyText, mine && { color: 'rgba(255,255,255,0.95)' }]} numberOfLines={1}>
-              ↩ {item.reply_snippet}
-            </Text>
+            <View style={[styles.bubbleReplyBar, mine && styles.bubbleReplyBarMine]} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bubbleReplySender, mine && { color: '#fff' }]} numberOfLines={1}>
+                {item.reply_to ? 'Replied Message' : 'Quoted Message'}
+              </Text>
+              <Text style={[styles.bubbleReplyText, mine && { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={2}>
+                {item.reply_snippet}
+              </Text>
+            </View>
           </TouchableOpacity>
         ) : null}
 
@@ -884,15 +996,33 @@ export default function ChatDetailScreen() {
   const canSendMessages = !isComposerBlocked;
   const canSend = text.trim().length > 0 && canSendMessages;
 
-  const othersTyping = useMemo(() => {
-    if (!chat?.typing || !user?.uid) return false;
+  const typingUserNames = useMemo(() => {
+    if (!chat?.typing || !user?.uid) return [];
     const now = Date.now();
-    return Object.entries(chat.typing).some(([uid, val]) => {
+    const names: string[] = [];
+    Object.entries(chat.typing).forEach(([uid, val]) => {
       const typingVal = val as any;
       const lastMs = typingVal?.updated_at?.toDate ? typingVal.updated_at.toDate().getTime() : 0;
-      return uid !== user.uid && typingVal?.is_typing === true && now - lastMs < 12000;
+      if (uid !== user.uid && typingVal?.is_typing === true && now - lastMs < 10000) {
+        const name = chat.participant_names?.[uid] || (uid === directTargetId ? targetProfile?.name : undefined) || 'Someone';
+        names.push(name);
+      }
     });
-  }, [chat?.typing, user?.uid]);
+    return names;
+  }, [chat?.participant_names, chat?.typing, directTargetId, targetProfile?.name, user?.uid]);
+
+  const othersTyping = typingUserNames.length > 0;
+
+  const typingStatusText = useMemo(() => {
+    if (typingUserNames.length === 0) return '';
+    if (typingUserNames.length === 1) {
+      return `${typingUserNames[0]} is typing... (لکھ رہے ہیں...)`;
+    }
+    if (typingUserNames.length === 2) {
+      return `${typingUserNames[0]} and ${typingUserNames[1]} are typing...`;
+    }
+    return `${typingUserNames.length} people are typing...`;
+  }, [typingUserNames]);
 
   const setTyping = useCallback((isTyping: boolean) => {
     if (!id || !user?.uid || !canSendMessages) return;
@@ -903,7 +1033,7 @@ export default function ChatDetailScreen() {
     setText(value);
     setTyping(!!value.trim());
     if (typingTimer.current) clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => setTyping(false), 1500);
+    typingTimer.current = setTimeout(() => setTyping(false), 2000);
   }, [setTyping]);
 
   const ensureParentChatDoc = useCallback(async () => {
@@ -1491,19 +1621,55 @@ export default function ChatDetailScreen() {
   }, [user?.uid]);
 
   const unsendForEveryone = useCallback(async (message: MessageItem) => {
-    if (!user?.uid || message.sender_id !== user.uid) return;
-    try {
-      await updateDoc(doc(db, 'messages', message.id), {
-        text: 'This message was unsent.',
-        deleted_for_everyone: true,
-        unsent_by: user.uid,
-        unsent_at: serverTimestamp(),
-      });
-    } catch (error: unknown) {
-      logFirestoreFailure({ collection: 'messages', operation: 'update', query: `doc messages/${message.id} unsend for everyone` }, error);
-      setSendError('Could not unsend message. Please try again.');
+    if (!user?.uid) return;
+    
+    // Check permission with 30-minute window (admins bypass)
+    const msgContext = {
+      id: message.id,
+      sender_id: message.sender_id,
+      chat_id: id || '',
+      created_at_ms: toMillis(message),
+    };
+    const canDelete = canDeleteMessageForEveryoneWithWindow(
+      { uid: user.uid, role: profile?.role || 'student' },
+      msgContext,
+    );
+
+    if (!canDelete) {
+      Alert.alert(
+        'Deletion Period Expired',
+        'Messages can only be deleted for everyone within 30 minutes of sending.',
+      );
+      return;
     }
-  }, [user?.uid]);
+
+    Alert.alert(
+      'Delete for everyone?',
+      'This message will be deleted for all participants in this chat.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete for everyone',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await updateDoc(doc(db, 'messages', message.id), {
+                text: '🚫 This message was deleted',
+                deleted_for_everyone: true,
+                is_deleted: true,
+                unsent_by: user.uid,
+                unsent_at: serverTimestamp(),
+              });
+              setFeedback({ type: 'success', text: 'Message deleted for everyone' });
+            } catch (error: unknown) {
+              logFirestoreFailure({ collection: 'messages', operation: 'update', query: `doc messages/${message.id} unsend for everyone` }, error);
+              setSendError('Could not delete message. Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  }, [id, profile?.role, user?.uid]);
 
   const toggleReaction = useCallback(async (message: MessageItem, emoji: string) => {
     if (!user?.uid || !id) return;
@@ -1650,11 +1816,18 @@ export default function ChatDetailScreen() {
             </View>
           </View>
         )}
-        <TouchableOpacity activeOpacity={0.85} onLongPress={() => openMessageActions(item)}>
+        <SwipeableMessageRow
+          disabled={!canSendMessages || item.is_deleted || item.deleted_for_everyone}
+          onSwipeReply={() => {
+            setReplyTarget(item);
+            setFeedback({ type: 'success', text: `Replying to ${item.sender_name || 'User'}` });
+          }}
+          onLongPress={() => openMessageActions(item)}
+        >
           <MessageBubble
             isBroadcast={chat?.type === 'broadcast'}
             canViewBroadcastReceipts={isAdmin || isTeacher}
-            item={{ ...item, text: item.deleted_for_everyone ? 'This message was deleted.' : item.text }}
+            item={{ ...item, text: item.deleted_for_everyone ? '🚫 This message was deleted' : item.text }}
             mine={mine}
             showSender={!mine && chat?.type !== 'direct'}
             seenByOthers={seenByOthers}
@@ -1666,7 +1839,7 @@ export default function ChatDetailScreen() {
             onReport={() => setReportTarget(item)}
             onDelete={() => openMessageActions(item)}
           />
-        </TouchableOpacity>
+        </SwipeableMessageRow>
       </View>
     );
   }, [chat?.type, chatParticipants.length, isAdmin, isTeacher, openMessageActions, retryMessage, scrollToQuotedMessage, toggleReaction, user?.uid, visibleMessages]);
@@ -1765,12 +1938,17 @@ export default function ChatDetailScreen() {
               </View>
             ) : null}
           </View>
-          {targetPresence ? (
-            <Text style={[styles.presenceText, targetPresence.is_online && styles.presenceOnline]}>
-              {targetPresence.is_online ? '● Online' : formatLastSeen(targetPresence.last_seen)}
+          {othersTyping ? (
+            <Text style={styles.typingText} numberOfLines={1}>
+              {typingStatusText}
             </Text>
-          ) : null}
-          {othersTyping ? <Text style={styles.typingText}>Typing...</Text> : null}
+          ) : (
+            targetPresence ? (
+              <Text style={[styles.presenceText, targetPresence.is_online && styles.presenceOnline]}>
+                {targetPresence.is_online ? '● Online' : formatLastSeen(targetPresence.last_seen)}
+              </Text>
+            ) : null
+          )}
         </View>
 
         <ScalePressable
@@ -2036,14 +2214,48 @@ export default function ChatDetailScreen() {
 
       {/* Composer Area */}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Real-time Typing Indicator Bar above composer */}
+        {othersTyping && (
+          <View style={styles.floatingTypingBar}>
+            <View style={styles.typingDotWrap}>
+              <View style={[styles.typingDot, { opacity: 0.8 }]} />
+              <View style={[styles.typingDot, { opacity: 0.6 }]} />
+              <View style={[styles.typingDot, { opacity: 0.4 }]} />
+            </View>
+            <Text style={styles.floatingTypingText} numberOfLines={1}>
+              {typingStatusText}
+            </Text>
+          </View>
+        )}
+
         {/* Reply Quote Banner */}
         {replyTarget && (
           <View style={styles.replyBanner}>
             <View style={styles.replyBannerBar} />
+            <Ionicons
+              name={
+                replyTarget.message_type === 'audio'
+                  ? 'mic'
+                  : replyTarget.message_type === 'image'
+                  ? 'image'
+                  : replyTarget.message_type === 'document'
+                  ? 'document-text'
+                  : 'chatbubble-ellipses-outline'
+              }
+              size={18}
+              color={COLORS.primary}
+              style={{ marginRight: 4 }}
+            />
             <View style={{ flex: 1 }}>
               <Text style={styles.replyBannerSender}>Replying to {replyTarget.sender_name || 'User'}</Text>
               <Text style={styles.replyBannerSnippet} numberOfLines={1}>
-                {replyTarget.text || replyTarget.media_name || 'Attachment'}
+                {replyTarget.message_type === 'audio'
+                  ? '🎤 Voice Message'
+                  : replyTarget.message_type === 'image'
+                  ? '📷 Photo'
+                  : replyTarget.message_type === 'document'
+                  ? `📄 ${replyTarget.media_name || 'Document'}`
+                  : (replyTarget.text || 'Message')}
               </Text>
             </View>
             <TouchableOpacity onPress={() => setReplyTarget(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -2279,12 +2491,31 @@ const styles = StyleSheet.create({
   replyBannerSender: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   replyBannerSnippet: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   bubbleReply: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.05)',
     padding: 6,
     borderRadius: RADIUS.sm,
     marginBottom: 4,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
+    gap: 6,
+  },
+  bubbleReplyMine: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  bubbleReplyBar: {
+    width: 3,
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+  },
+  bubbleReplyBarMine: {
+    backgroundColor: '#fff',
+  },
+  bubbleReplySender: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 1,
   },
   bubbleReplyText: {
     fontSize: 12,
@@ -2536,6 +2767,55 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  floatingTypingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    backgroundColor: COLORS.surfaceAlt,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  typingDotWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+  },
+  floatingTypingText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '600',
+    flex: 1,
+  },
+  swipeableContainer: {
+    position: 'relative',
+    width: '100%',
+  },
+  swipeReplyIconWrap: {
+    position: 'absolute',
+    left: 8,
+    top: '50%',
+    marginTop: -16,
+    zIndex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipeReplyCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.card,
   },
 });
 

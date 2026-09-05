@@ -23,7 +23,8 @@ import {
   setDoc,
   runTransaction,
 } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { logger } from '@/lib/logger';
 import { buildNotificationPayload, buildNotificationRoute } from '@/lib/notificationPayloads';
 import type { DispatchNotificationInput, NotificationRecordInput } from '@/lib/notificationTypes';
@@ -168,7 +169,7 @@ type BackendPushResult = {
   raw?: unknown;
 };
 
-async function sendPushViaBackend(params: {
+async function sendPushViaCloudFunction(params: {
   title: string;
   body: string;
   data: Record<string, unknown>;
@@ -177,96 +178,31 @@ async function sendPushViaBackend(params: {
   dedupeId: string;
   channel: string;
 }): Promise<BackendPushResult> {
-  const base = String(
-    process.env.EXPO_PUBLIC_PUSH_API_URL ||
-      process.env.EXPO_PUBLIC_LIVE_API_URL ||
-      String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '')
-  ).replace(/\/$/, '');
-
-  if (!base) {
-    logger.warn('[notification_push_skipped]', {
-      reason: 'no_backend_url',
-      dedupe_id: params.dedupeId,
-    });
-    return { ok: false, sent: 0, failed: 0, skipped: 0, noToken: 0, providerErrors: 1 };
-  }
-
-  let idToken: string | undefined;
   try {
-    idToken = await auth.currentUser?.getIdToken?.();
-  } catch {
-    // Continue without token — backend will reject with 401 and we'll log it
-  }
-
-  if (!idToken) {
-    logger.warn('[notification_push_skipped]', {
-      reason: 'no_auth_token',
-      dedupe_id: params.dedupeId,
-    });
-    return { ok: false, sent: 0, failed: 0, skipped: 0, noToken: 0, providerErrors: 1 };
-  }
-
-  try {
-    const res = await withTimeout(
-      fetch(`${base}/api/push/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          title: params.title,
-          body: params.body,
-          data: {
-            ...params.data,
-            channelId: params.channel === 'live_classes' ? 'announcements' : params.channel,
-            push_dedupe_id: params.dedupeId,
-          },
-          send_to_all: params.sendToAll,
-          user_ids: params.sendToAll ? [] : params.recipientIds,
-          event_type: params.data.type || 'announcement',
-        }),
-      }),
-      6000
-    );
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      logger.warn('[notification_push_provider_error]', {
-        status: res.status,
-        body: body.slice(0, 200),
-        dedupe_id: params.dedupeId,
-      });
-      return { ok: false, sent: 0, failed: 1, skipped: 0, noToken: 0, providerErrors: 1, raw: body };
+    // Convert data values to strings for FCM compatibility
+    const stringData: Record<string, string> = {};
+    for (const [k, v] of Object.entries(params.data)) {
+      if (v !== null && v !== undefined) {
+        stringData[k] = String(v);
+      }
     }
 
-    const json = await res.json().catch(() => ({})) as Record<string, unknown>;
-
-    // Backend returns { ok, sent, failed, stale_removed, ... }
-    const sent = Number(json.sent ?? 0);
-    const failed = Number(json.failed ?? 0);
-
-    logger.info('[notification_push_delivered]', {
-      dedupe_id: params.dedupeId,
-      sent,
-      failed,
-      raw: json,
+    const callSendNotification = httpsCallable<unknown, { sent: number; failed: number; noToken: number }>(functions, 'sendNotification');
+    
+    const result = await callSendNotification({
+      title: params.title,
+      body: params.body,
+      data: stringData,
+      ...(params.sendToAll
+        ? { sendToAll: true }
+        : { recipientUids: params.recipientIds }),
     });
 
-    return {
-      ok: res.ok,
-      sent,
-      failed,
-      skipped: 0,
-      noToken: 0,
-      providerErrors: failed,
-      raw: json,
-    };
+    const { sent, failed, noToken } = result.data;
+    logger.info('[notification_push_cf_delivered]', { sent, failed, noToken, dedupe_id: params.dedupeId });
+    return { ok: true, sent, failed, skipped: 0, noToken, providerErrors: failed };
   } catch (err) {
-    logger.warn('[notification_push_network_error]', {
-      error: String(err),
-      dedupe_id: params.dedupeId,
-    });
+    logger.warn('[notification_push_cf_error]', { error: String(err), dedupe_id: params.dedupeId });
     return { ok: false, sent: 0, failed: 0, skipped: 0, noToken: 0, providerErrors: 1 };
   }
 }
@@ -398,7 +334,7 @@ export async function dispatchNotification(
   }
 
   // ── Step 2: Push via backend (FCM + Expo) ────────────────────────────────
-  const pushResult = await sendPushViaBackend({
+  const pushResult = await sendPushViaCloudFunction({
     title: input.title,
     body: input.body,
     data: payload,

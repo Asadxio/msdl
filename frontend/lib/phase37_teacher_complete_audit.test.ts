@@ -120,7 +120,7 @@ describe('Phase 37: Teacher Role Complete Audit & Workspace Hardening', () => {
   describe('4. Firestore Security Rules Alignment', () => {
     it('verifies isApprovedVerifiedUser includes all approved institutional users', () => {
       const rules = fs.readFileSync(path.join(__dirname, '../../firestore.rules'), 'utf8');
-      expect(rules).toContain("get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved'");
+      expect(rules).toContain("userDoc(request.auth.uid).status in ['approved', 'active']");
     });
 
     it('verifies audio_lessons and live_classes permissions for teachers', () => {

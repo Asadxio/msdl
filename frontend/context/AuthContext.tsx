@@ -313,6 +313,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
+              // After email verification detected
+              if (firebaseUser.emailVerified && nextProfile.status === 'pending' && nextProfile.role === 'student') {
+                try {
+                  await updateDoc(doc(db, 'users', firebaseUser.uid), {
+                    status: 'approved',
+                    updated_at: serverTimestamp(),
+                  });
+                  // Also update public_profiles
+                  await updateDoc(doc(db, 'public_profiles', firebaseUser.uid), {
+                    status: 'approved',
+                    updated_at: serverTimestamp(),
+                  });
+                  nextProfile.status = 'approved';
+                } catch (e) {
+                  // Non-fatal; user can re-login to retry
+                }
+              }
+
               setProfile((prev) => {
                 if (prev && JSON.stringify(prev) === JSON.stringify(nextProfile)) {
                   return prev;
@@ -459,7 +477,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: safeName,
           email: safeEmail,
           role: safeRole,
-          status: 'approved',
+          status: 'pending',
           referral_code: generateReferralCode(name),
           referred_by: referrerId,
           referral_count: 0,
@@ -500,7 +518,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           uid: cred.user.uid,
           name: safeName,
           role: safeRole,
-          status: 'approved',
+          status: 'pending',
           searchable: true,
           is_active: true,
           photo_url: '',
@@ -514,14 +532,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (referrerId) {
-        debugLog('[SIGNUP_DEBUG] Attempting update to referrer referral_count:', referrerId);
+        debugLog('[SIGNUP_DEBUG] Recording referral attribution:', referrerId);
         try {
-          await updateDoc(doc(db, 'users', referrerId), {
-            referral_count: increment(1),
-            updated_at: serverTimestamp(),
-          });
-
-          // Write referral record
+          // Multi-level gamified counter removed; write clean attribution record
           const recordId = 'ref_' + cred.user.uid;
           const nameParts = safeName.split(/\s+/);
           const maskedName = (nameParts[0] || 'طالبہ') + ' (محفوظ برائے پردہ)';

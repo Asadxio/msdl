@@ -191,70 +191,6 @@ type PushPayload = {
   data?: Record<string, any>;
 };
 
-async function sendDirectExpoPushFallback(payload: {
-  title: string;
-  body: string;
-  data?: Record<string, any>;
-  user_ids?: string[];
-  send_to_all?: boolean;
-}): Promise<void> {
-  try {
-    const tokensSet = new Set<string>();
-    if (payload.user_ids && payload.user_ids.length > 0) {
-      for (const uid of payload.user_ids.slice(0, 50)) {
-        try {
-          const userSnap = await getDoc(doc(db, 'users', uid));
-          if (userSnap.exists()) {
-            const data = userSnap.data();
-            const tokens = Array.isArray(data.expo_push_tokens) ? data.expo_push_tokens : [];
-            tokens.forEach((t: string) => {
-              if (t && t.startsWith('ExponentPushToken[')) tokensSet.add(t);
-            });
-          }
-        } catch {}
-      }
-    } else if (payload.send_to_all) {
-      try {
-        const q = query(collection(db, 'users'), limit(100));
-        const snaps = await getDocs(q);
-        snaps.forEach((docSnap) => {
-          const data = docSnap.data();
-          const tokens = Array.isArray(data.expo_push_tokens) ? data.expo_push_tokens : [];
-          tokens.forEach((t: string) => {
-            if (t && t.startsWith('ExponentPushToken[')) tokensSet.add(t);
-          });
-        });
-      } catch {}
-    }
-
-    const tokens = Array.from(tokensSet);
-    if (tokens.length === 0) return;
-
-    const messages = tokens.map((token) => ({
-      to: token,
-      sound: 'default',
-      title: payload.title,
-      body: payload.body,
-      data: payload.data || {},
-    }));
-
-    for (let i = 0; i < messages.length; i += 20) {
-      const batch = messages.slice(i, i + 20);
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Accept-Encoding': 'gzip, deflate',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(batch),
-      }).catch(() => {});
-    }
-  } catch (err) {
-    console.log('[Notifications] sendDirectExpoPushFallback ERROR', err);
-  }
-}
-
 async function requestBackendPush(payload: {
   title: string;
   body: string;
@@ -264,7 +200,6 @@ async function requestBackendPush(payload: {
 }): Promise<void> {
   try {
     if (!PUSH_API_URL || !auth.currentUser) {
-      await sendDirectExpoPushFallback(payload);
       return;
     }
     const idToken = await auth.currentUser.getIdToken();
@@ -280,8 +215,7 @@ async function requestBackendPush(payload: {
       throw new Error(`Push request failed with status ${response.status}`);
     }
   } catch (error) {
-    console.log('[Notifications] requestBackendPush failed, executing Direct Cloud Fallback...', error);
-    await sendDirectExpoPushFallback(payload);
+    console.log('[Notifications] requestBackendPush failed', error);
   }
 }
 

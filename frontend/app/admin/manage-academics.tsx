@@ -475,14 +475,14 @@ export default function ManageAcademicsScreen() {
         title: editingCourseId ? 'Class Schedule Updated' : 'New Class Scheduled',
         message: announcementMessage,
         user_id: 'all',
-      });
+      }).catch((err) => console.warn('[manage-academics] Announcement notification failed:', err));
       if (!editingCourseId) {
         await createRoleNotificationAsAdmin(profile, {
           title: 'New Course Available',
           message: `${payload.name} has been added. Open Courses to enroll now.`,
           roles: ['student'],
           category: 'new_course',
-        });
+        }).catch((err) => console.warn('[manage-academics] Role notification failed:', err));
       }
       await fetchData();
     } catch (error: unknown) {

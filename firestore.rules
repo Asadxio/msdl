@@ -6,24 +6,15 @@ service cloud.firestore {
     }
 
     function isVerified() {
-      return (isSignedIn()
-        && (
-          true
-          // Allow all approved users (admin-verified institutional roster)
-          || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
-        ));
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']);
     }
 
     function isApprovedVerifiedUser() {
-      return (isSignedIn()
-        && (
-          !exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          || userDoc(request.auth.uid).status != 'deactivated'
-          // Institutional roster check
-          || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved')
-        ));
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']);
     }
 
 
@@ -76,14 +67,14 @@ service cloud.firestore {
       return isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) == 'teacher'
-        && userDoc(request.auth.uid).status == 'approved';
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']);
     }
 
     function isStudent() {
       return isVerified()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && roleOf(request.auth.uid) == 'student'
-        && userDoc(request.auth.uid).status == 'approved';
+        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']);
     }
 
     function isSelf(uid) {
@@ -149,7 +140,7 @@ service cloud.firestore {
         && request.resource.data.email is string
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.role in ['student', 'teacher']
-        && request.resource.data.status in ['pending', 'approved']
+        && request.resource.data.status == 'pending'
         && request.resource.data.created_at is timestamp
         && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
@@ -882,9 +873,9 @@ service cloud.firestore {
     // For content tied to a specific course, require active enrollment.
     // Teachers/admins bypass enrollment check (they can see all content).
     function canReadCourseData(courseId, data) {
-      // Course metadata (title, description, price) is readable by all approved users.
-      // Course content (lessons, modules) requires enrollment — see canReadLearningContentForCourse.
-      return canReadLearningContent(data);
+      // Course catalog metadata (name, teacher, schedule, description) is readable by all signed-in users.
+      // Course sub-content (lessons, modules, assignments) requires enrollment — see canReadLearningContentForCourse.
+      return isSignedIn();
     }
 
     function canReadLearningContentForCourse(data) {
@@ -1205,14 +1196,14 @@ service cloud.firestore {
 
     // teachers collection
     match /teachers/{teacherId} {
-      allow read: if isApprovedVerifiedUser();
+      allow read: if isSignedIn();
       allow create, update: if isAdmin() && isValidTeacherWrite();
       allow delete: if isAdmin();
     }
 
     // library collection
     match /library/{bookId} {
-      allow read: if isApprovedVerifiedUser();
+      allow read: if isSignedIn();
       allow create, update: if isAdmin() && isValidLibraryWrite();
       allow delete: if isAdmin();
     }
@@ -1395,10 +1386,18 @@ service cloud.firestore {
     }
 
     match /certificates/{certificateId} {
-      allow get: if true;
+      allow get: if isApprovedVerifiedUser() && (resource.data.user_id == request.auth.uid || isTeacherOrAdmin());
       allow list: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
       allow create: if isTeacherOrAdmin();
       allow update, delete: if isAdmin();
+    }
+
+    // Public certificate verification — minimal safe data only (no UID, email, phone, internal metadata)
+    // Written by generateCertificate Cloud Function via Admin SDK.
+    match /certificate_verifications/{certificateId} {
+      allow get: if true;  // Public QR verification — safe fields only
+      allow list: if isAdmin();
+      allow create, update, delete: if false;  // Cloud Function Admin SDK only
     }
 
 
@@ -1600,7 +1599,8 @@ service cloud.firestore {
     }
 
     match /notification_dedupe/{dedupeId} {
-      allow read, create: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isApprovedVerifiedUser();
       allow update, delete: if false;
     }
 
@@ -1703,8 +1703,12 @@ service cloud.firestore {
         resource.data.student_id == request.auth.uid || 
         (resource.data.is_public == true && resource.data.status == 'answered')
       ));
-      allow create: if isSignedIn() && request.resource.data.student_id == request.auth.uid;
-      allow update: if (isTeacherOrAdmin() || (isSignedIn() && resource.data.student_id == request.auth.uid));
+      allow create: if isApprovedVerifiedUser() && request.resource.data.student_id == request.auth.uid;
+      allow update: if isTeacherOrAdmin()
+        || (isApprovedVerifiedUser()
+          && resource.data.student_id == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['question_text', 'updated_at']));
       allow delete: if isAdmin();
     }
 
@@ -1716,7 +1720,13 @@ service cloud.firestore {
 
     match /referral_records/{recordId} {
       allow read: if isSignedIn() && (isAdmin() || resource.data.referrer_uid == request.auth.uid || resource.data.referee_uid == request.auth.uid);
-      allow create: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.referee_uid == request.auth.uid
+        && request.resource.data.referrer_uid is string
+        && request.resource.data.referrer_uid != request.auth.uid
+        && request.resource.data.referee_uid is string
+        && request.resource.data.created_at is timestamp
+        && !exists(/databases/$(database)/documents/referral_records/$('ref_' + request.auth.uid));
       allow update, delete: if isAdmin();
     }
 

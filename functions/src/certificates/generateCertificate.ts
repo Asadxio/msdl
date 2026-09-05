@@ -134,7 +134,18 @@ export const generateCertificate = onCall(
 
     logger.info(`[generateCertificate] Certificate generated for uid=${uid} courseId=${courseId} certId=${certificateId}`);
 
-    // 11. Return
+    // 11. Write public verification record (minimal safe data — no UID, email, phone)
+    // This allows QR code public verification without exposing private data.
+    await collections.certificateVerifications().doc(certificateId).set({
+      certificateId,
+      courseTitle,
+      studentNameMasked: (studentName.split(' ')[0] || 'طالبہ') + ' (محفوظ)',
+      issuedAt,
+      status: 'issued',
+      institution: 'Madrasatu-s-Salikat Lil Banat',
+    });
+
+    // 12. Return
     return {
       certificateId,
       storageUrl,

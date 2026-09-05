@@ -71,12 +71,8 @@ export async function flushAnalytics(force = false) {
   const batch = dedupe(queue.slice(0, 20));
   try {
     if (!batch.length) return;
-    const res = await fetch(ingestUrl(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events: batch }),
-    });
-    if (!res.ok) throw new Error(`Analytics flush failed (${res.status})`);
+    // Clean local event tracking — remote /analytics/ingest removed (Render backend eliminated)
+    logger.info('analytics.events_flushed', { count: batch.length });
     queue = queue.slice(batch.length);
     lastFlushMs = now;
   } catch (err) {

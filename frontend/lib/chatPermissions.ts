@@ -29,6 +29,7 @@ export interface MessageContext {
   id: string;
   sender_id: string;
   chat_id: string;
+  created_at_ms?: number;
 }
 
 /**
@@ -122,6 +123,38 @@ export function canDeleteMessageForEveryone(
   if (message.sender_id === currentUser.uid) return true;
   // Admins/Super Admins have moderation override
   return currentUser.role === 'admin' || currentUser.role === 'super_admin';
+}
+
+export const DEFAULT_DELETE_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * Determine if currentUser can delete a message for everyone within a time window (e.g. 30 minutes).
+ * Admins/Super Admins bypass the time limit.
+ */
+export function canDeleteMessageForEveryoneWithWindow(
+  currentUser: ChatUserContext | null | undefined,
+  message: MessageContext | null | undefined,
+  windowMs: number = DEFAULT_DELETE_WINDOW_MS,
+  nowMs: number = Date.now(),
+): boolean {
+  if (!currentUser || !message) return false;
+  
+  // Admins and Super Admins can always delete
+  if (currentUser.role === 'admin' || currentUser.role === 'super_admin') {
+    return true;
+  }
+
+  // Author only
+  if (message.sender_id !== currentUser.uid) {
+    return false;
+  }
+
+  // If timestamp is known, check against window
+  if (typeof message.created_at_ms === 'number' && message.created_at_ms > 0) {
+    return nowMs - message.created_at_ms <= windowMs;
+  }
+
+  return true;
 }
 
 /**
