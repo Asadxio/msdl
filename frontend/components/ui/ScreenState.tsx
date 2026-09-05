@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { UIButton } from '@/components/ui/Button';
@@ -20,8 +20,23 @@ export function useMinimumLoading(active: boolean, minMs = 350): boolean {
 export const FullScreenLoader = React.memo(function FullScreenLoader({ label = 'Loading…' }: { label?: string }) {
   return (
     <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.fullscreen}>
-      <ActivityIndicator size="large" color={COLORS.primary} />
-      <Text allowFontScaling style={styles.busyText}>{label}</Text>
+      <View style={styles.splashEmblemContainer}>
+        {/* Noor subtle glow behind emblem */}
+        <View style={styles.splashNoorGlow} />
+        <View style={styles.splashLogoRing}>
+          <Image
+            source={require('../../assets/images/emblem_pure.png')}
+            style={styles.splashLogoImage}
+            resizeMode="contain"
+          />
+        </View>
+      </View>
+      <Text allowFontScaling style={styles.splashArabicTitle}>مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</Text>
+      <Text allowFontScaling style={styles.splashEnglishSubtitle}>MADRASA TUS SALIKAT LIL BANAT</Text>
+      <View style={styles.splashSpinnerRow}>
+        <ActivityIndicator size="small" color={COLORS.primary} />
+        <Text allowFontScaling style={styles.busyText}>{label}</Text>
+      </View>
     </View>
   );
 });
@@ -105,4 +120,66 @@ const styles = StyleSheet.create({
   stateWrap: { alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, gap: SPACING.sm },
   stateTitle: { ...TYPOGRAPHY.heading, color: COLORS.textMain, textAlign: 'center' },
   stateMessage: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center' },
+  splashEmblemContainer: {
+    width: 140,
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.xs,
+  },
+  splashNoorGlow: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 4,
+  },
+  splashLogoRing: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 1.5,
+    borderColor: 'rgba(212, 175, 55, 0.5)',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  splashLogoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  splashArabicTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#064E3B',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    letterSpacing: 0.5,
+    marginTop: SPACING.xs,
+  },
+  splashEnglishSubtitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#064E3B',
+    textAlign: 'center',
+    letterSpacing: 2,
+    marginBottom: SPACING.md,
+  },
+  splashSpinnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
 });
