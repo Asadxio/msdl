@@ -176,11 +176,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     setOnboardingStatus('complete');
   }, []);
 
+  const [legalCheckSettled, setLegalCheckSettled] = useState(false);
+
   useEffect(() => {
     if (!user?.uid || profileStatus !== 'approved') {
       setNeedsLegalAcceptance(false);
+      setLegalCheckSettled(true);
       return;
     }
+    setLegalCheckSettled(false);
     const unsub = onSnapshot(
       doc(db, 'users', user.uid, 'compliance', 'legal_acceptance'),
       (snap) => {
@@ -190,9 +194,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         const outdated = requiredDocs.filter((d) => accepted[d.key]?.version && accepted[d.key]?.version !== d.version);
         const needs = missing.length > 0 || outdated.length > 0;
         setNeedsLegalAcceptance(needs);
+        setLegalCheckSettled(true);
       },
       () => {
         setNeedsLegalAcceptance(false);
+        setLegalCheckSettled(true);
       }
     );
     return () => unsub();
@@ -241,10 +247,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       }
     } else if (holdingSignupVerificationPrompt) {
       startupLog('Navigation complete', { route: segmentKey, reason: 'signup-verification-prompt' });
-    } else if (needsLegalAcceptance && !inLegalConsentRoute) {
+    } else if (legalCheckSettled && needsLegalAcceptance && !inLegalConsentRoute) {
       startupLog('Navigation complete', { action: 'replace', route: '/legal-gate', reason: 'needs-legal-acceptance' });
       performReplace('/legal-gate');
-    } else if (!needsLegalAcceptance && inLegalGate) {
+    } else if (legalCheckSettled && !needsLegalAcceptance && inLegalGate) {
       startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'legal-gate-complete' });
       performReplace('/');
     } else if (inUnauthorized && profile?.status === 'approved') {

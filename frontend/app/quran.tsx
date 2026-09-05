@@ -101,7 +101,7 @@ export default function QuranScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => goBackOrReplace(router, '/more')}>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => goBackOrReplace(router)}>
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>

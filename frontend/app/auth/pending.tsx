@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { safeReplace } from '@/lib/navigation';
 import { sendEmailVerification } from 'firebase/auth';
 import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -127,7 +128,9 @@ export default function PendingScreen() {
       logger.error('Email verification profile refresh failed before navigation', err);
       console.log('[EmailVerification] Any caught errors', err);
     });
-    router.replace('/');
+    // Use safeReplace for atomic startup navigation while maintaining router.replace('/') compatibility
+    safeReplace(router, '/');
+    // router.replace('/');
   }, [router, stopPolling, profile]);
 
   const refreshVerificationStatus = useCallback(async (source: 'mount' | 'manual' | 'poll', showUnverifiedMessage = false) => {

@@ -48,10 +48,27 @@ export function getTodayDailyAyat(): typeof DAILY_AYAT_POOL[0] {
   return DAILY_AYAT_POOL[dayOfYear % DAILY_AYAT_POOL.length];
 }
 
+// ─── Fetch Helper with Timeout ────────────────────────────────────────────────
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return resp;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  }
+}
+
 // ─── Fetch from alquran.cloud ─────────────────────────────────────────────────
 async function fetchFromAlquranCloud(surahNumber: number): Promise<{ ayats: QuranAyat[]; arabicName: string; totalAyat: number }> {
   const url = ALQURAN_BASE + '/surah/' + surahNumber + '/editions/quran-uthmani,ur.kanzuliman,en.transliteration';
-  const resp = await fetch(url, { headers: { Accept: 'application/json' } });
+  const resp = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 9000);
   if (!resp.ok) throw new Error('alquran.cloud fetch failed: ' + resp.status);
   const json = await resp.json();
 
@@ -81,7 +98,7 @@ async function fetchRomanFromBlogspot(blogSlug: string): Promise<string[]> {
   try {
     // Use the label-based feed for this post
     const url = BLOGGER_FEED_BASE + encodeURIComponent(blogSlug) + '?alt=json&max-results=1';
-    const resp = await fetch(url, { headers: { Accept: 'application/json' } });
+    const resp = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 6000);
     if (!resp.ok) return [];
     const json = await resp.json();
 
