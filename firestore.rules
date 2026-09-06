@@ -6,7 +6,10 @@ service cloud.firestore {
     }
 
     function isOwner() {
-      return isSignedIn() && request.auth.token.email.lower() == 'sumraftm@gmail.com';
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'sumraftm@gmail.com' ||
+        request.auth.token.email.lower() == 'xioasad@gmail.com'
+      );
     }
 
     function isVerified() {

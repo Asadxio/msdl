@@ -1,5 +1,6 @@
 import type { UserProfile } from '@/context/AuthContext';
 import { normalizeRole, type AppRole } from '@/lib/roles';
+import { isFounderEmail } from '@/lib/founderPolicy';
 export type Permission =
   | 'admin.dashboard.read'
   | 'admin.users.manage'
@@ -31,6 +32,9 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
 
 
 export function hasPermission(profile: UserProfile | null, permission: Permission): boolean {
+  if (profile && isFounderEmail(profile.email)) {
+    return true;
+  }
   if (!profile || profile.status !== 'approved') return false;
   const role = normalizeRole(profile.role);
   return ROLE_PERMISSIONS[role].includes(permission);

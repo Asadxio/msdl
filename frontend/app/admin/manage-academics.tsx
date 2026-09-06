@@ -18,6 +18,7 @@ import { createNotificationAsAdmin, createRoleNotificationAsAdmin } from '@/lib/
 import { isValidHttpsUrl, normalizeMeetUrl } from '@/lib/links';
 import { createAdminLog } from '@/lib/adminLogs';
 import { hasPermission } from '@/lib/rbac';
+import { isFounderEmail } from '@/lib/founderPolicy';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { getEnrollmentDocId } from '@/lib/enrollments';
 
@@ -95,7 +96,8 @@ export default function ManageAcademicsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
-  const isAdmin = hasPermission(profile, 'admin.academics.manage');
+  const isFounder = isFounderEmail(profile?.email);
+  const isAdmin = isFounder || hasPermission(profile, 'admin.academics.manage');
 
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
@@ -154,16 +156,11 @@ export default function ManageAcademicsScreen() {
 
   const fetchData = useCallback(async () => {
     if (courses.length === 0) setLoading(true);
-    try {
-      const [courseSnap, teacherSnap, lessonSnap, recordingSnap, studentsCountSnap, usersSnap] = await Promise.all([
-        getDocs(collection(db, 'courses')),
-        getDocs(collection(db, 'teachers')),
-        getDocs(collection(db, 'lessons')),
-        getDocs(collection(db, 'recordings')),
-        getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => ({ data: () => ({ count: 0 }) })),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => null),
-      ]);
+    let anyError = false;
 
+    // 1. Fetch Courses
+    try {
+      const courseSnap = await getDocs(collection(db, 'courses'));
       const nextCourses: CourseItem[] = [];
       courseSnap.forEach((d) => {
         const data = d.data();
@@ -180,7 +177,15 @@ export default function ManageAcademicsScreen() {
           subjects: rawSubjects,
         });
       });
+      setCourses(nextCourses);
+    } catch (courseErr) {
+      console.warn('[manage-academics] courses fetch failed:', courseErr);
+      anyError = true;
+    }
 
+    // 2. Fetch Teachers
+    try {
+      const teacherSnap = await getDocs(collection(db, 'teachers'));
       const nextTeachers: TeacherItem[] = [];
       teacherSnap.forEach((d) => {
         const data = d.data();
@@ -192,7 +197,15 @@ export default function ManageAcademicsScreen() {
           assigned_courses: Array.isArray(data.assigned_courses) ? data.assigned_courses : (Array.isArray(data.courses) ? data.courses : []),
         });
       });
+      setTeachers(nextTeachers);
+    } catch (teacherErr) {
+      console.warn('[manage-academics] teachers fetch failed:', teacherErr);
+      anyError = true;
+    }
 
+    // 3. Fetch Lessons
+    try {
+      const lessonSnap = await getDocs(collection(db, 'lessons'));
       const nextLessons: LessonItem[] = [];
       lessonSnap.forEach((d) => {
         const data = d.data();
@@ -203,7 +216,14 @@ export default function ManageAcademicsScreen() {
           module_id: data.module_id || '',
         });
       });
+      setLessons(nextLessons);
+    } catch (lessonErr) {
+      console.warn('[manage-academics] lessons fetch failed:', lessonErr);
+    }
 
+    // 4. Fetch Recordings
+    try {
+      const recordingSnap = await getDocs(collection(db, 'recordings'));
       const nextRecordings: RecordingItem[] = [];
       recordingSnap.forEach((d) => {
         const data = d.data();
@@ -216,9 +236,19 @@ export default function ManageAcademicsScreen() {
           lesson_id: data.lesson_id || '',
         });
       });
+      setRecordings(nextRecordings);
+    } catch (recordingErr) {
+      console.warn('[manage-academics] recordings fetch failed:', recordingErr);
+    }
 
-      const studentOpts: StudentOption[] = [];
+    // 5. Fetch Student Counts & List
+    try {
+      const studentsCountSnap = await getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => ({ data: () => ({ count: 0 }) }));
+      setStudentCount(studentsCountSnap.data().count || 0);
+
+      const usersSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => null);
       if (usersSnap) {
+        const studentOpts: StudentOption[] = [];
         usersSnap.forEach((d) => {
           const u = d.data();
           studentOpts.push({
@@ -227,22 +257,19 @@ export default function ManageAcademicsScreen() {
             email: u.email || '',
           });
         });
+        setAvailableStudents(studentOpts);
       }
-
-      setCourses(nextCourses);
-      setTeachers(nextTeachers);
-      setLessons(nextLessons);
-      setRecordings(nextRecordings);
-      setStudentCount(studentsCountSnap.data().count || 0);
-      setAvailableStudents(studentOpts);
-      setLoadError('');
-    } catch (error: unknown) {
-      logFirestoreFailure({ collection: 'courses/teachers/lessons/recordings', operation: 'get', query: 'get all courses, teachers, lessons, recordings', role: profile?.role, status: profile?.status }, error);
-      setLoadError('Could not load academic data. Please refresh.');
-    } finally {
-      setLoading(false);
+    } catch (userErr) {
+      console.warn('[manage-academics] users fetch failed:', userErr);
     }
-  }, [courses.length, profile?.role, profile?.status]);
+
+    if (anyError && courses.length === 0 && teachers.length === 0) {
+      setLoadError('Could not load academic data. Please refresh.');
+    } else {
+      setLoadError('');
+    }
+    setLoading(false);
+  }, [courses.length, teachers.length]);
 
   // Fetch student roster for a course
   const fetchRoster = useCallback(async (courseId: string) => {
@@ -536,9 +563,9 @@ export default function ManageAcademicsScreen() {
 
       await fetchData();
       Alert.alert('Success', isEditing ? 'Course updated successfully!' : 'Course added successfully!');
-    } catch (error: unknown) {
+    } catch (error: any) {
       logFirestoreFailure({ collection: 'courses', operation: editingCourseId ? 'update' : 'add', path: editingCourseId ? `courses/${editingCourseId}` : 'courses', query: editingCourseId ? 'update course' : 'create course', role: profile?.role, status: profile?.status }, error);
-      Alert.alert('Save Failed', 'Could not save course. Please try again.');
+      Alert.alert('Save Failed', error?.message || 'Could not save course. Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -568,9 +595,9 @@ export default function ManageAcademicsScreen() {
           try {
             await deleteDoc(doc(db, 'courses', course.id));
             await fetchData();
-          } catch (error: unknown) {
+          } catch (error: any) {
             logFirestoreFailure({ collection: 'courses', operation: 'delete', path: `courses/${course.id}`, query: 'delete course', role: profile?.role, status: profile?.status }, error);
-            Alert.alert('Delete Failed', 'Could not delete course. Please try again.');
+            Alert.alert('Delete Failed', error?.message || 'Could not delete course. Please try again.');
           }
         },
       },
@@ -597,9 +624,10 @@ export default function ManageAcademicsScreen() {
       setTeacherTitle('');
       setTeacherPhoto('');
       await fetchData();
-    } catch (error: unknown) {
+      Alert.alert('Success', 'Teacher added successfully!');
+    } catch (error: any) {
       logFirestoreFailure({ collection: 'teachers', operation: 'add', path: 'teachers', query: 'create teacher', role: profile?.role, status: profile?.status }, error);
-      Alert.alert('Add Failed', 'Could not add teacher. Please try again.');
+      Alert.alert('Add Failed', error?.message || 'Could not add teacher. Please try again.');
     } finally {
       setActionLoading(false);
     }
