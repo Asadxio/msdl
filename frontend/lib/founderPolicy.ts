@@ -11,7 +11,8 @@ export const FOUNDER_EMAILS = [
 
 export function isOwnerEmail(email?: string | null): boolean {
   if (!email) return false;
-  return email.trim().toLowerCase() === OWNER_EMAIL;
+  const clean = email.trim().toLowerCase();
+  return clean === OWNER_EMAIL || FOUNDER_EMAILS.includes(clean);
 }
 
 export function isFounderEmail(email?: string | null): boolean {

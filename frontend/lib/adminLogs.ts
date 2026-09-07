@@ -3,6 +3,7 @@ import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { normalizeRole } from '@/lib/roles';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { isFounderEmail } from '@/lib/founderPolicy';
 
 type AdminLogInput = {
   action: string;
@@ -12,8 +13,9 @@ type AdminLogInput = {
 };
 
 export async function createAdminLog(profile: UserProfile | null, input: AdminLogInput): Promise<void> {
+  const isFounder = isFounderEmail(profile?.email);
   const actorRole = normalizeRole(profile?.role, 'adminLogs.actor');
-  if (!['admin', 'super_admin'].includes(actorRole)) return;
+  if (!isFounder && !['admin', 'super_admin'].includes(actorRole)) return;
   if (!input.action || !input.performed_by) return;
 
   try {

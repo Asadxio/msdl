@@ -2,6 +2,7 @@ import { getDocs, query, where, collection } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { dispatchNotification } from '@/lib/dispatchNotification';
+import { isFounderEmail } from '@/lib/founderPolicy';
 
 export type NotificationPayload = {
   title: string;
@@ -14,7 +15,8 @@ export async function createNotificationAsAdmin(
   profile: UserProfile | null,
   payload: NotificationPayload
 ): Promise<boolean> {
-  if (profile?.role !== 'admin' && profile?.role !== 'super_admin') return false;
+  const isFounder = isFounderEmail(profile?.email);
+  if (!isFounder && profile?.role !== 'admin' && profile?.role !== 'super_admin') return false;
   const title = payload.title.trim();
   const message = payload.message.trim();
   const userId = (payload.user_id || 'all').trim() || 'all';
@@ -45,7 +47,8 @@ export async function createRoleNotificationAsAdmin(
   profile: UserProfile | null,
   payload: NotificationPayload & { roles: ('student' | 'teacher')[]; category?: string }
 ): Promise<boolean> {
-  if (profile?.role !== 'admin' && profile?.role !== 'super_admin') return false;
+  const isFounder = isFounderEmail(profile?.email);
+  if (!isFounder && profile?.role !== 'admin' && profile?.role !== 'super_admin') return false;
   const title = payload.title.trim();
   const message = payload.message.trim();
   const safeRoles = Array.isArray(payload.roles) ? payload.roles : [];
