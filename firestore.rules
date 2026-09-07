@@ -1724,6 +1724,10 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /moderation_queue/{id} {
+      allow read, write: if isModeratorOrAbove();
+    }
+
     match /bug_reports/{id} {
       allow read: if isAdmin();
       allow create: if isSignedIn();
