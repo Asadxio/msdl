@@ -20,6 +20,8 @@ export type NotificationPermissionResult = {
   canAskAgain: boolean;
 };
 
+let lastRegisteredUserToken: string | null = null;
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -144,6 +146,12 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
     console.log('[Notifications] Device push token result', { hasToken: Boolean(primaryToken), hasNative: Boolean(nativeFcmToken), hasExpo: Boolean(token) });
     if (!primaryToken) return null;
 
+    // Deduplication check: Do not re-write to Firestore if this exact token is already registered for this user in this session
+    const registrationKey = `${userId}:${primaryToken}`;
+    if (lastRegisteredUserToken === registrationKey) {
+      return primaryToken;
+    }
+
     const userPatch: Record<string, unknown> = {
       fcm_token_updated_at: serverTimestamp(),
     };
@@ -167,6 +175,7 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
 
 
     console.log('[Notifications] Device push token saved');
+    lastRegisteredUserToken = registrationKey;
 
     return primaryToken;
   } catch (error) {

@@ -21,6 +21,7 @@ import { hasPermission } from '@/lib/rbac';
 import { isFounderEmail } from '@/lib/founderPolicy';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { getEnrollmentDocId } from '@/lib/enrollments';
+import { withTimeout } from '@/lib/errors';
 
 export type CourseSubject = {
   id: string;
@@ -160,7 +161,7 @@ export default function ManageAcademicsScreen() {
 
     // 1. Fetch Courses
     try {
-      const courseSnap = await getDocs(collection(db, 'courses'));
+      const courseSnap = await withTimeout(getDocs(collection(db, 'courses')), 8000);
       const nextCourses: CourseItem[] = [];
       courseSnap.forEach((d) => {
         const data = d.data();
@@ -185,7 +186,7 @@ export default function ManageAcademicsScreen() {
 
     // 2. Fetch Teachers
     try {
-      const teacherSnap = await getDocs(collection(db, 'teachers'));
+      const teacherSnap = await withTimeout(getDocs(collection(db, 'teachers')), 8000);
       const nextTeachers: TeacherItem[] = [];
       teacherSnap.forEach((d) => {
         const data = d.data();
@@ -205,7 +206,7 @@ export default function ManageAcademicsScreen() {
 
     // 3. Fetch Lessons
     try {
-      const lessonSnap = await getDocs(collection(db, 'lessons'));
+      const lessonSnap = await withTimeout(getDocs(collection(db, 'lessons')), 8000);
       const nextLessons: LessonItem[] = [];
       lessonSnap.forEach((d) => {
         const data = d.data();
@@ -223,7 +224,7 @@ export default function ManageAcademicsScreen() {
 
     // 4. Fetch Recordings
     try {
-      const recordingSnap = await getDocs(collection(db, 'recordings'));
+      const recordingSnap = await withTimeout(getDocs(collection(db, 'recordings')), 8000);
       const nextRecordings: RecordingItem[] = [];
       recordingSnap.forEach((d) => {
         const data = d.data();
@@ -243,10 +244,16 @@ export default function ManageAcademicsScreen() {
 
     // 5. Fetch Student Counts & List
     try {
-      const studentsCountSnap = await getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => ({ data: () => ({ count: 0 }) }));
+      const studentsCountSnap = await withTimeout(
+        getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))),
+        8000
+      ).catch(() => ({ data: () => ({ count: 0 }) }));
       setStudentCount(studentsCountSnap.data().count || 0);
 
-      const usersSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'student'))).catch(() => null);
+      const usersSnap = await withTimeout(
+        getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
+        8000
+      ).catch(() => null);
       if (usersSnap) {
         const studentOpts: StudentOption[] = [];
         usersSnap.forEach((d) => {
@@ -497,29 +504,29 @@ export default function ManageAcademicsScreen() {
       setActionLoading(true);
       const isEditing = Boolean(editingCourseId);
       if (editingCourseId) {
-        await updateDoc(doc(db, 'courses', editingCourseId), payload);
+        await withTimeout(updateDoc(doc(db, 'courses', editingCourseId), payload), 10000);
         createAdminLog(profile, { action: 'course_update', performed_by: profile?.email || profile?.name || 'admin', target_id: editingCourseId, details: payload.name }).catch(() => {});
       } else {
-        const newCourseRef = await addDoc(collection(db, 'courses'), {
+        const newCourseRef = await withTimeout(addDoc(collection(db, 'courses'), {
           ...payload,
           created_at: serverTimestamp(),
-        });
+        }), 10000);
         const createdCourseId = newCourseRef.id;
         createAdminLog(profile, { action: 'course_create', performed_by: profile?.email || profile?.name || 'admin', details: payload.name }).catch(() => {});
 
         // Auto-provision initial Module and Lesson so curriculum is immediately ready
         if (starterModuleTitle.trim()) {
           try {
-            const moduleRef = await addDoc(collection(db, 'modules'), {
+            const moduleRef = await withTimeout(addDoc(collection(db, 'modules'), {
               course_id: createdCourseId,
               title: starterModuleTitle.trim(),
               order: 1,
               created_at: serverTimestamp(),
               updated_at: serverTimestamp(),
-            });
+            }), 10000);
 
             if (starterLessonTitle.trim()) {
-              await addDoc(collection(db, 'lessons'), {
+              await withTimeout(addDoc(collection(db, 'lessons'), {
                 course_id: createdCourseId,
                 module_id: moduleRef.id,
                 title: starterLessonTitle.trim(),
@@ -529,7 +536,7 @@ export default function ManageAcademicsScreen() {
                 duration_minutes: 30,
                 created_at: serverTimestamp(),
                 updated_at: serverTimestamp(),
-              });
+              }), 10000);
             }
           } catch (starterErr) {
             console.warn('[manage-academics] Failed to create starter curriculum:', starterErr);
@@ -612,14 +619,14 @@ export default function ManageAcademicsScreen() {
     }
     try {
       setActionLoading(true);
-      await addDoc(collection(db, 'teachers'), {
+      await withTimeout(addDoc(collection(db, 'teachers'), {
         name: teacherName.trim(),
         title: teacherTitle.trim() || 'Teacher',
         photo_url: teacherPhoto.trim(),
         assigned_courses: [],
         courses: [],
         created_at: serverTimestamp(),
-      });
+      }), 10000);
       setTeacherName('');
       setTeacherTitle('');
       setTeacherPhoto('');
@@ -641,7 +648,7 @@ export default function ManageAcademicsScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDoc(doc(db, 'teachers', teacher.id));
+            await withTimeout(deleteDoc(doc(db, 'teachers', teacher.id)), 10000);
             if (selectedTeacherId === teacher.id) setSelectedTeacherId('');
             await fetchData();
           } catch (error: unknown) {
@@ -671,11 +678,11 @@ export default function ManageAcademicsScreen() {
         onPress: async () => {
           try {
             setActionLoading(true);
-            await updateDoc(doc(db, 'teachers', selectedTeacherId), {
+            await withTimeout(updateDoc(doc(db, 'teachers', selectedTeacherId), {
               assigned_courses: selectedCourses,
               courses: selectedCourses,
               updated_at: serverTimestamp(),
-            });
+            }), 10000);
             await fetchData();
             Alert.alert('Success', 'Courses assigned successfully');
           } catch (error: unknown) {
@@ -857,18 +864,18 @@ export default function ManageAcademicsScreen() {
                 const existing = teachers.find((curr) => curr.name.trim().toLowerCase() === t.name.trim().toLowerCase());
                 if (existing) {
                   teacherNameToId[t.name] = existing.id;
-                  await updateDoc(doc(db, 'teachers', existing.id), {
+                  await withTimeout(updateDoc(doc(db, 'teachers', existing.id), {
                     title: t.title,
                     assigned_courses: t.assigned_courses,
                     courses: t.courses,
                     updated_at: serverTimestamp(),
-                  });
+                  }), 10000);
                 } else {
-                  const ref = await addDoc(collection(db, 'teachers'), {
+                  const ref = await withTimeout(addDoc(collection(db, 'teachers'), {
                     ...t,
                     created_at: serverTimestamp(),
                     updated_at: serverTimestamp(),
-                  });
+                  }), 10000);
                   teacherNameToId[t.name] = ref.id;
                 }
               }
@@ -949,24 +956,24 @@ export default function ManageAcademicsScreen() {
                 };
 
                 if (existing) {
-                  await updateDoc(doc(db, 'courses', existing.id), courseData);
+                  await withTimeout(updateDoc(doc(db, 'courses', existing.id), courseData), 10000);
                 } else {
-                  const ref = await addDoc(collection(db, 'courses'), {
+                  const ref = await withTimeout(addDoc(collection(db, 'courses'), {
                     ...courseData,
                     created_at: serverTimestamp(),
-                  });
+                  }), 10000);
                   courseId = ref.id;
 
                   // Create initial Module & Lesson for this course
-                  const modRef = await addDoc(collection(db, 'modules'), {
+                  const modRef = await withTimeout(addDoc(collection(db, 'modules'), {
                     course_id: courseId,
                     title: c.moduleTitle,
                     order: 1,
                     created_at: serverTimestamp(),
                     updated_at: serverTimestamp(),
-                  });
+                  }), 10000);
 
-                  await addDoc(collection(db, 'lessons'), {
+                  await withTimeout(addDoc(collection(db, 'lessons'), {
                     course_id: courseId,
                     module_id: modRef.id,
                     title: c.lessonTitle,
@@ -975,7 +982,7 @@ export default function ManageAcademicsScreen() {
                     duration_minutes: 30,
                     created_at: serverTimestamp(),
                     updated_at: serverTimestamp(),
-                  });
+                  }), 10000);
                 }
               }
 

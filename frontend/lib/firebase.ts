@@ -19,13 +19,11 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 startupLog('Firebase initialized', { reusedApp: getApps().length > 1 });
 let db: Firestore;
 try {
-  db = initializeFirestore(app, {
-    experimentalForceLongPolling: true,
-  });
-  startupLog('Firestore initialized', { mode: 'longPolling' });
-} catch {
   db = getFirestore(app);
-  startupLog('Firestore initialized', { mode: 'existing' });
+  startupLog('Firestore initialized', { mode: 'getFirestore' });
+} catch (err) {
+  db = initializeFirestore(app, {});
+  startupLog('Firestore initialized', { mode: 'initializeFirestore' });
 }
 
 let auth: Auth;
