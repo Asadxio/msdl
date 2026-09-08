@@ -7,8 +7,12 @@ service cloud.firestore {
 
     function isOwner() {
       return isSignedIn() && (
-        request.auth.token.email.lower() == 'sumraftm@gmail.com' ||
-        request.auth.token.email.lower() == 'xioasad@gmail.com'
+        request.auth.uid in ['UYRU5CPF9jTf5FktUSVdRrxng7h2', 'qtdrDkqcHXSMDZpJe0YeWq1fBtJ2'] ||
+        (('email' in request.auth.token) && (
+          request.auth.token.email in ['sumraftm@gmail.com', 'xioasad@gmail.com', 'Sumraftm@gmail.com', 'Xioasad@gmail.com'] ||
+          request.auth.token.email.matches('^[sS][uU][mM][rR][aA][fF][tT][mM]@gmail\\.com$') ||
+          request.auth.token.email.matches('^[xX][iI][oO][aA][sS][aA][dD]@gmail\\.com$')
+        ))
       );
     }
 
