@@ -171,10 +171,18 @@ export async function deleteClassRecording(
   recordingId: string,
   storagePath: string,
 ): Promise<void> {
-  await deleteDoc(doc(db, 'recordings', recordingId));
+  await withTimeout(
+    deleteDoc(doc(db, 'recordings', recordingId)),
+    10000,
+    'Deleting recording document timed out'
+  );
   if (storagePath) {
     const storageRef = ref(storage, storagePath);
-    await deleteObject(storageRef).catch(() => {});
+    await withTimeout(
+      deleteObject(storageRef),
+      10000,
+      'Deleting recording storage object timed out'
+    ).catch(() => {});
   }
 }
 

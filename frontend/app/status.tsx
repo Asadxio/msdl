@@ -279,8 +279,16 @@ export default function StatusScreen() {
         const cleanName = selectedAudio.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(-40);
         const filePath = `status_updates/${user.uid}/${Date.now()}_${cleanName}`;
         const refObj = storageRef(getStorage(), filePath);
-        await uploadBytes(refObj, blob, { contentType: "audio/mp4" });
-        finalMediaUrl = await getDownloadURL(refObj);
+        await withTimeout(
+          uploadBytes(refObj, blob, { contentType: "audio/mp4" }),
+          30000,
+          "Audio status upload timed out after 30s. Please check connection."
+        );
+        finalMediaUrl = await withTimeout(
+          getDownloadURL(refObj),
+          12000,
+          "Failed to get audio URL: timed out."
+        );
         mediaType = "audio";
       } else if (finalMediaUrl) {
         if (!finalMediaUrl.startsWith("https://")) {
