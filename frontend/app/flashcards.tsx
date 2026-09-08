@@ -472,7 +472,28 @@ export default function FlashcardsScreen() {
                 </View>
 
                 <ScrollView style={styles.backScroll} showsVerticalScrollIndicator={false}>
-                  <Text style={styles.backTranslationText}>{currentCard.backTranslation}</Text>
+                  {/* Urdu Meaning Section */}
+                  <View style={styles.meaningBoxUrdu}>
+                    <View style={styles.sectionHeaderRow}>
+                      <View style={styles.langIndicatorBadgeUrdu}>
+                        <Text style={styles.langIndicatorTextUrdu}>اردو ترجمہ (Urdu)</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.backTranslationText}>{currentCard.backTranslation}</Text>
+                  </View>
+
+                  {/* Dedicated English Meaning Section */}
+                  {currentCard.backEnglish && (
+                    <View style={styles.meaningBoxEnglish}>
+                      <View style={styles.sectionHeaderRow}>
+                        <View style={styles.langIndicatorBadgeEn}>
+                          <Ionicons name="globe-outline" size={12} color="#1E40AF" />
+                          <Text style={styles.langIndicatorTextEn}>English Meaning</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.backEnglishText}>{currentCard.backEnglish}</Text>
+                    </View>
+                  )}
 
                   {currentCard.backRoman && (
                     <View style={styles.romanBox}>
@@ -883,11 +904,66 @@ const styles = StyleSheet.create({
     flex: 1,
     marginVertical: 10,
   },
+  meaningBoxUrdu: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.md,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
+  },
+  meaningBoxEnglish: {
+    backgroundColor: '#F0F7FF',
+    borderRadius: RADIUS.md,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    gap: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  langIndicatorBadgeUrdu: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+  },
+  langIndicatorTextUrdu: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  langIndicatorBadgeEn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+  },
+  langIndicatorTextEn: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1E40AF',
+  },
   backTranslationText: {
     fontSize: 14,
     lineHeight: 23,
     color: '#0F172A',
     fontWeight: '700',
+  },
+  backEnglishText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#1E293B',
+    fontWeight: '600',
   },
   romanBox: {
     backgroundColor: '#F1F5F9',
