@@ -170,9 +170,6 @@ export default function AiAssistantScreen() {
 
     try {
       await rec.stopAndUnloadAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-      });
 
       if (cancel) return;
 
@@ -199,6 +196,10 @@ export default function AiAssistantScreen() {
       handleSend(voiceQuery);
     } catch (err) {
       console.warn('[AiAssistant] Error stopping recording:', err);
+    } finally {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      }).catch(() => {});
     }
   };
 

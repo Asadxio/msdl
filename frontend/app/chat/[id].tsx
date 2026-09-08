@@ -1250,9 +1250,17 @@ export default function ChatDetailScreen() {
         const storageRefObj = storageRef(getStorage(), storagePath);
         const resolvedContentType = mimeType || (type === 'image' ? 'image/jpeg' : 'application/pdf');
 
-        // 3. Upload to Storage
-        await uploadBytes(storageRefObj, blob, { contentType: resolvedContentType });
-        const downloadUrl = await getDownloadURL(storageRefObj);
+        // 3. Upload to Storage with timeout protection (45s upload, 15s downloadUrl)
+        await withTimeout(
+          uploadBytes(storageRefObj, blob, { contentType: resolvedContentType }),
+          45000,
+          'Chat media upload timed out. Please check your network connection.'
+        );
+        const downloadUrl = await withTimeout(
+          getDownloadURL(storageRefObj),
+          15000,
+          'Failed to retrieve chat media URL.'
+        );
 
         // 4. Outbox enqueue & Firestore message write
         const outboxItem: QueueItem = {
@@ -1427,11 +1435,6 @@ export default function ChatDetailScreen() {
 
       try {
         await rec.stopAndUnloadAsync();
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-        });
-
         const uri = rec.getURI();
         if (!uri) return;
 
@@ -1445,6 +1448,11 @@ export default function ChatDetailScreen() {
       } catch (err) {
         console.warn('[ChatDetail] Error stopping voice recording:', err);
         setSendError('Failed to send voice note.');
+      } finally {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+        }).catch(() => {});
       }
     };
 

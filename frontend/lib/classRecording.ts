@@ -96,8 +96,11 @@ export async function stopAndSaveRecording(
 ): Promise<SavedRecording> {
   if (!auth.currentUser) throw new Error('Must be signed in to save a recording.');
 
-  await recording.stopAndUnloadAsync();
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+  try {
+    await recording.stopAndUnloadAsync();
+  } finally {
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+  }
 
   const uri = recording.getURI();
   if (!uri) throw new Error('Recording URI is missing — could not save.');

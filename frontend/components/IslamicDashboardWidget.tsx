@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { COLORS, RADIUS, SPACING, SHADOWS } from "@/constants/theme";
 import * as Location from "expo-location";
+import { withTimeout } from "@/lib/errors";
 import { calculatePrayerTimes, getPrayerCalculationSettings, PRAYER_METHODS } from "@/lib/prayerTimes";
 import {
   loadPrayerSettings,
@@ -108,9 +109,17 @@ export default function IslamicDashboardWidget() {
         Alert.alert("Permission Denied", "GPS location permission is required.");
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({});
+      const pos = await withTimeout(
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        12000,
+        "GPS request timed out"
+      );
       const { latitude, longitude, altitude } = pos.coords;
-      const rev = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const rev = await withTimeout(
+        Location.reverseGeocodeAsync({ latitude, longitude }),
+        6000,
+        "Reverse geocoding timed out"
+      ).catch(() => null);
       const r = rev?.[0] || {};
       
       const city = r.city || r.district || r.subregion || "Unknown city";

@@ -24,6 +24,7 @@ import { Magnetometer } from 'expo-sensors';
 import { Camera, CameraView } from 'expo-camera';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { goBackOrReplace } from '@/lib/navigation';
+import { withTimeout } from '@/lib/errors';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -235,10 +236,18 @@ export default function QiblaScreen() {
         setLocation((c) => ({ ...c, permission: c.source === 'cache' ? 'offline' : 'denied' }));
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy?.High ?? 5 });
+      const pos = await withTimeout(
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy?.Balanced ?? 3 }),
+        12000,
+        'GPS position timed out'
+      );
       let city = 'Detected location', state = 'Local region', country = 'Local Qibla direction';
       try {
-        const rev = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        const rev = await withTimeout(
+          Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+          6000,
+          'Reverse geocoding timed out'
+        ).catch(() => null);
         const pl = rev?.[0];
         city    = pl?.city || pl?.district || pl?.subregion || city;
         state   = pl?.region || pl?.subregion || state;
