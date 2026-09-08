@@ -22,6 +22,7 @@ import { APP_ROLES, canAssignRole, normalizeRole, type AppRole } from '@/lib/rol
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { getEnrollmentDocId } from '@/lib/enrollments';
+import { withTimeout } from '@/lib/errors';
 
 type UserWithId = UserProfile & { id: string };
 
@@ -108,15 +109,19 @@ export default function AdminUsersScreen() {
       onPress: async () => {
         try {
           const enrollmentDocId = getEnrollmentDocId(u.id, c.id);
-          await setDoc(doc(db, 'enrollments', enrollmentDocId), {
-            user_id: u.id,
-            course_id: c.id,
-            status: 'active',
-            enrolled_at: serverTimestamp(),
-            created_at: serverTimestamp(),
-            granted_by_admin: profile?.email || profile?.name || 'admin',
-            granted_free: true,
-          }, { merge: true });
+          await withTimeout(
+            setDoc(doc(db, 'enrollments', enrollmentDocId), {
+              user_id: u.id,
+              course_id: c.id,
+              status: 'active',
+              enrolled_at: serverTimestamp(),
+              created_at: serverTimestamp(),
+              granted_by_admin: profile?.email || profile?.name || 'admin',
+              granted_free: true,
+            }, { merge: true }),
+            10000,
+            'Granting course access timed out'
+          );
 
           await createAdminLog(profile, {
             action: 'grant_free_course_access',
@@ -142,18 +147,26 @@ export default function AdminUsersScreen() {
   const updateUser = async (uid: string, updates: Partial<UserProfile> & { updated_at?: any }) => {
     try {
       const payload = { ...updates, updated_at: serverTimestamp() };
-      await updateDoc(doc(db, 'users', uid), payload);
+      await withTimeout(
+        updateDoc(doc(db, 'users', uid), payload),
+        10000,
+        'Updating user timed out'
+      );
       if (updates.status) {
         const uTarget = users.find((x) => x.id === uid);
-        await setDoc(doc(db, 'public_profiles', uid), {
-          uid,
-          name: uTarget?.name || 'User',
-          role: uTarget?.role || 'student',
-          status: updates.status,
-          searchable: updates.status === 'approved',
-          is_active: updates.status === 'approved',
-          updated_at: serverTimestamp(),
-        }, { merge: true }).catch(() => {});
+        await withTimeout(
+          setDoc(doc(db, 'public_profiles', uid), {
+            uid,
+            name: uTarget?.name || 'User',
+            role: uTarget?.role || 'student',
+            status: updates.status,
+            searchable: updates.status === 'approved',
+            is_active: updates.status === 'approved',
+            updated_at: serverTimestamp(),
+          }, { merge: true }),
+          10000,
+          'Updating public profile timed out'
+        ).catch(() => {});
       }
       await createAdminLog(profile, {
         action: 'user_update',
@@ -196,35 +209,42 @@ export default function AdminUsersScreen() {
         setBulkEnrolling(true);
         let enrolled = 0;
         let failed = 0;
-        for (let i = 0; i < selectedIds.length; i++) {
-          const uid = selectedIds[i];
-          setBulkEnrollProgress(`Enrolling ${i + 1}/${selectedIds.length}...`);
-          try {
-            const enrollmentDocId = getEnrollmentDocId(uid, c.id);
-            await setDoc(doc(db, 'enrollments', enrollmentDocId), {
-              user_id: uid,
-              course_id: c.id,
-              status: 'active',
-              enrolled_at: serverTimestamp(),
-              created_at: serverTimestamp(),
-              granted_by_admin: profile?.email || profile?.name || 'admin',
-              granted_free: true,
-              bulk_enrolled: true,
-            }, { merge: true });
-            await createAdminLog(profile, {
-              action: 'bulk_enroll',
-              performed_by: profile?.email || profile?.name || 'admin',
-              target_id: uid,
-              details: `Bulk enrolled in course: ${c.name} (${c.id})`,
-            }).catch(() => {});
-            enrolled++;
-          } catch {
-            failed++;
+        try {
+          for (let i = 0; i < selectedIds.length; i++) {
+            const uid = selectedIds[i];
+            setBulkEnrollProgress(`Enrolling ${i + 1}/${selectedIds.length}...`);
+            try {
+              const enrollmentDocId = getEnrollmentDocId(uid, c.id);
+              await withTimeout(
+                setDoc(doc(db, 'enrollments', enrollmentDocId), {
+                  user_id: uid,
+                  course_id: c.id,
+                  status: 'active',
+                  enrolled_at: serverTimestamp(),
+                  created_at: serverTimestamp(),
+                  granted_by_admin: profile?.email || profile?.name || 'admin',
+                  granted_free: true,
+                  bulk_enrolled: true,
+                }, { merge: true }),
+                10000,
+                'Enrolling student timed out'
+              );
+              await createAdminLog(profile, {
+                action: 'bulk_enroll',
+                performed_by: profile?.email || profile?.name || 'admin',
+                target_id: uid,
+                details: `Bulk enrolled in course: ${c.name} (${c.id})`,
+              }).catch(() => {});
+              enrolled++;
+            } catch {
+              failed++;
+            }
           }
+        } finally {
+          setBulkEnrolling(false);
+          setBulkEnrollProgress('');
+          setSelectedIds([]);
         }
-        setBulkEnrolling(false);
-        setBulkEnrollProgress('');
-        setSelectedIds([]);
         Alert.alert(
           'Bulk Enrollment Done ✅',
           `${enrolled} students enrolled in "${c.name}"` + (failed > 0 ? `\n${failed} failed` : ''),
@@ -286,7 +306,11 @@ export default function AdminUsersScreen() {
               style: 'destructive',
               onPress: async () => {
                 try {
-                  await deleteDoc(doc(db, 'users', u.id));
+                  await withTimeout(
+                    deleteDoc(doc(db, 'users', u.id)),
+                    10000,
+                    'Deleting user timed out'
+                  );
                   await fetchUsers();
                 } catch (err: any) {
                   logFirestoreFailure({ collection: 'users', operation: 'delete', path: `users/${u.id}`, query: 'permanently delete user', role: profile?.role, status: profile?.status }, err);

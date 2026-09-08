@@ -17,11 +17,11 @@ export function normalizeFirebaseError(err: unknown, fallback: string): string {
   return String((err as any)?.message || fallback);
 }
 
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs = 15000): Promise<T> {
+export async function withTimeout<T>(promise: Promise<T>, timeoutMs = 15000, timeoutMessage = 'Request timed out'): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('Request timed out')), timeoutMs);
+      timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
     });
     return await Promise.race([promise, timeout]);
   } finally {

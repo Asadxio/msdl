@@ -3,7 +3,7 @@ import { addDoc, collection, writeBatch, doc, serverTimestamp, updateDoc } from 
 import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/context/AuthContext';
 import { createAdminLog } from '@/lib/adminLogs';
-
+import { withTimeout } from '@/lib/errors';
 import { canAssignRole, normalizeRole } from '@/lib/roles';
 
 export async function updateUserRoleSecure(input: {
@@ -22,7 +22,11 @@ export async function updateUserRoleSecure(input: {
   if (!canAssignRole(actorRole, newRole, input.targetUserId, input.actorId)) {
     throw new Error('Insufficient permissions to assign this role');
   }
-  await updateDoc(doc(db, 'users', input.targetUserId), { role: newRole, updated_at: serverTimestamp() });
+  await withTimeout(
+    updateDoc(doc(db, 'users', input.targetUserId), { role: newRole, updated_at: serverTimestamp() }),
+    10000,
+    'Updating user role timed out'
+  );
   await addDoc(collection(db, 'role_transition_audit_logs'), {
     actor: input.actorId,
     actor_role: actorRole,
@@ -52,7 +56,11 @@ export async function bulkUpdateUserStatus(input: {
   ids.forEach((uid) => {
     batch.update(doc(db, 'users', uid), { status: input.status, updated_at: serverTimestamp() });
   });
-  await batch.commit();
+  await withTimeout(
+    batch.commit(),
+    12000,
+    'Bulk updating user status timed out'
+  );
   await createAdminLog(input.profile, {
     action: `bulk_user_status_${input.status}`,
     performed_by: input.performedBy,

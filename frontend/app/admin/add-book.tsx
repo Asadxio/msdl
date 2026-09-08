@@ -25,6 +25,8 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { isValidHttpsUrl, normalizeGoogleDriveFileUrl } from '@/lib/links';
+import { withTimeout } from '@/lib/errors';
+import { isFounderEmail } from '@/lib/founderPolicy';
 
 const INITIAL_BOOKS = [
   {
@@ -54,7 +56,7 @@ export default function AddBookScreen() {
   const insets = useSafeAreaInsets();
   const { books, addBook, refetchBooks } = useData();
   const { profile } = useAuth();
-  const isAdmin = hasPermission(profile, 'admin.academics.manage');
+  const isAdmin = isFounderEmail(profile?.email) || profile?.founder === true || hasPermission(profile, 'admin.academics.manage');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [pdfUrl, setPdfUrl] = useState('');
@@ -108,7 +110,11 @@ export default function AddBookScreen() {
     try {
       let categoryId = selected?.id;
       if (!categoryId && newCategory.trim()) {
-        const newCatRef = await addDoc(collection(db, 'categories'), { name: categoryName, created_at: serverTimestamp() });
+        const newCatRef = await withTimeout(
+          addDoc(collection(db, 'categories'), { name: categoryName, created_at: serverTimestamp() }),
+          10000,
+          'Creating category timed out'
+        );
         categoryId = newCatRef.id;
         setCategory(newCatRef.id);
       }
@@ -139,10 +145,14 @@ export default function AddBookScreen() {
         // Check if book already exists by title
         const exists = books.some((b) => b.title === book.title);
         if (!exists) {
-          await addDoc(collection(db, 'library'), {
-            ...book,
-            created_at: serverTimestamp(),
-          });
+          await withTimeout(
+            addDoc(collection(db, 'library'), {
+              ...book,
+              created_at: serverTimestamp(),
+            }),
+            10000,
+            'Seeding book timed out'
+          );
           added++;
         }
       }
@@ -162,7 +172,11 @@ export default function AddBookScreen() {
       return;
     }
     try {
-      await addDoc(collection(db, 'categories'), { name, created_at: serverTimestamp() });
+      await withTimeout(
+        addDoc(collection(db, 'categories'), { name, created_at: serverTimestamp() }),
+        10000,
+        'Adding category timed out'
+      );
       setNewCategory('');
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to add category.');
@@ -176,7 +190,11 @@ export default function AddBookScreen() {
       return;
     }
     try {
-      await updateDoc(doc(db, 'categories', editingCategoryId), { name });
+      await withTimeout(
+        updateDoc(doc(db, 'categories', editingCategoryId), { name }),
+        10000,
+        'Updating category timed out'
+      );
       setEditingCategoryId('');
       setEditingCategoryName('');
     } catch (err: any) {
@@ -192,7 +210,11 @@ export default function AddBookScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDoc(doc(db, 'categories', item.id));
+            await withTimeout(
+              deleteDoc(doc(db, 'categories', item.id)),
+              10000,
+              'Deleting category timed out'
+            );
             if (category === item.id) setCategory('');
           } catch (err: any) {
             Alert.alert('Error', err?.message || 'Failed to delete category.');

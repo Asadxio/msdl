@@ -15,9 +15,10 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, addDoc, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { withTimeout } from '@/lib/errors';
 import {
   subscribeLiveClass,
   endLiveClass,
@@ -257,9 +258,15 @@ export default function LiveClassroomScreen() {
     const dateStr = new Date().toISOString().slice(0, 10);
     try {
       const presentCount = attendanceStudents.filter((s) => s.status === 'present').length;
-      await Promise.all(
-        attendanceStudents.map((st) =>
-          addDoc(collection(db, 'attendance'), {
+      
+      // Batch attendance writes in chunks of 50 to avoid Firestore limits & timeouts
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < attendanceStudents.length; i += CHUNK_SIZE) {
+        const chunk = attendanceStudents.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((st) => {
+          const newDocRef = doc(collection(db, 'attendance'));
+          batch.set(newDocRef, {
             user_id: st.id,
             user_name: st.name,
             user_email: st.email,
@@ -273,9 +280,15 @@ export default function LiveClassroomScreen() {
             marked_at: serverTimestamp(),
             updated_at: serverTimestamp(),
             created_at: serverTimestamp(),
-          })
-        )
-      );
+          });
+        });
+        await withTimeout(
+          batch.commit(),
+          12000,
+          'Saving in-class attendance chunk timed out'
+        );
+      }
+
       setAttendanceSubmittedCount(presentCount);
       setAttendanceModalVisible(false);
       Alert.alert(

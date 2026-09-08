@@ -28,6 +28,7 @@ import { dispatchNotification } from '@/lib/dispatchNotification';
 import { createRoleNotification } from '@/lib/notifications';
 import { cacheGet, cacheSet } from '@/lib/cacheManager';
 import { perfStart, perfEnd } from '@/lib/performanceMonitor';
+import { isFounderEmail } from '@/lib/founderPolicy';
 import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 
 const QUERY_CHUNK = 25;
@@ -864,6 +865,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profile?.role, user?.uid]);
 
+  const isUserAdmin = Boolean(
+    profile?.role === 'admin' ||
+    profile?.role === 'super_admin' ||
+    profile?.founder === true ||
+    isFounderEmail(profile?.email)
+  );
+
   const addBook = async (
     title: string,
     file_url: string,
@@ -871,7 +879,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     category_id?: string,
     description?: string,
   ): Promise<boolean> => {
-    if (profile?.role !== 'admin') {
+    if (!isUserAdmin) {
       logger.warn('Unauthorized: only admin can add books');
       return false;
     }
@@ -899,7 +907,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteBook = async (bookId: string): Promise<boolean> => {
-    if (profile?.role !== 'admin') {
+    if (!isUserAdmin) {
       logger.warn('Unauthorized: only admin can delete books');
       return false;
     }

@@ -33,6 +33,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 import { exportAdminCsvAndShare } from '@/lib/adminExportService';
+import { withTimeout } from '@/lib/errors';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -269,7 +270,11 @@ export default function AttendanceScreen() {
     setSavingUserId(targetUser.id);
     try {
       const attendanceRef = doc(db, 'attendance', docId);
-      const existing = await getDoc(attendanceRef);
+      const existing = await withTimeout(
+        getDoc(attendanceRef),
+        8000,
+        'Checking attendance timed out'
+      );
 
       const nextRecord: Record<string, any> = {
         user_id: targetUser.id,
@@ -292,7 +297,11 @@ export default function AttendanceScreen() {
         nextRecord.created_at = serverTimestamp();
       }
 
-      await setDoc(attendanceRef, nextRecord, { merge: true });
+      await withTimeout(
+        setDoc(attendanceRef, nextRecord, { merge: true }),
+        10000,
+        'Saving attendance timed out'
+      );
 
       // Send in-app notification to student
       await addDoc(collection(db, 'notifications'), {
@@ -354,7 +363,11 @@ export default function AttendanceScreen() {
                 batch.set(ref, payload, { merge: true });
               }
 
-              await batch.commit();
+              await withTimeout(
+                batch.commit(),
+                12000,
+                'Batch marking attendance timed out'
+              );
               setFeedbackMsg(`✓ Marked all ${filteredStudents.length} students PRESENT!`);
               setTimeout(() => setFeedbackMsg(''), 4000);
             } catch (err: any) {
