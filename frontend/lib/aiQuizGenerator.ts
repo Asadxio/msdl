@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { clearQuizCounts } from '@/lib/lmsHardening';
+import { withTimeout } from '@/lib/errors';
 
 export interface GeneratedQuestion {
   id: string;
@@ -252,24 +253,34 @@ export async function generateAiQuiz(params: QuizGenerationParams): Promise<Gene
 export async function publishGeneratedQuiz(questions: GeneratedQuestion[]): Promise<{ count: number }> {
   if (!questions || questions.length === 0) return { count: 0 };
 
-  const batch = writeBatch(db);
   const quizCol = collection(db, 'quizzes');
+  const CHUNK_SIZE = 100;
 
-  for (const q of questions) {
-    const docRef = doc(quizCol);
-    batch.set(docRef, {
-      question: q.question,
-      options: q.options,
-      correct_answer: q.correct_answer,
-      category: q.category,
-      explanation: q.explanation || '',
-      created_at: serverTimestamp(),
-      is_ai_generated: true,
-      difficulty: q.difficulty || 'easy',
-    });
+  for (let i = 0; i < questions.length; i += CHUNK_SIZE) {
+    const chunk = questions.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    for (const q of chunk) {
+      const docRef = doc(quizCol);
+      batch.set(docRef, {
+        question: q.question,
+        options: q.options,
+        correct_answer: q.correct_answer,
+        category: q.category,
+        explanation: q.explanation || '',
+        created_at: serverTimestamp(),
+        is_ai_generated: true,
+        difficulty: q.difficulty || 'easy',
+      });
+    }
+
+    await withTimeout(
+      batch.commit(),
+      15000,
+      'Publishing quiz batch timed out'
+    );
   }
 
-  await batch.commit();
   await clearQuizCounts().catch(() => {});
   return { count: questions.length };
 }

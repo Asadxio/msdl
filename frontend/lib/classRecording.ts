@@ -7,6 +7,7 @@ import { Audio } from 'expo-av';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { addDoc, collection, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, storage } from '@/lib/firebase';
+import { withTimeout } from '@/lib/errors';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -113,27 +114,39 @@ export async function stopAndSaveRecording(
   const storagePath = `recordings/${meta.classId}/${fileName}`;
   const storageRef = ref(storage, storagePath);
 
-  await uploadBytes(storageRef, blob, { contentType: 'audio/mp4' });
+  await withTimeout(
+    uploadBytes(storageRef, blob, { contentType: 'audio/mp4' }),
+    60000,
+    'Audio upload timed out after 60s. Please check your internet connection.'
+  );
   onProgress?.(80);
 
-  const fileUrl = await getDownloadURL(storageRef);
+  const fileUrl = await withTimeout(
+    getDownloadURL(storageRef),
+    15000,
+    'Retrieving audio download URL timed out.'
+  );
   onProgress?.(90);
 
   const title = `${meta.classTitle} — ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-  const docRef = await addDoc(collection(db, 'recordings'), {
-    title,
-    description: `Live class recording by ${meta.teacherName}`,
-    file_url: fileUrl,
-    storage_path: storagePath,
-    course_id: meta.courseId,
-    class_id: meta.classId,
-    teacher_id: meta.teacherId,
-    teacher_name: meta.teacherName,
-    duration_sec: durationSec,
-    size_bytes: sizeBytes,
-    recorded_at: serverTimestamp(),
-    created_at: serverTimestamp(),
-  });
+  const docRef = await withTimeout(
+    addDoc(collection(db, 'recordings'), {
+      title,
+      description: `Live class recording by ${meta.teacherName}`,
+      file_url: fileUrl,
+      storage_path: storagePath,
+      course_id: meta.courseId,
+      class_id: meta.classId,
+      teacher_id: meta.teacherId,
+      teacher_name: meta.teacherName,
+      duration_sec: durationSec,
+      size_bytes: sizeBytes,
+      recorded_at: serverTimestamp(),
+      created_at: serverTimestamp(),
+    }),
+    15000,
+    'Saving recording metadata timed out.'
+  );
 
   onProgress?.(100);
 

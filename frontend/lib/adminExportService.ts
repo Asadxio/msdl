@@ -10,6 +10,7 @@
 
 import { collection, getDocs, orderBy, query, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { withTimeout } from '@/lib/errors';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Share, Platform } from 'react-native';
@@ -30,12 +31,18 @@ function escapeCsvCell(val: string | number | null | undefined): string {
  */
 export async function generateAttendanceCsv(): Promise<string> {
   // 1. Fetch attendance records
-  const attSnap = await getDocs(
-    query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(5000))
+  const attSnap = await withTimeout(
+    getDocs(query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(5000))),
+    15000,
+    'Fetching attendance records timed out'
   );
 
   // 2. Fetch users map for accurate names & emails
-  const usersSnap = await getDocs(collection(db, 'users'));
+  const usersSnap = await withTimeout(
+    getDocs(query(collection(db, 'users'), limit(3000))),
+    15000,
+    'Fetching users timed out'
+  );
   const userMap = new Map<string, { name: string; email: string }>();
   usersSnap.forEach((d) => {
     const u = d.data();
@@ -46,7 +53,11 @@ export async function generateAttendanceCsv(): Promise<string> {
   });
 
   // 3. Fetch courses map for friendly names
-  const coursesSnap = await getDocs(collection(db, 'courses'));
+  const coursesSnap = await withTimeout(
+    getDocs(collection(db, 'courses')),
+    10000,
+    'Fetching courses timed out'
+  );
   const courseMap = new Map<string, string>();
   coursesSnap.forEach((d) => {
     courseMap.set(d.id, d.data().name || d.id);
@@ -112,17 +123,29 @@ export async function generateQuizMarksCsv(courseId?: string): Promise<string> {
 
   let quizSnap;
   try {
-    quizSnap = await getDocs(baseQuery);
+    quizSnap = await withTimeout(
+      getDocs(baseQuery),
+      15000,
+      'Fetching quiz results timed out'
+    );
   } catch {
     // Fallback without orderBy in case of compound index requirement
     const fallbackQuery = courseId
       ? query(collection(db, 'quiz_results'), where('course_id', '==', courseId), limit(5000))
       : query(collection(db, 'quiz_results'), limit(5000));
-    quizSnap = await getDocs(fallbackQuery);
+    quizSnap = await withTimeout(
+      getDocs(fallbackQuery),
+      15000,
+      'Fetching fallback quiz results timed out'
+    );
   }
 
   // 2. Fetch users map
-  const usersSnap = await getDocs(collection(db, 'users'));
+  const usersSnap = await withTimeout(
+    getDocs(query(collection(db, 'users'), limit(3000))),
+    15000,
+    'Fetching users timed out'
+  );
   const userMap = new Map<string, { name: string; email: string }>();
   usersSnap.forEach((d) => {
     const u = d.data();

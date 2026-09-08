@@ -12,6 +12,7 @@
  */
 import { httpsCallable } from 'firebase/functions';
 import { functions, auth, app } from '@/lib/firebase';
+import { withTimeout } from '@/lib/errors';
 
 export interface CreateOrderRequest {
   courseId?: string;
@@ -51,7 +52,11 @@ export async function createRazorpayOrder(
     functions,
     'createRazorpayOrder'
   );
-  const result = await createOrderFn(request);
+  const result = await withTimeout(
+    createOrderFn(request),
+    15000,
+    'Order creation timed out. Please check your connection and try again.'
+  );
   return result.data;
 }
 
@@ -64,7 +69,11 @@ export interface SubmitPaymentReferenceRequest {
 /** @deprecated Phase 8: Maintained only for legacy backwards compatibility. */
 export async function submitPaymentReference(request: SubmitPaymentReferenceRequest): Promise<any> {
   const submitFn = httpsCallable<SubmitPaymentReferenceRequest, any>(functions, 'submitPaymentReference');
-  const result = await submitFn(request);
+  const result = await withTimeout(
+    submitFn(request),
+    15000,
+    'Payment submission timed out.'
+  );
   return result.data;
 }
 
@@ -77,7 +86,11 @@ export interface AdminPaymentActionRequest {
 
 export async function adminPaymentAction(request: AdminPaymentActionRequest): Promise<any> {
   const adminActionFn = httpsCallable<AdminPaymentActionRequest, any>(functions, 'adminPaymentAction');
-  const result = await adminActionFn(request);
+  const result = await withTimeout(
+    adminActionFn(request),
+    15000,
+    'Admin payment action timed out.'
+  );
   return result.data;
 }
 
@@ -97,7 +110,11 @@ export interface AdminRefundPaymentResponse {
 
 export async function adminRefundPayment(request: AdminRefundPaymentRequest): Promise<AdminRefundPaymentResponse> {
   const refundFn = httpsCallable<AdminRefundPaymentRequest, AdminRefundPaymentResponse>(functions, 'adminRefundPayment');
-  const result = await refundFn(request);
+  const result = await withTimeout(
+    refundFn(request),
+    18000,
+    'Razorpay refund request timed out. Please verify payment status.'
+  );
   return result.data;
 }
 

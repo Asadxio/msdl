@@ -1,5 +1,6 @@
-import { addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { withTimeout } from '@/lib/errors';
 import { normalizeRole } from '@/lib/roles';
 import type { UserProfile } from '@/context/AuthContext';
 import { MODERATION_ACTIONS, type ModerationAction, type ModerationSeverity, type EvidenceSnapshot } from '@/lib/moderationDomain';
@@ -67,7 +68,10 @@ export async function applyModerationDecision(input: {
   const duration = Math.max(0, Number(input.durationMinutes || 0));
   const until = duration > 0 ? new Date(now + duration * 60_000) : null;
 
-  await addDoc(collection(db, 'moderation_actions'), {
+  const batch = writeBatch(db);
+
+  const actionDocRef = doc(collection(db, 'moderation_actions'));
+  batch.set(actionDocRef, {
     actor_uid: input.actorUid,
     actor_role: actorRole,
     target_uid: input.targetUid,
@@ -83,7 +87,8 @@ export async function applyModerationDecision(input: {
     created_at: serverTimestamp(),
   });
 
-  await updateDoc(doc(db, 'moderation_reports', input.reportId), {
+  const reportRef = doc(db, 'moderation_reports', input.reportId);
+  batch.update(reportRef, {
     state: input.action === 'dismiss_report' ? 'dismissed' : 'actioned',
     moderation_notes: input.notes || '',
     actioned_by: input.actorUid,
@@ -92,11 +97,18 @@ export async function applyModerationDecision(input: {
   });
 
   if (['temporary_suspension', 'permanent_suspension', 'mute_user', 'warn_user', 'shadow_restriction'].includes(input.action)) {
-    await updateDoc(doc(db, 'users', input.targetUid), {
+    const userRef = doc(db, 'users', input.targetUid);
+    batch.update(userRef, {
       moderation_state: input.action,
       suspension_until: until,
       moderated_at: serverTimestamp(),
       moderation_reason: input.reason,
     });
   }
+
+  await withTimeout(
+    batch.commit(),
+    12000,
+    'Applying moderation decision timed out'
+  );
 }

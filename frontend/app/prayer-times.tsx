@@ -55,6 +55,7 @@ import {
   DEFAULT_PRAYER_ALARMS_CONFIG,
   type PrayerAlarmsConfig,
 } from '@/lib/prayerAlarmService';
+import { withTimeout } from '@/lib/errors';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const BG       = '#01150E';
@@ -190,10 +191,25 @@ export default function PrayerTimesScreen() {
     try {
       const { status: gs } = await Location.requestForegroundPermissionsAsync();
       if (gs !== 'granted') { Alert.alert('GPS Denied', 'Permission required.'); setStatus('ready'); return; }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const pos = await withTimeout(
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        12000,
+        'GPS signal timed out. Using default location.'
+      );
       const { latitude, longitude, altitude } = pos.coords;
       let city = 'Unknown', state = '', country = '';
-      try { const r = await Location.reverseGeocodeAsync({ latitude, longitude }); if (r?.length) { city = r[0].city || r[0].district || 'Unknown'; state = r[0].region || ''; country = r[0].country || ''; } } catch { /**/ }
+      try {
+        const r = await withTimeout(
+          Location.reverseGeocodeAsync({ latitude, longitude }),
+          8000,
+          'Reverse geocoding timed out'
+        );
+        if (r?.length) {
+          city = r[0].city || r[0].district || 'Unknown';
+          state = r[0].region || '';
+          country = r[0].country || '';
+        }
+      } catch { /**/ }
       await savePrayerSettings({ ...settings, locationMode: 'auto', latitude, longitude, altitude: altitude || 0, city, state, country, method: methodOverride as any, shafaqType, asrFactor });
       Alert.alert('Location Updated', `${city}, ${country}`);
     } catch { Alert.alert('Error', 'Unable to detect location.'); }

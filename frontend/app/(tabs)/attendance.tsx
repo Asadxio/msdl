@@ -336,38 +336,43 @@ export default function AttendanceScreen() {
           onPress: async () => {
             setMarkingAllLoading(true);
             try {
-              const batch = writeBatch(db);
               const cId = selectedCourseId !== 'all' ? selectedCourseId : '';
+              const CHUNK_SIZE = 100;
 
-              for (const student of filteredStudents) {
-                const docId = cId
-                  ? `${student.id}_${selectedDate}_${cId}`
-                  : `${student.id}_${selectedDate}`;
-                const ref = doc(db, 'attendance', docId);
+              for (let i = 0; i < filteredStudents.length; i += CHUNK_SIZE) {
+                const chunk = filteredStudents.slice(i, i + CHUNK_SIZE);
+                const batch = writeBatch(db);
 
-                const payload: any = {
-                  user_id: student.id,
-                  user_name: student.name,
-                  user_email: student.email,
-                  date: selectedDate,
-                  status: 'present',
-                  marked_by: isTeacher ? 'teacher' : 'admin',
-                  marked_by_uid: user.uid,
-                  marked_by_name: profile?.name || user.email || 'Teacher',
-                  marked_at: serverTimestamp(),
-                  updated_at: serverTimestamp(),
-                  created_at: serverTimestamp(),
-                };
-                if (cId) payload.course_id = cId;
+                for (const student of chunk) {
+                  const docId = cId
+                    ? `${student.id}_${selectedDate}_${cId}`
+                    : `${student.id}_${selectedDate}`;
+                  const ref = doc(db, 'attendance', docId);
 
-                batch.set(ref, payload, { merge: true });
+                  const payload: any = {
+                    user_id: student.id,
+                    user_name: student.name,
+                    user_email: student.email,
+                    date: selectedDate,
+                    status: 'present',
+                    marked_by: isTeacher ? 'teacher' : 'admin',
+                    marked_by_uid: user.uid,
+                    marked_by_name: profile?.name || user.email || 'Teacher',
+                    marked_at: serverTimestamp(),
+                    updated_at: serverTimestamp(),
+                    created_at: serverTimestamp(),
+                  };
+                  if (cId) payload.course_id = cId;
+
+                  batch.set(ref, payload, { merge: true });
+                }
+
+                await withTimeout(
+                  batch.commit(),
+                  12000,
+                  'Batch marking attendance chunk timed out'
+                );
               }
-
-              await withTimeout(
-                batch.commit(),
-                12000,
-                'Batch marking attendance timed out'
-              );
               setFeedbackMsg(`✓ Marked all ${filteredStudents.length} students PRESENT!`);
               setTimeout(() => setFeedbackMsg(''), 4000);
             } catch (err: any) {

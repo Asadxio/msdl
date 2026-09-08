@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import Constants from 'expo-constants';
 import { db } from '@/lib/firebase';
+import { withTimeout } from '@/lib/errors';
 
 export type TelemetrySeverity = 'critical' | 'high' | 'medium' | 'low';
 
@@ -179,9 +180,13 @@ export async function updateTelemetryErrorStatus(
   adminNotes?: string
 ): Promise<void> {
   const docRef = doc(db, 'telemetry_errors', errorId);
-  await updateDoc(docRef, {
-    status,
-    admin_notes: adminNotes || '',
-    updated_at: serverTimestamp(),
-  });
+  await withTimeout(
+    updateDoc(docRef, {
+      status,
+      admin_notes: adminNotes || '',
+      updated_at: serverTimestamp(),
+    }),
+    10000,
+    'Updating telemetry status timed out'
+  );
 }

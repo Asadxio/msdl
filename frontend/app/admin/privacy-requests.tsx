@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, orderBy, query, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { withTimeout } from '@/lib/errors';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
@@ -89,10 +90,14 @@ export default function AdminPrivacyRequestsScreen() {
     if (request.state === state || updatingId || !NEXT_STATUS[request.state].includes(state)) return;
     setUpdatingId(request.id);
     try {
-      await updateDoc(doc(db, 'privacy_requests', request.id), {
-        state,
-        updated_at: serverTimestamp(),
-      });
+      await withTimeout(
+        updateDoc(doc(db, 'privacy_requests', request.id), {
+          state,
+          updated_at: serverTimestamp(),
+        }),
+        10000,
+        'Updating privacy request timed out'
+      );
       setRequests((prev) => prev.map((item) => (item.id === request.id ? { ...item, state } : item)));
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'privacy_requests', operation: 'update', path: `privacy_requests/${request.id}`, query: `set state ${state}`, role: profile?.role, status: profile?.status }, error);

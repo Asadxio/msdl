@@ -24,6 +24,7 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { IslamicReceiptModal } from '@/components/IslamicReceiptModal';
 import { shareReceiptToWhatsApp, type FeeReceiptData } from '@/lib/receiptGenerator';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { withTimeout } from '@/lib/errors';
 
 type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
 
@@ -195,7 +196,11 @@ export default function AdminPaymentsScreen() {
       // Fetch user contact info for WhatsApp receipt
       let parentPhone = '';
       try {
-        const uSnap = await getDoc(doc(db, 'users', payment.user_id));
+        const uSnap = await withTimeout(
+          getDoc(doc(db, 'users', payment.user_id)),
+          8000,
+          'User fetch timed out'
+        );
         if (uSnap.exists()) {
           const uData = uSnap.data();
           parentPhone = String(uData.guardian_phone || uData.parent_phone || uData.whatsapp || uData.phone || '').trim();
