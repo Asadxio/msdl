@@ -8,6 +8,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { addDoc, collection, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, storage } from '@/lib/firebase';
 import { withTimeout } from '@/lib/errors';
+import { LIVE_OPS } from '@/lib/liveOpsConfig';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,10 @@ export async function requestMicPermission(): Promise<boolean> {
 // ─── Recording Start ──────────────────────────────────────────────────────────
 
 export async function startClassRecording(): Promise<Audio.Recording> {
+  if (LIVE_OPS.emergencyRecordingDisabled) {
+    throw new Error('Recording service is temporarily disabled by administrator.');
+  }
+
   const granted = await requestMicPermission();
   if (!granted) throw new Error('Microphone permission is required to record the class.');
 
