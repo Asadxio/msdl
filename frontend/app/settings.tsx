@@ -106,7 +106,7 @@ export default function SettingsScreen() {
     }
     
     try {
-      const { db } = require('@/config/firebase');
+      const { db } = require('@/lib/firebase');
       setStatusDb(db ? 'Connected' : 'Disconnected');
     } catch {
       setStatusDb('Disconnected');

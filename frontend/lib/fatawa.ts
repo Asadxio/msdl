@@ -13,6 +13,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { withTimeout } from '@/lib/errors';
 
 export type FatawaCategoryKey =
   | 'taharat'
@@ -126,30 +127,38 @@ export async function askFatawaQuestion(params: {
     updated_at: serverTimestamp(),
   };
 
-  await setDoc(newDocRef, payload);
+  await withTimeout(
+    setDoc(newDocRef, payload),
+    12000,
+    'Failed to submit fatwa question: server timed out.'
+  );
 
   // Notify teachers/Dar-ul-Ifta scholars about the new question
   try {
     const notifRef = doc(collection(db, 'notifications'));
     const dedupeId = `fatwa_ask:${newDocRef.id}:${Date.now()}`;
-    await setDoc(notifRef, {
-      id: notifRef.id,
-      user_id: 'role_targeted',
-      target_roles: ['teacher'],
-      recipient_id: 'all_teachers',
-      actor_id: params.userId,
-      category: 'fatawa_question_asked',
-      channel: 'announcements',
-      event: 'system_alert',
-      title: 'نیا فقہی سوال (New Dar-ul-Ifta Question)',
-      message: `ایک طالبہ نے دار الافتاء میں نیا سوال پوچھا ہے: "${title}"`,
-      body: `ایک طالبہ نے دار الافتاء میں نیا سوال پوچھا ہے: "${title}"`,
-      route: '/fatawa/manage',
-      read: {},
-      dedupe_id: dedupeId,
-      created_at: serverTimestamp(),
-      created_at_ms: Date.now(),
-    });
+    await withTimeout(
+      setDoc(notifRef, {
+        id: notifRef.id,
+        user_id: 'role_targeted',
+        target_roles: ['teacher'],
+        recipient_id: 'all_teachers',
+        actor_id: params.userId,
+        category: 'fatawa_question_asked',
+        channel: 'announcements',
+        event: 'system_alert',
+        title: 'نیا فقہی سوال (New Dar-ul-Ifta Question)',
+        message: `ایک طالبہ نے دار الافتاء میں نیا سوال پوچھا ہے: "${title}"`,
+        body: `ایک طالبہ نے دار الافتاء میں نیا سوال پوچھا ہے: "${title}"`,
+        route: '/fatawa/manage',
+        read: {},
+        dedupe_id: dedupeId,
+        created_at: serverTimestamp(),
+        created_at_ms: Date.now(),
+      }),
+      8000,
+      'Notification write timed out'
+    );
   } catch (err) {
     console.warn('[Fatawa] Teacher notification dispatch failed:', err);
   }
@@ -285,18 +294,26 @@ export async function answerFatawaQuestion(params: {
   }
 
   const docRef = doc(db, 'fatawa_questions', params.questionId);
-  const snap = await getDoc(docRef);
+  const snap = await withTimeout(
+    getDoc(docRef),
+    10000,
+    'Failed to fetch question details: server timed out.'
+  );
 
-  await updateDoc(docRef, {
-    answer,
-    answered_by_uid: params.teacherUid,
-    answered_by_name: params.teacherName || 'Muftiah / Ustaadha',
-    answered_at: serverTimestamp(),
-    reference_kitab: params.referenceKitab?.trim() || 'کتبِ فقہ و فتاویٰ',
-    is_public: params.isPublic,
-    status: 'answered',
-    updated_at: serverTimestamp(),
-  });
+  await withTimeout(
+    updateDoc(docRef, {
+      answer,
+      answered_by_uid: params.teacherUid,
+      answered_by_name: params.teacherName || 'Muftiah / Ustaadha',
+      answered_at: serverTimestamp(),
+      reference_kitab: params.referenceKitab?.trim() || 'کتبِ فقہ و فتاویٰ',
+      is_public: params.isPublic,
+      status: 'answered',
+      updated_at: serverTimestamp(),
+    }),
+    12000,
+    'Failed to update fatwa answer: server timed out.'
+  );
 
   if (snap.exists()) {
     const qData = snap.data() as FatawaQuestion;
@@ -304,24 +321,28 @@ export async function answerFatawaQuestion(params: {
       try {
         const notifRef = doc(collection(db, 'notifications'));
         const dedupeId = `fatwa_ans:${params.questionId}:${Date.now()}`;
-        await setDoc(notifRef, {
-          id: notifRef.id,
-          recipient_id: qData.student_id,
-          user_id: qData.student_id,
-          actor_id: params.teacherUid,
-          channel: 'announcements',
-          event: 'system_alert',
-          type: 'fatwa_answered',
-          category: 'fatwa_answered',
-          title: 'شرعی مسئلہ کا جواب (Fatwa Answered)',
-          message: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
-          body: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
-          route: `/fatawa/${params.questionId}`,
-          read: { [qData.student_id]: false },
-          dedupe_id: dedupeId,
-          created_at: serverTimestamp(),
-          created_at_ms: Date.now(),
-        });
+        await withTimeout(
+          setDoc(notifRef, {
+            id: notifRef.id,
+            recipient_id: qData.student_id,
+            user_id: qData.student_id,
+            actor_id: params.teacherUid,
+            channel: 'announcements',
+            event: 'system_alert',
+            type: 'fatwa_answered',
+            category: 'fatwa_answered',
+            title: 'شرعی مسئلہ کا جواب (Fatwa Answered)',
+            message: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
+            body: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
+            route: `/fatawa/${params.questionId}`,
+            read: { [qData.student_id]: false },
+            dedupe_id: dedupeId,
+            created_at: serverTimestamp(),
+            created_at_ms: Date.now(),
+          }),
+          8000,
+          'Notification write timed out'
+        );
       } catch (err) {
         console.warn('[Fatawa] Notification write skipped:', err);
       }
