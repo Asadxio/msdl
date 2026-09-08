@@ -33,6 +33,7 @@ import { ReportReasonModal } from '@/components/ReportReasonModal';
 import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { canSendMessage, canDeleteMessageForEveryone, canDeleteMessageForEveryoneWithWindow, canAddReaction } from '@/lib/chatPermissions';
+import { withTimeout } from '@/lib/errors';
 
 type ChatMeta = {
   id: string;
@@ -1130,24 +1131,28 @@ export default function ChatDetailScreen() {
         };
         await enqueue(id, outboxItem).catch(() => {});
 
-        await setDoc(doc(db, 'messages', msgId), {
-          chat_id: id,
-          text: msg,
-          sender_id: user.uid,
-          sender_name: profile?.name || user.email || 'User',
-          created_at: serverTimestamp(),
-          read_by: [user.uid],
-          client_id: clientId,
-          deleted_for: [],
-          deleted_for_everyone: false,
-          message_type: 'text',
-          media_url: '',
-          media_name: '',
-          media_size: 0,
-          status: 'sent',
-          reactions: {},
-          ...(curReply ? { reply_to: curReply.id, reply_snippet: curReply.text } : {}),
-        });
+        await withTimeout(
+          setDoc(doc(db, 'messages', msgId), {
+            chat_id: id,
+            text: msg,
+            sender_id: user.uid,
+            sender_name: profile?.name || user.email || 'User',
+            created_at: serverTimestamp(),
+            read_by: [user.uid],
+            client_id: clientId,
+            deleted_for: [],
+            deleted_for_everyone: false,
+            message_type: 'text',
+            media_url: '',
+            media_name: '',
+            media_size: 0,
+            status: 'sent',
+            reactions: {},
+            ...(curReply ? { reply_to: curReply.id, reply_snippet: curReply.text } : {}),
+          }),
+          10000,
+          'Sending message timed out'
+        );
 
         await completeItem(id, outboxItem.id).catch(() => {});
 
@@ -1611,9 +1616,13 @@ export default function ChatDetailScreen() {
       return;
     }
     try {
-      await updateDoc(doc(db, 'messages', message.id), {
-        deleted_for: arrayUnion(user.uid),
-      });
+      await withTimeout(
+        updateDoc(doc(db, 'messages', message.id), {
+          deleted_for: arrayUnion(user.uid),
+        }),
+        8000,
+        'Deleting message timed out'
+      );
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'messages', operation: 'update', query: `doc messages/${message.id} delete_for me` }, error);
       setSendError('Could not delete message. Please try again.');
@@ -1653,13 +1662,17 @@ export default function ChatDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await updateDoc(doc(db, 'messages', message.id), {
-                text: '🚫 This message was deleted',
-                deleted_for_everyone: true,
-                is_deleted: true,
-                unsent_by: user.uid,
-                unsent_at: serverTimestamp(),
-              });
+              await withTimeout(
+                updateDoc(doc(db, 'messages', message.id), {
+                  text: '🚫 This message was deleted',
+                  deleted_for_everyone: true,
+                  is_deleted: true,
+                  unsent_by: user.uid,
+                  unsent_at: serverTimestamp(),
+                }),
+                8000,
+                'Unsending message timed out'
+              );
               setFeedback({ type: 'success', text: 'Message deleted for everyone' });
             } catch (error: unknown) {
               logFirestoreFailure({ collection: 'messages', operation: 'update', query: `doc messages/${message.id} unsend for everyone` }, error);

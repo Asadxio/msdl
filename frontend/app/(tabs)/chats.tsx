@@ -19,6 +19,7 @@ import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { canInitiateDirectChat, canCreateGroup, canCreateBroadcast } from '@/lib/chatPermissions';
+import { withTimeout } from '@/lib/errors';
 
 type AppUser = {
   id: string;
@@ -276,9 +277,13 @@ export default function ChatsScreen() {
     try {
       console.log('[Chats] Pin chat clicked', { chatId: chatItem.id });
       const pinned = (Array.isArray(chatItem.pinned_by) ? chatItem.pinned_by : []).includes(user.uid);
-      await updateDoc(doc(db, 'chats', chatItem.id), {
-        pinned_by: pinned ? arrayRemove(user.uid) : arrayUnion(user.uid),
-      });
+      await withTimeout(
+        updateDoc(doc(db, 'chats', chatItem.id), {
+          pinned_by: pinned ? arrayRemove(user.uid) : arrayUnion(user.uid),
+        }),
+        8000,
+        'Pinning chat timed out'
+      );
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'chats', operation: 'update', query: `doc chats/${chatItem.id} toggle pinned_by` }, error);
       console.log('[Chats] togglePinChat ERROR', error);
@@ -290,9 +295,13 @@ export default function ChatsScreen() {
     if (!user?.uid) return;
     try {
       const isArchived = (Array.isArray(chatItem.archived_by) ? chatItem.archived_by : []).includes(user.uid);
-      await updateDoc(doc(db, 'chats', chatItem.id), {
-        archived_by: isArchived ? arrayRemove(user.uid) : arrayUnion(user.uid),
-      });
+      await withTimeout(
+        updateDoc(doc(db, 'chats', chatItem.id), {
+          archived_by: isArchived ? arrayRemove(user.uid) : arrayUnion(user.uid),
+        }),
+        8000,
+        'Archiving chat timed out'
+      );
       setFeedback({ type: 'success', text: isArchived ? 'Chat unarchived' : 'Chat archived' });
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'chats', operation: 'update', query: `doc chats/${chatItem.id} toggle archived_by` }, error);
@@ -313,13 +322,17 @@ export default function ChatsScreen() {
             setBulkUpdating(true);
             try {
               const selectedChats = safeChats.filter((chatItem) => selectedChatIds.includes(chatItem.id));
-              await Promise.all(selectedChats.map(async (chatItem) => {
-                const updatePayload: Record<string, any> = { hidden_by: arrayUnion(user.uid) };
-                if (chatItem.type !== 'broadcast') {
-                  updatePayload[`unread_counts.${user.uid}`] = 0;
-                }
-                await updateDoc(doc(db, 'chats', chatItem.id), updatePayload);
-              }));
+              await withTimeout(
+                Promise.all(selectedChats.map(async (chatItem) => {
+                  const updatePayload: Record<string, any> = { hidden_by: arrayUnion(user.uid) };
+                  if (chatItem.type !== 'broadcast') {
+                    updatePayload[`unread_counts.${user.uid}`] = 0;
+                  }
+                  await updateDoc(doc(db, 'chats', chatItem.id), updatePayload);
+                })),
+                10000,
+                'Deleting chats timed out'
+              );
               setSelectedChatIds([]);
               setFeedback({ type: 'success', text: 'Selected chats deleted from your list.' });
             } catch (error: unknown) {
@@ -394,18 +407,22 @@ export default function ChatsScreen() {
 
     setCreatingGroup(true);
     try {
-      const ref = await addDoc(collection(db, 'chats'), {
-        type: 'group',
-        name: cleanedName,
-        participants,
-        participant_names,
-        created_by: user.uid,
-        last_message: '',
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-        typing: {},
-        unread_counts,
-      });
+      const ref = await withTimeout(
+        addDoc(collection(db, 'chats'), {
+          type: 'group',
+          name: cleanedName,
+          participants,
+          participant_names,
+          created_by: user.uid,
+          last_message: '',
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+          typing: {},
+          unread_counts,
+        }),
+        10000,
+        'Creating group timed out'
+      );
       setShowGroupCreator(false);
       setGroupName('');
       setSelected([]);
@@ -429,18 +446,22 @@ export default function ChatsScreen() {
     }
     setOpeningBroadcast(true);
     try {
-      const ref = await addDoc(collection(db, 'chats'), {
-        type: 'broadcast',
-        name: 'Announcements',
-        participants: [],
-        participant_names: {},
-        created_by: user.uid,
-        last_message: '',
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-        typing: {},
-        unread_counts: { [user.uid]: 0 },
-      });
+      const ref = await withTimeout(
+        addDoc(collection(db, 'chats'), {
+          type: 'broadcast',
+          name: 'Announcements',
+          participants: [],
+          participant_names: {},
+          created_by: user.uid,
+          last_message: '',
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+          typing: {},
+          unread_counts: { [user.uid]: 0 },
+        }),
+        10000,
+        'Opening broadcast channel timed out'
+      );
       safePush(`/chat/${ref.id}`);
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'chats', operation: 'add', query: 'create broadcast chat' }, error);

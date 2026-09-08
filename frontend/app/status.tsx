@@ -43,6 +43,7 @@ import { trackPerformanceMetric } from "@/lib/performanceEngine";
 import * as DocumentPicker from "expo-document-picker";
 import { Audio, type AVPlaybackStatus } from "expo-av";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { withTimeout } from "@/lib/errors";
 
 type StatusComment = {
   id: string;
@@ -294,25 +295,29 @@ export default function StatusScreen() {
         }
       }
 
-      await addDoc(collection(db, "status_updates"), {
-        user_id: user.uid,
-        user_name: profile.name || (profile.role === "admin" ? "مدیر اعلیٰ" : "معلمہ محترمہ"),
-        role: profile.role === "admin" ? "admin" : "teacher",
-        text: statusText.trim(),
-        media_url: finalMediaUrl,
-        media_type: mediaType,
-        audio_title: mediaType === "audio" ? (audioTitle.trim() || "تلاوت کلام پاک / Tilawat") : "",
-        duration_ms: mediaType === "audio" ? 30000 : 5000,
-        likes: [],
-        comments: [],
-        audience,
-        audience_user_ids: [],
-        hidden_user_ids: [],
-        muted_by: [],
-        reaction_counts: {},
-        expires_at_ms: Date.now() + STATUS_EXPIRY_MS,
-        created_at: serverTimestamp(),
-      });
+      await withTimeout(
+        addDoc(collection(db, "status_updates"), {
+          user_id: user.uid,
+          user_name: profile.name || (profile.role === "admin" ? "مدیر اعلیٰ" : "معلمہ محترمہ"),
+          role: profile.role === "admin" ? "admin" : "teacher",
+          text: statusText.trim(),
+          media_url: finalMediaUrl,
+          media_type: mediaType,
+          audio_title: mediaType === "audio" ? (audioTitle.trim() || "تلاوت کلام پاک / Tilawat") : "",
+          duration_ms: mediaType === "audio" ? 30000 : 5000,
+          likes: [],
+          comments: [],
+          audience,
+          audience_user_ids: [],
+          hidden_user_ids: [],
+          muted_by: [],
+          reaction_counts: {},
+          expires_at_ms: Date.now() + STATUS_EXPIRY_MS,
+          created_at: serverTimestamp(),
+        }),
+        12000,
+        "Posting status update timed out"
+      );
       setStatusText("");
       setStatusMediaUrl("");
       setSelectedAudio(null);
@@ -388,9 +393,13 @@ export default function StatusScreen() {
     setUpdatingId(item.id);
     try {
       const liked = (item.likes || []).includes(user.uid);
-      await updateDoc(doc(db, "status_updates", item.id), {
-        likes: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
-      });
+      await withTimeout(
+        updateDoc(doc(db, "status_updates", item.id), {
+          likes: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
+        }),
+        8000,
+        "Liking status timed out"
+      );
     } catch {
       Alert.alert("Update failed", "Could not update like.");
     } finally {
@@ -414,10 +423,14 @@ export default function StatusScreen() {
         created_at_ms: Date.now(),
         deleted: false,
       };
-      await setDoc(doc(db, "status_updates", item.id, "comments", commentId), {
-        ...comment,
-        created_at: serverTimestamp(),
-      });
+      await withTimeout(
+        setDoc(doc(db, "status_updates", item.id, "comments", commentId), {
+          ...comment,
+          created_at: serverTimestamp(),
+        }),
+        8000,
+        "Adding comment timed out"
+      );
       setCommentInputs((prev) => ({ ...prev, [item.id]: "" }));
     } catch {
       Alert.alert("Comment failed", "Could not add comment.");
@@ -487,7 +500,11 @@ export default function StatusScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteDoc(doc(db, "status_updates", item.id));
+            await withTimeout(
+              deleteDoc(doc(db, "status_updates", item.id)),
+              10000,
+              "Deleting status update timed out"
+            );
             setItems((prev) => prev.filter((s) => s.id !== item.id));
           } catch {
             Alert.alert("Delete failed", "Could not delete status update.");

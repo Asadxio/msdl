@@ -335,17 +335,21 @@ export default function ManageAcademicsScreen() {
       const studentObj = availableStudents.find((s) => s.uid === selectedStudentToEnroll);
       const courseObj = courses.find((c) => c.id === selectedRosterCourseId);
       
-      await setDoc(doc(db, 'enrollments', enrollmentDocId), {
-        user_id: selectedStudentToEnroll,
-        course_id: selectedRosterCourseId,
-        status: 'active',
-        user_name: studentObj?.name || '',
-        user_email: studentObj?.email || '',
-        course_name: courseObj?.name || '',
-        enrolled_at: serverTimestamp(),
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-      }, { merge: true });
+      await withTimeout(
+        setDoc(doc(db, 'enrollments', enrollmentDocId), {
+          user_id: selectedStudentToEnroll,
+          course_id: selectedRosterCourseId,
+          status: 'active',
+          user_name: studentObj?.name || '',
+          user_email: studentObj?.email || '',
+          course_name: courseObj?.name || '',
+          enrolled_at: serverTimestamp(),
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+        }, { merge: true }),
+        10000,
+        'Enrolling student timed out'
+      );
 
       await createAdminLog(profile, {
         action: 'course_enroll_student',
@@ -383,10 +387,14 @@ export default function ManageAcademicsScreen() {
           onPress: async () => {
             try {
               setActionLoading(true);
-              await updateDoc(doc(db, 'enrollments', rosterItem.id), {
-                status: 'cancelled',
-                updated_at: serverTimestamp(),
-              });
+              await withTimeout(
+                updateDoc(doc(db, 'enrollments', rosterItem.id), {
+                  status: 'cancelled',
+                  updated_at: serverTimestamp(),
+                }),
+                10000,
+                'Unenrolling student timed out'
+              );
               await createAdminLog(profile, {
                 action: 'course_unenroll_student',
                 performed_by: profile?.email || profile?.name || 'admin',
@@ -600,7 +608,11 @@ export default function ManageAcademicsScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDoc(doc(db, 'courses', course.id));
+            await withTimeout(
+              deleteDoc(doc(db, 'courses', course.id)),
+              10000,
+              'Deleting course timed out'
+            );
             await fetchData();
           } catch (error: any) {
             logFirestoreFailure({ collection: 'courses', operation: 'delete', path: `courses/${course.id}`, query: 'delete course', role: profile?.role, status: profile?.status }, error);
@@ -707,12 +719,16 @@ export default function ManageAcademicsScreen() {
     }
     try {
       setActionLoading(true);
-      await updateDoc(doc(db, 'teachers', selectedTeacherId), {
-        name: teacherName.trim(),
-        title: teacherTitle.trim(),
-        photo_url: teacherPhoto.trim(),
-        updated_at: serverTimestamp(),
-      });
+      await withTimeout(
+        updateDoc(doc(db, 'teachers', selectedTeacherId), {
+          name: teacherName.trim(),
+          title: teacherTitle.trim(),
+          photo_url: teacherPhoto.trim(),
+          updated_at: serverTimestamp(),
+        }),
+        10000,
+        'Updating teacher profile timed out'
+      );
       await fetchData();
       Alert.alert('Saved', 'Teacher profile updated.');
     } catch (error: unknown) {
@@ -743,13 +759,21 @@ export default function ManageAcademicsScreen() {
         updated_at: serverTimestamp(),
       };
       if (editingRecordingId) {
-        await updateDoc(doc(db, 'recordings', editingRecordingId), payload);
+        await withTimeout(
+          updateDoc(doc(db, 'recordings', editingRecordingId), payload),
+          10000,
+          'Updating recording timed out'
+        );
       } else {
-        await addDoc(collection(db, 'recordings'), {
-          ...payload,
-          created_by: profile?.name || 'admin',
-          created_at: serverTimestamp(),
-        });
+        await withTimeout(
+          addDoc(collection(db, 'recordings'), {
+            ...payload,
+            created_by: profile?.name || 'admin',
+            created_at: serverTimestamp(),
+          }),
+          10000,
+          'Adding recording timed out'
+        );
       }
       await createNotificationAsAdmin(profile, {
         title: editingRecordingId ? 'Recording Updated' : 'New Recording Added',
@@ -799,7 +823,11 @@ export default function ManageAcademicsScreen() {
         onPress: async () => {
           try {
             setActionLoading(true);
-            await deleteDoc(doc(db, 'recordings', recording.id));
+            await withTimeout(
+              deleteDoc(doc(db, 'recordings', recording.id)),
+              10000,
+              'Deleting recording timed out'
+            );
             if (editingRecordingId === recording.id) clearRecordingForm();
             await fetchData();
           } catch (error: unknown) {

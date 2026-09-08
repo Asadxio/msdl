@@ -22,6 +22,7 @@ import { QUIZ_CATEGORIES } from '@/constants/quizCategories';
 import { Ionicons } from '@expo/vector-icons';
 import { IslamicCertificateModal } from '@/components/IslamicCertificateModal';
 import { saveQuizCertificate, type QuizCertificateData } from '@/lib/quizCertificate';
+import { withTimeout } from '@/lib/errors';
 
 
 type QuizQuestion = {
@@ -490,9 +491,17 @@ export default function QuizScreen() {
     setSavingQuestion(true);
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'quizzes', editingId), payload);
+        await withTimeout(
+          updateDoc(doc(db, 'quizzes', editingId), payload),
+          10000,
+          'Updating quiz question timed out'
+        );
       } else {
-        await addDoc(collection(db, 'quizzes'), payload);
+        await withTimeout(
+          addDoc(collection(db, 'quizzes'), payload),
+          10000,
+          'Adding quiz question timed out'
+        );
       }
       // Reset form state
       setEditingId('');
@@ -520,7 +529,11 @@ export default function QuizScreen() {
     // (admin has direct Firestore read access per security rules)
     // This is intentionally NOT done via getQuizQuestions (which strips answer keys for students)
     try {
-      const fullDoc = await getDoc(doc(db, 'quizzes', q.id));
+      const fullDoc = await withTimeout(
+        getDoc(doc(db, 'quizzes', q.id)),
+        8000,
+        'Fetching quiz question timed out'
+      );
       if (fullDoc.exists()) {
         const data = fullDoc.data() as any;
         const correctAnswerValue = String(data.correctAnswer ?? data.correct_answer ?? '');
@@ -539,7 +552,11 @@ export default function QuizScreen() {
   const removeQuestion = async (id: string) => {
     if (!isAdmin || !id) return;
     try {
-      await deleteDoc(doc(db, 'quizzes', id));
+      await withTimeout(
+        deleteDoc(doc(db, 'quizzes', id)),
+        10000,
+        'Deleting quiz question timed out'
+      );
       if (selectedCategory) await loadQuiz(selectedCategory);
     } catch (e: any) {
       logFirestoreFailure({ collection: 'quizzes', operation: 'delete', path: `quizzes/${id}`, query: 'delete quiz question', role: profile?.role, status: profile?.status }, e);
