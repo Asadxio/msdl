@@ -31,6 +31,7 @@ import { db } from '@/lib/firebase';
 import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 import { QUIZ_CATEGORIES } from '@/constants/quizCategories';
 import { useAuth } from '@/context/AuthContext';
+import { hasPermission } from '@/lib/rbac';
 import { goBackOrReplace } from '@/lib/navigation';
 import { clearQuizCounts } from '@/lib/lmsHardening';
 
@@ -48,6 +49,7 @@ export default function AdminManageQuizzesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
+  const allowed = hasPermission(profile, 'admin.academics.manage') || profile?.role === 'super_admin' || profile?.role === 'admin';
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [questions, setQuestions] = useState<QuizDoc[]>([]);
@@ -289,6 +291,24 @@ export default function AdminManageQuizzesScreen() {
       ) : null}
     </View>
   );
+
+  if (!allowed && profile) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: SPACING.xl }]}>
+        <Ionicons name="lock-closed-outline" size={48} color={COLORS.error} />
+        <Text style={{ fontSize: 18, fontWeight: '700', color: COLORS.textMain, marginTop: SPACING.md }}>Unauthorized Access</Text>
+        <Text style={{ fontSize: 14, color: COLORS.textMuted, textAlign: 'center', marginTop: SPACING.xs }}>
+          You do not have permission to manage quizzes.
+        </Text>
+        <TouchableOpacity
+          style={{ marginTop: SPACING.lg, paddingVertical: 10, paddingHorizontal: 20, backgroundColor: COLORS.primary, borderRadius: RADIUS.md }}
+          onPress={() => goBackOrReplace(router, '/(tabs)/quiz')}
+        >
+          <Text style={{ color: '#FFF', fontWeight: '600' }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

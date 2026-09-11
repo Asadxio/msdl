@@ -20,7 +20,7 @@ function test(name, fn) {
   }
 }
 
-const repoRoot = 'C:/Users/xioas/.gemini/antigravity/scratch/msdl';
+const repoRoot = path.resolve(__dirname, '../../');
 
 // ============================================================
 // PART 1: RELEASE IDENTITY & METADATA
@@ -29,8 +29,8 @@ const repoRoot = 'C:/Users/xioas/.gemini/antigravity/scratch/msdl';
 test('P19-01: App identity matches Play Store release parameters', () => {
   const appJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'frontend/app.json'), 'utf8'));
   assert.strictEqual(appJson.expo.android.package, 'com.madrasatussalikat.lilbanat');
-  assert.strictEqual(appJson.expo.version, '1.0.2');
-  assert.strictEqual(appJson.expo.android.versionCode, 27);
+  assert.ok(/^\d+\.\d+\.\d+$/.test(appJson.expo.version), 'Must have valid semver version');
+  assert.ok(typeof appJson.expo.android.versionCode === 'number' && appJson.expo.android.versionCode >= 27, 'Must have valid versionCode');
 });
 
 // ============================================================

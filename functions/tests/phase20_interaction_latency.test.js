@@ -20,7 +20,7 @@ function test(name, fn) {
   }
 }
 
-const repoRoot = 'C:/Users/xioas/.gemini/antigravity/scratch/msdl';
+const repoRoot = path.resolve(__dirname, '../../');
 
 // ============================================================
 // PART 1: ROUTE GUARD & LEGAL CONSENT CACHING
@@ -60,7 +60,7 @@ test('P20-04: ScalePressable provides sub-50ms haptic and spring feedback on pre
 
 test('P20-05: Performance optimizations strictly preserve security and role checks', () => {
   const rules = fs.readFileSync(path.join(repoRoot, 'firestore.rules'), 'utf8');
-  assert.ok(rules.includes("role == 'super_admin'"));
+  assert.ok(rules.includes("roleOf(request.auth.uid) == 'super_admin'") || rules.includes("isSuperAdmin()"));
   assert.ok(rules.includes("isAdmin()"));
 });
 

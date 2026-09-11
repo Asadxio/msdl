@@ -20,7 +20,7 @@ function test(name, fn) {
   }
 }
 
-const repoRoot = 'C:/Users/xioas/.gemini/antigravity/scratch/msdl';
+const repoRoot = path.resolve(__dirname, '../../');
 
 // ============================================================
 // PART 1: STUDENT FUNCTIONAL INVARIANTS (B1 to B18)

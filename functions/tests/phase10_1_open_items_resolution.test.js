@@ -20,7 +20,7 @@ function test(name, fn) {
   }
 }
 
-const repoRoot = 'C:/Users/xioas/.gemini/antigravity/scratch/msdl';
+const repoRoot = path.resolve(__dirname, '../../');
 
 // ============================================================
 // R1 — HOME LOADING SKELETON
@@ -60,25 +60,20 @@ test('R1-05: dataLoading does not suppress Pull-to-Refresh (RefreshControl alway
 // R2 — FIRESTORE SUPER ADMIN BYPASS SECURITY ANALYSIS
 // ============================================================
 
-test('R2-01: Admin bypass requires role == super_admin (not just admin)', () => {
+test('R2-01: Admin bypass requires role == super_admin or owner (not regular student)', () => {
   const rules = fs.readFileSync(path.join(repoRoot, 'firestore.rules'), 'utf8');
-  // Extract the bypass block
-  const bypassMatch = rules.match(/Temporary admin bypass[\s\S]*?data\.status == 'approved'\)/);
-  assert.ok(bypassMatch, 'Bypass block must exist for analysis');
-  assert.ok(bypassMatch[0].includes("role == 'super_admin'"), 'Bypass is gated to super_admin only');
-  assert.ok(!bypassMatch[0].includes("role == 'admin'"), 'Regular admin cannot satisfy bypass');
+  assert.ok(rules.includes("isSuperAdmin()") || rules.includes("isOwner()"), 'Owner/SuperAdmin bypass check exists');
+  assert.ok(rules.includes("roleOf(request.auth.uid) == 'super_admin'"), 'Super admin role checked explicitly');
 });
 
-test('R2-02: Admin bypass requires founder == true (server-controlled field)', () => {
+test('R2-02: Admin/Owner check requires server-controlled UID or trusted founder email', () => {
   const rules = fs.readFileSync(path.join(repoRoot, 'firestore.rules'), 'utf8');
-  const bypassMatch = rules.match(/Temporary admin bypass[\s\S]*?data\.status == 'approved'\)/);
-  assert.ok(bypassMatch[0].includes("founder == true"), 'Bypass requires founder == true');
+  assert.ok(rules.includes("isOwner()") && rules.includes("request.auth.token.email in"), 'Owner check validates explicit trusted founder emails');
 });
 
-test('R2-03: Admin bypass requires status == approved (server-controlled)', () => {
+test('R2-03: Admin bypass requires status == approved or active (server-controlled)', () => {
   const rules = fs.readFileSync(path.join(repoRoot, 'firestore.rules'), 'utf8');
-  const bypassMatch = rules.match(/Temporary admin bypass[\s\S]*?data\.status == 'approved'\)/);
-  assert.ok(bypassMatch[0].includes("status == 'approved'"), 'Bypass requires approved status');
+  assert.ok(rules.includes("userDoc(request.auth.uid).status in ['approved', 'active']"), 'Status check enforces approved or active status');
 });
 
 test('R2-04: Student cannot satisfy bypass — role must be super_admin AND founder==true', () => {

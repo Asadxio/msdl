@@ -19,13 +19,15 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { functions, db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { isFounderEmail } from '@/lib/founderPolicy';
 import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 import { CustomerSupportModal } from '@/components/CustomerSupportModal';
 
 export default function OrganizationSettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
+  const isAdmin = isFounderEmail(user?.email || profile?.email || '') || profile?.role === 'super_admin' || profile?.role === 'admin';
   const { activeOrgId, activeOrg, loading: orgLoading } = useActiveOrganization();
 
   const [name, setName] = useState('');
@@ -109,6 +111,24 @@ export default function OrganizationSettingsScreen() {
   const isSuspended = activeOrg?.status === 'suspended';
   const isTrial = activeOrg?.status === 'trial';
   const paymentStatus = activeOrg?.payment_status || (activeOrg?.status === 'active' ? 'received' : 'pending');
+
+  if (!isAdmin && profile) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: SPACING.xl }]}>
+        <Ionicons name="lock-closed-outline" size={48} color={COLORS.error} />
+        <Text style={{ fontSize: 18, fontWeight: '700', color: COLORS.text, marginTop: SPACING.md }}>Unauthorized Access</Text>
+        <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.xs }}>
+          You do not have permission to configure organization settings.
+        </Text>
+        <TouchableOpacity
+          style={{ marginTop: SPACING.lg, paddingVertical: 10, paddingHorizontal: 20, backgroundColor: COLORS.primary, borderRadius: RADIUS.md }}
+          onPress={() => router.replace('/(tabs)')}
+        >
+          <Text style={{ color: '#FFF', fontWeight: '600' }}>Go Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView

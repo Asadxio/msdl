@@ -20,7 +20,7 @@ function test(name, fn) {
   }
 }
 
-const repoRoot = 'C:/Users/xioas/.gemini/antigravity/scratch/msdl';
+const repoRoot = path.resolve(__dirname, '../../');
 const rules = fs.readFileSync(path.join(repoRoot, 'firestore.rules'), 'utf8');
 const storageRules = fs.readFileSync(path.join(repoRoot, 'storage.rules'), 'utf8');
 const chatListSrc = fs.readFileSync(path.join(repoRoot, 'frontend/app/(tabs)/chats.tsx'), 'utf8');

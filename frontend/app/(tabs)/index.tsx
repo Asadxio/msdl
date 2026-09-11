@@ -363,6 +363,9 @@ export default function HomeScreen() {
           accessibilityLabel="Open Profile and Account Settings"
         >
           <View style={styles.welcomeInfo}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#C8A84E', letterSpacing: 0.5, marginBottom: 2 }}>
+              Student Portal
+            </Text>
             {/* 1.1 — Time-based Islamic greeting */}
             <Text style={styles.islamicGreetingText}>{islamicGreeting}</Text>
             <Text style={styles.userName} numberOfLines={1}>{profile?.name || 'Student'}</Text>

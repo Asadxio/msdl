@@ -22,11 +22,15 @@ import {
   publishGeneratedQuiz,
   formatQuizAsPrintableExam,
 } from '@/lib/aiQuizGenerator';
+import { useAuth } from '@/context/AuthContext';
+import { hasPermission } from '@/lib/rbac';
 import { goBackOrReplace } from '@/lib/navigation';
 
 export default function AiQuizMakerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { profile } = useAuth();
+  const allowed = hasPermission(profile, 'admin.academics.manage') || profile?.role === 'super_admin' || profile?.role === 'admin';
 
   const [category, setCategory] = useState('Wudu');
   const [questionCount, setQuestionCount] = useState<number>(5);
@@ -123,6 +127,24 @@ export default function AiQuizMakerScreen() {
     await Clipboard.setStringAsync(text);
     Alert.alert('Paper Copied!', 'Exam paper with Answer Key has been copied to your clipboard. You can paste it in WhatsApp or print it.');
   };
+
+  if (!allowed && profile) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: SPACING.xl }]}>
+        <Ionicons name="lock-closed-outline" size={48} color={COLORS.error} />
+        <Text style={{ fontSize: 18, fontWeight: '700', color: COLORS.text, marginTop: SPACING.md }}>Unauthorized Access</Text>
+        <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.xs }}>
+          You do not have permission to access the AI Quiz Maker.
+        </Text>
+        <TouchableOpacity
+          style={{ marginTop: SPACING.lg, paddingVertical: 10, paddingHorizontal: 20, backgroundColor: COLORS.primary, borderRadius: RADIUS.md }}
+          onPress={() => goBackOrReplace(router, '/(tabs)/quiz')}
+        >
+          <Text style={{ color: '#FFF', fontWeight: '600' }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

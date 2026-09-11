@@ -26,7 +26,7 @@ const firebaseConfig = {
   appId: "1:675123731963:web:2b892063276a7c452cbf5e",
 };
 
-const repoRoot = "C:/Users/xioas/.gemini/antigravity/scratch/msdl";
+const repoRoot = path.resolve(__dirname, '../../');
 
 console.log("================================================================");
 console.log("   PHASE P0.3.2 - TEACHER ACADEMIC VISIBILITY TEST SUITE       ");

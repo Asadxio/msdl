@@ -25,7 +25,7 @@ async function test(name, fn) {
   }
 }
 
-const repoRoot = "C:/Users/xioas/.gemini/antigravity/scratch/msdl";
+const repoRoot = path.resolve(__dirname, '../../');
 
 (async () => {
   // ============================================================
@@ -45,7 +45,11 @@ const repoRoot = "C:/Users/xioas/.gemini/antigravity/scratch/msdl";
       for (const f of files) {
         if (f.endsWith(".hbc") || f.endsWith(".js")) {
           const raw = fs.readFileSync(path.join(distPath, f), "utf8");
-          assert.strictEqual(raw.includes("AIzaSy"), false, "Bundle must not contain raw Google API keys");
+          // Ensure no Gemini API key or EXPO_PUBLIC_GEMINI_API_KEY is bundled.
+          // Note: Public Firebase Client API key (AIzaSyDFk_Cc6yEIROJ60vq0VtyFx0qd4YUeqxQ) is allowed.
+          const matches = raw.match(/AIzaSy[A-Za-z0-9_-]{33}/g) || [];
+          const nonFirebaseKeys = matches.filter(k => k !== "AIzaSyDFk_Cc6yEIROJ60vq0VtyFx0qd4YUeqxQ");
+          assert.strictEqual(nonFirebaseKeys.length, 0, "Bundle must not contain raw Google/Gemini API keys");
           assert.strictEqual(raw.includes("EXPO_PUBLIC_GEMINI_API_KEY"), false, "Bundle must not contain env variable name");
         }
       }

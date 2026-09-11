@@ -20,7 +20,7 @@ function test(name, fn) {
   }
 }
 
-const repoRoot = 'C:/Users/xioas/.gemini/antigravity/scratch/msdl';
+const repoRoot = path.resolve(__dirname, '../../');
 
 // ============================================================
 // PART 1: GLOBAL DESIGN SYSTEM & PALETTE HARMONIZATION
@@ -83,7 +83,7 @@ test('P23-04: Reusable cards and button targets adhere to standard 44px+ touch h
 
 test('P23-05: Zero security regressions and payment live test remains strictly PAUSED', () => {
   const rules = fs.readFileSync(path.join(repoRoot, 'firestore.rules'), 'utf8');
-  assert.ok(rules.includes("role == 'super_admin'"));
+  assert.ok(rules.includes("roleOf(request.auth.uid) == 'super_admin'") || rules.includes("isSuperAdmin()"));
   assert.ok(rules.includes("isAdmin()"));
   const state = 'PAUSED_0_LIVE_TRANSACTIONS';
   assert.strictEqual(state, 'PAUSED_0_LIVE_TRANSACTIONS');

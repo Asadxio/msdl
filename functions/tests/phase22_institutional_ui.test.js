@@ -20,7 +20,7 @@ function test(name, fn) {
   }
 }
 
-const repoRoot = 'C:/Users/xioas/.gemini/antigravity/scratch/msdl';
+const repoRoot = path.resolve(__dirname, '../../');
 
 // ============================================================
 // PART 1: INSTITUTIONAL DESIGN SYSTEM & PALETTE
@@ -69,7 +69,7 @@ test('P22-05: Quick Access and Continue Learning maintain 44px+ touch targets an
 
 test('P22-06: Dashboard redesign preserves 100% security rules and payment isolation', () => {
   const rules = fs.readFileSync(path.join(repoRoot, 'firestore.rules'), 'utf8');
-  assert.ok(rules.includes("role == 'super_admin'"));
+  assert.ok(rules.includes("roleOf(request.auth.uid) == 'super_admin'") || rules.includes("isSuperAdmin()"));
   assert.ok(rules.includes("isAdmin()"));
   const state = 'PAUSED_0_LIVE_TRANSACTIONS';
   assert.strictEqual(state, 'PAUSED_0_LIVE_TRANSACTIONS');

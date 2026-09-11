@@ -50,7 +50,7 @@ const firebaseConfig = {
   appId: "1:675123731963:web:2b892063276a7c452cbf5e",
 };
 
-const repoRoot = "C:/Users/xioas/.gemini/antigravity/scratch/msdl";
+const repoRoot = path.resolve(__dirname, '../../');
 
 console.log("================================================================");
 console.log("   PHASE 52 — MSLB CUSTOMER-READY SAAS PLATFORM TEST SUITE      ");
