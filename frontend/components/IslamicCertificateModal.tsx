@@ -255,6 +255,7 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
                 )}
               </TouchableOpacity>
 
+              {/* 11.3: Download / Print Official Sanad PDF (A4 Landscape with QR) */}
               <TouchableOpacity
                 style={[styles.shareBtn, { backgroundColor: currentTheme.primaryColor }]}
                 onPress={handleShare}
@@ -265,8 +266,8 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
                   <ActivityIndicator size="small" color="#FFF" />
                 ) : (
                   <>
-                    <Ionicons name="share-social" size={18} color="#FFFFFF" />
-                    <Text style={styles.shareBtnText}>Share / Save Official Sanad (تصویر / فائل)</Text>
+                    <Ionicons name="document-text" size={18} color="#FFFFFF" />
+                    <Text style={styles.shareBtnText}>Download / Print Official PDF (پی ڈی ایف ڈاؤنلوڈ)</Text>
                   </>
                 )}
               </TouchableOpacity>

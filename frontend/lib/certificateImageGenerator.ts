@@ -4,6 +4,7 @@
  */
 import { MSLB_LOGO_BASE64 } from './mslbLogoBase64';
 import type { QuizCertificateData } from './quizCertificate';
+import { getSanadVerificationUrl, getSanadQrCodeUrl } from './sanadVerification';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform, Linking, Share } from 'react-native';
@@ -256,9 +257,78 @@ export function generateCertificateHtml(cert: QuizCertificateData, themeKey: Cer
       font-weight: 700;
       color: ${theme.primaryColor};
     }
+
+    /* Print & PDF Specific Styling */
+    .print-toolbar {
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+    .print-btn {
+      background: #005F46;
+      color: #FFFFFF;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 24px;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0,95,70,0.25);
+    }
+    .verify-btn {
+      background: #FFFFFF;
+      color: #005F46;
+      border: 1.5px solid #005F46;
+      padding: 9px 18px;
+      border-radius: 24px;
+      font-weight: 700;
+      font-size: 13px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 8mm;
+      }
+      body {
+        background-color: #FFFFFF !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .print-toolbar {
+        display: none !important;
+      }
+      .cert-container {
+        max-width: 100% !important;
+        box-shadow: none !important;
+        border: 6px solid ${theme.borderColor} !important;
+        page-break-inside: avoid !important;
+      }
+    }
   </style>
 </head>
 <body>
+  <div class="print-toolbar">
+    <button class="print-btn" onclick="window.print()">
+      🖨️ Print / Save as PDF (پی ڈی ایف ڈاؤنلوڈ)
+    </button>
+    <a class="verify-btn" href="${getSanadVerificationUrl(cert.certificateId)}" target="_blank" rel="noopener noreferrer">
+      🔍 Live Verification Portal (لائیو تصدیق)
+    </a>
+  </div>
+
   <div class="cert-container" id="certificate-root">
     <div class="inner-frame">
       <div class="corner-ornament top-left"></div>
@@ -298,7 +368,7 @@ export function generateCertificateHtml(cert: QuizCertificateData, themeKey: Cer
             <span>OFFICIAL</span>
             <span>SEAL</span>
           </div>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https%3A%2F%2Fmslb.app%2Fverify-sanad%3Fid%3D${encodeURIComponent(cert.certificateId)}" style="width: 54px; height: 54px; margin-top: 6px; border: 1px solid #CBD5E1; border-radius: 4px; padding: 2px; background: #fff;" alt="Verify QR" />
+          <img src="${getSanadQrCodeUrl(cert.certificateId)}" style="width: 58px; height: 58px; margin-top: 6px; border: 1px solid #CBD5E1; border-radius: 4px; padding: 2px; background: #fff;" alt="Verify QR" />
           <div style="font-size: 8px; color: #64748B; margin-top: 2px; font-weight: 600;">Scan to Verify Sanad</div>
         </div>
 
@@ -321,7 +391,7 @@ export function generateCertificateHtml(cert: QuizCertificateData, themeKey: Cer
  */
 export function generateCertificateSvg(cert: QuizCertificateData, themeKey: CertificateThemeKey = 'emerald'): string {
   const theme = CERTIFICATE_THEMES[themeKey] || CERTIFICATE_THEMES.emerald;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https%3A%2F%2Fmslb.app%2Fverify-sanad%3Fid%3D${encodeURIComponent(cert.certificateId)}`;
+  const qrUrl = getSanadQrCodeUrl(cert.certificateId);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1050" width="800" height="1050">
@@ -461,7 +531,7 @@ export async function shareCertificateImageFile(cert: QuizCertificateData, theme
     } else {
       await Share.share({
         title: `Official Sanad - ${cert.studentName}`,
-        message: `Madrasatu-s-Salikat Lil Banat Official Sanad Certificate for ${cert.studentName}\nVerify: https://mslb.app/verify-sanad?id=${encodeURIComponent(cert.certificateId)}`,
+        message: `Madrasatu-s-Salikat Lil Banat Official Sanad Certificate for ${cert.studentName}\nVerify: ${getSanadVerificationUrl(cert.certificateId)}`,
       });
     }
   } catch (err: unknown) {
@@ -473,7 +543,7 @@ export async function shareCertificateImageFile(cert: QuizCertificateData, theme
  * 11.1: Directly shares certificate celebration text & live verification link to WhatsApp
  */
 export async function shareCertificateToWhatsApp(cert: QuizCertificateData): Promise<boolean> {
-  const verifyUrl = `https://mslb.app/verify-sanad?id=${encodeURIComponent(cert.certificateId)}`;
+  const verifyUrl = getSanadVerificationUrl(cert.certificateId);
   const shareText = `🌸 *الحمد لله رب العالمين!*
 
 ہماری بیٹی *${cert.studentName}* نے *مدرسۃ السالکات للبنات* کے شعبہ تعلیم میں شاندار کامیابی حاصل کر کے باضابطہ سند (Official Sanad) حاصل کی ہے۔
@@ -522,11 +592,11 @@ _Nurturing Knowledge & Faith_`;
 }
 
 /**
- * Saves and launches native OS image share sheet
+ * Saves and launches native OS print / PDF share sheet with print-optimized A4 layout
  */
 export async function shareCertificatePngFile(cert: QuizCertificateData, themeKey: CertificateThemeKey = 'emerald'): Promise<void> {
   const html = generateCertificateHtml(cert, themeKey);
-  const fileName = `Certificate_${cert.certificateId.replace(/[^a-zA-Z0-9_-]/g, '_')}.html`;
+  const fileName = `MSLB_Official_Sanad_${cert.certificateId.replace(/[^a-zA-Z0-9_-]/g, '_')}.html`;
 
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined') {
@@ -547,12 +617,16 @@ export async function shareCertificatePngFile(cert: QuizCertificateData, themeKe
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(file.uri, {
         mimeType: 'text/html',
-        dialogTitle: `Official Sanad - ${cert.studentName}`,
+        dialogTitle: `Official Sanad PDF & Print - ${cert.studentName}`,
         UTI: 'public.html',
+      });
+    } else {
+      await Share.share({
+        title: `Official Sanad - ${cert.studentName}`,
+        message: `Madrasatu-s-Salikat Lil Banat Official Sanad Certificate for ${cert.studentName}\nVerify: ${getSanadVerificationUrl(cert.certificateId)}`,
       });
     }
   } catch (err: unknown) {
     console.warn('[shareCertificatePngFile] Share error:', err);
   }
 }
-
