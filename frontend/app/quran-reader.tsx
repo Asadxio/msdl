@@ -21,6 +21,10 @@ import {
   deleteDownloadedSurahAudio,
 } from '@/lib/quranAudioDownloader';
 import {
+  showMediaPlaybackNotification,
+  dismissMediaPlaybackNotification,
+} from '@/lib/mediaNotificationManager';
+import {
   addBookmark, removeBookmark, loadBookmarks, incrementKhatamAyats,
   loadFontSize, loadShowRoman,
   saveFontSize, saveLastRead, saveShowRoman,
@@ -230,6 +234,7 @@ export default function QuranReaderScreen() {
     setIsPlayingAudio(false);
     setPlayingAyatNum(null);
     setIsFullSurahPlaying(false);
+    void dismissMediaPlaybackNotification();
   };
 
   const playAyatAudio = async (ayatNum: number) => {
@@ -263,6 +268,16 @@ export default function QuranReaderScreen() {
       soundRef.current = newSound;
       setSound(newSound);
 
+      // Display Lock-Screen & Status Bar Media Controls
+      void showMediaPlaybackNotification({
+        title: `${surahMeta?.englishName || 'Surah ' + surahNum} (Ayat ${ayatNum})`,
+        subtitle: `Mishary Rashid Alafasy • Verse ${ayatNum} of ${surahDataRef.current?.totalAyat || surahMeta?.totalAyat || ''}`,
+        isPlaying: true,
+        playbackRate: playbackSpeedRef.current,
+        surahNumber: surahNum,
+        ayatNumber: ayatNum,
+      });
+
       newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
         if (!playbackStatus.isLoaded) return;
         if (playbackStatus.positionMillis && playbackStatus.positionMillis > 1000) {
@@ -284,6 +299,7 @@ export default function QuranReaderScreen() {
           } else {
             setIsPlayingAudio(false);
             setPlayingAyatNum(null);
+            void dismissMediaPlaybackNotification();
           }
         }
       });
@@ -291,6 +307,7 @@ export default function QuranReaderScreen() {
       console.warn('Audio play error:', error);
       setIsPlayingAudio(false);
       setPlayingAyatNum(null);
+      void dismissMediaPlaybackNotification();
     } finally {
       setAudioLoading(false);
     }
@@ -327,6 +344,15 @@ export default function QuranReaderScreen() {
       setIsFullSurahPlaying(true);
       setPlayingAyatNum(null);
 
+      // Display Lock-Screen & Notification shade controls for full surah
+      void showMediaPlaybackNotification({
+        title: `Surah ${surahMeta?.englishName || surahNum} (Full Audio)`,
+        subtitle: 'Arabic Recitation with Urdu Translation',
+        isPlaying: true,
+        playbackRate: playbackSpeedRef.current,
+        surahNumber: surahNum,
+      });
+
       newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
         if (!playbackStatus.isLoaded) return;
         if (playbackStatus.positionMillis && playbackStatus.positionMillis > 2000) {
@@ -342,10 +368,12 @@ export default function QuranReaderScreen() {
         if (playbackStatus.didJustFinish) {
           setIsPlayingAudio(false);
           setIsFullSurahPlaying(false);
+          void dismissMediaPlaybackNotification();
         }
       });
     } catch (error) {
       console.warn('Full surah audio error:', error);
+      void dismissMediaPlaybackNotification();
     } finally {
       setAudioLoading(false);
     }
