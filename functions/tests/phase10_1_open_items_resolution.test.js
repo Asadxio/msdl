@@ -185,9 +185,20 @@ test('R4-04: Physical live class join — NOT VERIFIED (no active class during Q
 // R5 — ANDROID CAMERA PERMISSION VERIFICATION
 // ============================================================
 
-test('R5-01: Camera permission is declared in AndroidManifest.xml', () => {
-  const manifest = fs.readFileSync(path.join(repoRoot, 'frontend/android/app/src/main/AndroidManifest.xml'), 'utf8');
-  assert.ok(manifest.includes('android.permission.CAMERA'), 'CAMERA permission must be declared');
+// Helper to read manifest permissions or fallback to app.json (when android folder is gitignored in CI)
+function getAndroidPermissions() {
+  const manifestPath = path.join(repoRoot, 'frontend/android/app/src/main/AndroidManifest.xml');
+  if (fs.existsSync(manifestPath)) {
+    return fs.readFileSync(manifestPath, 'utf8');
+  }
+  const appJsonPath = path.join(repoRoot, 'frontend/app.json');
+  const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
+  return (appJson.expo?.android?.permissions || []).join(' ');
+}
+
+test('R5-01: Camera permission is declared in AndroidManifest.xml or app.json', () => {
+  const perms = getAndroidPermissions();
+  assert.ok(perms.includes('CAMERA'), 'CAMERA permission must be declared');
 });
 
 test('R5-02: Camera is used by Qibla screen (CameraView for compass overlay)', () => {
@@ -197,22 +208,22 @@ test('R5-02: Camera is used by Qibla screen (CameraView for compass overlay)', (
 });
 
 test('R5-03: RECORD_AUDIO permission is declared and justified by live classes and status video', () => {
-  const manifest = fs.readFileSync(path.join(repoRoot, 'frontend/android/app/src/main/AndroidManifest.xml'), 'utf8');
-  assert.ok(manifest.includes('RECORD_AUDIO'), 'RECORD_AUDIO must be declared');
+  const perms = getAndroidPermissions();
+  assert.ok(perms.includes('RECORD_AUDIO'), 'RECORD_AUDIO must be declared');
   // Justified by call/[id].tsx and status.tsx video recording
   const status = fs.readFileSync(path.join(repoRoot, 'frontend/app/status.tsx'), 'utf8');
   assert.ok(status.includes('video') || status.includes('media'), 'status.tsx uses media — justifies RECORD_AUDIO');
 });
 
 test('R5-04: FOREGROUND_SERVICE permissions are justified by live class media playback', () => {
-  const manifest = fs.readFileSync(path.join(repoRoot, 'frontend/android/app/src/main/AndroidManifest.xml'), 'utf8');
-  assert.ok(manifest.includes('FOREGROUND_SERVICE_MEDIA_PLAYBACK'), 'Media playback foreground service must exist');
-  assert.ok(manifest.includes('FOREGROUND_SERVICE_CAMERA'), 'Camera foreground service must exist (live class)');
+  const perms = getAndroidPermissions();
+  assert.ok(perms.includes('FOREGROUND_SERVICE_MEDIA_PLAYBACK'), 'Media playback foreground service must exist');
+  assert.ok(perms.includes('FOREGROUND_SERVICE_CAMERA'), 'Camera foreground service must exist (live class)');
 });
 
 test('R5-05: READ_EXTERNAL_STORAGE + READ_MEDIA_IMAGES/VIDEO declared for library PDF and media', () => {
-  const manifest = fs.readFileSync(path.join(repoRoot, 'frontend/android/app/src/main/AndroidManifest.xml'), 'utf8');
-  assert.ok(manifest.includes('READ_EXTERNAL_STORAGE') || manifest.includes('READ_MEDIA_IMAGES'), 
+  const perms = getAndroidPermissions();
+  assert.ok(perms.includes('READ_EXTERNAL_STORAGE') || perms.includes('READ_MEDIA_IMAGES'), 
     'Media read permissions must be declared for library and course media');
 });
 
