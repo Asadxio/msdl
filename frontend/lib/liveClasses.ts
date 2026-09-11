@@ -40,6 +40,10 @@ export type LiveClass = {
   status: LiveClassStatus;
   meet_url: string;
   purdah_mode_enabled?: boolean;
+  audio_muted_all?: boolean;
+  camera_disabled_all?: boolean;
+  privacy_shield_active?: boolean;
+  privacy_updated_at_ms?: number;
   active_board_view?: 'mushaf' | 'makharij' | 'whiteboard' | 'notes';
   current_ayah_or_page?: string | number;
   highlighted_words?: string[];
@@ -231,6 +235,90 @@ export async function lowerHandRecitation(
   await updateDoc(ref, {
     recitation_queue: updatedQueue,
     ...(isTargetActive ? { active_speaker_name: '', active_speaker_uid: '' } : {}),
+    updated_at: serverTimestamp(),
+  });
+}
+
+function verifyTeacherOrAdmin(profile: UserProfile | null, actionName: string) {
+  if (profile?.role !== 'admin' && profile?.role !== 'super_admin' && profile?.role !== 'teacher') {
+    throw new Error(`Only admins and teachers can ${actionName}`);
+  }
+}
+
+export async function muteAllStudents(classId: string, profile: UserProfile | null): Promise<void> {
+  verifyTeacherOrAdmin(profile, 'mute all students');
+  const ref = doc(db, 'live_classes', classId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const currentQueue: RecitationQueueItem[] = snap.data().recitation_queue || [];
+  // Reset any speaking queue item back to waiting
+  const resetQueue = currentQueue.map((item) => ({
+    ...item,
+    status: item.status === 'speaking' ? ('waiting' as const) : item.status,
+  }));
+
+  await updateDoc(ref, {
+    audio_muted_all: true,
+    active_speaker_name: '',
+    active_speaker_uid: '',
+    recitation_queue: resetQueue,
+    privacy_updated_at_ms: Date.now(),
+    updated_at: serverTimestamp(),
+  });
+}
+
+export async function unmuteAllStudents(classId: string, profile: UserProfile | null): Promise<void> {
+  verifyTeacherOrAdmin(profile, 'unmute all students');
+  const ref = doc(db, 'live_classes', classId);
+  await updateDoc(ref, {
+    audio_muted_all: false,
+    privacy_updated_at_ms: Date.now(),
+    updated_at: serverTimestamp(),
+  });
+}
+
+export async function killAllVideo(
+  classId: string,
+  profile: UserProfile | null,
+  disabled: boolean = true
+): Promise<void> {
+  verifyTeacherOrAdmin(profile, 'toggle video privacy');
+  const ref = doc(db, 'live_classes', classId);
+  await updateDoc(ref, {
+    camera_disabled_all: disabled,
+    purdah_mode_enabled: true,
+    privacy_updated_at_ms: Date.now(),
+    updated_at: serverTimestamp(),
+  });
+}
+
+export async function toggleEmergencyPrivacyShield(
+  classId: string,
+  profile: UserProfile | null,
+  active: boolean
+): Promise<void> {
+  verifyTeacherOrAdmin(profile, 'toggle emergency privacy shield');
+  const ref = doc(db, 'live_classes', classId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const currentQueue: RecitationQueueItem[] = snap.data().recitation_queue || [];
+  const resetQueue = active
+    ? currentQueue.map((item) => ({
+        ...item,
+        status: item.status === 'speaking' ? ('waiting' as const) : item.status,
+      }))
+    : currentQueue;
+
+  await updateDoc(ref, {
+    privacy_shield_active: active,
+    camera_disabled_all: active ? true : snap.data().camera_disabled_all,
+    audio_muted_all: active ? true : snap.data().audio_muted_all,
+    ...(active ? { active_speaker_name: '', active_speaker_uid: '' } : {}),
+    recitation_queue: resetQueue,
+    purdah_mode_enabled: true,
+    privacy_updated_at_ms: Date.now(),
     updated_at: serverTimestamp(),
   });
 }

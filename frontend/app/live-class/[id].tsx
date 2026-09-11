@@ -27,6 +27,10 @@ import {
   raiseHandForRecitation,
   grantMicrophone,
   lowerHandRecitation,
+  muteAllStudents,
+  unmuteAllStudents,
+  killAllVideo,
+  toggleEmergencyPrivacyShield,
   type LiveClass,
 } from '@/lib/liveClasses';
 import { TajweedBoard, type TajweedBoardView } from '@/components/classroom/TajweedBoard';
@@ -74,6 +78,11 @@ export default function LiveClassroomScreen() {
   const [notifyingStudents, setNotifyingStudents] = useState(false);
   const [notifiedStudents, setNotifiedStudents] = useState(false);
 
+  // Privacy Master Switch busy states
+  const [mutingAll, setMutingAll] = useState(false);
+  const [togglingVideo, setTogglingVideo] = useState(false);
+  const [togglingShield, setTogglingShield] = useState(false);
+
   useEffect(() => {
     if (!classId) {
       setLoading(false);
@@ -89,6 +98,18 @@ export default function LiveClassroomScreen() {
     });
     return () => unsub();
   }, [classId, router]);
+
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
+  const isSpeaking = liveClass?.active_speaker_uid === user?.uid || (isTeacher && !liveClass?.active_speaker_uid);
+
+  // Reactive Privacy Enforcement: force student mic mute when Ustaadha locks audio or triggers shield
+  useEffect(() => {
+    if (!isTeacher && liveClass) {
+      if (liveClass.audio_muted_all || liveClass.privacy_shield_active) {
+        setMicMuted(true);
+      }
+    }
+  }, [isTeacher, liveClass?.audio_muted_all, liveClass?.privacy_shield_active]);
 
   // Audio wave animation pulse
   useEffect(() => {
@@ -116,9 +137,6 @@ export default function LiveClassroomScreen() {
       if (timer) clearInterval(timer);
     };
   }, [isRecording]);
-
-  const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
-  const isSpeaking = liveClass?.active_speaker_uid === user?.uid || (isTeacher && !liveClass?.active_speaker_uid);
 
   // Inbuilt Class Audio Recording handlers
   const handleStartAudioRecording = async () => {
@@ -395,6 +413,96 @@ export default function LiveClassroomScreen() {
     ]);
   };
 
+  // Privacy Master Switch Handlers (Ustaadha Controls)
+  const handleToggleMuteAll = async () => {
+    if (!classId || !isTeacher) return;
+    const isCurrentlyMuted = !!liveClass?.audio_muted_all;
+    setMutingAll(true);
+    try {
+      if (isCurrentlyMuted) {
+        await unmuteAllStudents(classId, profile);
+        Alert.alert('Microphones Open', 'Students may now unmute themselves when invited.');
+      } else {
+        await muteAllStudents(classId, profile);
+        Alert.alert('Mute All Active 🔇', 'All student microphones have been force-muted.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to toggle Mute All');
+    } finally {
+      setMutingAll(false);
+    }
+  };
+
+  const handleToggleKillVideo = async () => {
+    if (!classId || !isTeacher) return;
+    const isCurrentlyDisabled = !!liveClass?.camera_disabled_all;
+    setTogglingVideo(true);
+    try {
+      await killAllVideo(classId, profile, !isCurrentlyDisabled);
+      if (!isCurrentlyDisabled) {
+        Alert.alert('Video Killed for Privacy 📷🚫', 'All camera/video feeds are disabled. Classroom is strictly audio & Mushaf mode.');
+      } else {
+        Alert.alert('Video Allowed', 'Video feeds are now allowed under teacher discretion.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to toggle video privacy');
+    } finally {
+      setTogglingVideo(false);
+    }
+  };
+
+  const handleToggleEmergencyShield = () => {
+    if (!classId || !isTeacher) return;
+    const isShieldActive = !!liveClass?.privacy_shield_active;
+
+    if (!isShieldActive) {
+      Alert.alert(
+        'Activate Emergency Privacy Shield? 🛡️',
+        'This will immediately KILL all video, MUTE all students, clear active speaker, and lock the classroom into Emergency Pardah mode.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Activate Shield Now',
+            style: 'destructive',
+            onPress: async () => {
+              setTogglingShield(true);
+              try {
+                await toggleEmergencyPrivacyShield(classId, profile, true);
+                Alert.alert('Emergency Shield Active 🛡️', 'Full privacy lockdown engaged. All video and audio streams are sealed.');
+              } catch (err: any) {
+                Alert.alert('Error', err?.message || 'Failed to engage emergency shield');
+              } finally {
+                setTogglingShield(false);
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Deactivate Emergency Privacy Shield?',
+        'Release emergency lockdown and restore normal classroom mode?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Deactivate Shield',
+            onPress: async () => {
+              setTogglingShield(true);
+              try {
+                await toggleEmergencyPrivacyShield(classId, profile, false);
+                Alert.alert('Shield Deactivated', 'Classroom returned to standard live mode.');
+              } catch (err: any) {
+                Alert.alert('Error', err?.message || 'Failed to deactivate shield');
+              } finally {
+                setTogglingShield(false);
+              }
+            },
+          },
+        ]
+      );
+    }
+  };
+
   // Board state change handlers
   const handleViewModeChange = async (mode: TajweedBoardView) => {
     if (!classId || !isTeacher) return;
@@ -483,6 +591,23 @@ export default function LiveClassroomScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Emergency Privacy Shield Banner (Shown when Lockdown is engaged) */}
+        {liveClass.privacy_shield_active && (
+          <View style={styles.emergencyShieldBanner}>
+            <View style={styles.emergencyShieldIconBox}>
+              <Ionicons name="shield" size={24} color="#B91C1C" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.purdahRow}>
+                <Text style={styles.emergencyShieldTitle}>ہنگامی پردہ شیلڈ • Emergency Shield Active</Text>
+              </View>
+              <Text style={styles.emergencyShieldSub}>
+                Ustaadha has initiated an instant privacy lockdown. All camera streams and student microphones are locked.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Purdah Protection Banner */}
         <View style={styles.purdahBanner}>
           <View style={styles.purdahIconBox}>
@@ -490,15 +615,130 @@ export default function LiveClassroomScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.purdahRow}>
-              <Text style={styles.purdahTitle}>Purdah Mode Active</Text>
+              <Text style={styles.purdahTitle}>
+                {liveClass.camera_disabled_all ? 'حجاب و پردہ موڈ • Video Killed' : 'Purdah Mode Active'}
+              </Text>
               <View style={styles.cameraOffBadge}>
                 <Ionicons name="videocam-off" size={11} color="#92400E" />
-                <Text style={styles.cameraOffText}>Camera Locked OFF</Text>
+                <Text style={styles.cameraOffText}>
+                  {liveClass.camera_disabled_all ? 'Camera Strictly OFF' : 'Camera Locked OFF'}
+                </Text>
               </View>
             </View>
-            <Text style={styles.purdahSub}>Audio-first Quranic recitation & modesty protection enabled for all sisters.</Text>
+            <Text style={styles.purdahSub}>
+              {liveClass.camera_disabled_all
+                ? 'Camera feeds strictly disabled. Classroom is running in safe audio & Tajweed Mushaf mode.'
+                : 'Audio-first Quranic recitation & modesty protection enabled for all sisters.'}
+            </Text>
           </View>
         </View>
+
+        {/* Teacher Privacy Master Toolbar (حجاب و صوتی کنٹرول) */}
+        {isTeacher && (
+          <View style={styles.privacyMasterCard}>
+            <View style={styles.privacyMasterHeader}>
+              <View style={styles.privacyMasterTitleRow}>
+                <Ionicons name="shield-half" size={16} color={COLORS.primary} />
+                <Text style={styles.privacyMasterTitle}>حجاب و صوتی کنٹرول • Privacy & Mic Master Switch</Text>
+              </View>
+              <Text style={styles.privacyMasterSubtitle}>
+                Teacher 1-tap instant privacy enforcement for the entire classroom
+              </Text>
+            </View>
+
+            <View style={styles.privacyActionsRow}>
+              {/* Mute All Button */}
+              <TouchableOpacity
+                style={[
+                  styles.privacyActionBtn,
+                  liveClass.audio_muted_all ? styles.privacyActionBtnMuted : styles.privacyActionBtnNormal,
+                  mutingAll && { opacity: 0.6 },
+                ]}
+                onPress={handleToggleMuteAll}
+                disabled={mutingAll}
+              >
+                {mutingAll ? (
+                  <ActivityIndicator size="small" color={liveClass.audio_muted_all ? '#991B1B' : COLORS.primary} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={liveClass.audio_muted_all ? 'mic-off' : 'mic'}
+                      size={18}
+                      color={liveClass.audio_muted_all ? '#991B1B' : COLORS.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.privacyActionBtnText,
+                        liveClass.audio_muted_all && styles.privacyActionBtnTextMuted,
+                      ]}
+                    >
+                      {liveClass.audio_muted_all ? 'Unmute Allowed' : 'Mute All (سب خاموش)'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Kill Video Button */}
+              <TouchableOpacity
+                style={[
+                  styles.privacyActionBtn,
+                  liveClass.camera_disabled_all ? styles.privacyActionBtnVideoKilled : styles.privacyActionBtnNormal,
+                  togglingVideo && { opacity: 0.6 },
+                ]}
+                onPress={handleToggleKillVideo}
+                disabled={togglingVideo}
+              >
+                {togglingVideo ? (
+                  <ActivityIndicator size="small" color={liveClass.camera_disabled_all ? '#B45309' : COLORS.primary} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={liveClass.camera_disabled_all ? 'videocam-off' : 'videocam'}
+                      size={18}
+                      color={liveClass.camera_disabled_all ? '#B45309' : COLORS.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.privacyActionBtnText,
+                        liveClass.camera_disabled_all && styles.privacyActionBtnTextVideoKilled,
+                      ]}
+                    >
+                      {liveClass.camera_disabled_all ? 'Allow Video' : 'Kill Video (پردہ)'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Emergency Shield 1-Tap Toggle */}
+            <TouchableOpacity
+              style={[
+                styles.emergencyShieldBtn,
+                liveClass.privacy_shield_active && styles.emergencyShieldBtnActive,
+                togglingShield && { opacity: 0.6 },
+              ]}
+              onPress={handleToggleEmergencyShield}
+              disabled={togglingShield}
+            >
+              {togglingShield ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons
+                    name={liveClass.privacy_shield_active ? 'shield-checkmark' : 'warning'}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.emergencyShieldBtnText}>
+                    {liveClass.privacy_shield_active
+                      ? 'Release Emergency Privacy Shield'
+                      : 'Emergency Privacy Shield (ہنگامی پردہ)'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Audio Wave & Active Reciter Bar */}
         <View style={styles.speakerCard}>
@@ -696,28 +936,91 @@ export default function LiveClassroomScreen() {
 
         {/* Audio Controls & External Bridge */}
         <View style={styles.controlsCard}>
+          {/* Student Mute Lockdown Banner */}
+          {!isTeacher && (liveClass.audio_muted_all || liveClass.privacy_shield_active) && (
+            <View style={styles.studentMuteLockBanner}>
+              <Ionicons name="lock-closed" size={14} color="#991B1B" />
+              <Text style={styles.studentMuteLockText}>
+                {liveClass.privacy_shield_active
+                  ? 'Microphone locked: Emergency Privacy Shield active'
+                  : 'Microphone locked by Ustaadha (Mute All active)'}
+              </Text>
+            </View>
+          )}
+
           <TouchableOpacity
-            style={[styles.micBtn, !micMuted && styles.micBtnActive]}
-            onPress={() => setMicMuted(!micMuted)}
+            style={[
+              styles.micBtn,
+              !micMuted && styles.micBtnActive,
+              !isTeacher && (liveClass.audio_muted_all || liveClass.privacy_shield_active) && styles.micBtnDisabled,
+            ]}
+            onPress={() => {
+              if (!isTeacher && (liveClass.audio_muted_all || liveClass.privacy_shield_active)) {
+                Alert.alert(
+                  'Microphone Locked 🔒',
+                  liveClass.privacy_shield_active
+                    ? 'Ustaadha has engaged the Emergency Privacy Shield. All audio streams are secured.'
+                    : 'Ustaadha has activated Mute All for class discipline and modesty. Please raise your hand in the Tilawat Queue to request a turn.'
+                );
+                return;
+              }
+              setMicMuted(!micMuted);
+            }}
           >
-            <Ionicons name={micMuted ? 'mic-off' : 'mic'} size={20} color={micMuted ? COLORS.textSecondary : '#fff'} />
+            <Ionicons
+              name={micMuted ? 'mic-off' : 'mic'}
+              size={20}
+              color={micMuted ? COLORS.textSecondary : '#fff'}
+            />
             <Text style={[styles.micBtnText, !micMuted && styles.micBtnTextActive]}>
               {micMuted ? 'Microphone Muted' : 'Microphone Active'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.meetBridgeBtn, joining && { opacity: 0.7 }]}
-            onPress={handleJoinExternalMeet}
+            style={[
+              styles.meetBridgeBtn,
+              joining && { opacity: 0.7 },
+              liveClass.camera_disabled_all && !isTeacher && styles.meetBridgeBtnDisabled,
+            ]}
+            onPress={() => {
+              if (liveClass.camera_disabled_all && !isTeacher) {
+                Alert.alert(
+                  'Video Bridge Disabled 📷🚫',
+                  'External camera/video bridge is disabled under Pardah Mode. Please continue using the built-in Tajweed board and audio stream.'
+                );
+                return;
+              }
+              handleJoinExternalMeet();
+            }}
             disabled={joining}
           >
             {joining ? (
               <ActivityIndicator color={COLORS.primary} size="small" />
             ) : (
               <>
-                <Ionicons name={liveClass?.meet_url ? "logo-google" : "videocam-outline"} size={16} color={COLORS.primary} />
-                <Text style={styles.meetBridgeBtnText}>
-                  {liveClass?.meet_url ? "External Screen Share / Meet Bridge" : "Live Video / Meet Room"}
+                <Ionicons
+                  name={
+                    liveClass.camera_disabled_all
+                      ? 'videocam-off-outline'
+                      : liveClass?.meet_url
+                      ? 'logo-google'
+                      : 'videocam-outline'
+                  }
+                  size={16}
+                  color={liveClass.camera_disabled_all ? COLORS.textSecondary : COLORS.primary}
+                />
+                <Text
+                  style={[
+                    styles.meetBridgeBtnText,
+                    liveClass.camera_disabled_all && { color: COLORS.textSecondary },
+                  ]}
+                >
+                  {liveClass.camera_disabled_all
+                    ? 'Video Bridge Locked (Pardah Mode)'
+                    : liveClass?.meet_url
+                    ? 'External Screen Share / Meet Bridge'
+                    : 'Live Video / Meet Room'}
                 </Text>
               </>
             )}
@@ -1467,5 +1770,149 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#fff',
+  },
+  // Emergency Privacy Shield styles
+  emergencyShieldBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#F87171',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    gap: 12,
+    marginBottom: SPACING.sm,
+  },
+  emergencyShieldIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emergencyShieldTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+  emergencyShieldSub: {
+    fontSize: 11,
+    color: '#B91C1C',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  // Privacy Master Card (Teacher toolbar)
+  privacyMasterCard: {
+    backgroundColor: '#fff',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  privacyMasterHeader: {
+    marginBottom: SPACING.sm,
+  },
+  privacyMasterTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  privacyMasterTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  privacyMasterSubtitle: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  privacyActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  privacyActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    gap: 6,
+  },
+  privacyActionBtnNormal: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
+  privacyActionBtnMuted: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  privacyActionBtnVideoKilled: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  privacyActionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  privacyActionBtnTextMuted: {
+    color: '#991B1B',
+  },
+  privacyActionBtnTextVideoKilled: {
+    color: '#B45309',
+  },
+  emergencyShieldBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DC2626',
+    borderRadius: RADIUS.md,
+    paddingVertical: 11,
+    gap: 8,
+  },
+  emergencyShieldBtnActive: {
+    backgroundColor: '#059669',
+  },
+  emergencyShieldBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  // Student Lockout Banners & States
+  studentMuteLockBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+    marginBottom: SPACING.sm,
+  },
+  studentMuteLockText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#991B1B',
+    flex: 1,
+  },
+  micBtnDisabled: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+    opacity: 0.7,
+  },
+  meetBridgeBtnDisabled: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+    opacity: 0.7,
   },
 });
