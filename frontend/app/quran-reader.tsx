@@ -14,6 +14,13 @@ import {
   getAyatAudioUrl, getFullSurahUrduAudioUrl,
 } from '@/lib/quranApi';
 import {
+  isSurahAudioDownloaded,
+  getPlayableSurahAudioUri,
+  getSurahAudioSizeMb,
+  downloadSurahAudio,
+  deleteDownloadedSurahAudio,
+} from '@/lib/quranAudioDownloader';
+import {
   addBookmark, removeBookmark, loadBookmarks, incrementKhatamAyats,
   loadFontSize, loadShowRoman,
   saveFontSize, saveLastRead, saveShowRoman,
@@ -39,6 +46,11 @@ export default function QuranReaderScreen() {
   const [bookmarkedAyats, setBookmarkedAyats] = useState<Set<number>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Offline Audio Download State
+  const [isAudioDownloaded, setIsAudioDownloaded] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [downloadedSizeMb, setDownloadedSizeMb] = useState<number>(0);
 
   // Audio Player & Speed / Resume State
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -107,13 +119,61 @@ export default function QuranReaderScreen() {
         setTimeout(() => setToastMessage(null), 3000);
       }
     });
+
+    // Check offline audio status
+    void checkOfflineAudioStatus();
+
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch(() => {});
         soundRef.current = null;
       }
     };
-  }, [surahNum]);
+  }, [surahNum, initialAyat]);
+
+  const checkOfflineAudioStatus = async () => {
+    try {
+      const downloaded = await isSurahAudioDownloaded(surahNum);
+      setIsAudioDownloaded(downloaded);
+      if (downloaded) {
+        const size = await getSurahAudioSizeMb(surahNum);
+        setDownloadedSizeMb(size);
+      }
+    } catch {
+      // best-effort check
+    }
+  };
+
+  const handleDownloadAudio = async () => {
+    if (downloadProgress !== null || !surahMeta) return;
+    try {
+      setDownloadProgress(1);
+      const meta = await downloadSurahAudio(surahNum, surahMeta.englishName, (pct) => {
+        setDownloadProgress(pct);
+      });
+      setIsAudioDownloaded(true);
+      setDownloadedSizeMb(meta.sizeMb);
+      setToastMessage(`Downloaded ${surahMeta.englishName} audio (${meta.sizeMb} MB) for offline use`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (err: any) {
+      setToastMessage(err?.message || 'Download failed');
+      setTimeout(() => setToastMessage(null), 3500);
+    } finally {
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleDeleteAudio = async () => {
+    try {
+      await deleteDownloadedSurahAudio(surahNum);
+      setIsAudioDownloaded(false);
+      setDownloadedSizeMb(0);
+      setToastMessage('Offline audio deleted to free storage');
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch {
+      // best-effort
+    }
+  };
 
   const handleCycleSpeed = async () => {
     const speeds = [1.0, 1.25, 1.5, 2.0];
@@ -251,11 +311,14 @@ export default function QuranReaderScreen() {
         staysActiveInBackground: true,
       });
 
-      const audioUrl = getFullSurahUrduAudioUrl(surahNum);
+      const playable = await getPlayableSurahAudioUri(surahNum);
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
+        { uri: playable.uri },
         { shouldPlay: true }
       );
+      if (playable.isOffline) {
+        console.log(`[QuranReader] Playing Surah ${surahNum} from offline local storage`);
+      }
       await newSound.setRateAsync(playbackSpeedRef.current, true).catch(() => {});
 
       soundRef.current = newSound;
@@ -430,6 +493,35 @@ export default function QuranReaderScreen() {
           <Text style={[styles.audioPillText, isFullSurahPlaying && styles.audioPillTextActive]}>
             {isFullSurahPlaying ? 'Playing' : 'Audio'}
           </Text>
+        </TouchableOpacity>
+
+        {/* 1-Tap Offline Audio Download Manager Button */}
+        <TouchableOpacity
+          style={[
+            styles.downloadPillBtn,
+            isAudioDownloaded && styles.downloadPillBtnDownloaded,
+            downloadProgress !== null && styles.downloadPillBtnDownloading,
+          ]}
+          onPress={isAudioDownloaded ? handleDeleteAudio : handleDownloadAudio}
+          activeOpacity={0.8}
+          accessibilityLabel={isAudioDownloaded ? `Offline ready ${downloadedSizeMb}MB. Tap to delete.` : 'Download audio for offline listening'}
+        >
+          {downloadProgress !== null ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <ActivityIndicator size="small" color="#C8A84E" />
+              <Text style={styles.downloadPillText}>{downloadProgress}%</Text>
+            </View>
+          ) : isAudioDownloaded ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="cloud-done" size={13} color="#059669" />
+              <Text style={[styles.downloadPillText, { color: '#059669' }]}>{downloadedSizeMb}MB</Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="arrow-down-circle-outline" size={14} color="#C8A84E" />
+              <Text style={styles.downloadPillText}>Offline</Text>
+            </View>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => navigateSurah(1)} disabled={surahNum >= 114}>
@@ -717,6 +809,10 @@ const styles = StyleSheet.create({
   audioPillBtnActive: { backgroundColor: '#005F46', borderWidth: 1, borderColor: '#C8A84E' },
   audioPillText: { fontSize: 11, fontWeight: '800', color: '#002E23' },
   audioPillTextActive: { color: '#FFFFFF' },
+  downloadPillBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(200,168,78,0.4)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.full, gap: 4 },
+  downloadPillBtnDownloaded: { backgroundColor: 'rgba(5, 150, 105, 0.15)', borderColor: '#059669' },
+  downloadPillBtnDownloading: { backgroundColor: 'rgba(200, 168, 78, 0.15)', borderColor: '#C8A84E' },
+  downloadPillText: { fontSize: 11, fontWeight: '700', color: '#C8A84E' },
   centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   loadingText: { color: '#C8A84E', fontSize: 15, fontWeight: '700' },
   errorText: { color: '#EF4444', fontSize: 14, fontWeight: '700' },

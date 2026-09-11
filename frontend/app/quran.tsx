@@ -16,6 +16,7 @@ import {
   toggleParahHifz, KhatamProgress, HifzProgress, QuranBookmark,
 } from "@/lib/quranStorage";
 import { getDailyAyat } from "@/lib/quranApi";
+import { getAllDownloadedSurahs, DownloadedSurahMeta } from "@/lib/quranAudioDownloader";
 import type { DailyAyatCache } from "@/lib/quranStorage";
 
 type ActiveTab = 'surahs' | 'reader' | 'khatam' | 'hifz' | 'daily';
@@ -32,14 +33,18 @@ export default function QuranScreen() {
   const [hifz, setHifz] = useState<HifzProgress | null>(null);
   const [dailyAyat, setDailyAyat] = useState<DailyAyatCache | null>(null);
   const [loadingDailyAyat, setLoadingDailyAyat] = useState(false);
+  const [downloadedSurahIds, setDownloadedSurahIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const init = async () => {
-      const [lr, kt, hf, bms] = await Promise.all([loadLastRead(), loadKhatamProgress(), loadHifzProgress(), loadBookmarks()]);
+      const [lr, kt, hf, bms, dl] = await Promise.all([
+        loadLastRead(), loadKhatamProgress(), loadHifzProgress(), loadBookmarks(), getAllDownloadedSurahs()
+      ]);
       setLastRead(lr);
       setKhatam(kt);
       setHifz(hf);
       setBookmarks(bms);
+      setDownloadedSurahIds(new Set(dl.map((d) => d.surahNumber)));
     };
     init();
   }, []);
@@ -86,10 +91,18 @@ export default function QuranScreen() {
         </View>
         <View style={styles.surahMetaRow}>
           <Text style={styles.surahAyatCount}>{item.totalAyat} Verses • Para {item.parah}</Text>
-          <View style={[styles.typeBadge, item.type === 'Makki' ? styles.makkiBadge : styles.madaniBadge]}>
-            <Text style={[styles.typeBadgeText, item.type === 'Makki' ? styles.makkiBadgeText : styles.madaniBadgeText]}>
-              {item.type}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {downloadedSurahIds.has(item.number) && (
+              <View style={[styles.typeBadge, { backgroundColor: '#E8F5EE' }]}>
+                <Ionicons name="cloud-done" size={10} color="#059669" />
+                <Text style={[styles.typeBadgeText, { color: '#059669', fontSize: 10, marginLeft: 2 }]}>Offline</Text>
+              </View>
+            )}
+            <View style={[styles.typeBadge, item.type === 'Makki' ? styles.makkiBadge : styles.madaniBadge]}>
+              <Text style={[styles.typeBadgeText, item.type === 'Makki' ? styles.makkiBadgeText : styles.madaniBadgeText]}>
+                {item.type}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
