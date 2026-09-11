@@ -13,10 +13,12 @@ type AppItem = { label: string; subtitle: string; icon: keyof typeof Ionicons.gl
 
 const APPLICATION_ITEMS: AppItem[] = [
   { label: 'Islamic Dashboard', subtitle: 'Complete prayer, Hijri, location, and Qibla overview', icon: 'grid-outline', route: '/more/applications/islamic-dashboard', featured: true },
+  { label: 'The Holy Quran (Roman Urdu)', subtitle: 'Read, Khatam & Hifz tracker in Roman Urdu', icon: 'book-outline', route: '/quran' },
+  { label: 'Smart Tasbeeh', subtitle: 'Digital smart dhikr counter and bead vibration', icon: 'finger-print-outline', route: '/tasbeeh' },
+  { label: 'Taharat & Purity Tracker', subtitle: 'Private Islamic purity, cycle & habit tracker', icon: 'heart-outline', route: '/taharat-tracker' },
   { label: 'Islamic Calendar', subtitle: 'Hijri date and Islamic calendar view', icon: 'calendar-number-outline', route: '/islamic-calendar' },
-  { label: 'Qibla Finder', subtitle: 'Google Camera Qibla Finder (Internet Required) and Compass Qibla Direction', icon: 'compass-outline', route: '/qibla' },
+  { label: 'Qibla Finder', subtitle: 'Camera Qibla & Compass Direction', icon: 'compass-outline', route: '/qibla' },
   { label: 'Prayer Times', subtitle: 'Daily prayer schedule and countdown', icon: 'time-outline', route: '/prayer-times' },
-  { label: 'Future Islamic Tools', subtitle: 'Duas, tasbih, and more tools coming soon', icon: 'sparkles-outline', disabled: true },
 ];
 
 export default function ApplicationsScreen() {

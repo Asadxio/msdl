@@ -370,6 +370,14 @@ export default function LoginScreen() {
               <Text style={[styles.footerLink, { color: isDarkMode ? '#10B981' : '#005F46' }]}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Institutional Customer Onboarding Link */}
+          <View style={[styles.footerRow, { marginTop: 4, marginBottom: 8 }]}>
+            <Text style={[styles.footerText, { color: colors.textMuted, fontSize: 13 }]}>Setting up for your Madrasa? </Text>
+            <TouchableOpacity onPress={() => router.push('/onboarding/start-madrasa')} testID="start-madrasa-btn">
+              <Text style={[styles.footerLink, { color: isDarkMode ? '#34D399' : '#005F46', fontWeight: '700', fontSize: 13 }]}>Start a Madrasa</Text>
+            </TouchableOpacity>
+          </View>
           
           <TouchableOpacity
             style={[

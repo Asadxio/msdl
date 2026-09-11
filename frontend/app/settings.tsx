@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { isFounderEmail } from '@/lib/founderPolicy';
 import { useTutorial } from '@/context/TutorialContext';
 import { useTheme } from '@/context/ThemeContext';
 import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
@@ -20,6 +21,8 @@ import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
 import { BugReportModal, FeatureSuggestModal, FaqModal } from '@/components/SupportModals';
 import * as Notifications from 'expo-notifications';
 import { clearQuizCounts } from '@/lib/lmsHardening';
+import { useData } from '@/context/DataContext';
+import { subscribeToTelemetryErrors, type TelemetryErrorDoc } from '@/lib/telemetry';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
 const LARGE_TEXT_PREF_KEY = 'settings_large_text';
@@ -81,16 +84,34 @@ export default function SettingsScreen() {
   const [featureModalVisible, setFeatureModalVisible] = useState(false);
   const [faqModalVisible, setFaqModalVisible] = useState(false);
   
+  const { refetch, refetchLearning, refetchBooks } = useData();
+  const [syncingData, setSyncingData] = useState(false);
+
+  const isFounder = isFounderEmail(profile?.email || user?.email);
+  const isAdminUser = isFounder || profile?.role === 'admin' || profile?.role === 'super_admin';
+
   // Admin Diagnostics State
   const [diagLogsVisible, setDiagLogsVisible] = useState(false);
+  const [diagLogs, setDiagLogs] = useState<TelemetryErrorDoc[]>([]);
+  const [diagLogsLoading, setDiagLogsLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [statusAuth, setStatusAuth] = useState<'Checking...' | 'Connected' | 'Disconnected'>('Checking...');
   const [statusDb, setStatusDb] = useState<'Checking...' | 'Connected' | 'Disconnected'>('Checking...');
   const [statusNet, setStatusNet] = useState<'Checking...' | 'Connected' | 'Disconnected'>('Checking...');
   const [statusPush, setStatusPush] = useState<'Checking...' | 'Connected' | 'Disconnected'>('Checking...');
 
+  useEffect(() => {
+    if (!diagLogsVisible || !isAdminUser) return;
+    setDiagLogsLoading(true);
+    const unsub = subscribeToTelemetryErrors({ maxLimit: 30 }, (logs) => {
+      setDiagLogs(logs);
+      setDiagLogsLoading(false);
+    });
+    return () => unsub();
+  }, [diagLogsVisible, isAdminUser]);
+
   const checkDiagnostics = async () => {
-    if (profile?.role !== 'admin') return;
+    if (!isAdminUser) return;
     setChecking(true);
     setStatusAuth('Checking...');
     setStatusDb('Checking...');
@@ -123,10 +144,10 @@ export default function SettingsScreen() {
   };
 
   useEffect(() => {
-    if (profile?.role === 'admin') {
+    if (isAdminUser) {
       checkDiagnostics();
     }
-  }, [profile?.role]);
+  }, [isAdminUser]);
 
   // Notification State
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -641,7 +662,7 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         {/* Section: Admin Diagnostics (Admin Only) */}
-        {profile?.role === 'admin' && (
+        {isAdminUser && (
           <SettingsSection title="Developer & Diagnostics" icon="construct-outline" defaultOpen={false}>
             <AdminHealthDashboard 
               onClearCache={() => {
@@ -650,7 +671,23 @@ export default function SettingsScreen() {
                   { text: 'Clear', style: 'destructive', onPress: () => Alert.alert('Success', 'Cache cleared.') }
                 ]);
               }}
-              onSyncData={() => Alert.alert('Sync Data', 'Local cache refreshed from Firestore.')}
+              onSyncData={async () => {
+                if (syncingData) return;
+                setSyncingData(true);
+                try {
+                  refetch();
+                  await Promise.all([
+                    refetchLearning().catch(() => {}),
+                    refetchBooks().catch(() => {}),
+                  ]);
+                  await checkDiagnostics();
+                  Alert.alert('Sync Completed', 'All local course data, books, and telemetry refreshed from Firestore.');
+                } catch (e: any) {
+                  Alert.alert('Sync Warning', e?.message || 'Sync encountered partial network latency.');
+                } finally {
+                  setSyncingData(false);
+                }
+              }}
               onOpenLogs={() => setDiagLogsVisible(true)}
               checkDiagnosticsParent={checkDiagnostics}
             />
@@ -689,18 +726,100 @@ export default function SettingsScreen() {
         </SettingsSection>
       </ScrollView>
       <Modal visible={diagLogsVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDiagLogsVisible(false)}>
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: COLORS.background }]}>
           <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => setDiagLogsVisible(false)}>
               <Ionicons name="close" size={22} color={COLORS.textMain} />
             </TouchableOpacity>
-            <Text style={styles.title}>Diagnostics Logs</Text>
-            <View style={{ width: 44 }} />
+            <Text style={styles.title}>Diagnostics & Error Logs</Text>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => checkDiagnostics()}>
+              <Ionicons name="refresh" size={20} color={COLORS.primary} />
+            </TouchableOpacity>
           </View>
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="document-text-outline" size={48} color={COLORS.textMuted} style={{ marginBottom: 16 }} />
-            <Text style={{ color: COLORS.textMuted, fontSize: 16, fontWeight: '500' }}>No diagnostic logs available.</Text>
-          </View>
+
+          {diagLogsLoading ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="sync" size={32} color={COLORS.primary} />
+              <Text style={{ marginTop: 12, color: COLORS.textMuted, fontSize: 15 }}>Loading live telemetry...</Text>
+            </View>
+          ) : diagLogs.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+              <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.success} style={{ marginBottom: 16 }} />
+              <Text style={{ color: COLORS.textMain, fontSize: 17, fontWeight: '700', marginBottom: 6 }}>System Operating Cleanly</Text>
+              <Text style={{ color: COLORS.textMuted, fontSize: 14, textAlign: 'center' }}>No active telemetry exceptions or runtime errors recorded.</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textMuted, marginBottom: 4 }}>
+                RECENT TELEMETRY EVENTS ({diagLogs.length})
+              </Text>
+              {diagLogs.map((item) => {
+                const isCrit = item.severity === 'critical';
+                const isHigh = item.severity === 'high';
+                const badgeColor = isCrit ? COLORS.error : isHigh ? '#F59E0B' : COLORS.primary;
+                const dateStr = item.created_at?.toDate
+                  ? item.created_at.toDate().toLocaleString()
+                  : new Date().toLocaleTimeString();
+
+                return (
+                  <View
+                    key={item.id || item.fingerprint}
+                    style={{
+                      backgroundColor: COLORS.surface,
+                      borderRadius: 14,
+                      padding: 14,
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                      gap: 6,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View
+                          style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 2,
+                            borderRadius: 6,
+                            backgroundColor: badgeColor + '18',
+                          }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '800', color: badgeColor, textTransform: 'uppercase' }}>
+                            {item.severity}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: COLORS.textMuted }}>
+                          {item.category}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 11, color: COLORS.textMuted }}>{dateStr}</Text>
+                    </View>
+
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.textMain }}>
+                      {item.message || 'Unknown runtime event'}
+                    </Text>
+
+                    {item.screen_route ? (
+                      <Text style={{ fontSize: 12, color: COLORS.textMuted }}>
+                        Route: <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>{item.screen_route}</Text>
+                      </Text>
+                    ) : null}
+
+                    {item.user_email ? (
+                      <Text style={{ fontSize: 12, color: COLORS.textMuted }}>User: {item.user_email}</Text>
+                    ) : null}
+
+                    {item.occurrence_count > 1 ? (
+                      <View style={{ alignSelf: 'flex-start', backgroundColor: '#F1F5F9', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ fontSize: 11, color: '#475569', fontWeight: '600' }}>
+                          Occurrences: {item.occurrence_count}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
       </Modal>
 

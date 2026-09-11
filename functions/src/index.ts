@@ -3,13 +3,6 @@
  * 
  * Entry point for all Cloud Functions.
  * Each function is in its own module for clean separation of security boundaries.
- * 
- * PHASE 1 STATUS:
- * [x] sendNotification  — Admin-only FCM dispatch (FOUNDATION READY)
- * [x] submitQuiz        — Server-side quiz grading (SKELETON — Phase 4)
- * [x] razorpayWebhook   — Razorpay HMAC webhook (SKELETON — Phase 5)
- * [x] generateCertificate — PDF certificate generation (SKELETON — Phase 6)
- * [x] createStatusCheck — MongoDB→Firestore migration foundation (READY)
  */
 export { sendNotification } from "./notifications/sendNotification";
 export { getQuizQuestions } from "./quiz/getQuizQuestions";
@@ -25,4 +18,19 @@ export { generateCertificate } from "./certificates/generateCertificate";
 export { createStatusCheck } from "./status/statusChecks";
 
 export { reactToStatus } from "./status/reactToStatus";
+
+// ─── P0.1: Secure AI Gateway (Gemini key in Secret Manager — NOT in APK) ───────
+export { askAITutor } from "./ai/askAITutor";
+export { generateAIFlashcards } from "./ai/generateAIFlashcards";
+export { generateAIQuiz } from "./ai/generateAIQuiz";
+
+// ─── Phase 50/51: Multi-Tenant SaaS Organizations ─────────────────────────────
+export {
+  createOrganization,
+  updateOrganizationStatus,
+  recordManualPayment,
+  updateOrganizationSettings,
+  bulkImportStudents,
+  inviteUserToOrganization,
+} from "./organizations/organizationService";
 

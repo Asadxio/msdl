@@ -43,6 +43,7 @@ export type UserProfile = {
   email: string;
   role: AppRole;
   status: 'pending' | 'approved' | 'deactivated' | 'rejected' | 'suspended';
+  phone?: string;
   photo_url?: string;
   avatar?: string;
   referral_code?: string;
@@ -76,6 +77,7 @@ type AuthContextType = {
       age_bracket?: string;
       guardian_name?: string;
       guardian_phone?: string;
+      phone?: string;
     }
   ) => Promise<string | null>;
   signOut: () => Promise<void>;
@@ -266,6 +268,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     startupLog('Auth provider mounted', { authLoadingInitial: true });
 
+    // ─── Fresh-install guard ─────────────────────────────────────────────────
+    // Android AccountManager keeps Firebase credentials even after an uninstall.
+    // We detect the very first launch after install and if ANY old user session
+    // is restored, we force sign-out immediately so the login screen is displayed.
+    const INSTALL_SENTINEL = 'MSLB_INSTALLED_v3';
+    let isFreshInstall = false;
+
     const clearAuthLoader = (reason: string) => {
       if (!mounted) return;
       authStartupCompletedRef.current = true;
@@ -293,137 +302,165 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }, AUTH_STARTUP_WATCHDOG_MS);
 
-    try {
-      authUnsub = onAuthStateChanged(auth, async (firebaseUser) => {
-        startupLog('Auth restored', { hasUser: Boolean(firebaseUser?.uid), emailVerified: Boolean(firebaseUser?.emailVerified) });
-        try {
-          if (profileUnsub) {
-            profileUnsub();
-            profileUnsub = null;
+    void (async () => {
+      try {
+        const sentinel = await AsyncStorage.getItem(INSTALL_SENTINEL);
+        if (sentinel === null) {
+          isFreshInstall = true;
+          await AsyncStorage.setItem(INSTALL_SENTINEL, '1').catch(() => {});
+          startupLog('Fresh install detected: marked for forced sign-out of any restored session');
+        }
+      } catch {
+        // Continue normally
+      }
+
+      try {
+        authUnsub = onAuthStateChanged(auth, async (firebaseUser) => {
+          startupLog('Auth restored', { hasUser: Boolean(firebaseUser?.uid), emailVerified: Boolean(firebaseUser?.emailVerified) });
+
+          // On fresh install, discard any restored background credential
+          if (firebaseUser && isFreshInstall) {
+            isFreshInstall = false;
+            startupLog('Fresh install: signing out restored background user session');
+            try {
+              await firebaseSignOut(auth);
+            } catch {}
+            setUser(null);
+            setProfile(null);
+            clearTimeout(watchdog);
+            clearAuthLoader('fresh-install-signout');
+            return;
           }
-          setUser(firebaseUser);
-          setProfileOffline(false);
-          if (firebaseUser) {
-            const usedCachedProfile = await applyCachedProfile(firebaseUser.uid, 'auth.cachedRealtime');
-            startupLog('Cached profile lookup complete', { usedCache: usedCachedProfile });
-            profileUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snap) => {
-              setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
-              if (!snap.exists()) {
-                startupLog('Profile loaded', { exists: false, fromCache: snap.metadata.fromCache });
-                if (isOwnerEmail(firebaseUser.email)) {
+
+          try {
+            if (profileUnsub) {
+              profileUnsub();
+              profileUnsub = null;
+            }
+            setUser(firebaseUser);
+            setProfileOffline(false);
+            if (firebaseUser) {
+              const usedCachedProfile = await applyCachedProfile(firebaseUser.uid, 'auth.cachedRealtime');
+              startupLog('Cached profile lookup complete', { usedCache: usedCachedProfile });
+              profileUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snap) => {
+                setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
+                if (!snap.exists()) {
+                  startupLog('Profile loaded', { exists: false, fromCache: snap.metadata.fromCache });
+                  if (isOwnerEmail(firebaseUser.email)) {
+                    try {
+                      await setDoc(doc(db, 'users', firebaseUser.uid), {
+                        name: firebaseUser.displayName || 'Owner',
+                        email: (firebaseUser.email || '').trim().toLowerCase(),
+                        role: 'super_admin',
+                        status: 'approved',
+                        founder: true,
+                        created_at: serverTimestamp(),
+                        updated_at: serverTimestamp(),
+                      });
+                      return;
+                    } catch (initErr) {
+                      logger.warn('[AuthContext] Failed to initialize owner user document:', initErr);
+                    }
+                  }
+                  setProfile(null);
+                  setProfileIssue('missing_profile_document');
+                  trackEvent('missing_profile_document', { uid: firebaseUser.uid, timestamp: Date.now(), source: 'snapshot', platform: Platform.OS }, `missing-profile-${firebaseUser.uid}-${Date.now()}`);
+                  await AsyncStorage.removeItem(getProfileCacheKey(firebaseUser.uid)).catch(() => {});
+                  return;
+                }
+                const { profile: nextProfile, issue } = validateProfileData(snap.data(), firebaseUser.uid, 'auth.snapshotProfile');
+                startupLog('Profile loaded', { exists: true, status: nextProfile.status, role: nextProfile.role, issue, fromCache: snap.metadata.fromCache });
+
+                if (nextProfile.status === 'approved' && !firebaseUser.emailVerified) {
                   try {
-                    await setDoc(doc(db, 'users', firebaseUser.uid), {
-                      name: firebaseUser.displayName || 'Owner',
-                      email: (firebaseUser.email || '').trim().toLowerCase(),
-                      role: 'super_admin',
+                    await firebaseUser.reload();
+                    await firebaseUser.getIdToken(true);
+                    setUser({ ...firebaseUser, emailVerified: firebaseUser.emailVerified } as User);
+                  } catch (reloadErr) {
+                    // Non-fatal — cached token will still be used
+                  }
+                }
+
+                // Self-healing for Owner: ensure Firestore doc has super_admin, approved, and founder: true
+                if (isOwnerEmail(firebaseUser.email)) {
+                  const snapData = snap.data() || {};
+                  if (snapData.role !== 'super_admin' || snapData.status !== 'approved' || !snapData.founder) {
+                    try {
+                      await setDoc(doc(db, 'users', firebaseUser.uid), {
+                        name: snapData.name || firebaseUser.displayName || 'Owner',
+                        email: (firebaseUser.email || '').trim().toLowerCase(),
+                        role: 'super_admin',
+                        status: 'approved',
+                        founder: true,
+                        updated_at: serverTimestamp(),
+                      }, { merge: true });
+
+                    } catch (healErr) {
+                      logger.warn('[AuthContext] Failed to self-heal owner user document:', healErr);
+                    }
+                  }
+                }
+
+                // After email verification detected
+                if (firebaseUser.emailVerified && nextProfile.status === 'pending' && nextProfile.role === 'student') {
+                  try {
+                    await firebaseUser.getIdToken(true);
+                    await updateDoc(doc(db, 'users', firebaseUser.uid), {
                       status: 'approved',
-                      founder: true,
-                      created_at: serverTimestamp(),
                       updated_at: serverTimestamp(),
                     });
-                    return;
-                  } catch (initErr) {
-                    logger.warn('[AuthContext] Failed to initialize owner user document:', initErr);
-                  }
-                }
-                setProfile(null);
-                setProfileIssue('missing_profile_document');
-                trackEvent('missing_profile_document', { uid: firebaseUser.uid, timestamp: Date.now(), source: 'snapshot', platform: Platform.OS }, `missing-profile-${firebaseUser.uid}-${Date.now()}`);
-                await AsyncStorage.removeItem(getProfileCacheKey(firebaseUser.uid)).catch(() => {});
-                return;
-              }
-              const { profile: nextProfile, issue } = validateProfileData(snap.data(), firebaseUser.uid, 'auth.snapshotProfile');
-              startupLog('Profile loaded', { exists: true, status: nextProfile.status, role: nextProfile.role, issue, fromCache: snap.metadata.fromCache });
-
-              if (nextProfile.status === 'approved' && !firebaseUser.emailVerified) {
-                try {
-                  await firebaseUser.reload();
-                  await firebaseUser.getIdToken(true);
-                  setUser({ ...firebaseUser, emailVerified: firebaseUser.emailVerified } as User);
-                } catch (reloadErr) {
-                  // Non-fatal — cached token will still be used
-                }
-              }
-
-              // Self-healing for Owner: ensure Firestore doc has super_admin, approved, and founder: true
-              if (isOwnerEmail(firebaseUser.email)) {
-                const snapData = snap.data() || {};
-                if (snapData.role !== 'super_admin' || snapData.status !== 'approved' || !snapData.founder) {
-                  try {
-                    await setDoc(doc(db, 'users', firebaseUser.uid), {
-                      name: snapData.name || firebaseUser.displayName || 'Owner',
-                      email: (firebaseUser.email || '').trim().toLowerCase(),
-                      role: 'super_admin',
+                    // Also update public_profiles
+                    await updateDoc(doc(db, 'public_profiles', firebaseUser.uid), {
                       status: 'approved',
-                      founder: true,
+                      searchable: true,
+                      is_active: true,
                       updated_at: serverTimestamp(),
-                    }, { merge: true });
-
-                  } catch (healErr) {
-                    logger.warn('[AuthContext] Failed to self-heal owner user document:', healErr);
+                    }).catch(() => {});
+                    nextProfile.status = 'approved';
+                  } catch (e) {
+                    // Non-fatal; user can re-login to retry
                   }
                 }
-              }
 
-              // After email verification detected
-              if (firebaseUser.emailVerified && nextProfile.status === 'pending' && nextProfile.role === 'student') {
-                try {
-                  await firebaseUser.getIdToken(true);
-                  await updateDoc(doc(db, 'users', firebaseUser.uid), {
-                    status: 'approved',
-                    updated_at: serverTimestamp(),
-                  });
-                  // Also update public_profiles
-                  await updateDoc(doc(db, 'public_profiles', firebaseUser.uid), {
-                    status: 'approved',
-                    searchable: true,
-                    is_active: true,
-                    updated_at: serverTimestamp(),
-                  }).catch(() => {});
-                  nextProfile.status = 'approved';
-                } catch (e) {
-                  // Non-fatal; user can re-login to retry
-                }
-              }
-
-              setProfile((prev) => {
-                if (prev && JSON.stringify(prev) === JSON.stringify(nextProfile)) {
-                  return prev;
-                }
-                return nextProfile;
+                setProfile((prev) => {
+                  if (prev && JSON.stringify(prev) === JSON.stringify(nextProfile)) {
+                    return prev;
+                  }
+                  return nextProfile;
+                });
+                setProfileIssue(issue);
+                await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
+                await syncPublicProfile(firebaseUser.uid, nextProfile);
+              }, async (err) => {
+                logger.warn('Profile realtime listener failed:', err);
+                startupLog('Profile listener failed', { message: String((err as any)?.message || err) });
+                setProfileOffline(true);
+                await fetchProfile(firebaseUser.uid);
               });
-              setProfileIssue(issue);
-              await AsyncStorage.setItem(getProfileCacheKey(firebaseUser.uid), JSON.stringify(nextProfile)).catch(() => {});
-              await syncPublicProfile(firebaseUser.uid, nextProfile);
-            }, async (err) => {
-              logger.warn('Profile realtime listener failed:', err);
-              startupLog('Profile listener failed', { message: String((err as any)?.message || err) });
-              setProfileOffline(true);
-              await fetchProfile(firebaseUser.uid);
-            });
-          } else {
-            startupLog('Profile loaded', { skipped: 'no-user' });
-            setProfile(null);
-            setProfileIssue(null);
+            } else {
+              startupLog('Profile loaded', { skipped: 'no-user' });
+              setProfile(null);
+              setProfileIssue(null);
+            }
+          } catch (err) {
+            logger.warn('Auth startup callback failed:', err);
+            startupLog('Auth startup callback failed', { message: String((err as any)?.message || err) });
+            setUser(auth.currentUser ?? null);
+            if (!auth.currentUser) setProfile(null);
+          } finally {
+            clearTimeout(watchdog);
+            clearAuthLoader('auth-state-callback');
           }
-        } catch (err) {
-          logger.warn('Auth startup callback failed:', err);
-          startupLog('Auth startup callback failed', { message: String((err as any)?.message || err) });
-          setUser(auth.currentUser ?? null);
-          if (!auth.currentUser) setProfile(null);
-        } finally {
-          clearTimeout(watchdog);
-          clearAuthLoader('auth-state-callback');
-        }
-      });
-    } catch (err) {
-      logger.warn('Auth state subscription failed:', err);
-      startupLog('Auth state subscription failed', { message: String((err as any)?.message || err) });
-      clearTimeout(watchdog);
-      setUser(auth.currentUser ?? null);
-      if (!auth.currentUser) setProfile(null);
-      clearAuthLoader('auth-subscribe-error');
-    }
+        });
+      } catch (err) {
+        logger.warn('Auth state subscription failed:', err);
+        startupLog('Auth state subscription failed', { message: String((err as any)?.message || err) });
+        clearTimeout(watchdog);
+        setUser(auth.currentUser ?? null);
+        if (!auth.currentUser) setProfile(null);
+        clearAuthLoader('auth-subscribe-error');
+      }
+    })();
 
     return () => {
       mounted = false;
@@ -469,6 +506,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       age_bracket?: string;
       guardian_name?: string;
       guardian_phone?: string;
+      phone?: string;
     }
   ): Promise<string | null> => {
     // Role protection - only student or teacher allowed
@@ -542,6 +580,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           age_bracket: complianceData?.age_bracket || (complianceData?.is_minor ? 'under_18' : '18_plus'),
           ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
           ...(complianceData?.guardian_phone ? { guardian_phone: complianceData.guardian_phone } : {}),
+          ...(complianceData?.phone ? { phone: complianceData.phone } : {}),
         });
         debugLog('[SIGNUP_DEBUG] Successfully wrote users/', cred.user.uid);
 
@@ -732,16 +771,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOutUser = async () => {
     const uid = auth.currentUser?.uid || user?.uid || null;
+    // 1. Clear state immediately so UI responds at once
+    setUser(null);
+    setProfile(null);
+    setProfileOffline(false);
     try {
+      // 2. Sign out from Firebase Auth (clears Google Play Services credential too)
       await firebaseSignOut(auth);
-      if (uid) await AsyncStorage.removeItem(getProfileCacheKey(uid)).catch(() => {});
-      logger.info('Signed out and cleared auth session cache', { uid });
+      // 3. Wipe ALL AsyncStorage — profile cache + any leftover session data
+      const allKeys = await AsyncStorage.getAllKeys().catch(() => [] as string[]);
+      if (allKeys.length > 0) {
+        await AsyncStorage.multiRemove(allKeys as string[]).catch(() => {});
+      }
+      logger.info('Signed out — cleared Firebase session + full AsyncStorage', { uid });
     } catch (err) {
-      logger.error('Failed to sign out cleanly:', err);
-    } finally {
-      setUser(null);
-      setProfile(null);
-      setProfileOffline(false);
+      logger.error('Sign out error (state already cleared):', err);
     }
   };
 

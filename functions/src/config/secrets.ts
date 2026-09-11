@@ -7,6 +7,7 @@
  * DEPLOYMENT:
  *   firebase functions:secrets:set RAZORPAY_KEY_ID
  *   firebase functions:secrets:set RAZORPAY_KEY_SECRET
+ *   firebase functions:secrets:set GEMINI_API_KEY
  * 
  * EMULATOR:
  *   Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET as environment variables.
@@ -15,8 +16,16 @@
  * IMPORTANT:
  *   RAZORPAY_KEY_ID = public key (rzp_live_... or rzp_test_...)
  *   RAZORPAY_KEY_SECRET = private key — NEVER expose to frontend
+ *   GEMINI_API_KEY = Google AI Studio key — NEVER expose to frontend or APK
  */
 import { defineSecret } from 'firebase-functions/params';
 
 export const RAZORPAY_KEY_ID = defineSecret('RAZORPAY_KEY_ID');
 export const RAZORPAY_KEY_SECRET = defineSecret('RAZORPAY_KEY_SECRET');
+
+/**
+ * Gemini API key — stored in Secret Manager, bound ONLY to AI callable functions.
+ * NEVER returned to client. NEVER logged. NEVER in EXPO_PUBLIC_* env vars.
+ */
+export const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
+

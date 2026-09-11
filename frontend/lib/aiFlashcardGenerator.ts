@@ -122,6 +122,58 @@ const ISLAMIC_TOPIC_FLASHCARD_VAULT: Record<string, Omit<IslamicFlashcard, 'id'>
       reference: 'تحفة الأطفال / قواعد التجويد',
     },
   ],
+  'Taharat & Purity': [
+    {
+      category: 'fiqh',
+      categoryTitle: 'طہارت و پاکی کے احکام',
+      topic: 'وضو کے فرائض (۴ فرائض)',
+      frontText: 'فَاغْسِلُوا وُجُوهَكُمْ وَأَيْدِيَكُمْ إِلَى الْمَرَافِقِ...',
+      frontSubtitle: 'سورۃ المائدہ آیت ۶ کے مطابق وضو کے فرائض',
+      backTranslation: 'اپنے چہرے دھوؤ، اور کہنیوں تک ہاتھ، اور سر کا مسح کرو اور ٹخنوں تک پاؤں دھوؤ۔',
+      backEnglish: 'Wash your faces, and your forearms to the elbows, wipe over your heads, and wash your feet up to the ankles.',
+      backRoman: 'Fa-ghsiloo wujoohakum wa aydiyakum ilal maraafiq...',
+      backExplanation: 'وضو میں یہ چار اعضاء دھونا فرض ہے، اگر بال برابر جگہ بھی سوکھی رہ جائے تو وضو نہیں ہوگا۔',
+      reference: 'قرآن مجید: سورۃ المائدہ (۵:۶)',
+    },
+    {
+      category: 'fiqh',
+      categoryTitle: 'طہارت و پاکی کے احکام',
+      topic: 'غسل کے فرائض (۳ فرائض)',
+      frontText: 'فَرَائِضُ الْغُسْلِ',
+      frontSubtitle: 'جسمانی پاکی حاصل کرنے کا شرعی طریقہ',
+      backTranslation: 'غسل میں تین فرائض ہیں: ۱. کلی کرنا، ۲. ناک کی نرم ہڈی تک پانی پہنچانا، ۳. پورے جسم پر اس طرح پانی بہانا کہ بال برابر جگہ سوکھی نہ رہے۔',
+      backEnglish: 'Ghusl has 3 obligations: 1. Thorough mouth rinsing, 2. Cleansing the nasal passage up to soft bone, 3. Flowing water over every single part of the body.',
+      backRoman: 'Faraaid-ul-Ghusl (Kulli, Naak me paani, Poore jism par paani)',
+      backExplanation: 'ناپاکی کی حالت سے پاکی حاصل کرنے کے لیے غسل کے ان فرائض کو پورا کرنا لازمی ہے۔',
+      reference: 'فتاویٰ ہندیہ / نور الایضاح',
+    },
+  ],
+  'Daily Duas': [
+    {
+      category: 'duas',
+      categoryTitle: 'صبح و شام کی مسنون دعائیں',
+      topic: 'سونے اور جاگنے کی مسنون دعا',
+      frontText: 'الْحَمْدُ لِلَّهِ الَّذِي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا وَإِلَيْهِ النُّشُورُ',
+      frontSubtitle: 'صبح بیدار ہونے پر پڑھیں',
+      backTranslation: 'تمام تعریفیں اللہ کے لیے ہیں جس نے ہمیں مارنے کے بعد زندہ کیا اور اسی کی طرف لوٹ کر جانا ہے۔',
+      backEnglish: 'All praise is for Allah Who gave us life after having taken it from us and unto Him is the resurrection.',
+      backRoman: 'Alhamdu lillahil-ladhee ahyana ba’da ma amatana wa ilayhin-nushoor.',
+      backExplanation: 'نیند کو موت کی بہن قرار دیا گیا ہے، بیدار ہو کر اللہ کی نعمتِ حیات کا شکر ادا کرنا مسنون ہے۔',
+      reference: 'صحیح بخاری: ۶۳۱۲',
+    },
+    {
+      category: 'duas',
+      categoryTitle: 'صبح و شام کی مسنون دعائیں',
+      topic: 'بیت الخلاء میں داخل ہونے کی دعا',
+      frontText: 'اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْخُبُثِ وَالْخَبَائِثِ',
+      frontSubtitle: 'بایاں پاؤں اندر رکھتے ہوئے پڑھیں',
+      backTranslation: 'اے اللہ! میں خبیث جنات (نر اور مادہ) کے شر سے تیری پناہ مانگتا ہوں۔',
+      backEnglish: 'O Allah, I seek refuge in You from the evil male and female devils.',
+      backRoman: 'Allahumma inni a’oodhu bika minal-khubuthi wal-khabaa’ith.',
+      backExplanation: 'یہ دعا گندگی اور شیاطین کے وسوسوں سے روحانی حفاظت فراہم کرتی ہے۔',
+      reference: 'صحیح بخاری: ۱۴۲',
+    },
+  ],
   'Seerah & Akhlaq': [
     {
       category: 'hadith',
@@ -138,23 +190,71 @@ const ISLAMIC_TOPIC_FLASHCARD_VAULT: Record<string, Omit<IslamicFlashcard, 'id'>
   ],
 };
 
+function generateDynamicCardsForTopic(topic: string, count: number): Omit<IslamicFlashcard, 'id'>[] {
+  return [
+    {
+      category: 'fiqh',
+      categoryTitle: `${topic} - مطالعہ و دہرائی`,
+      topic: `${topic} - بنیادی شرعی اصول`,
+      frontText: `أَحْكَامُ ${topic.toUpperCase()}`,
+      frontSubtitle: `${topic} کی شرعی اہمیت اور احکام`,
+      backTranslation: `${topic} کے اسلامی احکام کو سنتِ نبوی ﷺ کے مطابق سیکھنا ہر مسلمان کے لیے ضروری ہے۔`,
+      backEnglish: `Mastering the core Islamic rulings of ${topic} ensures our worship and daily conduct align with the Sunnah.`,
+      backRoman: `Ahkaam-ut-${topic}`,
+      backExplanation: `اس سبق کے نوٹس تیار کریں اور استاذہ کے بتائے ہوئے اہم نکات کو بار بار دہرائیں۔`,
+      reference: 'مدارسِ سلفیہ نصابِ تعلیم',
+    },
+    {
+      category: 'hadith',
+      categoryTitle: `${topic} - احادیثِ مبارکہ`,
+      topic: `${topic} کی فضیلت`,
+      frontText: 'طَلَبُ الْعِلْمِ فَرِيضَةٌ عَلَى كُلِّ مُسْلِمٍ',
+      frontSubtitle: 'علمِ دین حاصل کرنے کی فرضیت',
+      backTranslation: 'علمِ دین حاصل کرنا ہر مسلمان (مرد اور عورت) پر فرض ہے۔',
+      backEnglish: 'Seeking sacred knowledge is an obligatory duty upon every Muslim.',
+      backRoman: 'Talabul-ilmi fareedatun ‘ala kulli Muslim.',
+      backExplanation: `${topic} کا علم حاصل کرنا اسی فرضِ عین کے دائرے میں آتا ہے۔`,
+      reference: 'سنن ابن ماجہ: ۲۲۴',
+    },
+  ];
+}
+
 export async function generateAiFlashcards(params: AiCardGenerationParams): Promise<IslamicFlashcard[]> {
   const { topic, count } = params;
 
-  // Simulate ultra-fast AI generation response (300ms)
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  // 1. Server-side Gemini via Firebase Callable Function (P0.1 Security Fix)
+  // GEMINI_API_KEY lives in Firebase Secret Manager — NOT in APK.
+  try {
+    const { callGenerateAIFlashcards } = await import('@/lib/aiGatewayClient');
+    const result = await callGenerateAIFlashcards({ topic, count: Math.min(Math.max(count, 1), 10) });
+    if (result.cards && result.cards.length > 0) {
+      return result.cards as IslamicFlashcard[];
+    }
+  } catch (err) {
+    console.warn('[AiFlashcards] Server generation failed, falling back to static vault:', err);
+  }
 
+  // 2. Offline fallback: static vault
+  return _staticVaultFallback(topic, count);
+}
+
+
+
+function _staticVaultFallback(topic: string, count: number): IslamicFlashcard[] {
   let pool: Omit<IslamicFlashcard, 'id'>[] = [];
   if (ISLAMIC_TOPIC_FLASHCARD_VAULT[topic]) {
     pool = [...ISLAMIC_TOPIC_FLASHCARD_VAULT[topic]];
   } else {
-    // Collect from all topic pools if custom topic
-    Object.values(ISLAMIC_TOPIC_FLASHCARD_VAULT).forEach((cards) => {
-      pool.push(...cards);
-    });
+    const matchingKey = Object.keys(ISLAMIC_TOPIC_FLASHCARD_VAULT).find(
+      (k) => k.toLowerCase().includes(topic.toLowerCase()) || topic.toLowerCase().includes(k.toLowerCase())
+    );
+    if (matchingKey) {
+      pool = [...ISLAMIC_TOPIC_FLASHCARD_VAULT[matchingKey]];
+    } else {
+      pool = generateDynamicCardsForTopic(topic, count);
+    }
   }
 
-  // Shuffle and pick desired count
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   const selected = shuffled.slice(0, Math.max(1, Math.min(count, pool.length)));
 

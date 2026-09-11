@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getCountFromServer, query, serverTimestamp, setDoc, updateDoc, where, Timestamp, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -64,6 +64,7 @@ function shuffle<T>(arr: T[]): T[] {
 export default function QuizScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ courseId?: string; course_id?: string; category?: string }>();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const isTeacher = profile?.role === 'teacher' || isAdmin;
@@ -357,6 +358,8 @@ export default function QuizScreen() {
               category: cleanCat,
               answers: answers,
               nonce: attemptDocId,
+              course_id: String(params.courseId || params.course_id || '').trim() || undefined,
+              student_name: profile?.name || user.displayName || undefined,
             }),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_ERROR')), 30000))
           ]);

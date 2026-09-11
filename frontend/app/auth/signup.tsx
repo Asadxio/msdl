@@ -34,12 +34,11 @@ import {
   trackEmailVerificationError,
 } from '@/lib/emailVerificationAnalytics';
 
-// FUTURE ARCHITECTURE PREPARATION CONFIG (DISABLED FOR CURRENT STAGE)
-// Set phonePersistenceEnabled to true after Firestore rules update to allow 'phone' key.
+// FUTURE ARCHITECTURE PREPARATION CONFIG
 const FUTURE_CHANNELS_CONFIG = {
   persistence: {
-    phonePersistenceEnabled: false, 
-    guardianContactEnabled: false,
+    phonePersistenceEnabled: true, 
+    guardianContactEnabled: true,
     parentAccountsEnabled: false,
   },
   verification: {
@@ -480,10 +479,11 @@ export default function SignupScreen() {
       const complianceData = {
         is_minor: ageCategory === 'minor',
         age_bracket: ageCategory === 'minor' ? 'under_18' : '18_plus',
+        phone: mobile.trim() ? `+91${mobile.trim()}` : '',
         ...(ageCategory === 'minor'
           ? {
               guardian_name: guardianName.trim(),
-              guardian_phone: guardianPhone.trim(),
+              guardian_phone: guardianPhone.trim() ? `+91${guardianPhone.trim()}` : '',
             }
           : {}),
       };

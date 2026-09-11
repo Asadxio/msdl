@@ -113,8 +113,11 @@ const MENU_SECTIONS: MenuSection[] = [
       { label: 'Manage Quiz Questions', subtitle: 'View, edit & delete Firestore quiz questions', icon: 'list-outline', route: '/admin/manage-quizzes', colorBg: '#ECFDF5', colorIcon: '#059669' },
       { label: 'AI Auto-Quiz Maker', subtitle: 'Generate Islamic exams in 5 seconds', icon: 'sparkles-outline', route: '/admin/ai-quiz-maker', colorBg: '#FEF3C7', colorIcon: '#D97706' },
       { label: 'Manage Academics', subtitle: 'Admin controls for academics', icon: 'school-outline', route: '/admin/manage-academics' },
+      { label: 'Madrasa Settings', subtitle: 'Institutional profile, branding & support', icon: 'settings-outline', route: '/admin/organization-settings', colorBg: '#ECFDF5', colorIcon: '#059669' },
+      { label: 'Madrasa Organizations', subtitle: 'Platform-wide multi-tenant governance', icon: 'business-outline', route: '/admin/organizations', colorBg: '#F5F3FF', colorIcon: '#7C3AED' },
       { label: 'Admin Payments', subtitle: 'Admin billing tools', icon: 'card-outline', route: '/admin/payments' },
       { label: 'Admin Users', subtitle: 'Manage registered users', icon: 'people-circle-outline', route: '/admin/users' },
+      { label: 'Start a Madrasa', subtitle: 'Onboard a new Islamic institution', icon: 'add-circle-outline', route: '/onboarding/start-madrasa', colorBg: '#ECFDF5', colorIcon: '#059669' },
       { label: 'Analytics Dashboard', subtitle: 'Platform-wide metrics and reports', icon: 'bar-chart-outline', route: '/admin/analytics' },
       { label: 'Moderation Queue', subtitle: 'Review flagged content and reports', icon: 'flag-outline', route: '/admin/moderation' },
       { label: 'Security Dashboard', subtitle: 'Monitor security events and access', icon: 'shield-outline', route: '/admin/security' },
@@ -192,13 +195,16 @@ export default function MoreLandingScreen() {
   };
 
   const handleRateApp = () => {
-    // On Android, link to Play Store listing
+    // Play store package ID from app.json
     const storeUrl = Platform.select({
-      android: 'https://play.google.com/store/apps/details?id=com.mslb.frontend',
-      ios: 'https://apps.apple.com/app/idXXXXXXXXXX',
-      default: '',
+      android: 'market://details?id=com.mslb.frontend',
+      default: 'https://play.google.com/store/apps/details?id=com.mslb.frontend',
     });
-    if (storeUrl) Linking.openURL(storeUrl).catch(() => {});
+    Linking.openURL(storeUrl).catch(() => {
+      Linking.openURL('https://play.google.com/store/apps/details?id=com.mslb.frontend').catch(() => {
+        Linking.openURL(MADRASA_WEBSITE_URL).catch(() => {});
+      });
+    });
   };
 
   return (

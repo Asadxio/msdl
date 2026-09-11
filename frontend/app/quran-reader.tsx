@@ -455,9 +455,13 @@ export default function QuranReaderScreen() {
         </View>
       ) : status === 'error' ? (
         <View style={styles.centerBox}>
-          <Ionicons name="wifi-outline" size={48} color="#EF4444" />
-          <Text style={styles.errorText}>Please check internet connection</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={loadSurah}>
+          <Ionicons name="cloud-offline-outline" size={54} color="#EF4444" />
+          <Text style={styles.errorText}>Unable to load Surah</Text>
+          <Text style={[styles.loadingText, { marginTop: 4, marginBottom: 16, fontSize: 13, color: '#94A3B8' }]}>
+            Please check internet connection & tap Try Again
+          </Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={loadSurah} activeOpacity={0.8}>
+            <Ionicons name="reload" size={16} color="#002E23" style={{ marginRight: 6 }} />
             <Text style={styles.retryBtnText}>Try Again</Text>
           </TouchableOpacity>
         </View>

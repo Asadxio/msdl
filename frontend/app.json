@@ -65,6 +65,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.madrasatussalikat.lilbanat",
       "versionCode": 30,
+      "allowBackup": false,
       "googleServicesFile": "./google-services.json"
     },
     "web": {
@@ -90,7 +91,9 @@
           "backgroundColor": "#F8F6F0"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics"
     ],
     "updates": {
       "url": "https://u.expo.dev/408ebb1a-6a8c-467e-b941-44b658fe7977",

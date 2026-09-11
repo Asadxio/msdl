@@ -598,8 +598,10 @@ export default function FlashcardsScreen() {
             <View style={styles.topicOptionsList}>
               {[
                 'Salah / Namaz',
+                'Taharat & Purity',
                 'Fasting / Roza',
                 'Zakat & Charity',
+                'Daily Duas',
                 'Tajweed Rules',
                 'Seerah & Akhlaq',
               ].map((topic) => {

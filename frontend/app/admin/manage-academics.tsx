@@ -1,6 +1,6 @@
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, StatusBar, ActivityIndicator,
 } from 'react-native';
@@ -19,9 +19,12 @@ import { isValidHttpsUrl, normalizeMeetUrl } from '@/lib/links';
 import { createAdminLog } from '@/lib/adminLogs';
 import { hasPermission } from '@/lib/rbac';
 import { isFounderEmail } from '@/lib/founderPolicy';
-import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { getEnrollmentDocId } from '@/lib/enrollments';
 import { withTimeout } from '@/lib/errors';
+import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+
+
 
 export type CourseSubject = {
   id: string;
@@ -34,6 +37,7 @@ export type CourseSubject = {
 type CourseItem = {
   id: string;
   name: string;
+  organization_id?: string;
   teacher_name: string;
   teacher_id?: string;
   schedule: string;
@@ -46,6 +50,7 @@ type CourseItem = {
 type TeacherItem = {
   id: string;
   name: string;
+  organization_id?: string;
   title: string;
   photo_url?: string;
   assigned_courses: string[];
@@ -99,6 +104,7 @@ export default function ManageAcademicsScreen() {
   const { profile } = useAuth();
   const isFounder = isFounderEmail(profile?.email);
   const isAdmin = isFounder || hasPermission(profile, 'admin.academics.manage');
+  const { activeOrgId, activeOrg } = useActiveOrganization();
 
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
@@ -144,6 +150,12 @@ export default function ManageAcademicsScreen() {
   const [selectedStudentToEnroll, setSelectedStudentToEnroll] = useState<string>('');
   const [rosterLoading, setRosterLoading] = useState(false);
 
+  // In-flight and mount guards to prevent infinite refresh loops
+  const fetchingRef = useRef(false);
+  const initialFetchedRef = useRef(false);
+  const availableStudentsRef = useRef<StudentOption[]>([]);
+  availableStudentsRef.current = availableStudents;
+
   const courseNames = useMemo(() => courses.map((c) => c.name).filter(Boolean), [courses]);
   const lessonOptions = useMemo(
     () => lessons.filter((lesson) => lesson.course_id === recordingCourseId),
@@ -156,19 +168,28 @@ export default function ManageAcademicsScreen() {
   }, [courses.length, lessons.length, recordings.length]);
 
   const fetchData = useCallback(async () => {
-    if (courses.length === 0) setLoading(true);
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    setLoading((prev) => (courses.length === 0 ? true : prev));
     let anyError = false;
 
-    // 1. Fetch Courses
+    // 1. Fetch Courses (Tenant-scoped with mslb-main backward compatibility)
     try {
       const courseSnap = await withTimeout(getDocs(collection(db, 'courses')), 8000);
       const nextCourses: CourseItem[] = [];
+      const currentOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
+
       courseSnap.forEach((d) => {
         const data = d.data();
+        const docOrg = data.organization_id || DEFAULT_ORGANIZATION_ID;
+        // Tenant isolation filter: match current org OR if current is default, show legacy untagged
+        if (docOrg !== currentOrg) return;
+
         const rawSubjects = Array.isArray(data.subjects) ? data.subjects : undefined;
         nextCourses.push({
           id: d.id,
           name: data.name || '',
+          organization_id: docOrg,
           teacher_name: data.teacher_name || data.teacherName || '',
           teacher_id: data.teacher_id ? String(data.teacher_id) : undefined,
           schedule: data.schedule || '',
@@ -184,15 +205,21 @@ export default function ManageAcademicsScreen() {
       anyError = true;
     }
 
-    // 2. Fetch Teachers
+    // 2. Fetch Teachers (Tenant-scoped)
     try {
       const teacherSnap = await withTimeout(getDocs(collection(db, 'teachers')), 8000);
       const nextTeachers: TeacherItem[] = [];
+      const currentOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
+
       teacherSnap.forEach((d) => {
         const data = d.data();
+        const docOrg = data.organization_id || DEFAULT_ORGANIZATION_ID;
+        if (docOrg !== currentOrg) return;
+
         nextTeachers.push({
           id: d.id,
           name: data.name || '',
+          organization_id: docOrg,
           title: data.title || '',
           photo_url: data.photo_url || '',
           assigned_courses: Array.isArray(data.assigned_courses) ? data.assigned_courses : (Array.isArray(data.courses) ? data.courses : []),
@@ -270,13 +297,18 @@ export default function ManageAcademicsScreen() {
       console.warn('[manage-academics] users fetch failed:', userErr);
     }
 
-    if (anyError && courses.length === 0 && teachers.length === 0) {
-      setLoadError('Could not load academic data. Please refresh.');
+    if (anyError) {
+      setLoadError((prev) => prev || 'Could not load academic data. Please refresh.');
     } else {
       setLoadError('');
     }
     setLoading(false);
-  }, [courses.length, teachers.length]);
+    fetchingRef.current = false;
+  }, []);
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await fetchData();
+  });
 
   // Fetch student roster for a course
   const fetchRoster = useCallback(async (courseId: string) => {
@@ -293,9 +325,10 @@ export default function ManageAcademicsScreen() {
       );
       const snap = await getDocs(q);
       const list: RosterItem[] = [];
+      const currentStudents = availableStudentsRef.current;
       snap.forEach((d) => {
         const data = d.data();
-        const studentInfo = availableStudents.find((s) => s.uid === data.user_id);
+        const studentInfo = currentStudents.find((s) => s.uid === data.user_id);
         list.push({
           id: d.id,
           user_id: data.user_id,
@@ -312,7 +345,7 @@ export default function ManageAcademicsScreen() {
     } finally {
       setRosterLoading(false);
     }
-  }, [availableStudents]);
+  }, []);
 
   useEffect(() => {
     if (selectedRosterCourseId) {
@@ -339,6 +372,7 @@ export default function ManageAcademicsScreen() {
         setDoc(doc(db, 'enrollments', enrollmentDocId), {
           user_id: selectedStudentToEnroll,
           course_id: selectedRosterCourseId,
+          organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
           status: 'active',
           user_name: studentObj?.name || '',
           user_email: studentObj?.email || '',
@@ -448,8 +482,11 @@ export default function ManageAcademicsScreen() {
       router.replace('/unauthorized?required=admin');
       return;
     }
-    if (isAdmin) fetchData();
-  }, [isAdmin]);
+    if (isAdmin && !initialFetchedRef.current) {
+      initialFetchedRef.current = true;
+      fetchData();
+    }
+  }, [isAdmin, profile, fetchData]);
 
   useEffect(() => {
     if (!selectedTeacherId) {
@@ -517,6 +554,7 @@ export default function ManageAcademicsScreen() {
       } else {
         const newCourseRef = await withTimeout(addDoc(collection(db, 'courses'), {
           ...payload,
+          organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
           created_at: serverTimestamp(),
         }), 10000);
         const createdCourseId = newCourseRef.id;
@@ -551,6 +589,31 @@ export default function ManageAcademicsScreen() {
           }
         }
       }
+
+      // ── Auto-sync teacher's assigned_courses ──
+      // Jab course save ho aur teacher_id set ho, teacher doc mein course naam add karo
+      if (payload.teacher_id) {
+        try {
+          const assignedTeacher = teachers.find((t) => t.id === payload.teacher_id);
+          const currentAssigned: string[] = assignedTeacher?.assigned_courses || [];
+          const courseName = payload.name;
+          if (!currentAssigned.includes(courseName)) {
+            const updatedList = [...currentAssigned, courseName];
+            await withTimeout(
+              updateDoc(doc(db, 'teachers', payload.teacher_id), {
+                assigned_courses: updatedList,
+                courses: updatedList,
+                updated_at: serverTimestamp(),
+              }),
+              8000
+            );
+          }
+        } catch (syncErr) {
+          // Non-blocking — course save already succeeded
+          console.warn('[manage-academics] teacher assigned_courses sync failed:', syncErr);
+        }
+      }
+
 
       setCourseForm(INITIAL_COURSE);
       setEditingCourseId(null);
@@ -633,11 +696,13 @@ export default function ManageAcademicsScreen() {
       setActionLoading(true);
       await withTimeout(addDoc(collection(db, 'teachers'), {
         name: teacherName.trim(),
+        organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
         title: teacherTitle.trim() || 'Teacher',
         photo_url: teacherPhoto.trim(),
         assigned_courses: [],
         courses: [],
         created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
       }), 10000);
       setTeacherName('');
       setTeacherTitle('');
@@ -1044,14 +1109,25 @@ export default function ManageAcademicsScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')}>
           <Ionicons name="close" size={22} color={COLORS.textMain} />
         </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Manage Academics</Text>
-        <TouchableOpacity onPress={fetchData}>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={styles.topBarTitle}>Manage Academics</Text>
+          <View style={styles.orgBadgeWrap}>
+            <Ionicons name="business" size={11} color={COLORS.primary} />
+            <Text style={styles.orgBadgeText} numberOfLines={1}>
+              {activeOrg?.name || (activeOrgId === DEFAULT_ORGANIZATION_ID ? 'Madrasatu-s-Salikat Lil Banat' : activeOrgId)}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity onPress={onRefresh}>
           <Ionicons name="refresh" size={20} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
-        {loading ? (
+      <ScrollView
+        contentContainerStyle={styles.body}
+        refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {loading && !refreshing ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={COLORS.primary} />
             <Text style={styles.helper}>Loading...</Text>
@@ -1137,7 +1213,78 @@ export default function ManageAcademicsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Courses & Institutional Classes</Text>
           <TextInput style={styles.input} placeholder="Course / Class Name (e.g. Dars-e-Nizami Year 1)" placeholderTextColor={COLORS.textMuted} value={courseForm.name} onChangeText={(v) => setCourseForm((p) => ({ ...p, name: v }))} />
-          <TextInput style={styles.input} placeholder="Lead Teacher Name" placeholderTextColor={COLORS.textMuted} value={courseForm.teacher_name} onChangeText={(v) => setCourseForm((p) => ({ ...p, teacher_name: v }))} />
+
+          {/* ── Lead Teacher Picker ── */}
+          <View style={styles.subSectionBox}>
+            <View style={styles.subSectionHeader}>
+              <Ionicons name="person-circle-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.subSectionTitle}>Lead Teacher / Ustaadhah</Text>
+            </View>
+            {teachers.length > 0 ? (
+              <>
+                <Text style={[styles.helper, { marginBottom: 6 }]}>
+                  Neeche se teacher chunein — naam aur ID automatic set ho jaayega:
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                  {teachers.map((t) => {
+                    const isSelected = courseForm.teacher_id === t.id;
+                    return (
+                      <TouchableOpacity
+                        key={t.id}
+                        style={[styles.teacherPickerChip, isSelected && styles.teacherPickerChipSelected]}
+                        onPress={() =>
+                          setCourseForm((p) => ({
+                            ...p,
+                            teacher_id: isSelected ? '' : t.id,
+                            teacher_name: isSelected ? '' : t.name,
+                          }))
+                        }
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons
+                          name={isSelected ? 'checkmark-circle' : 'person-outline'}
+                          size={16}
+                          color={isSelected ? '#FFFFFF' : COLORS.primary}
+                        />
+                        <View style={{ marginLeft: 6 }}>
+                          <Text style={[styles.teacherPickerName, isSelected && styles.teacherPickerNameSelected]}>
+                            {t.name}
+                          </Text>
+                          {t.title ? (
+                            <Text style={[styles.teacherPickerTitle, isSelected && { color: 'rgba(255,255,255,0.8)' }]} numberOfLines={1}>
+                              {t.title}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                {courseForm.teacher_id ? (
+                  <View style={styles.teacherSelectedBadge}>
+                    <Ionicons name="checkmark-circle" size={14} color="#059669" />
+                    <Text style={styles.teacherSelectedBadgeText}>
+                      ✓ {courseForm.teacher_name} assigned as lead teacher
+                    </Text>
+                    <TouchableOpacity onPress={() => setCourseForm((p) => ({ ...p, teacher_id: '', teacher_name: '' }))}>
+                      <Ionicons name="close-circle-outline" size={16} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+            <Text style={[styles.helper, { marginTop: 8, marginBottom: 4 }]}>
+              Ya manually naam likhein (agar teacher list mein nahi hai):
+            </Text>
+            <TextInput
+              style={[styles.input, { marginBottom: 0 }]}
+              placeholder="Teacher Name (manual)"
+              placeholderTextColor={COLORS.textMuted}
+              value={courseForm.teacher_name}
+              onChangeText={(v) => setCourseForm((p) => ({ ...p, teacher_name: v, teacher_id: v ? p.teacher_id : '' }))}
+            />
+          </View>
+
           <TextInput style={styles.input} placeholder="Schedule (e.g. Mon-Thu)" placeholderTextColor={COLORS.textMuted} value={courseForm.schedule} onChangeText={(v) => setCourseForm((p) => ({ ...p, schedule: v }))} />
           <TextInput style={styles.input} placeholder="Class time (e.g. 10:00 AM / 14:30)" placeholderTextColor={COLORS.textMuted} value={courseForm.class_time} onChangeText={(v) => setCourseForm((p) => ({ ...p, class_time: v }))} />
           <TextInput style={styles.input} placeholder="Google Meet link" placeholderTextColor={COLORS.textMuted} value={courseForm.meet_link} onChangeText={(v) => setCourseForm((p) => ({ ...p, meet_link: v }))} autoCapitalize="none" />
@@ -1265,7 +1412,25 @@ export default function ManageAcademicsScreen() {
             <View key={course.id} style={styles.itemRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.itemTitle}>{course.name}</Text>
-                <Text style={styles.itemMeta}>{course.schedule} {course.class_time ? `• ${course.class_time}` : ''}</Text>
+                {/* Teacher assignment status */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <Ionicons
+                    name={course.teacher_id ? 'person-circle' : 'person-circle-outline'}
+                    size={13}
+                    color={course.teacher_id ? '#059669' : '#F59E0B'}
+                  />
+                  <Text
+                    style={[
+                      styles.itemMeta,
+                      { color: course.teacher_id ? '#059669' : '#D97706', fontWeight: '600' },
+                    ]}
+                  >
+                    {course.teacher_name
+                      ? `${course.teacher_name}`
+                      : '⚠️ No teacher assigned'}
+                  </Text>
+                </View>
+                <Text style={styles.itemMeta}>{course.schedule}{course.class_time ? ` • ${course.class_time}` : ''}</Text>
                 {Array.isArray(course.subjects) && course.subjects.length > 0 ? (
                   <Text style={[styles.itemMeta, { color: '#059669', fontWeight: '700' }]}>
                     {course.subjects.length} Subjects: {course.subjects.map(s => s.name).join(', ')}
@@ -1502,6 +1667,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceAlt,
   },
   topBarTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textMain },
+  orgBadgeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF6F2',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    marginTop: 2,
+    gap: 4,
+  },
+  orgBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
   body: { padding: SPACING.md, gap: SPACING.md, paddingBottom: 40 },
   section: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, gap: 12, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: COLORS.primary, marginBottom: 4 },
@@ -1876,5 +2056,53 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     marginTop: 2,
     lineHeight: 15,
+  },
+  // ── Teacher Picker Chip Styles ──
+  teacherPickerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.surface,
+    ...SHADOWS.card,
+  },
+  teacherPickerChipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  teacherPickerName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  teacherPickerNameSelected: {
+    color: '#FFFFFF',
+  },
+  teacherPickerTitle: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginTop: 1,
+    maxWidth: 140,
+  },
+  teacherSelectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 8,
+  },
+  teacherSelectedBadgeText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#065F46',
   },
 });

@@ -356,22 +356,21 @@ export default function LiveClassroomScreen() {
         return;
       }
 
-      const meetUrl = liveClass.meet_url;
-      if (!meetUrl) {
-        Alert.alert('Error', 'No Google Meet URL was provided for this class.');
-        return;
-      }
+      // If meet_url is specified use it; otherwise fallback to canonical Jitsi room for seamless classroom bridge
+      const rawMeetUrl = (liveClass.meet_url || '').trim();
+      const fallbackRoomName = `mslb-class-${(liveClass.course_id || liveClass.id || 'general').replace(/[^a-zA-Z0-9]/g, '')}`;
+      const effectiveUrl = rawMeetUrl.length > 0 ? rawMeetUrl : `https://meet.jit.si/${fallbackRoomName}`;
 
-      const canOpen = await Linking.canOpenURL(meetUrl).catch(() => false);
+      const canOpen = await Linking.canOpenURL(effectiveUrl).catch(() => false);
       if (canOpen) {
-        await Linking.openURL(meetUrl);
+        await Linking.openURL(effectiveUrl);
       } else {
-        await WebBrowser.openBrowserAsync(meetUrl, {
+        await WebBrowser.openBrowserAsync(effectiveUrl, {
           presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
         });
       }
     } catch (e: any) {
-      Alert.alert('Error joining class', e?.message || 'Could not launch Google Meet.');
+      Alert.alert('Error joining class', e?.message || 'Could not launch live meeting.');
     } finally {
       setJoining(false);
     }
@@ -707,22 +706,22 @@ export default function LiveClassroomScreen() {
             </Text>
           </TouchableOpacity>
 
-          {liveClass?.meet_url ? (
-            <TouchableOpacity
-              style={[styles.meetBridgeBtn, joining && { opacity: 0.7 }]}
-              onPress={handleJoinExternalMeet}
-              disabled={joining}
-            >
-              {joining ? (
-                <ActivityIndicator color={COLORS.primary} size="small" />
-              ) : (
-                <>
-                  <Ionicons name="logo-google" size={16} color={COLORS.primary} />
-                  <Text style={styles.meetBridgeBtnText}>External Screen Share / Meet Bridge</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity
+            style={[styles.meetBridgeBtn, joining && { opacity: 0.7 }]}
+            onPress={handleJoinExternalMeet}
+            disabled={joining}
+          >
+            {joining ? (
+              <ActivityIndicator color={COLORS.primary} size="small" />
+            ) : (
+              <>
+                <Ionicons name={liveClass?.meet_url ? "logo-google" : "videocam-outline"} size={16} color={COLORS.primary} />
+                <Text style={styles.meetBridgeBtnText}>
+                  {liveClass?.meet_url ? "External Screen Share / Meet Bridge" : "Live Video / Meet Room"}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
 
           {isTeacher && (
             <TouchableOpacity style={styles.dangerBtn} onPress={handleEndClass}>

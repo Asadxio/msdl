@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   collection,
@@ -44,6 +44,7 @@ export type CourseSubject = {
 export type Course = {
   id: string;
   name: string;
+  organization_id?: string;
   teacher_name: string;
   teacher_id?: string;
   schedule: string;
@@ -58,6 +59,7 @@ export type Course = {
 export type Teacher = {
   id: string;
   name: string;
+  organization_id?: string;
   title: string;
   courses: string[];
   assigned_courses?: string[];
@@ -464,8 +466,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const initialCoursesLoadedRef = useRef(false);
+
+  const fetchData = useCallback(async (opts?: { silent?: boolean }) => {
+    const isSilent = opts?.silent ?? initialCoursesLoadedRef.current;
+    if (!isSilent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const t0 = perfStart('data.fetchData');
@@ -473,7 +480,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         cacheGet<Course[]>(COURSES_CACHE_KEY),
         cacheGet<Teacher[]>(TEACHERS_CACHE_KEY),
       ]);
-      if (cachedCourses?.length) setCourses(cachedCourses);
+      if (cachedCourses?.length) {
+        setCourses(cachedCourses);
+        initialCoursesLoadedRef.current = true;
+      }
       if (cachedTeachers?.length) setTeachers(cachedTeachers);
 
       const [coursesSnap, teachersSnap] = await Promise.all([
@@ -490,6 +500,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         coursesData.push({
           id: doc.id,
           name: data.name || '',
+          organization_id: data.organization_id || 'mslb-main',
           teacher_name: data.teacherName || data.teacher_name || '',
           teacher_id: data.teacher_id ? String(data.teacher_id) : undefined,
           schedule: data.schedule || '',
@@ -507,6 +518,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         teachersData.push({
           id: doc.id,
           name: data.name || '',
+          organization_id: data.organization_id || 'mslb-main',
           title: data.title || '',
           courses: Array.isArray(data.courses) ? data.courses : [],
           assigned_courses: Array.isArray(data.assigned_courses) ? data.assigned_courses : undefined,
@@ -521,6 +533,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       setCourses(coursesData);
       setTeachers(teachersData);
+      initialCoursesLoadedRef.current = true;
       await cacheSet(COURSES_CACHE_KEY, coursesData, COURSE_CACHE_TTL_MS).catch(() => {});
       await cacheSet(TEACHERS_CACHE_KEY, teachersData, COURSE_CACHE_TTL_MS).catch(() => {});
       perfEnd('data.fetchData', t0, { courses: coursesData.length, teachers: teachersData.length });
@@ -534,7 +547,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   function cursorFromItems(items: { order: number; id: string }[]): QueryCursor {
     if (!items.length) return null;

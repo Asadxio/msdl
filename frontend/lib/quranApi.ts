@@ -1,8 +1,11 @@
 import { loadCachedSurah, cacheSurah, saveDailyAyat, loadDailyAyat } from './quranStorage';
+import { STARTER_SURAHS } from './quranStarterSurahs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MSDL — Quran API Layer
-// Arabic + Urdu: api.alquran.cloud (free, open)
+// Primary: api.alquran.cloud (free, open)
+// High-Availability Fallback: api.quran.com (Cloudflare edge CDN)
+// Zero-Network Fallback: STARTER_SURAHS (bundled offline)
 // Roman Urdu: quran-roman-translation.blogspot.com (owner's own content)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -27,6 +30,7 @@ export interface SurahData {
 
 // API endpoints
 const ALQURAN_BASE = 'https://api.alquran.cloud/v1';
+const QURAN_COM_BASE = 'https://api.quran.com/api/v4';
 const BLOGGER_FEED_BASE = 'https://quran-roman-translation.blogspot.com/feeds/posts/default/-/';
 
 // Known daily ayat pool (stored in app — offline guaranteed)
@@ -49,7 +53,7 @@ export function getTodayDailyAyat(): typeof DAILY_AYAT_POOL[0] {
 }
 
 // ─── Fetch Helper with Timeout ────────────────────────────────────────────────
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12000): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -65,14 +69,14 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
-// ─── Fetch from alquran.cloud ─────────────────────────────────────────────────
+// ─── 1. Primary Fetch: alquran.cloud ──────────────────────────────────────────
 async function fetchFromAlquranCloud(surahNumber: number): Promise<{ ayats: QuranAyat[]; arabicName: string; totalAyat: number }> {
-  const url = ALQURAN_BASE + '/surah/' + surahNumber + '/editions/quran-uthmani,ur.kanzuliman,en.transliteration';
-  const resp = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 9000);
-  if (!resp.ok) throw new Error('alquran.cloud fetch failed: ' + resp.status);
+  const url = `${ALQURAN_BASE}/surah/${surahNumber}/editions/quran-uthmani,ur.kanzuliman,en.transliteration`;
+  const resp = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 12000);
+  if (!resp.ok) throw new Error(`alquran.cloud error: ${resp.status}`);
   const json = await resp.json();
 
-  if (!json.data || json.data.length < 3) throw new Error('Invalid API response structure');
+  if (!json.data || json.data.length < 3) throw new Error('Invalid alquran.cloud structure');
 
   const arabicEdition = json.data[0];
   const urduEdition = json.data[1];
@@ -93,12 +97,51 @@ async function fetchFromAlquranCloud(surahNumber: number): Promise<{ ayats: Qura
   return { ayats, arabicName, totalAyat };
 }
 
+// ─── 2. Fallback Fetch: api.quran.com (Cloudflare CDN backed) ─────────────────
+async function fetchFromQuranCom(surahNumber: number, surahName: string): Promise<{ ayats: QuranAyat[]; arabicName: string; totalAyat: number }> {
+  // Resource 158: Urdu translation (Maulana Fateh Muhammad / Kanzul Iman equivalent)
+  // Resource 57: English Transliteration
+  const url = `${QURAN_COM_BASE}/verses/by_chapter/${surahNumber}?words=false&translations=158,57&fields=text_uthmani&per_page=300`;
+  const resp = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 10000);
+  if (!resp.ok) throw new Error(`api.quran.com error: ${resp.status}`);
+  const json = await resp.json();
+
+  if (!json.verses || !Array.isArray(json.verses) || json.verses.length === 0) {
+    throw new Error('Invalid api.quran.com structure');
+  }
+
+  const ayats: QuranAyat[] = json.verses.map((v: any) => {
+    const translations = v.translations || [];
+    const urduTr = translations.find((t: any) => t.resource_id === 158)?.text || '';
+    const romanTr = translations.find((t: any) => t.resource_id === 57)?.text || '';
+
+    // Strip any HTML tags that may appear in translation strings
+    const cleanUrdu = urduTr.replace(/<[^>]+>/g, '').trim();
+    const cleanRoman = romanTr.replace(/<[^>]+>/g, '').trim();
+
+    return {
+      number: v.verse_number,
+      globalNumber: v.id,
+      arabic: v.text_uthmani || '',
+      roman: cleanRoman,
+      urduMeaning: cleanUrdu,
+      surahNumber,
+      surahName,
+    };
+  });
+
+  return {
+    ayats,
+    arabicName: '',
+    totalAyat: ayats.length,
+  };
+}
+
 // ─── Parse Roman from Blogger Atom Feed ──────────────────────────────────────
 async function fetchRomanFromBlogspot(blogSlug: string): Promise<string[]> {
   try {
-    // Use the label-based feed for this post
     const url = BLOGGER_FEED_BASE + encodeURIComponent(blogSlug) + '?alt=json&max-results=1';
-    const resp = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 6000);
+    const resp = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 5000);
     if (!resp.ok) return [];
     const json = await resp.json();
 
@@ -108,10 +151,7 @@ async function fetchRomanFromBlogspot(blogSlug: string): Promise<string[]> {
     const content: string = entries[0]?.content?.['$t'] || entries[0]?.summary?.['$t'] || '';
     if (!content) return [];
 
-    // Extract Roman column from HTML table: rows have Arabic | Roman | Meaning | Audio
-    // We want column index 1 (Roman)
     const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
     const stripTags = (html: string) => html.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').trim();
 
     const romans: string[] = [];
@@ -124,9 +164,7 @@ async function fetchRomanFromBlogspot(blogSlug: string): Promise<string[]> {
       while ((cellMatch = tempRegex.exec(rowHtml)) !== null) {
         cells.push(stripTags(cellMatch[1]));
       }
-      // Column 1 (index 1) is Roman translation
       if (cells.length >= 2 && cells[1] && cells[1].length > 1) {
-        // Skip header row
         if (!cells[1].toLowerCase().includes('roman') && !cells[1].toLowerCase().includes('meaning')) {
           romans.push(cells[1]);
         }
@@ -134,46 +172,93 @@ async function fetchRomanFromBlogspot(blogSlug: string): Promise<string[]> {
     }
     return romans;
   } catch (e) {
-    console.warn('fetchRomanFromBlogspot error:', e);
     return [];
   }
 }
 
-// ─── Main: Fetch Complete Surah ───────────────────────────────────────────────
+// ─── Main: Resilient Surah Fetcher ────────────────────────────────────────────
 export async function fetchSurah(surahNumber: number, blogSlug: string, surahName: string): Promise<SurahData> {
-  // 1. Try cache first
+  // 1. Check local cache first
   const cached = await loadCachedSurah(surahNumber);
   if (cached) {
     try {
       const parsed: SurahData = JSON.parse(cached);
-      // Revive dates in ayats (not needed but structure intact)
-      return parsed;
+      if (parsed.ayats && parsed.ayats.length > 0) {
+        return parsed;
+      }
     } catch {
-      // Cache corrupted, re-fetch
+      // Cache corrupted, continue to fetch
     }
   }
 
-  // 2. Fetch from alquran.cloud
-  const { ayats, arabicName, totalAyat } = await fetchFromAlquranCloud(surahNumber);
+  let resultAyats: QuranAyat[] = [];
+  let resultArabicName = '';
+  let resultTotal = 0;
 
-  // 3. Fetch Roman from blogspot (best-effort, non-blocking)
-  const romans = await fetchRomanFromBlogspot(blogSlug);
-  if (romans.length > 0) {
-    ayats.forEach((a, idx) => {
-      if (romans[idx]) a.roman = romans[idx];
-    });
+  // 2. Try Primary: alquran.cloud with 1 retry
+  let primarySuccess = false;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const primary = await fetchFromAlquranCloud(surahNumber);
+      resultAyats = primary.ayats;
+      resultArabicName = primary.arabicName;
+      resultTotal = primary.totalAyat;
+      primarySuccess = true;
+      break;
+    } catch (primaryErr) {
+      console.warn(`[QuranApi] Primary (alquran.cloud) attempt ${attempt} failed:`, primaryErr);
+      if (attempt === 1) {
+        await new Promise((res) => setTimeout(res, 600)); // small delay before retry
+      }
+    }
+  }
+
+  // 3. If primary failed, try Secondary Fallback: api.quran.com (Cloudflare CDN)
+  if (!primarySuccess) {
+    try {
+      console.log(`[QuranApi] Falling back to api.quran.com for Surah ${surahNumber}`);
+      const fallback = await fetchFromQuranCom(surahNumber, surahName);
+      resultAyats = fallback.ayats;
+      resultArabicName = fallback.arabicName;
+      resultTotal = fallback.totalAyat;
+    } catch (fallbackErr) {
+      console.warn('[QuranApi] Secondary (api.quran.com) failed:', fallbackErr);
+
+      // 4. Last Line of Defense: Check if this Surah is in the bundled STARTER_SURAHS
+      if (STARTER_SURAHS[surahNumber]) {
+        console.log(`[QuranApi] Serving offline bundled starter data for Surah ${surahNumber}`);
+        return STARTER_SURAHS[surahNumber];
+      }
+
+      // Re-throw if totally unavailable and not in starters
+      throw new Error('Unable to connect to Quran services. Please check your internet connection.');
+    }
+  }
+
+  // 4. Fetch Custom Roman Urdu from blogspot (best-effort, non-blocking)
+  if (blogSlug) {
+    try {
+      const romans = await fetchRomanFromBlogspot(blogSlug);
+      if (romans.length > 0) {
+        resultAyats.forEach((a, idx) => {
+          if (romans[idx]) a.roman = romans[idx];
+        });
+      }
+    } catch {
+      // Ignore blogspot failure — API roman transliteration is already present
+    }
   }
 
   const surahData: SurahData = {
     surahNumber,
     surahName,
-    arabicName,
-    totalAyat,
-    ayats,
+    arabicName: resultArabicName,
+    totalAyat: resultTotal || resultAyats.length,
+    ayats: resultAyats,
     fetchedAt: Date.now(),
   };
 
-  // 4. Cache it
+  // 5. Cache for offline future use
   await cacheSurah(surahNumber, JSON.stringify(surahData));
 
   return surahData;

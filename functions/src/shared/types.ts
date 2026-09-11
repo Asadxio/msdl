@@ -3,7 +3,8 @@
  * Mirrors Firestore document schemas.
  */
 
-export type UserRole = "student" | "teacher" | "admin" | "super_admin";
+export type UserRole = "student" | "teacher" | "admin" | "super_admin" | "moderator" | "assistant_teacher";
+
 
 export interface MslbUser {
   uid: string;

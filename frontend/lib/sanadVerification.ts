@@ -22,9 +22,12 @@ export interface VerifiedSanad {
   issuedAtTimestamp?: number;
 }
 
+import { MADRASA_WEBSITE_URL } from '@/lib/links';
+
 export function getSanadVerificationUrl(certificateId: string): string {
   const cleanId = encodeURIComponent(certificateId || '');
-  return 'https://mslb.app/verify-sanad?id=' + cleanId;
+  const baseUrl = MADRASA_WEBSITE_URL.endsWith('/') ? MADRASA_WEBSITE_URL : `${MADRASA_WEBSITE_URL}/`;
+  return `${baseUrl}verify-sanad.html?id=${cleanId}`;
 }
 
 export function getSanadQrCodeUrl(certificateId: string): string {

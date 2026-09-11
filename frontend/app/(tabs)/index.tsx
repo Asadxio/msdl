@@ -354,7 +354,14 @@ export default function HomeScreen() {
         </View>
 
         {/* Section 2: Student Identity Card */}
-        <View style={styles.welcomeCard}>
+        <TouchableOpacity
+          style={styles.welcomeCard}
+          onPress={() => router.push('/(tabs)/about')}
+          activeOpacity={0.85}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="Open Profile and Account Settings"
+        >
           <View style={styles.welcomeInfo}>
             {/* 1.1 — Time-based Islamic greeting */}
             <Text style={styles.islamicGreetingText}>{islamicGreeting}</Text>
@@ -370,7 +377,7 @@ export default function HomeScreen() {
                 {profile?.name ? profile.name.charAt(0).toUpperCase() : 'S'}
              </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Global Quick Search Bar */}
         <TouchableOpacity

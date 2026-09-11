@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SPACING, SHADOWS, TYPOGRAPHY } from '@/constants/theme';
-import { VerifiedSanad, verifySanadById } from '@/lib/sanadVerification';
+import { VerifiedSanad, verifySanadById, getSanadVerificationUrl } from '@/lib/sanadVerification';
 import { goBackOrReplace } from '@/lib/navigation';
 
 export default function VerifySanadScreen() {
@@ -60,7 +60,7 @@ export default function VerifySanadScreen() {
       'Grade / Distinction: ' + (sanad.gradeLabel || 'Passed') + '\n' +
       'Completion Date: ' + sanad.completionDate + ' (' + (sanad.hijriDate || '') + ')\n' +
       'Certificate Serial: ' + sanad.certificateId + '\n\n' +
-      '🔗 Live Verification Link: https://mslb.app/verify-sanad?id=' + encodeURIComponent(sanad.certificateId);
+      '🔗 Live Verification Link: ' + getSanadVerificationUrl(sanad.certificateId);
 
     try {
       await Share.share({

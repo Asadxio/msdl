@@ -23,6 +23,7 @@ import { FullScreenLoader } from '@/components/ui';
 import { startupLog } from '@/lib/startup';
 import { shouldShowOnboardingEntry } from '@/lib/onboarding';
 import { safeReplace } from '@/lib/navigation';
+import { isFounderEmail } from '@/lib/founderPolicy';
 import { OnboardingProvider } from '@/context/OnboardingContext';
 import { TutorialProvider } from '@/context/TutorialContext';
 import { InAppTutorialOverlay } from '@/components/ui/InAppTutorialOverlay';
@@ -31,6 +32,10 @@ import { markUserEnteredApp } from '@/lib/emailVerificationAnalytics';
 import { trackEvent, type AnalyticsEventName } from '@/lib/analytics';
 import { usePresence } from '@/hooks/usePresence';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { initCrashReporting, setCrashlyticsUser, logBreadcrumb } from '@/lib/crashlytics';
+
+// Initialize production crash reporting early
+initCrashReporting();
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -55,6 +60,18 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [splashHidden, setSplashHidden] = useState(false);
   const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
   const enteredAppTrackedRef = useRef<string | null>(null);
+  const pushRegisteredUserRef = useRef<string | null>(null);
+
+  // Sync safe user context with Crashlytics
+  useEffect(() => {
+    if (user?.uid) {
+      setCrashlyticsUser({ uid: user.uid, role: profile?.role });
+      logBreadcrumb('User authenticated session active', { role: profile?.role });
+    } else {
+      setCrashlyticsUser(null);
+    }
+  }, [user?.uid, profile?.role]);
+
   useEffect(() => {
     try {
       validateConfig();
@@ -218,8 +235,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const inAuth = segments[0] === 'auth';
     const inPendingAuthRoute = segmentKey === 'auth/pending' || segmentKey === 'auth/change-email';
     const inOnboardingEntry = segments[0] === 'onboarding-entry';
-    const isSuperAdminFounder = profile?.role === 'super_admin' && profile?.founder === true;
-    const isAdmin = (profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved';
+    const isFounder = isFounderEmail(profile?.email || user?.email);
+    const isSuperAdminFounder = (profile?.role === 'super_admin' && profile?.founder === true) || isFounder;
+    const isAdmin = isFounder || ((profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved');
     const inAdmin = segments[0] === 'admin';
     const inUnauthorized = segments[0] === 'unauthorized';
     const legalConsentRoutes = ['legal-gate', 'terms', 'privacy', 'community-guidelines'];
@@ -253,10 +271,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } else if (legalCheckSettled && !needsLegalAcceptance && inLegalGate) {
       startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'legal-gate-complete' });
       performReplace('/');
-    } else if (inUnauthorized && profile?.status === 'approved') {
+    } else if (inUnauthorized && (profile?.status === 'approved' || isFounder)) {
       startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'authorized-user-on-unauthorized' });
       performReplace('/');
-    } else if (inAdmin && (profileOffline || !isAdmin)) {
+    } else if (inAdmin && !isAdmin) {
       startupLog('Navigation complete', { action: 'replace', route: '/unauthorized?required=admin', reason: 'admin-required' });
       performReplace('/unauthorized?required=admin');
     } else if (profile?.status === 'rejected') {
@@ -311,27 +329,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigationReady, user, profile, authLoading, emailVerified, segments, router, profileOffline, needsLegalAcceptance, onboardingStatus, signupVerificationFlowActive]);
 
-  useEffect(() => {
-    if (shouldShowTutorial || authLoading || onboardingStatus !== 'complete' || !user?.uid) return;
-    const isAdmin = (profile?.role === 'admin' || profile?.role === 'super_admin') && profile?.status === 'approved';
-    const isSuperAdminFounder = profile?.role === 'super_admin' && profile?.founder === true;
-    if (!profile || !(profile.status === 'approved' || isAdmin || isSuperAdminFounder) || needsLegalAcceptance) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const completed = await isTutorialCompleted();
-        if (cancelled || completed) return;
-        setShouldShowTutorial(true);
-      } catch {
-        // If tutorial completion check fails, do not block the app.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, onboardingStatus, user?.uid, profile, needsLegalAcceptance, shouldShowTutorial]);
+  // In-app tutorial overlay disabled to eliminate UI freeze risk
 
   useEffect(() => {
     try {
@@ -373,7 +371,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user?.uid) return;
-    registerDevicePushToken(user.uid).catch(() => {});
+    if (pushRegisteredUserRef.current !== user.uid) {
+      pushRegisteredUserRef.current = user.uid;
+      registerDevicePushToken(user.uid).catch(() => {});
+    }
     if (profile?.role === 'student') {
       checkAndTriggerInactivityNudge(user.uid, profile?.name || '').catch(() => {});
     }
@@ -534,17 +535,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <OnboardingProvider value={{ markEntryCompleteInSession }}>
-      <TutorialProvider autoShowOnMount={shouldShowTutorial} initialStep="dashboard">
-        <View style={{ flex: 1 }}>
-          {children}
-          {showLoader ? (
-            <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: COLORS.background }]}>
-              <FullScreenLoader label={splashHidden ? 'Loading account…' : 'Starting app…'} />
-            </View>
-          ) : null}
-          <InAppTutorialOverlay />
-        </View>
-      </TutorialProvider>
+      <View style={{ flex: 1 }}>
+        {children}
+        {showLoader ? (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: COLORS.background }]}>
+            <FullScreenLoader label={splashHidden ? 'Loading account…' : 'Starting app…'} />
+          </View>
+        ) : null}
+      </View>
     </OnboardingProvider>
   );
 }
@@ -601,6 +599,10 @@ export default function RootLayout() {
               <Stack.Screen name="fatawa/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="fatawa/manage" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="payment" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="live-class/index" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="payment-history" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="admin/organization-settings" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="admin/organizations" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="admin/add-book" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="admin/users" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="admin/payments" options={{ animation: 'slide_from_bottom' }} />

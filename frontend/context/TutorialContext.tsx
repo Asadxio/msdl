@@ -46,6 +46,15 @@ export function TutorialProvider({ children, autoShowOnMount = false, initialSte
 
 export function useTutorial() {
   const ctx = useContext(TutorialContext);
-  if (!ctx) throw new Error('useTutorial must be used within TutorialProvider');
+  if (!ctx) {
+    return {
+      showTutorial: false,
+      setShowTutorial: () => {},
+      currentStep: null,
+      setCurrentStep: () => {},
+      completedSteps: new Set<TutorialScreen>(),
+      markStepComplete: () => {},
+    };
+  }
   return ctx;
 }

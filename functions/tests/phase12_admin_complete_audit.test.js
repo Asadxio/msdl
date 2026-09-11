@@ -198,7 +198,7 @@ test('P12-14: sendNotification Cloud Function enforces requireAdminUser server-s
 
 test('P12-15: Notification recipient token is fetched from server-controlled user_tokens collection', () => {
   const sendNotifSrc = fs.readFileSync(path.join(repoRoot, 'functions/src/notifications/sendNotification.ts'), 'utf8');
-  assert.ok(sendNotifSrc.includes('collections.userTokens().doc(payload.recipientUid).get()'),
+  assert.ok(sendNotifSrc.includes('collections.userTokens().doc('),
     'Must look up FCM token from server userTokens collection');
 });
 

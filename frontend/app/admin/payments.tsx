@@ -14,6 +14,7 @@ import { auth, db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
+import { isFounderEmail } from '@/lib/founderPolicy';
 import { createAdminLog } from '@/lib/adminLogs';
 import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination';
 import { actionNonce, apiUrl } from '@/lib/api';
@@ -66,8 +67,9 @@ function formatDate(item: PaymentItem) {
 export default function AdminPaymentsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile } = useAuth();
-  const isAdmin = hasPermission(profile, 'admin.payments.review');
+  const { user, profile } = useAuth();
+  const isFounder = isFounderEmail(profile?.email || user?.email);
+  const isAdmin = isFounder || hasPermission(profile, 'admin.payments.review') || profile?.role === 'super_admin' || profile?.role === 'admin';
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [error, setError] = useState('');

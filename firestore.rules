@@ -144,7 +144,7 @@ service cloud.firestore {
       return isSelf(uid)
         && hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone']
+          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -161,6 +161,7 @@ service cloud.firestore {
         && (!('age_bracket' in request.resource.data) || request.resource.data.age_bracket is string)
         && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name is string)
         && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone is string)
+        && (!('phone' in request.resource.data) || request.resource.data.phone is string)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
         && ((request.resource.data.role == 'assistant_teacher') ? roleOf(request.auth.uid) in ['admin', 'super_admin'] : true);
     }
@@ -168,7 +169,7 @@ service cloud.firestore {
     function isValidUserUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'founder']
+          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone', 'founder']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -185,6 +186,7 @@ service cloud.firestore {
         && (!('age_bracket' in request.resource.data) || request.resource.data.age_bracket is string)
         && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name is string)
         && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone is string)
+        && (!('phone' in request.resource.data) || request.resource.data.phone is string)
         && (!('founder' in request.resource.data) || request.resource.data.founder is bool)
         && (isOwner() || request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
@@ -245,7 +247,7 @@ service cloud.firestore {
     function isValidCourseWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'teacher_name', 'teacherName', 'teacher_id', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'subjects', 'created_at', 'updated_at']
+          ['name', 'teacher_name', 'teacherName', 'teacher_id', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'subjects', 'organization_id', 'created_at', 'updated_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -259,13 +261,14 @@ service cloud.firestore {
         && (!('class_link' in request.resource.data) || request.resource.data.class_link is string)
         && (!('classLink' in request.resource.data) || request.resource.data.classLink is string)
         && (!('meet_link' in request.resource.data) || request.resource.data.meet_link is string)
-        && (!('subjects' in request.resource.data) || request.resource.data.subjects is list);
+        && (!('subjects' in request.resource.data) || request.resource.data.subjects is list)
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string);
     }
 
     function isValidTeacherWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'title', 'courses', 'assigned_courses', 'photo_url', 'bio', 'qualifications', 'specializations', 'experience_years', 'languages', 'created_at', 'updated_at']
+          ['name', 'title', 'courses', 'assigned_courses', 'photo_url', 'bio', 'qualifications', 'specializations', 'experience_years', 'languages', 'organization_id', 'created_at', 'updated_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -277,7 +280,8 @@ service cloud.firestore {
         && (!('experience_years' in request.resource.data) || request.resource.data.experience_years is string || request.resource.data.experience_years is number)
         && (!('qualifications' in request.resource.data) || request.resource.data.qualifications is list || request.resource.data.qualifications is string)
         && (!('specializations' in request.resource.data) || request.resource.data.specializations is list || request.resource.data.specializations is string)
-        && (!('languages' in request.resource.data) || request.resource.data.languages is list || request.resource.data.languages is string);
+        && (!('languages' in request.resource.data) || request.resource.data.languages is list || request.resource.data.languages is string)
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string);
     }
 
     function isValidLibraryWrite() {
@@ -1403,14 +1407,20 @@ service cloud.firestore {
     }
 
     match /quiz_results/{resultId} {
-      allow get: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
-      allow list: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow read: if isTeacherOrAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
       // SECURITY FIX (Phase 8): Students MUST NOT write quiz results directly to Firestore.
-      // All quiz submissions must go through the /lms/quiz/submit backend API endpoint,
+      // All quiz submissions must go through the submitQuiz Cloud Function,
       // which performs server-side grading and deduplication.
-      // Direct client writes would allow score manipulation (e.g. always submitting score=10/10).
       allow create: if false;  // Server-only via Admin SDK
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isTeacherOrAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacher_notes', 'feedback', 'reviewed_at', 'reviewed_by'])
+        && request.resource.data.score == resource.data.score
+        && request.resource.data.total == resource.data.total
+        && request.resource.data.percentage == resource.data.percentage
+        && request.resource.data.user_id == resource.data.user_id
+      );
+      allow delete: if isAdmin();
     }
 
     match /certificates/{certificateId} {
@@ -1621,6 +1631,24 @@ service cloud.firestore {
     match /app_settings/{docId} {
       allow read: if isApprovedVerifiedUser();
       allow write: if isAdmin() && (docId != 'platform' || isValidPlatformSettingsWrite(docId));
+    }
+
+    // Phase 50: Multi-Tenant SaaS Organizations & Memberships
+    match /organizations/{organizationId} {
+      // Any verified user can read active organization metadata (name, slug, logo)
+      allow read: if isApprovedVerifiedUser();
+      // Only Super Admin can directly create, update, or archive organizations
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /organization_memberships/{membershipId} {
+      // Users can read their own memberships; Admins can read memberships in their org; Super Admins read all
+      allow read: if isSuperAdmin()
+        || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid)
+        || (isAdmin() && isApprovedVerifiedUser());
+      // Super Admin can manage all memberships; Admins can invite/manage within their org
+      allow create, update, delete: if isSuperAdmin()
+        || (isAdmin() && isApprovedVerifiedUser() && (!('role' in request.resource.data) || request.resource.data.role != 'super_admin'));
     }
 
 

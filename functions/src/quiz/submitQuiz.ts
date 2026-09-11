@@ -11,6 +11,8 @@ interface SubmitQuizRequest {
   answers: Record<string, string>; // { [questionDocId]: selectedOptionValue }
   nonce: string;                   // dedup / attempt ID from client
   startedAtMs?: number;            // for timing analysis (not trusted for security)
+  course_id?: string;              // course ID if submitted within a course
+  student_name?: string;           // student name for academic visibility
 }
 
 interface SubmitQuizResponse {
@@ -138,7 +140,7 @@ export const submitQuiz = onCall(
     const passed = percentage >= passThreshold;
 
     // Write result via Admin SDK
-    const resultRef = collections.quizResults().add({
+    const resultDocData: Record<string, any> = {
       uid: user.uid,
       user_id: user.uid, // backward compat with existing quiz_results schema
       category: category.trim(),
@@ -151,7 +153,16 @@ export const submitQuiz = onCall(
       submittedAtMs: Date.now(),
       submittedAt: FieldValue.serverTimestamp(),
       created_at: FieldValue.serverTimestamp(), // backward compat
-    });
+    };
+
+    if (request.data?.course_id) {
+      resultDocData.course_id = String(request.data.course_id).trim();
+    }
+    if (request.data?.student_name) {
+      resultDocData.student_name = String(request.data.student_name).trim();
+    }
+
+    const resultRef = collections.quizResults().add(resultDocData);
 
     // Write dedupe BEFORE awaiting result (prevent race condition)
     await dedupeRef.set({

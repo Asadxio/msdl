@@ -21,6 +21,7 @@ export type NotificationPermissionResult = {
 };
 
 let lastRegisteredUserToken: string | null = null;
+let registrationInProgress: Promise<string | null> | null = null;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -108,80 +109,84 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 export async function registerDevicePushToken(userId: string): Promise<string | null> {
-  if (isExpoGo()) {
-    console.log('[Notifications] token registration skipped in Expo Go');
-    return null;
+  if (registrationInProgress) {
+    return registrationInProgress;
   }
-  if (!Device.isDevice) {
-    console.log('[Notifications] registerDevicePushToken skipped: physical device required');
-    return null;
-  }
-  try {
-    const permission = await requestNotificationPermission();
-    if (!permission.granted) {
-      console.log('[Notifications] registerDevicePushToken skipped: permission not granted');
-      return null;
-    }
-
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-    let token = '';
+  registrationInProgress = (async () => {
     try {
-      const tokenResponse = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
-      token = String(tokenResponse?.data || '');
-    } catch (expoErr) {
-      console.log('[Notifications] getExpoPushTokenAsync ERROR', expoErr);
-    }
+      if (isExpoGo()) {
+        return null;
+      }
+      if (!Device.isDevice) {
+        return null;
+      }
 
-    let nativeFcmToken = '';
-    try {
-      const deviceTokenResp = await Notifications.getDevicePushTokenAsync();
-      nativeFcmToken = String(deviceTokenResp?.data || '');
-    } catch (devErr) {
-      console.log('[Notifications] getDevicePushTokenAsync ERROR', devErr);
-    }
+      const permission = await requestNotificationPermission();
+      if (!permission.granted) {
+        return null;
+      }
 
-    // For standalone APK/Android native builds, prefer native FCM token directly
-    // so push notifications are delivered straight via Firebase Admin SDK without Expo relay dependence.
-    const primaryToken = nativeFcmToken || token;
-    console.log('[Notifications] Device push token result', { hasToken: Boolean(primaryToken), hasNative: Boolean(nativeFcmToken), hasExpo: Boolean(token) });
-    if (!primaryToken) return null;
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+      let token = '';
+      try {
+        const tokenResponse = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+        token = String(tokenResponse?.data || '');
+      } catch (expoErr) {
+        console.log('[Notifications] getExpoPushTokenAsync ERROR', expoErr);
+      }
 
-    // Deduplication check: Do not re-write to Firestore if this exact token is already registered for this user in this session
-    const registrationKey = `${userId}:${primaryToken}`;
-    if (lastRegisteredUserToken === registrationKey) {
+      let nativeFcmToken = '';
+      try {
+        const deviceTokenResp = await Notifications.getDevicePushTokenAsync();
+        nativeFcmToken = String(deviceTokenResp?.data || '');
+      } catch (devErr) {
+        console.log('[Notifications] getDevicePushTokenAsync ERROR', devErr);
+      }
+
+      const primaryToken = nativeFcmToken || token;
+      if (!primaryToken) return null;
+
+      // Deduplication check: Do not re-write to Firestore if this exact token is already registered for this user in this session
+      const registrationKey = `${userId}:${primaryToken}`;
+      if (lastRegisteredUserToken === registrationKey) {
+        return primaryToken;
+      }
+
+      // Mark IMMEDIATELY to prevent concurrent re-entrancy from snapshot listeners
+      lastRegisteredUserToken = registrationKey;
+
+      const userPatch: Record<string, unknown> = {
+        fcm_token_updated_at: serverTimestamp(),
+      };
+      if (nativeFcmToken) {
+        userPatch.fcm_tokens = arrayUnion(nativeFcmToken);
+      }
+      if (token) {
+        userPatch.expo_push_tokens = arrayUnion(token);
+      }
+
+      await withTimeout(setDoc(doc(db, 'users', userId), userPatch, { merge: true }), 5000).catch(() => {});
+
+      await withTimeout(setDoc(doc(db, 'user_tokens', userId), {
+        token: primaryToken,
+        fcmToken: nativeFcmToken || primaryToken,
+        expoPushToken: token || primaryToken,
+        userId,
+        platform: Device.osName || 'android',
+        updatedAt: serverTimestamp(),
+      }, { merge: true }), 5000).catch(() => {});
+
+      console.log('[Notifications] Device push token saved successfully');
       return primaryToken;
+    } catch (error) {
+      console.log('[Notifications] registerDevicePushToken ERROR', error);
+      return null;
+    } finally {
+      registrationInProgress = null;
     }
+  })();
 
-    const userPatch: Record<string, unknown> = {
-      fcm_token_updated_at: serverTimestamp(),
-    };
-    if (nativeFcmToken) {
-      userPatch.fcm_tokens = arrayUnion(nativeFcmToken);
-    }
-    if (token) {
-      userPatch.expo_push_tokens = arrayUnion(token);
-    }
-
-    await withTimeout(setDoc(doc(db, 'users', userId), userPatch, { merge: true }), 5000).catch(() => {});
-
-    await withTimeout(setDoc(doc(db, 'user_tokens', userId), {
-      token: primaryToken,
-      fcmToken: nativeFcmToken || primaryToken,
-      expoPushToken: token || primaryToken,
-      userId,
-      platform: Device.osName || 'android',
-      updatedAt: serverTimestamp(),
-    }, { merge: true }), 5000).catch(() => {});
-
-
-    console.log('[Notifications] Device push token saved');
-    lastRegisteredUserToken = registrationKey;
-
-    return primaryToken;
-  } catch (error) {
-    console.log('[Notifications] registerDevicePushToken ERROR', error);
-    return null;
-  }
+  return registrationInProgress;
 }
 
 export async function unregisterDevicePushToken(userId: string, token?: string | null): Promise<void> {

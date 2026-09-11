@@ -147,9 +147,18 @@ export default function BookViewerScreen() {
 
   const currentTheme = THEME_CONFIG[readingTheme];
 
-  // Google Docs Viewer with page bookmark anchor
-  const baseViewerUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(book.pdf_url)}`;
-  const viewerUrl = lastReadPage > 1 ? `${baseViewerUrl}#page=${lastReadPage}` : baseViewerUrl;
+  // Resilient PDF Viewer URLs: Google Docs Viewer with direct Drive preview fallback
+  const rawPdfUrl = (book.pdf_url || '').trim();
+  const drivePreviewUrl = rawPdfUrl.includes('drive.google.com')
+    ? rawPdfUrl.replace(/\/uc\?export=download&id=/i, '/file/d/').concat('/preview')
+    : rawPdfUrl;
+
+  const baseViewerUrl = rawPdfUrl.includes('drive.google.com')
+    ? drivePreviewUrl
+    : `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(rawPdfUrl)}`;
+  const viewerUrl = lastReadPage > 1 && !rawPdfUrl.includes('drive.google.com')
+    ? `${baseViewerUrl}#page=${lastReadPage}`
+    : baseViewerUrl;
 
   const catColor = (book.category && {
     Islamic: { bg: '#E8F5E9', text: '#2E7D32' },

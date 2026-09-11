@@ -116,11 +116,16 @@ export default function CoursesScreen() {
   const { profile } = useAuth();
   const { courses, loading, refetch, getCourseProgress, isEnrolledInCourse, enrolledCourses } = useData();
 
-  // Auto-fetch fresh courses whenever screen is opened / focused
+  const lastFocusFetchRef = useRef<number>(0);
+  // Auto-fetch fresh courses whenever screen is opened / focused (throttled to max once every 60s)
   useFocusEffect(
     useCallback(() => {
-      if (refetch) {
-        refetch();
+      const now = Date.now();
+      if (now - lastFocusFetchRef.current > 60000) {
+        lastFocusFetchRef.current = now;
+        if (refetch) {
+          refetch();
+        }
       }
     }, [refetch])
   );

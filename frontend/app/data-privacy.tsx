@@ -126,7 +126,7 @@ export default function DataPrivacyScreen() {
               maxLength={600}
             />
             <UIButton label="Request Data Export" onPress={() => submit('export')} loading={loading === 'export'} />
-            <UIButton label="Request Admin Data Review" onPress={() => submit('deletion')} loading={loading === 'deletion'} variant="secondary" />
+            <UIButton label="Request Account Deletion" onPress={() => submit('deletion')} loading={loading === 'deletion'} variant="secondary" />
 
             {/* In-App Permanent Deletion (Google Play Store Required) */}
             <View style={styles.dangerBox}>

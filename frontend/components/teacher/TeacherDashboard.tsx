@@ -8,11 +8,14 @@ import {
   RefreshControl,
   Image,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, limit, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 import { UserProfile } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
@@ -50,6 +53,24 @@ interface PendingSubmission {
   submitted_at?: any;
 }
 
+export interface TeacherQuizResult {
+  id: string;
+  user_id: string;
+  student_name?: string;
+  category: string;
+  course_id?: string;
+  score: number;
+  total: number;
+  percentage: number;
+  passed: boolean;
+  submittedAt?: any;
+  created_at?: any;
+  teacher_notes?: string;
+  feedback?: string;
+  reviewed_at?: any;
+  reviewed_by?: string;
+}
+
 export function TeacherDashboard({
   profile,
   user,
@@ -67,6 +88,11 @@ export function TeacherDashboard({
   const [liveClasses, setLiveClasses] = useState<LiveClassSummary[]>([]);
   const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
   const [attendanceCount, setAttendanceCount] = useState<number>(0);
+  const [quizResults, setQuizResults] = useState<TeacherQuizResult[]>([]);
+  const [loadingQuizzes, setLoadingQuizzes] = useState<boolean>(true);
+  const [selectedQuizResult, setSelectedQuizResult] = useState<TeacherQuizResult | null>(null);
+  const [teacherNoteInput, setTeacherNoteInput] = useState<string>('');
+  const [savingNote, setSavingNote] = useState<boolean>(false);
   const [loadingSchedule, setLoadingSchedule] = useState(true);
   const [selectedDayIdx, setSelectedDayIdx] = useState<number>(
     new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
@@ -162,6 +188,102 @@ export function TeacherDashboard({
     );
     return () => unsub();
   }, []);
+
+  // Set of assigned course IDs and names for academic scoping
+  const assignedCourseMeta = useMemo(() => {
+    const ids = new Set<string>();
+    const names = new Set<string>();
+    myAssignedCourses.forEach((c: any) => {
+      if (c.id) ids.add(String(c.id).toLowerCase());
+      if (c.name) names.add(String(c.name).toLowerCase());
+      if (c.title) names.add(String(c.title).toLowerCase());
+    });
+    return { ids, names };
+  }, [myAssignedCourses]);
+
+  // Real-time student quiz results listener for teacher academic visibility
+  useEffect(() => {
+    setLoadingQuizzes(true);
+    const q = query(
+      collection(db, 'quiz_results'),
+      orderBy('created_at', 'desc'),
+      limit(25)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list: TeacherQuizResult[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          // Filter by assigned courses/subjects to prevent cross-course leakage
+          const courseMatch = data.course_id && assignedCourseMeta.ids.has(String(data.course_id).toLowerCase());
+          const catMatch = data.category && assignedCourseMeta.names.has(String(data.category).toLowerCase());
+          
+          // If teacher has assigned courses, match against them; otherwise show all if no restriction or fallback
+          if (assignedCourseMeta.ids.size === 0 || courseMatch || catMatch) {
+            list.push({
+              id: d.id,
+              user_id: data.user_id || data.uid || 'Student',
+              student_name: data.student_name || 'Student',
+              category: data.category || 'General Assessment',
+              course_id: data.course_id || '',
+              score: typeof data.score === 'number' ? data.score : 0,
+              total: typeof data.total === 'number' ? data.total : (data.total_questions || 0),
+              percentage: typeof data.percentage === 'number' ? data.percentage : 0,
+              passed: !!data.passed,
+              submittedAt: data.submittedAt || null,
+              created_at: data.created_at || null,
+              teacher_notes: data.teacher_notes || data.feedback || '',
+              feedback: data.feedback || '',
+              reviewed_at: data.reviewed_at || null,
+              reviewed_by: data.reviewed_by || '',
+            });
+          }
+        });
+        setQuizResults(list);
+        setLoadingQuizzes(false);
+      },
+      (err) => {
+        console.warn('[TeacherDashboard] Error fetching quiz results:', err);
+        setLoadingQuizzes(false);
+      }
+    );
+
+    return () => unsub();
+  }, [assignedCourseMeta]);
+
+  // Handle saving teacher note/feedback on quiz result
+  const handleSaveTeacherNote = async () => {
+    if (!selectedQuizResult) return;
+    setSavingNote(true);
+    try {
+      const resultRef = doc(db, 'quiz_results', selectedQuizResult.id);
+      await updateDoc(resultRef, {
+        teacher_notes: teacherNoteInput.trim(),
+        feedback: teacherNoteInput.trim(),
+        reviewed_at: serverTimestamp(),
+        reviewed_by: profile?.name || user?.email || 'Teacher',
+      });
+      // Update local state
+      setSelectedQuizResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              teacher_notes: teacherNoteInput.trim(),
+              feedback: teacherNoteInput.trim(),
+              reviewed_by: profile?.name || user?.email || 'Teacher',
+            }
+          : null
+      );
+      Alert.alert('Academic Feedback Saved', 'Your notes have been recorded for this student assessment.');
+    } catch (error: any) {
+      console.error('[TeacherDashboard] Failed to save teacher note:', error);
+      Alert.alert('Save Failed', error.message || 'Unable to update academic feedback notes.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -297,6 +419,14 @@ export function TeacherDashboard({
               <Text style={styles.metricNumber}>{pendingSubmissions.length}</Text>
               <Text style={styles.metricLabel}>Submissions</Text>
             </TouchableOpacity>
+
+            <View style={styles.metricCard}>
+              <View style={[styles.metricIconWrap, { backgroundColor: '#F3E8FF' }]}>
+                <Ionicons name="school" size={20} color="#7C3AED" />
+              </View>
+              <Text style={styles.metricNumber}>{quizResults.length}</Text>
+              <Text style={styles.metricLabel}>Quiz Results</Text>
+            </View>
           </View>
         </View>
 
@@ -660,6 +790,231 @@ export function TeacherDashboard({
             </View>
           )}
         </View>
+
+        {/* ========================================================================= */}
+        {/* SECTION 5.5: RECENT QUIZ ASSESSMENTS (ACADEMIC VISIBILITY)                */}
+        {/* ========================================================================= */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Recent Quiz Assessments</Text>
+              <Text style={styles.sectionSubtitle}>Performance across assigned courses</Text>
+            </View>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{quizResults.length}</Text>
+            </View>
+          </View>
+
+          {loadingQuizzes ? (
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 16 }} />
+          ) : quizResults.length > 0 ? (
+            quizResults.map((qr) => {
+              const dateStr = qr.created_at?.toDate
+                ? qr.created_at.toDate().toLocaleDateString()
+                : qr.submittedAt
+                ? new Date(qr.submittedAt).toLocaleDateString()
+                : 'Recent';
+
+              return (
+                <View key={qr.id} style={styles.quizResultCard}>
+                  <View style={styles.quizResultHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.quizStudentName} numberOfLines={1}>
+                        {qr.student_name || `Student (${qr.user_id.slice(0, 6).toUpperCase()})`}
+                      </Text>
+                      <Text style={styles.quizCategoryName} numberOfLines={1}>
+                        {qr.category}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.quizStatusBadge,
+                        { backgroundColor: qr.passed ? '#ECFDF5' : '#FEF2F2' },
+                      ]}
+                    >
+                      <Ionicons
+                        name={qr.passed ? 'checkmark-circle' : 'alert-circle'}
+                        size={12}
+                        color={qr.passed ? '#059669' : '#DC2626'}
+                      />
+                      <Text
+                        style={[
+                          styles.quizStatusText,
+                          { color: qr.passed ? '#059669' : '#DC2626' },
+                        ]}
+                      >
+                        {qr.passed ? 'Passed' : 'Needs Rev.'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.quizMetricsRow}>
+                    <View style={styles.quizMetricItem}>
+                      <Text style={styles.quizMetricLabel}>SCORE</Text>
+                      <Text style={styles.quizMetricValue}>
+                        {qr.score}/{qr.total}
+                      </Text>
+                    </View>
+                    <View style={styles.quizMetricItem}>
+                      <Text style={styles.quizMetricLabel}>PERCENTAGE</Text>
+                      <Text
+                        style={[
+                          styles.quizMetricValue,
+                          { color: qr.passed ? '#059669' : '#DC2626' },
+                        ]}
+                      >
+                        {qr.percentage}%
+                      </Text>
+                    </View>
+                    <View style={styles.quizMetricItem}>
+                      <Text style={styles.quizMetricLabel}>DATE</Text>
+                      <Text style={styles.quizMetricValue}>{dateStr}</Text>
+                    </View>
+                  </View>
+
+                  {qr.teacher_notes ? (
+                    <View style={styles.feedbackPreview}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={12} color="#4B5563" />
+                      <Text style={styles.feedbackPreviewText} numberOfLines={1}>
+                        Note: {qr.teacher_notes}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={styles.viewQuizDetailBtn}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setSelectedQuizResult(qr);
+                      setTeacherNoteInput(qr.teacher_notes || qr.feedback || '');
+                    }}
+                  >
+                    <Ionicons name="create-outline" size={14} color={COLORS.primary} />
+                    <Text style={styles.viewQuizDetailText}>
+                      {qr.teacher_notes ? 'View / Edit Feedback' : 'Add Teacher Feedback'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.allClearCard}>
+              <Ionicons name="school-outline" size={32} color="#9CA3AF" />
+              <Text style={styles.allClearTitle}>No Quiz Results Found</Text>
+              <Text style={styles.allClearSubtitle}>
+                No student quiz assessments recorded for your assigned courses yet.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Modal for Quiz Assessment Detail & Academic Feedback Note */}
+        <Modal
+          visible={!!selectedQuizResult}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setSelectedQuizResult(null)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Quiz Assessment</Text>
+                  <Text style={styles.modalSubtitle}>Student Academic Performance</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.modalCloseBtn}
+                  onPress={() => setSelectedQuizResult(null)}
+                >
+                  <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {selectedQuizResult && (
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+                  <View style={styles.modalInfoBox}>
+                    <Text style={styles.modalLabel}>STUDENT</Text>
+                    <Text style={styles.modalValue}>
+                      {selectedQuizResult.student_name || 'Student'} (UID: #{selectedQuizResult.user_id.slice(0, 8)})
+                    </Text>
+
+                    <Text style={[styles.modalLabel, { marginTop: 8 }]}>ASSESSMENT CATEGORY</Text>
+                    <Text style={styles.modalValue}>{selectedQuizResult.category}</Text>
+
+                    <View style={styles.modalStatRow}>
+                      <View>
+                        <Text style={styles.modalLabel}>SCORE</Text>
+                        <Text style={styles.modalStatNum}>
+                          {selectedQuizResult.score} / {selectedQuizResult.total}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.modalLabel}>PERCENTAGE</Text>
+                        <Text
+                          style={[
+                            styles.modalStatNum,
+                            { color: selectedQuizResult.passed ? '#059669' : '#DC2626' },
+                          ]}
+                        >
+                          {selectedQuizResult.percentage}%
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.modalLabel}>RESULT</Text>
+                        <Text
+                          style={[
+                            styles.modalStatNum,
+                            { color: selectedQuizResult.passed ? '#059669' : '#DC2626' },
+                          ]}
+                        >
+                          {selectedQuizResult.passed ? 'PASSED' : 'REVISION'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={styles.modalLabel}>TEACHER ACADEMIC NOTES & FEEDBACK</Text>
+                    <Text style={styles.noteInstructions}>
+                      Provide constructive feedback, study tips, or required revision areas for this student.
+                    </Text>
+                    <TextInput
+                      style={styles.teacherNoteInput}
+                      placeholder="e.g. Excellent grasp of tajweed rules. Review questions 3 and 7 on makharij."
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      numberOfLines={4}
+                      value={teacherNoteInput}
+                      onChangeText={setTeacherNoteInput}
+                    />
+                  </View>
+
+                  {selectedQuizResult.reviewed_by ? (
+                    <Text style={styles.reviewedMetaText}>
+                      Last reviewed by: {selectedQuizResult.reviewed_by}
+                    </Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={[styles.saveNoteBtn, savingNote && { opacity: 0.7 }]}
+                    disabled={savingNote}
+                    onPress={handleSaveTeacherNote}
+                  >
+                    {savingNote ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="save-outline" size={16} color="#fff" />
+                        <Text style={styles.saveNoteBtnText}>Save Academic Feedback</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
 
         {/* ========================================================================= */}
         {/* SECTION 6: ISLAMIC INSPIRATION FOR TEACHERS                               */}
@@ -1310,5 +1665,222 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 10,
+  },
+  countBadge: {
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  quizResultCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  quizResultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  quizStudentName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  quizCategoryName: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  quizStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  quizStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  quizMetricsRow: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.sm,
+    padding: 8,
+    marginTop: 4,
+    marginBottom: 8,
+    justifyContent: 'space-around',
+  },
+  quizMetricItem: {
+    alignItems: 'center',
+  },
+  quizMetricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    letterSpacing: 0.5,
+  },
+  quizMetricValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    marginTop: 2,
+  },
+  feedbackPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 8,
+    gap: 6,
+    borderLeftWidth: 2,
+    borderLeftColor: COLORS.primary,
+  },
+  feedbackPreviewText: {
+    fontSize: 11,
+    color: '#4B5563',
+    fontStyle: 'italic',
+    flex: 1,
+  },
+  viewQuizDetailBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: RADIUS.sm,
+    backgroundColor: '#ECFDF5',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  viewQuizDetailText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    maxHeight: '85%',
+    ...SHADOWS.card,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textMain,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    padding: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  modalInfoBox: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    letterSpacing: 0.5,
+  },
+  modalValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMain,
+    marginTop: 2,
+  },
+  modalStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  modalStatNum: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginTop: 2,
+  },
+  noteInstructions: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  teacherNoteInput: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    fontSize: 13,
+    color: COLORS.textMain,
+    minHeight: 90,
+    textAlignVertical: 'top',
+  },
+  reviewedMetaText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    marginTop: 6,
+  },
+  saveNoteBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: SPACING.md,
+    ...SHADOWS.card,
+  },
+  saveNoteBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

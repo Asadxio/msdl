@@ -22,6 +22,8 @@ import { cacheGet, cacheSet } from '@/lib/cacheManager';
 import { QuickAdminActions } from '@/components/admin/QuickAdminActions';
 import { AdminPendingTasks, type PendingTasksCounts } from '@/components/admin/AdminPendingTasks';
 import { AdminActivityCenter } from '@/components/admin/AdminActivityCenter';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { CustomerSupportModal } from '@/components/CustomerSupportModal';
 
 // ─── Institutional Palette ───
 const THEME = {
@@ -88,8 +90,11 @@ export const AdminDashboard = React.memo(function AdminDashboard({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { courses, teachers, books } = useData();
+  const { activeOrgId, activeOrg, isDefaultOrg } = useActiveOrganization();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [supportModalVisible, setSupportModalVisible] = useState(false);
+  const [checklistDismissed, setChecklistDismissed] = useState(false);
   const [kpi, setKpi] = useState<AdminKpiSummary>({
     totalStudents: 0,
     pendingApprovals: 0,
@@ -296,12 +301,98 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             )}
           </View>
 
+          {/* Institution Context Badge */}
+          <View style={[styles.badgeRow, { marginTop: 8, marginBottom: 4 }]}>
+            <View style={[styles.adminBadge, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
+              <Ionicons name="business" size={13} color="#059669" />
+              <Text style={[styles.adminBadgeText, { color: '#059669' }]}>
+                {activeOrg?.name || 'Madrasatu-s-Salikat Lil Banat'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => safePush('/admin/organization-settings')} style={{ marginLeft: 8 }}>
+              <Text style={{ fontSize: 12, color: THEME.primary, fontWeight: '600' }}>Settings & Support</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* System Health Status Indicator */}
           <View style={styles.systemHealthBar}>
             <View style={styles.healthStatusDot} />
             <Text style={styles.healthStatusText}>System Status: Verified Operational • DB & Auth Synchronized</Text>
           </View>
         </View>
+
+        {/* ─── Customer Setup Checklist (Only for new/non-default institutions until dismissed) ─── */}
+        {!isDefaultOrg && !checklistDismissed && (
+          <View style={{
+            marginHorizontal: SPACING.lg,
+            marginTop: SPACING.md,
+            backgroundColor: '#FFFFFF',
+            borderRadius: RADIUS.lg,
+            padding: SPACING.lg,
+            borderWidth: 1,
+            borderColor: '#E2E8F0',
+            ...SHADOWS.card,
+          }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="compass-outline" size={20} color={THEME.primary} style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 16, fontWeight: '700', color: THEME.textMain }}>Madrasa Setup Guide</Text>
+              </View>
+              <TouchableOpacity onPress={() => setChecklistDismissed(true)}>
+                <Ionicons name="close-circle-outline" size={20} color={THEME.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 13, color: THEME.textMuted, marginBottom: 12 }}>
+              Quick onboarding steps to start operating your madrasa workspace:
+            </Text>
+
+            <View style={{ gap: 8, marginBottom: 14 }}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
+                onPress={() => safePush('/admin/organization-settings')}
+              >
+                <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginRight: 10 }} />
+                <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500' }}>1. Set Madrasa Profile & Contacts</Text>
+                <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
+                onPress={() => safePush('/admin/manage-academics')}
+              >
+                <Ionicons name="school-outline" size={18} color={THEME.primary} style={{ marginRight: 10 }} />
+                <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500' }}>2. Create Academic Classes & Subjects</Text>
+                <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
+                onPress={() => safePush('/admin/manage-academics')}
+              >
+                <Ionicons name="people-outline" size={18} color={THEME.primary} style={{ marginRight: 10 }} />
+                <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500' }}>3. Add Faculty & Assign Subjects</Text>
+                <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
+                onPress={() => safePush('/admin/manage-academics')}
+              >
+                <Ionicons name="cloud-upload-outline" size={18} color={THEME.primary} style={{ marginRight: 10 }} />
+                <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500' }}>4. Import or Enroll Students</Text>
+                <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ECFDF5', paddingVertical: 10, borderRadius: RADIUS.md }}
+              onPress={() => setSupportModalVisible(true)}
+            >
+              <Ionicons name="logo-whatsapp" size={16} color="#25D366" style={{ marginRight: 8 }} />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Need Help? WhatsApp MSLB Support</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ─── Platform Metrics (8 Authoritative Cards - 2x4 Grid) ─── */}
         <View style={styles.kpiSection}>
@@ -437,6 +528,11 @@ export const AdminDashboard = React.memo(function AdminDashboard({
         {/* ─── Activity Center ─── */}
         <AdminActivityCenter courses={courses} teachers={teachers} books={books} />
       </ScrollView>
+
+      <CustomerSupportModal
+        visible={supportModalVisible}
+        onClose={() => setSupportModalVisible(false)}
+      />
     </View>
   );
 });

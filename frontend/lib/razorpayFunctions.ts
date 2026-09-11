@@ -1,14 +1,16 @@
 /**
  * MSLB Razorpay Cloud Functions Client Helper
- * 
- * PHASE 3 STAGE A: Implementation complete, NOT yet activated in production UI.
- * Activation happens in STAGE E after full test verification.
- * 
+ *
+ * Status: ACTIVE — imported and used by payment.tsx.
+ *
+ * Prerequisites (for payment to work end-to-end):
+ *   1. Firebase Cloud Function `createRazorpayOrder` must be deployed.
+ *   2. Razorpay Key ID and Secret must be set in Firebase Secret Manager.
+ *   3. Firestore `app_settings/fees` document must have `fees_amount` field.
+ *
  * Usage:
  *   const result = await createRazorpayOrder({ courseId: 'course_123' });
- *   // Launch Razorpay Checkout SDK with result.orderId, result.keyId, result.amount
- * 
- * DO NOT import this file in payment.tsx until Stage E is approved.
+ *   // Then launch Razorpay WebView with result.orderId, result.keyId, result.amount
  */
 import { httpsCallable } from 'firebase/functions';
 import { functions, auth, app } from '@/lib/firebase';

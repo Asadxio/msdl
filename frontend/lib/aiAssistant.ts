@@ -522,6 +522,142 @@ const ISLAMIC_KNOWLEDGE: Record<string, KnowledgeEntry> = {
       ],
     },
   },
+
+  ghusl: {
+    english:
+      '### 🚿 Fiqh of Ghusl (Obligatory Ritual Bath)\n\n' +
+      'In Islamic jurisprudence, Ghusl is the complete bodily ritual purification. It has **3 obligatory acts (Farz)**:\n\n' +
+      '1. **Rinsing the Mouth Thoroughly (Kulli):** Passing water throughout the oral cavity and gargling (unless fasting).\n' +
+      '2. **Inhaling Water into the Nostrils (Istinshaq):** Sniffing water up to the soft nasal bone.\n' +
+      '3. **Washing the Entire Body:** Pouring water from head to toe so that not a single hair-width spot remains dry.\n\n' +
+      '💡 *Note:* Impermeable nail polish or wax that prevents water from reaching the nail or skin invalidates Ghusl.',
+    urdu:
+      '**غسل کے تین فرائض اور بنیادی احکام:**\n\n' +
+      '۱. **منہ بھر کر کلی کرنا:** حلق کی جڑ تک پانی پہنچانا (روزے کی حالت میں غرغرہ نہ کریں)۔\n' +
+      '۲. **ناک میں نرم ہڈی تک پانی چڑھانا:** ناک کے دونوں نتھنوں کو اچھی طرح تر کرنا۔\n' +
+      '۳. **پورے جسم پر پانی بہانا:** سر کے بالوں کی جڑوں سے لے کر پاؤں کے تلووں تک، کہ ایک بال برابر جگہ بھی خشک نہ رہے۔',
+    vocab: [
+      { arabic: 'غُسْل', transliteration: 'Ghusl', root: 'غ-س-ل (Gh-S-L)', meaning: 'Complete ritual washing of the entire body', quranExample: 'وَإِن كُنتُمْ جُنُبًا فَاطَّهَّرُوا' },
+      { arabic: 'مَضْمَضَة', transliteration: 'Madmadah', root: 'م-ض-م-ض (M-D-M-D)', meaning: 'Rinsing and gargling water in the mouth', quranExample: 'المضمضة في الغسل' },
+    ],
+    summaryPointsEn: [
+      'Ghusl has 3 obligatory acts: Rinsing mouth, sniffing water into nostrils, and washing entire body.',
+      'No spot even the width of a hair may remain dry.',
+      'Waterproof barriers must be removed before making Ghusl.',
+    ],
+    summaryPointsUr: [
+      'غسل کے ۳ فرائض ہیں: کلی کرنا، ناک میں پانی ڈالنا، اور پورے جسم کو تر کرنا۔',
+      'بال برابر جگہ بھی خشک رہ جائے تو غسل ادا نہیں ہوتا۔',
+    ],
+    quiz: {
+      id: 'quiz_ghusl',
+      question: 'How many obligatory Farz acts are there in Ghusl according to Hanafi Fiqh?',
+      options: [
+        { id: 'opt_1', text: '2 Farz', isCorrect: false, explanation: 'Incorrect.' },
+        { id: 'opt_2', text: '3 Farz (Mouth, Nose, Full Body)', isCorrect: true, explanation: 'Correct! 1. Gargling, 2. Nasal wash, 3. Complete body wash.' },
+        { id: 'opt_3', text: '4 Farz', isCorrect: false, explanation: 'Wudu has 4 Farz, while Ghusl has 3.' },
+        { id: 'opt_4', text: '7 Farz', isCorrect: false, explanation: 'Incorrect.' },
+      ],
+    },
+  },
+
+  haiz: {
+    english:
+      '### 🌸 Fiqh of Haiz (Menstruation) & Purity\n\n' +
+      '• **Minimum Duration:** 3 days and 3 nights (72 complete hours).\n' +
+      '• **Maximum Duration:** 10 days and 10 nights (240 hours).\n' +
+      '• **Rulings:** Daily prayers (Salah) are entirely waived and not made up. Fasting in Ramadan is paused and made up (Qada) after recovery.\n' +
+      '• **Tuhr (Purity Interval):** Minimum interval of purity between two cycles is 15 days.',
+    urdu:
+      '**حیض و طہارت کے بنیادی فقہی مسائل:**\n\n' +
+      '• **کم سے کم مدت:** ۳ دن اور ۳ راتیں (۷۲ گھنٹے)۔\n' +
+      '• **زیادہ سے زیادہ مدت:** ۱۰ دن اور ۱۰ راتیں (۲۴۰ گھنٹے)۔\n' +
+      '• **احکام:** ایامِ حیض کی نمازیں معاف ہیں اور ان کی قضا نہیں ہے۔ روزوں کی قضا بعد میں رکھنا لازم ہے۔\n' +
+      '• **طہر کی کم سے کم مدت:** دو حیض کے درمیانی پاکی کا وقفہ کم از کم ۱۵ دن ہونا ضروری ہے۔',
+    vocab: [
+      { arabic: 'حَيْض', transliteration: 'Haiz', root: 'ح-ی-ض (H-Y-D)', meaning: 'Natural cyclical menstruation', quranExample: 'وَيَسْأَلُونَكَ عَنِ الْمَحِيضِ' },
+      { arabic: 'طُهْر', transliteration: 'Tuhr', root: 'ط-ہ-ر (T-H-R)', meaning: 'State of complete ritual purity between cycles', quranExample: 'فَإِذَا تَطَهَّرْنَ' },
+    ],
+    summaryPointsEn: [
+      'Minimum Haiz duration in Hanafi Fiqh is 72 hours; maximum is 10 days/nights.',
+      'Prayers missed during menstruation are completely forgiven without Qada.',
+      'Ramadan fasts must be made up day-for-day after purity is restored.',
+    ],
+    summaryPointsUr: [
+      'حیض کی کم سے کم مدت ۳ دن اور زیادہ سے زیادہ ۱۰ دن ہے۔',
+      'نمازیں معاف ہیں، جبکہ رمضان کے روزوں کی قضا فرض ہے۔',
+    ],
+    quiz: {
+      id: 'quiz_haiz',
+      question: 'In Hanafi Fiqh, are prayers missed during Haiz required to be made up (Qada)?',
+      options: [
+        { id: 'opt_1', text: 'Yes, all 5 prayers must be made up', isCorrect: false, explanation: 'Salah is completely waived during menstruation.' },
+        { id: 'opt_2', text: 'No, prayers are completely forgiven without Qada', isCorrect: true, explanation: 'Correct! By Islamic consensus, prayers during menses are forgiven without Qada.' },
+        { id: 'opt_3', text: 'Only Jumuah prayer must be made up', isCorrect: false, explanation: 'Incorrect.' },
+        { id: 'opt_4', text: 'Only if missed for fewer than 3 days', isCorrect: false, explanation: 'Incorrect.' },
+      ],
+    },
+  },
+
+  roza: {
+    english:
+      '### 🌙 Fiqh of Fasting (Sawm / Roza)\n\n' +
+      '**Pillars of Fasting:** Abstaining from food, drink, and intimate relations from true dawn (*Subh Sadiq*) until sunset (*Maghrib*) with sincere intention (*Niyyah*).\n\n' +
+      '• **Eating forgetfully:** Does NOT break the fast (Hadith: Allah fed and gave them drink).\n' +
+      '• **Sunnah of Suhoor & Iftar:** Delaying Suhoor until near Fajr, and hastening Iftar immediately upon sunset with fresh dates or water.',
+    urdu:
+      '**روزے کے فرائض، سنن اور احکام:**\n\n' +
+      '• **بنیادی رکن:** صبح صادق سے غروبِ آفتاب تک کھانے پینے اور ازدواجی تعلقات سے نیت کے ساتھ رکے رہنا۔\n' +
+      '• **بھول کر کھانا پینا:** بھول کر کچھ کھا پی لینے سے روزہ بالکل نہیں ٹوٹتا۔\n' +
+      '• **سحری و افطاری:** سحری تاخیر سے اور افطار وقت ہوتے ہی کھجور یا پانی سے جلدی کرنا مسنون ہے۔',
+    vocab: [
+      { arabic: 'صَوْم', transliteration: 'Sawm', root: 'ص-و-م (S-W-M)', meaning: 'Abstinence and fasting', quranExample: 'كُتِبَ عَلَيْكُمُ الصِّيَامُ' },
+      { arabic: 'إِمْسَاك', transliteration: 'Imsak', root: 'م-س-ک (M-S-K)', meaning: 'Holding oneself back and restraining', quranExample: 'الإمساك عن المفطرات' },
+    ],
+    summaryPointsEn: [
+      'Fasting is abstaining from food, drink, and desires from Fajr to Maghrib with Niyyah.',
+      'Forgetful eating or drinking does not break the fast.',
+    ],
+    summaryPointsUr: [
+      'روزہ صبح صادق سے غروبِ آفتاب تک کھانے پینے سے رکے رہنے کا نام ہے۔',
+      'بھول کر کھانے سے روزہ نہیں ٹوٹتا۔',
+    ],
+    quiz: {
+      id: 'quiz_roza',
+      question: 'What happens if a fasting person eats or drinks out of genuine forgetfulness?',
+      options: [
+        { id: 'opt_1', text: 'The fast breaks and requires Kaffarah', isCorrect: false, explanation: 'Incorrect.' },
+        { id: 'opt_2', text: 'The fast remains completely valid and unbroken', isCorrect: true, explanation: 'Correct! The Prophet ﷺ said: Whoever eats or drinks forgetfully should complete his fast.' },
+        { id: 'opt_3', text: 'Requires half day makeup fast', isCorrect: false, explanation: 'Incorrect.' },
+        { id: 'opt_4', text: 'Breaks only if water was swallowed', isCorrect: false, explanation: 'Incorrect.' },
+      ],
+    },
+  },
+
+  hijab: {
+    english:
+      '### 🧕 Modesty, Hijab & Satr-e-Aurat\n\n' +
+      'In the Islamic tradition, modest dress (Hijab) is an act of sacred devotion, protection, and dignity.\n\n' +
+      '• **Definition of Satr:** For a Muslim woman in front of non-Mahram men, the entire body must be covered with loose, opaque, dignified clothing, with established dispensations for face and hands for practical necessity.\n' +
+      '• **Core Purpose:** To foster a pure, dignified community centered upon virtue, intellect, and piety.',
+    urdu:
+      '**حجاب و پردہ اور سترِ عورت کے شرعی احکام:**\n\n' +
+      'اسلام میں پردہ اور حیا عورت کا وقار اور دین کا عظیم حکم ہے۔\n\n' +
+      '• **ستر کا دائرہ:** غیر محرم کے سامنے مکمل جسم کو ڈھیلے اور باوقار لباس سے چھپانا واجب ہے۔\n' +
+      '• **بنیادی مقصد:** معاشرے کو بے راہ روی اور فتنوں سے پاک رکھنا اور خواتین کے احترام اور عفت کا تحفظ۔',
+    vocab: [
+      { arabic: 'حِجَاب', transliteration: 'Hijab', root: 'ح-ج-ب (H-J-B)', meaning: 'Barrier, modesty, and sacred cover', quranExample: 'وَمِن وَرَاءِ حِجَابٍ' },
+      { arabic: 'حَيَاء', transliteration: 'Haya', root: 'ح-ی-ی (H-Y-Y)', meaning: 'Modesty, spiritual dignity, and self-respect', quranExample: 'الحياء شعبة من الإيمان' },
+    ],
+    summaryPointsEn: [
+      'Hijab is a divine command of dignity and spiritual empowerment.',
+      'Modesty (Haya) is a fundamental branch of Islamic faith.',
+    ],
+    summaryPointsUr: [
+      'حجاب اللہ تعالیٰ کا تاکیدی حکم اور باوقار زندگی کی علامت ہے۔',
+      'حیا ایمان کا ایک اہم ترین شعبہ ہے۔',
+    ],
+  },
 };
 
 export interface TutorResponse {
@@ -552,7 +688,7 @@ export async function askAiSabaqAssistant(
     };
   }
 
-  // 1. Strict Shariah Guardrail Check: Intercept sensitive Fiqh/Fatwa questions
+  // 1. Strict Shariah Guardrail: Intercept sensitive Fiqh/Fatwa questions
   if (isFatwaQuery(cleanQ)) {
     return {
       text: getFatwaRedirectMessage(language),
@@ -561,23 +697,65 @@ export async function askAiSabaqAssistant(
     };
   }
 
+  // 2. Server-side Gemini call via Firebase Callable Function (P0.1 Security Fix)
+  // GEMINI_API_KEY is in Firebase Secret Manager — NEVER in client/APK.
+  try {
+    const { callAskAITutor } = await import('@/lib/aiGatewayClient');
+    const historyPayload = history
+      .slice(-10)
+      .filter((m) => m.sender === 'user' || m.sender === 'assistant')
+      .map((m) => ({ sender: m.sender, text: m.text }));
+
+    const result = await callAskAITutor({
+      question:     cleanQ,
+      history:      historyPayload,
+      language,
+      mode:         mode as TutorMode,
+      lessonTitle:  context.lessonTitle,
+      courseTitle:  context.courseTitle,
+    });
+    return { text: result.text, mode: result.mode as TutorMode, language: result.language as TutorLanguage };
+  } catch (err) {
+    console.warn('[AiAssistant] Server AI call failed, using offline fallback:', err);
+  }
+
+  // 3. Offline fallback: original keyword-based knowledge bank
+  return _offlineFallbackResponse(cleanQ, context, language, mode);
+}
+
+// ─── Offline Fallback ────────────────────────────────────────────────────────
+
+function _offlineFallbackResponse(
+  cleanQ: string,
+  context: TutorContext,
+  language: TutorLanguage,
+  mode: TutorMode,
+): TutorResponse {
   const lower = cleanQ.toLowerCase();
 
-  // 2. Resolve Topic Entry
+  // Resolve Topic Entry from static knowledge bank
   let matchedKey: string | null = null;
   if (lower.includes('فاتحہ') || lower.includes('fatiha') || lower.includes('opening') || lower.includes('الفاظ')) {
     matchedKey = 'fatiha';
-  } else if (lower.includes('تجوید') || lower.includes('tajweed') || lower.includes('اخفاء') || lower.includes('ادغام') || lower.includes('noon') || lower.includes('nun')) {
+  } else if (lower.includes('تجوید') || lower.includes('tajweed') || lower.includes('اخفاء') || lower.includes('ادغام') || lower.includes('noon') || lower.includes('nun') || lower.includes('madd')) {
     matchedKey = 'tajweed';
-  } else if (lower.includes('وضو') || lower.includes('wudu') || lower.includes('ablution') || lower.includes('غسل')) {
+  } else if (lower.includes('غسل') || lower.includes('ghusl') || lower.includes('bath') || lower.includes('napak') || lower.includes('janabat')) {
+    matchedKey = 'ghusl';
+  } else if (lower.includes('حیض') || lower.includes('haiz') || lower.includes('istihada') || lower.includes('nifas') || lower.includes('menses') || lower.includes('menstruation')) {
+    matchedKey = 'haiz';
+  } else if (lower.includes('روزہ') || lower.includes('roza') || lower.includes('fast') || lower.includes('ramadan') || lower.includes('iftar') || lower.includes('sehri')) {
+    matchedKey = 'roza';
+  } else if (lower.includes('حجاب') || lower.includes('پردہ') || lower.includes('hijab') || lower.includes('purdah') || lower.includes('niqab') || lower.includes('modesty') || lower.includes('satr')) {
+    matchedKey = 'hijab';
+  } else if (lower.includes('وضو') || lower.includes('wudu') || lower.includes('ablution')) {
     matchedKey = 'wudu';
-  } else if (lower.includes('نماز') || lower.includes('salah') || lower.includes('namaz') || lower.includes('ارکان') || lower.includes('prayer')) {
+  } else if (lower.includes('نماز') || lower.includes('salah') || lower.includes('namaz') || lower.includes('ارکان') || lower.includes('prayer') || lower.includes('sajda') || lower.includes('ruku')) {
     matchedKey = 'salah';
-  } else if (lower.includes('عقائد') || lower.includes('عقیدہ') || lower.includes('aqeedah') || lower.includes('iman') || lower.includes('faith') || lower.includes('pillar')) {
+  } else if (lower.includes('عقائد') || lower.includes('عقیدہ') || lower.includes('aqeedah') || lower.includes('iman') || lower.includes('faith') || lower.includes('pillar') || lower.includes('tawheed')) {
     matchedKey = 'aqeedah';
-  } else if (lower.includes('فرض') || lower.includes('farz')) {
+  } else if (lower.includes('فرض') || lower.includes('farz') || lower.includes('wajib') || lower.includes('sunnah')) {
     matchedKey = 'farz';
-  } else if (lower.includes('بدر') || lower.includes('سیرت') || lower.includes('غزوہ') || lower.includes('تاریخ') || lower.includes('badr') || lower.includes('seerah')) {
+  } else if (lower.includes('بدر') || lower.includes('سیرت') || lower.includes('غزوہ') || lower.includes('تاریخ') || lower.includes('badr') || lower.includes('seerah') || lower.includes('prophet') || lower.includes('nabi')) {
     matchedKey = 'seerah';
   }
 

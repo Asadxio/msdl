@@ -31,6 +31,17 @@ export class ErrorBoundary extends Component<Props, State> {
       stack: errorInfo.componentStack || error.stack,
       severityOverride: 'critical',
     });
+
+    try {
+      const { recordCrashlyticsError } = require('@/lib/crashlytics');
+      recordCrashlyticsError(error, {
+        isFatal: true,
+        origin: 'ErrorBoundary',
+        componentStack: errorInfo.componentStack,
+      });
+    } catch (e) {
+      // Fail-safe
+    }
   }
 
   handleReload = () => {

@@ -40,4 +40,17 @@ export function reportError(error: unknown, context: ErrorContext) {
     stack,
     screenRoute: context.screen,
   });
+
+  // Canonical Crashlytics bridge for non-fatal exception tracking
+  try {
+    const { recordCrashlyticsError } = require('@/lib/crashlytics');
+    recordCrashlyticsError(error, {
+      origin: 'reportError',
+      kind: context.kind,
+      code: context.code,
+      screen: context.screen,
+    });
+  } catch (e) {
+    // Fail-safe
+  }
 }

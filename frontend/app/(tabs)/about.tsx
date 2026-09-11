@@ -809,7 +809,13 @@ export default function AboutScreen() {
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: () => { void signOut(); },
+          onPress: async () => {
+            try {
+              await signOut();
+            } finally {
+              router.replace('/auth/login');
+            }
+          },
         },
       ]
     );

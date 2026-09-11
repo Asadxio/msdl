@@ -202,13 +202,181 @@ const ISLAMIC_QUESTION_KNOWLEDGE_BASE: Record<string, GeneratedQuestion[]> = {
       difficulty: 'medium',
     },
   ],
+  'Tayammum': [
+    {
+      id: 'tayammum_1',
+      question: 'How many Farz are there in Tayammum? / تیمم میں کتنے فرائض ہیں؟',
+      options: ['2 Farz (۲ فرائض)', '3 Farz (۳ فرائض)', '4 Farz (۴ فرائض)', '1 Farz (۱ فرض)'],
+      correct_answer: '3 Farz (۳ فرائض)',
+      category: 'Tayammum',
+      explanation: 'Tayammum has 3 Farz: 1. Niyyah (Intention), 2. Striking hands on pure earth and wiping the entire face, 3. Striking hands again and wiping both arms including elbows.',
+      difficulty: 'easy',
+    },
+    {
+      id: 'tayammum_2',
+      question: 'Which substance is valid to perform Tayammum with? / تیمم کس چیز سے جائز ہے؟',
+      options: ['Pure Earth / Dust / Stone (پاک مٹی، ریت، پتھر)', 'Wood or Plastic (لکڑی یا پلاسٹک)', 'Cloth or Paper (کپڑا یا کاغذ)', 'Ash (راکھ)'],
+      correct_answer: 'Pure Earth / Dust / Stone (پاک مٹی، ریت، پتھر)',
+      category: 'Tayammum',
+      explanation: 'Tayammum is valid only with pure substances that belong to the genus of the earth (Sa’eedan Tayyiba) such as pure soil, clay, dust, unglazed stone, and sand.',
+      difficulty: 'medium',
+    },
+  ],
+  'Sajda Sahw': [
+    {
+      id: 'sahw_1',
+      question: 'When does Sajda Sahw become Wajib in Salah? / سجدہ سہو کب واجب ہوتا ہے؟',
+      options: [
+        'When a Wajib is unintentionally delayed or omitted (بھولے سے واجب چھوٹنے یا تاخیر پر)',
+        'When a Farz is omitted (فرض چھوٹنے پر)',
+        'When a Sunnah is omitted (سنت چھوٹنے پر)',
+        'In every Salah automatically',
+      ],
+      correct_answer: 'When a Wajib is unintentionally delayed or omitted (بھولے سے واجب چھوٹنے یا تاخیر پر)',
+      category: 'Sajda Sahw',
+      explanation: 'Sajda Sahw becomes Wajib when an obligatory (Wajib) component of prayer is unintentionally missed or delayed by a pillar duration.',
+      difficulty: 'medium',
+    },
+    {
+      id: 'sahw_2',
+      question: 'What is the correct procedure for Sajda Sahw in Hanafi Fiqh? / حنفی فقہ میں سجدہ سہو کا درست طریقہ کیا ہے؟',
+      options: [
+        'Recite Tashahhud, turn right for Salam, do 2 Sajdas, repeat Tashahhud, Durood & Salam (دائیں طرف سلام پھر ۲ سجدے)',
+        'Do 2 Sajdas before Tashahhud',
+        'Turn left first then do 1 Sajda',
+        'Only 1 Sajda at the end',
+      ],
+      correct_answer: 'Recite Tashahhud, turn right for Salam, do 2 Sajdas, repeat Tashahhud, Durood & Salam (دائیں طرف سلام پھر ۲ سجدے)',
+      category: 'Sajda Sahw',
+      explanation: 'In the final Qaada, after reciting Tashahhud, make a single Salam to the right side, perform two Sujood, recite Tashahhud, Durood Ibrahim and Dua, then complete both Salams.',
+      difficulty: 'medium',
+    },
+  ],
+  'Nikah': [
+    {
+      id: 'nikah_1',
+      question: 'What are the two foundational pillars (Arkaan) of Nikah in Islamic jurisprudence? / نکاح کے دو بنیادی ارکان کیا ہیں؟',
+      options: ['Ijab and Qubool (ایجاب و قبول)', 'Walima and Gifts', 'Feast and Cards', 'Only Signing Paper'],
+      correct_answer: 'Ijab and Qubool (ایجاب و قبول)',
+      category: 'Nikah',
+      explanation: 'The essential legal pillars of Nikah are Offer (Ijab) and Acceptance (Qubool) conducted in a single sitting in the presence of qualified Muslim witnesses.',
+      difficulty: 'easy',
+    },
+    {
+      id: 'nikah_2',
+      question: 'How many sane, adult Muslim witnesses are required for the validity of Nikah? / نکاح کی درستگی کے لیے کتنے گواہ ضروری ہیں؟',
+      options: ['Two adult males OR one male and two females (دو مرد یا ایک مرد اور دو عورتیں)', 'Only 1 witness', 'No witnesses needed', 'Any 4 children'],
+      correct_answer: 'Two adult males OR one male and two females (دو مرد یا ایک مرد اور دو عورتیں)',
+      category: 'Nikah',
+      explanation: 'Under Islamic law, a Nikah must be witnessed by either two adult, sane Muslim males, or one male and two females who hear the Ijab and Qubool simultaneously.',
+      difficulty: 'medium',
+    },
+  ],
+  'Haya': [
+    {
+      id: 'haya_1',
+      question: 'What did the Prophet Muhammad ﷺ state regarding the relationship between Haya (modesty) and Iman? / حیا اور ایمان کے بارے میں نبی ﷺ نے کیا ارشاد فرمایا؟',
+      options: [
+        'Haya is a branch of Iman (الحياء شعبة من الإيمان)',
+        'Haya is unrelated to faith',
+        'Haya is only for women',
+        'Haya is only in clothes',
+      ],
+      correct_answer: 'Haya is a branch of Iman (الحياء شعبة من الإيمان)',
+      category: 'Haya',
+      explanation: 'Sahih Bukhari records the authentic Hadith: "Haya (modesty) is an essential branch of Iman." When modesty is preserved, faith is safeguarded.',
+      difficulty: 'easy',
+    },
+  ],
+  'Adab-e-Guftagu': [
+    {
+      id: 'adab_1',
+      question: 'What is the Sunnah guidance regarding speech and conversation? / گفتگو کے آداب کے بارے میں سنتِ نبوی ﷺ کیا ہے؟',
+      options: [
+        'Speak good or remain silent (خیر کہو یا خاموش رہو)',
+        'Always speak loudly',
+        'Interrupt others often',
+        'Talk continuously without pause',
+      ],
+      correct_answer: 'Speak good or remain silent (خیر کہو یا خاموش رہو)',
+      category: 'Adab-e-Guftagu',
+      explanation: 'Prophet Muhammad ﷺ said: "Whoever believes in Allah and the Last Day should speak good or keep quiet." (Sahih Bukhari & Muslim).',
+      difficulty: 'easy',
+    },
+  ],
 };
+
+function generateDynamicCategoryQuestions(category: string, count: number): GeneratedQuestion[] {
+  const cleanCat = category.replace(/-/g, ' ');
+  return [
+    {
+      id: `dyn_${category.toLowerCase()}_1`,
+      question: `What is the primary Islamic rule regarding ${cleanCat}? / ${cleanCat} کے متعلق بنیادی شرعی حکم کیا ہے؟`,
+      options: [
+        `It must be observed according to Sunnah (سنت کے مطابق عمل کرنا)`,
+        `It is optional without guidelines`,
+        `It is prohibited in all cases`,
+        `It is only for elderly people`,
+      ],
+      correct_answer: `It must be observed according to Sunnah (سنت کے مطابق عمل کرنا)`,
+      category: category,
+      explanation: `In Islamic ethics and jurisprudence, ${cleanCat} is observed strictly following Quran and Sunnah guidelines to attain barakah and reward.`,
+      difficulty: 'medium',
+    },
+    {
+      id: `dyn_${category.toLowerCase()}_2`,
+      question: `What is the consequence of neglecting Islamic etiquette in ${cleanCat}? / ${cleanCat} میں شرعی آداب چھوڑنے کا کیا نقصان ہے؟`,
+      options: [
+        `Deprivation of spiritual reward and risk of sin (ثواب سے محرومی اور گناہ کا اندیشہ)`,
+        `No effect at all`,
+        `Salah is automatically broken`,
+        `Zakat becomes due`,
+      ],
+      correct_answer: `Deprivation of spiritual reward and risk of sin (ثواب سے محرومی اور گناہ کا اندیشہ)`,
+      category: category,
+      explanation: `Maintaining Islamic adab protects a believer from spiritual negligence and preserves moral character.`,
+      difficulty: 'easy',
+    },
+  ];
+}
 
 export async function generateAiQuiz(params: QuizGenerationParams): Promise<GeneratedQuestion[]> {
   const category = params.category || 'Wudu';
   const targetCount = params.count || 5;
 
-  const templates = ISLAMIC_QUESTION_KNOWLEDGE_BASE[category] || ISLAMIC_QUESTION_KNOWLEDGE_BASE['Wudu'];
+  // 1. Server-side Gemini via Firebase Callable Function (P0.1 Security Fix)
+  // GEMINI_API_KEY is stored in Firebase Secret Manager — NOT in client or APK.
+  try {
+    const { callGenerateAIQuiz } = await import('@/lib/aiGatewayClient');
+    const result = await callGenerateAIQuiz({
+      category,
+      count: targetCount,
+      difficulty: params.difficulty,
+      language: params.language,
+      customTopic: params.customTopic,
+    });
+    if (result.questions && result.questions.length > 0) {
+      return result.questions as GeneratedQuestion[];
+    }
+  } catch (err) {
+    console.warn('[AiQuizGen] Server quiz generation failed, using static fallback:', err);
+  }
+
+  // 2. Offline fallback: static knowledge base
+  return _staticQuizFallback(params, category, targetCount);
+}
+
+
+
+function _staticQuizFallback(
+  params: QuizGenerationParams,
+  category: string,
+  targetCount: number,
+): GeneratedQuestion[] {
+  let templates = ISLAMIC_QUESTION_KNOWLEDGE_BASE[category];
+  if (!templates || templates.length === 0) {
+    templates = generateDynamicCategoryQuestions(category, targetCount);
+  }
   const generated: GeneratedQuestion[] = [];
 
   for (let i = 0; i < targetCount; i++) {
@@ -220,7 +388,6 @@ export async function generateAiQuiz(params: QuizGenerationParams): Promise<Gene
     let correct = base.correct_answer;
     let expl = base.explanation;
 
-    // Filter by language preference
     if (params.language === 'english') {
       if (qText.includes(' / ')) qText = qText.split(' / ')[0];
       opts = opts.map((o) => (o.includes(' (') ? o.split(' (')[0] : o));
