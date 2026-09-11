@@ -37,7 +37,8 @@ import { initCrashReporting, setCrashlyticsUser, logBreadcrumb } from '@/lib/cra
 // Initialize production crash reporting early
 initCrashReporting();
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+// Ensure any native splash screen is dismissed immediately on launch
+SplashScreen.hideAsync().catch(() => {});
 
 const ONBOARDING_GATE_TIMEOUT_MS = 2500;
 
@@ -57,7 +58,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const profileStatus = profile?.status;
   const [needsLegalAcceptance, setNeedsLegalAcceptance] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
-  const [splashHidden, setSplashHidden] = useState(false);
+  const [splashHidden, setSplashHidden] = useState(true);
   const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
   const enteredAppTrackedRef = useRef<string | null>(null);
   const pushRegisteredUserRef = useRef<string | null>(null);
