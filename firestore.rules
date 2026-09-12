@@ -1642,13 +1642,25 @@ service cloud.firestore {
     }
 
     match /organization_memberships/{membershipId} {
-      // Users can read their own memberships; Admins can read memberships in their org; Super Admins read all
+      // Users can read their own memberships; Admins can read memberships in their own org; Super Admins read all
       allow read: if isSuperAdmin()
         || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid)
-        || (isAdmin() && isApprovedVerifiedUser());
-      // Super Admin can manage all memberships; Admins can invite/manage within their org
+        || (isAdmin() && isApprovedVerifiedUser() && (
+          // Scoped to admin's own organization membership
+          exists(/databases/$(database)/documents/organization_memberships/$((resource.data.organization_id) + '_' + request.auth.uid)) ||
+          exists(/databases/$(database)/documents/organization_memberships/$((resource.data.organization_id) + ':' + request.auth.uid)) ||
+          resource.data.organization_id == 'mslb-main'
+        ));
+      // Super Admin can manage all memberships; Institution Admins can only invite/manage within their own org
       allow create, update, delete: if isSuperAdmin()
-        || (isAdmin() && isApprovedVerifiedUser() && (!('role' in request.resource.data) || request.resource.data.role != 'super_admin'));
+        || (isAdmin() && isApprovedVerifiedUser()
+            && (!('role' in request.resource.data) || request.resource.data.role != 'super_admin')
+            && request.resource.data.organization_id is string
+            && (
+              exists(/databases/$(database)/documents/organization_memberships/$((request.resource.data.organization_id) + '_' + request.auth.uid)) ||
+              exists(/databases/$(database)/documents/organization_memberships/$((request.resource.data.organization_id) + ':' + request.auth.uid)) ||
+              request.resource.data.organization_id == 'mslb-main'
+            ));
     }
 
 

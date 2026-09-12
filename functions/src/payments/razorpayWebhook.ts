@@ -237,6 +237,7 @@ async function finalizePayment(payload: any, eventType: string, eventId: string)
 
   const userId: string = paymentData.user_id;
   const courseId: string | null = paymentData.course_id ?? null;
+  const orgId: string = paymentData.organization_id || 'mslb-main';
 
   if (!userId) {
     logger.error(`[finalizePayment] Payment has no user_id — cannot grant entitlement id=${paymentDocId}`);
@@ -277,6 +278,7 @@ async function finalizePayment(payload: any, eventType: string, eventId: string)
     provider_payment_id: razorpayPaymentId,
     paid_amount: paidAmount,
     paid_currency: currency,
+    organization_id: orgId,
     finalized_at: now,
     finalized_at_ms: nowMs,
     finalized_by: 'razorpay_webhook_v2',
@@ -288,6 +290,7 @@ async function finalizePayment(payload: any, eventType: string, eventId: string)
   batch.set(enrollmentRef, {
     user_id: userId,
     course_id: courseId,
+    organization_id: orgId,
     payment_id: paymentDocId,
     provider_order_id: razorpayOrderId,
     provider_payment_id: razorpayPaymentId,
@@ -303,6 +306,7 @@ async function finalizePayment(payload: any, eventType: string, eventId: string)
   const subscriptionRef = collections.subscriptions().doc(userId);
   batch.set(subscriptionRef, {
     user_id: userId,
+    organization_id: orgId,
     status: 'active',
     last_payment_id: paymentDocId,
     provider_order_id: razorpayOrderId,

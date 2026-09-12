@@ -44,6 +44,7 @@ export const adminPaymentAction = onCall(
       const userId = pData.user_id;
       const courseId = pData.course_id ?? null;
       const paymentType = pData.type || pData.payment_type || 'fees';
+      const orgId = pData.organization_id || 'mslb-main';
 
       let nextState = '';
       if (action === 'approve' || action === 'verify') {
@@ -108,6 +109,7 @@ export const adminPaymentAction = onCall(
           tx.set(eRef, {
             user_id: userId,
             course_id: courseId,
+            organization_id: orgId,
             status: 'active',
             source: 'admin_action',
             payment_id: paymentId,

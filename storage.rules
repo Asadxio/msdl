@@ -230,6 +230,38 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // ── Multi-Tenant SaaS Scoped Assets (/organizations/{orgId}/...) ───────────
+    match /organizations/{orgId}/{allPaths=**} {
+      // Platform super admin can read/write across any tenant
+      allow read, write: if isSignedIn()
+        && (
+          (request.auth.token.email in ['sumraftm@gmail.com', 'xioasad@gmail.com'])
+          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'super_admin')
+        );
+
+      // Institution members can access only their own organization's storage
+      allow read: if isApprovedVerifiedUser()
+        && (
+          firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid))
+          || firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid))
+          || orgId == 'mslb-main'
+        );
+
+      // Institution Admin can upload branding & public assets within their own organization
+      allow write: if isApprovedVerifiedUser()
+        && (
+          (firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid))
+            && firestore.get(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid)).data.role in ['admin', 'super_admin'])
+          || (firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid))
+            && firestore.get(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid)).data.role in ['admin', 'super_admin'])
+          || (orgId == 'mslb-main' && isAdmin())
+        )
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 20971520;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

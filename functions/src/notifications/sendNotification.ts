@@ -17,9 +17,12 @@ import { onCall } from "firebase-functions/v2/https";
 import { messaging } from "../config/admin";
 import { collections, db } from "../shared/firestore";
 import { requireAdminUser } from "../auth/verifyAuth";
-import { invalidArgumentError } from "../shared/errors";
+import { invalidArgumentError, permissionDeniedError } from "../shared/errors";
+import { assertOrgOperational, isSuperAdminEmail } from "../shared/tenantAuth";
 
 interface NotificationRequest {
+  // Scoped tenant/organization (defaults to mslb-main)
+  organization_id?: string;
   // Single recipient (legacy, backward-compatible)
   recipientUid?: string;
   // Multi-recipient
@@ -92,21 +95,42 @@ async function getTokensForUids(uids: string[]): Promise<{ uid: string; token: s
 }
 
 
-async function getUidsForRole(role: string): Promise<string[]> {
-  const snap = await db.collection("users")
+async function getUidsForRole(role: string, organizationId: string): Promise<string[]> {
+  if (organizationId === "mslb-main") {
+    const snap = await db.collection("users")
+      .where("role", "==", role)
+      .where("status", "==", "approved")
+      .limit(500)
+      .get();
+    return snap.docs.map((d) => d.id);
+  }
+
+  // Tenant-scoped membership lookup
+  const snap = await db.collection("organization_memberships")
+    .where("organization_id", "==", organizationId)
     .where("role", "==", role)
-    .where("status", "==", "approved")
+    .where("status", "==", "active")
     .limit(500)
     .get();
-  return snap.docs.map((d) => d.id);
+  return snap.docs.map((d) => d.data().user_id).filter(Boolean);
 }
 
-async function getAllApprovedUids(): Promise<string[]> {
-  const snap = await db.collection("users")
-    .where("status", "==", "approved")
+async function getAllApprovedUids(organizationId: string): Promise<string[]> {
+  if (organizationId === "mslb-main") {
+    const snap = await db.collection("users")
+      .where("status", "==", "approved")
+      .limit(1000)
+      .get();
+    return snap.docs.map((d) => d.id);
+  }
+
+  // Tenant-scoped membership lookup
+  const snap = await db.collection("organization_memberships")
+    .where("organization_id", "==", organizationId)
+    .where("status", "==", "active")
     .limit(1000)
     .get();
-  return snap.docs.map((d) => d.id);
+  return snap.docs.map((d) => d.data().user_id).filter(Boolean);
 }
 
 export const sendNotification = onCall(
@@ -121,20 +145,39 @@ export const sendNotification = onCall(
     logger.info(`[sendNotification] Called by admin uid=${admin.uid}`);
 
     const payload = request.data;
+    const targetOrg = (payload?.organization_id || "mslb-main").trim();
+
+    // Verify organization operational status
+    await assertOrgOperational(targetOrg, false);
+
+    // If caller is NOT super_admin, verify caller's admin membership in the target organization
+    if (!isSuperAdminEmail(admin.email)) {
+      const canonicalId = `${targetOrg}_${admin.uid}`;
+      const legacyId = `${targetOrg}:${admin.uid}`;
+      const [m1, m2] = await Promise.all([
+        db.collection("organization_memberships").doc(canonicalId).get(),
+        db.collection("organization_memberships").doc(legacyId).get(),
+      ]);
+      const membershipDoc = m1.exists ? m1 : (m2.exists ? m2 : null);
+
+      if (targetOrg !== "mslb-main" && (!membershipDoc || !["admin", "super_admin"].includes(membershipDoc.data()?.role) || membershipDoc.data()?.status !== "active")) {
+        throw permissionDeniedError(`You are not an active administrator of organization '${targetOrg}'.`);
+      }
+    }
 
     // 2. Validate content
     if (!payload?.title || !payload?.body) {
       throw invalidArgumentError("title and body are required.");
     }
 
-    // 3. Determine recipient UIDs
+    // 3. Determine recipient UIDs (strictly scoped to target organization)
     let recipientUids: string[] = [];
     if (payload.sendToAll) {
-      recipientUids = await getAllApprovedUids();
-      logger.info(`[sendNotification] Broadcast to all: ${recipientUids.length} users`);
+      recipientUids = await getAllApprovedUids(targetOrg);
+      logger.info(`[sendNotification] Broadcast to all in org ${targetOrg}: ${recipientUids.length} users`);
     } else if (payload.targetRole) {
-      recipientUids = await getUidsForRole(payload.targetRole);
-      logger.info(`[sendNotification] Role broadcast ${payload.targetRole}: ${recipientUids.length} users`);
+      recipientUids = await getUidsForRole(payload.targetRole, targetOrg);
+      logger.info(`[sendNotification] Role broadcast ${payload.targetRole} in org ${targetOrg}: ${recipientUids.length} users`);
     } else if (payload.recipientUids && payload.recipientUids.length > 0) {
       recipientUids = payload.recipientUids.filter((u) => u && typeof u === "string");
     } else if (payload.recipientUid) {
@@ -268,6 +311,7 @@ export const sendNotification = onCall(
         expoCount: expoTokens.length,
         fcmCount: fcmTokens.length,
         sentByUid: admin.uid,
+        organization_id: targetOrg,
         sentAtMs: Date.now(),
         status: "sent",
         ...(payload.targetRole ? { targetRole: payload.targetRole } : {}),

@@ -30,6 +30,7 @@ import { cacheGet, cacheSet } from '@/lib/cacheManager';
 import { perfStart, perfEnd } from '@/lib/performanceMonitor';
 import { isFounderEmail } from '@/lib/founderPolicy';
 import { filterTeacherAssignedCourses } from '@/lib/enrollments';
+import { getActiveOrganizationIdSync, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 const QUERY_CHUNK = 25;
 
@@ -531,12 +532,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       });
 
-      setCourses(coursesData);
-      setTeachers(teachersData);
+      // Scope courses and teachers to active organization (platform super admin or founder sees all)
+      const activeOrg = getActiveOrganizationIdSync();
+      const isSuper = user?.email && isFounderEmail(user.email);
+      const filteredCourses = isSuper
+        ? coursesData
+        : coursesData.filter((c) => (c.organization_id || DEFAULT_ORGANIZATION_ID) === activeOrg);
+      const filteredTeachers = isSuper
+        ? teachersData
+        : teachersData.filter((t) => (t.organization_id || DEFAULT_ORGANIZATION_ID) === activeOrg);
+
+      setCourses(filteredCourses);
+      setTeachers(filteredTeachers);
       initialCoursesLoadedRef.current = true;
-      await cacheSet(COURSES_CACHE_KEY, coursesData, COURSE_CACHE_TTL_MS).catch(() => {});
-      await cacheSet(TEACHERS_CACHE_KEY, teachersData, COURSE_CACHE_TTL_MS).catch(() => {});
-      perfEnd('data.fetchData', t0, { courses: coursesData.length, teachers: teachersData.length });
+      await cacheSet(COURSES_CACHE_KEY, filteredCourses, COURSE_CACHE_TTL_MS).catch(() => {});
+      await cacheSet(TEACHERS_CACHE_KEY, filteredTeachers, COURSE_CACHE_TTL_MS).catch(() => {});
+      perfEnd('data.fetchData', t0, { courses: filteredCourses.length, teachers: filteredTeachers.length });
     } catch (err: unknown) {
       logger.warn('Firebase fetch failed, using local data:', normalizeFirebaseError(err, 'Failed to fetch data'));
       setError(normalizeFirebaseError(err, 'Failed to fetch data'));
