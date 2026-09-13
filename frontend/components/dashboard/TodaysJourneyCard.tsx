@@ -38,64 +38,77 @@ export function TodaysJourneyCard({ items, loading }: TodaysJourneyCardProps) {
 
         <View style={styles.progressPill}>
           <Text style={styles.progressPillText}>
-            {completedCount} / {totalCount} Done
+            {loading ? '...' : `${completedCount} / ${totalCount} Done`}
           </Text>
           <View style={styles.miniRing}>
-            <Text style={styles.miniRingText}>{percentage}%</Text>
+            <Text style={styles.miniRingText}>{loading ? '•' : `${percentage}%`}</Text>
           </View>
         </View>
       </View>
 
       {/* Progress Line */}
       <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${percentage}%` }]} />
+        <View style={[styles.progressFill, { width: `${loading ? 25 : percentage}%` }]} />
       </View>
 
       {/* Tasks List */}
       <View style={styles.tasksContainer}>
-        {items.map((item, idx) => (
-          <TouchableOpacity
-            key={item.id}
-            style={[
-              styles.taskRow,
-              idx < items.length - 1 && styles.taskRowBorder,
-            ]}
-            onPress={() => router.push(item.route as any)}
-            accessibilityRole="button"
-            accessibilityLabel={`${item.title}: ${item.completed ? 'Completed' : 'Pending'}`}
-            activeOpacity={0.7}
-          >
-            <View
+        {loading ? (
+          /* Skeleton rows while data hydrates */
+          [0, 1, 2].map((i) => (
+            <View key={i} style={[styles.taskRow, i < 2 && styles.taskRowBorder]}>
+              <View style={styles.skeletonCircle} />
+              <View style={styles.taskTextCol}>
+                <View style={[styles.skeletonLine, { width: i === 0 ? '65%' : i === 1 ? '50%' : '70%' }]} />
+                <View style={[styles.skeletonLine, { width: '40%', marginTop: 6, height: 9 }]} />
+              </View>
+            </View>
+          ))
+        ) : (
+          items.map((item, idx) => (
+            <TouchableOpacity
+              key={item.id}
               style={[
-                styles.checkCircle,
-                item.completed && styles.checkCircleDone,
+                styles.taskRow,
+                idx < items.length - 1 && styles.taskRowBorder,
               ]}
+              onPress={() => router.push(item.route as any)}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.title}: ${item.completed ? 'Completed' : 'Pending'}`}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name={item.completed ? 'checkmark' : 'ellipse-outline'}
-                size={item.completed ? 14 : 18}
-                color={item.completed ? '#FFFFFF' : '#71817B'}
-              />
-            </View>
-
-            <View style={styles.taskTextCol}>
-              <Text
+              <View
                 style={[
-                  styles.taskTitle,
-                  item.completed && styles.taskTitleDone,
+                  styles.checkCircle,
+                  item.completed && styles.checkCircleDone,
                 ]}
-                numberOfLines={1}
               >
-                {item.title}
-              </Text>
-              <Text style={styles.taskSubtitle} numberOfLines={1}>
-                {item.subtitle}
-              </Text>
-            </View>
+                <Ionicons
+                  name={item.completed ? 'checkmark' : 'ellipse-outline'}
+                  size={item.completed ? 14 : 18}
+                  color={item.completed ? '#FFFFFF' : '#71817B'}
+                />
+              </View>
 
-            <Ionicons name="chevron-forward" size={16} color="#71817B" />
-          </TouchableOpacity>
-        ))}
+              <View style={styles.taskTextCol}>
+                <Text
+                  style={[
+                    styles.taskTitle,
+                    item.completed && styles.taskTitleDone,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.title}
+                </Text>
+                <Text style={styles.taskSubtitle} numberOfLines={1}>
+                  {item.subtitle}
+                </Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={16} color="#71817B" />
+            </TouchableOpacity>
+          ))
+        )}
       </View>
     </View>
   );
@@ -229,5 +242,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#71817B',
     marginTop: 1,
+  },
+  skeletonCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EFECE2',
+  },
+  skeletonLine: {
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: '#EFECE2',
   },
 });

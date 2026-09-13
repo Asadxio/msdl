@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
@@ -56,7 +56,7 @@ export function QuickAccessGrid() {
               </Text>
             </View>
 
-            <Ionicons name="chevron-forward" size={14} color="#C6A15B" />
+            <Ionicons name="chevron-forward" size={13} color="#C6A15B" />
           </TouchableOpacity>
         ))}
       </View>
@@ -107,24 +107,25 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    justifyContent: 'space-between',
+    rowGap: 10,
   },
   card: {
-    width: '48.7%',
+    width: '48.5%',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 10,
+    padding: 11,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
     borderColor: '#E7E4DA',
     ...SHADOWS.card,
-    minHeight: 60,
+    minHeight: 64,
   },
   iconBox: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     backgroundColor: '#FCFBF7',
     alignItems: 'center',
@@ -136,12 +137,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardTitle: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#17332C',
   },
   cardSubtitle: {
-    fontSize: 10,
+    fontSize: 10.5,
     color: '#71817B',
     marginTop: 1,
   },

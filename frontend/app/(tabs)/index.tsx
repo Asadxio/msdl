@@ -302,7 +302,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 52 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
@@ -701,7 +701,8 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryLight,
     fontWeight: '500',
     marginBottom: 8,
-    letterSpacing: 0.5,
+    textAlign: 'center',
+    writingDirection: 'rtl',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   madrasaName: {
@@ -1080,12 +1081,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   continueCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     padding: SPACING.lg,
-    ...SHADOWS.card,
+    ...SHADOWS.premiumCard,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E7E4DA',
   },
   continueHeaderRow: {
     flexDirection: 'row',
@@ -1097,7 +1098,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#075B49',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1107,11 +1108,11 @@ const styles = StyleSheet.create({
   resumeCourseName: {
     fontSize: 15,
     fontWeight: '800',
-    color: COLORS.textMain,
+    color: '#17332C',
   },
   resumeLessonName: {
     fontSize: 12,
-    color: COLORS.textSecondary,
+    color: '#71817B',
     marginTop: 2,
   },
   progressBarContainer: {
@@ -1119,19 +1120,19 @@ const styles = StyleSheet.create({
   },
   progressTrackBar: {
     height: 6,
-    backgroundColor: COLORS.surfaceAlt,
+    backgroundColor: '#E7E4DA',
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressFillBar: {
     height: '100%',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#075B49',
     borderRadius: 3,
   },
   progressPercentText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.textSecondary,
+    color: '#71817B',
     marginTop: 4,
     textAlign: 'right',
   },
@@ -1141,30 +1142,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: SPACING.sm,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: '#F0ECE1',
   },
   continueBtnText: {
     fontSize: 13,
     fontWeight: '800',
-    color: COLORS.primary,
+    color: '#075B49',
   },
   emptyLearningCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     padding: SPACING.lg,
     alignItems: 'center',
-    ...SHADOWS.card,
+    ...SHADOWS.premiumCard,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E7E4DA',
   },
   emptyLearningIconBox: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: COLORS.surfaceAlt,
+    backgroundColor: '#FCFBF7',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: '#EFECE2',
   },
   emptyLearningTextCol: {
     alignItems: 'center',
@@ -1173,27 +1176,27 @@ const styles = StyleSheet.create({
   emptyLearningTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: COLORS.textMain,
+    color: '#17332C',
   },
   emptyLearningSubtitle: {
     fontSize: 12,
-    color: COLORS.textSecondary,
+    color: '#71817B',
     textAlign: 'center',
     marginTop: 4,
     lineHeight: 18,
     paddingHorizontal: SPACING.sm,
   },
   exploreBtn: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#075B49',
     paddingHorizontal: SPACING.lg,
     paddingVertical: 12,
-    borderRadius: RADIUS.md,
+    borderRadius: 14,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   exploreBtnText: {
-    color: COLORS.surface,
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
   },

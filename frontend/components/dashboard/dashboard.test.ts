@@ -74,5 +74,41 @@ describe('Student Dashboard Redesign Verification', () => {
       expect(fs.existsSync(mosquePath)).toBe(true);
       expect(fs.statSync(mosquePath).size).toBeGreaterThan(1000);
     });
+
+    it('islamic geometric pattern SVG exists and is non-empty', () => {
+      const patternPath = path.join(assetsDir, 'islamic_geometric_pattern.svg');
+      expect(fs.existsSync(patternPath)).toBe(true);
+      expect(fs.statSync(patternPath).size).toBeGreaterThan(100);
+    });
+  });
+
+  describe('Component Architecture Verification', () => {
+    const compDir = __dirname;
+
+    it('all 6 modular dashboard component files exist', () => {
+      const expectedComponents = [
+        'StudentLearningCard.tsx',
+        'DailyWisdomCard.tsx',
+        'SpiritualMomentsRow.tsx',
+        'PrayerTimesHeroCard.tsx',
+        'TodaysJourneyCard.tsx',
+        'QuickAccessGrid.tsx',
+      ];
+      expectedComponents.forEach((file) => {
+        const filePath = path.join(compDir, file);
+        expect(fs.existsSync(filePath)).toBe(true);
+        expect(fs.statSync(filePath).size).toBeGreaterThan(500);
+      });
+    });
+
+    it('Quick Access services have distinct and coherent icons', () => {
+      const flashcard = ALL_QUICK_ACCESS_SERVICES.find((s) => s.name === 'Flashcards');
+      const payFees = ALL_QUICK_ACCESS_SERVICES.find((s) => s.name === 'Pay Fees');
+      const taharat = ALL_QUICK_ACCESS_SERVICES.find((s) => s.name === 'Taharat Tracker');
+
+      expect(flashcard?.icon).toBe('layers-outline');
+      expect(payFees?.icon).toBe('wallet-outline');
+      expect(taharat?.icon).toBe('water-outline');
+    });
   });
 });

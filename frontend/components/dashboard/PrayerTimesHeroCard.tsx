@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -106,7 +106,7 @@ export function PrayerTimesHeroCard({
               {/* Current */}
               <View style={styles.focusCol}>
                 <Text style={styles.focusLabel}>CURRENT PRAYER</Text>
-                <Text style={styles.focusName}>{currentPrayer.name}</Text>
+                <Text style={styles.focusName}>{currentPrayer.name === 'Zuhr' ? 'Dhuhr' : currentPrayer.name}</Text>
                 <Text style={styles.focusTime}>{formatTime(currentPrayer.time)}</Text>
               </View>
 
@@ -115,7 +115,7 @@ export function PrayerTimesHeroCard({
               {/* Next */}
               <View style={styles.focusCol}>
                 <Text style={styles.focusLabel}>NEXT PRAYER</Text>
-                <Text style={styles.focusName}>{nextPrayer.name}</Text>
+                <Text style={styles.focusName}>{nextPrayer.name === 'Zuhr' ? 'Dhuhr' : nextPrayer.name}</Text>
                 <Text style={styles.focusTime}>{formatTime(nextPrayer.time)}</Text>
               </View>
             </View>
@@ -151,6 +151,7 @@ export function PrayerTimesHeroCard({
                   style={[
                     styles.timelineItem,
                     dp.isCurrent && styles.timelineItemCurrent,
+                    dp.isPast && styles.timelineItemPast,
                   ]}
                 >
                   <Text
@@ -158,6 +159,7 @@ export function PrayerTimesHeroCard({
                       styles.timelineName,
                       dp.isCurrent && styles.timelineNameCurrent,
                     ]}
+                    numberOfLines={1}
                   >
                     {dp.name === 'Zuhr' ? 'Dhuhr' : dp.name}
                   </Text>
@@ -166,6 +168,8 @@ export function PrayerTimesHeroCard({
                       styles.timelineTime,
                       dp.isCurrent && styles.timelineTimeCurrent,
                     ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit={true}
                   >
                     {dp.time ? formatTime(dp.time) : '--:--'}
                   </Text>
@@ -371,6 +375,9 @@ const styles = StyleSheet.create({
   timelineItemCurrent: {
     backgroundColor: 'rgba(198, 161, 91, 0.25)',
     borderColor: '#C6A15B',
+  },
+  timelineItemPast: {
+    opacity: 0.65,
   },
   timelineName: {
     fontSize: 10,

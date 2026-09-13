@@ -24,15 +24,18 @@ export function StudentLearningCard({
 }: StudentLearningCardProps) {
   const router = useRouter();
 
-  const studentName = profile?.name || 'Student';
+  const studentName = profile?.name || 'Taliba';
   const roleLabel =
     profile?.role === 'super_admin' || profile?.founder
       ? 'ADMINISTRATOR'
-      : profile?.role === 'teacher'
-      ? 'FACULTY'
-      : 'ENROLLED STUDENT';
+      : profile?.role === 'teacher' || profile?.role === 'assistant_teacher'
+      ? 'USTAADHA • FACULTY'
+      : 'TALIBA • STUDENT';
 
   const courseDisplay = resumeCourseName || (coursesCount > 0 ? 'Darse Nizami & Classical Studies' : 'Islamic Scholarship');
+
+  const hasLessons = totalLessons > 0;
+  const safePercent = Math.min(100, Math.max(0, completionPercent));
 
   return (
     <View style={styles.cardContainer}>
@@ -55,7 +58,7 @@ export function StudentLearningCard({
               <Text style={styles.activeText}>Active</Text>
             </View>
           </View>
-          <Text style={styles.studentName} numberOfLines={1}>
+          <Text style={styles.studentName} numberOfLines={1} adjustsFontSizeToFit>
             {studentName}
           </Text>
           <Text style={styles.roleTag}>{roleLabel}</Text>
@@ -82,22 +85,24 @@ export function StudentLearningCard({
             {courseDisplay}
           </Text>
           <Text style={styles.courseSubtitle}>
-            {totalLessons > 0 ? `${totalLessons} Lessons Enrolled` : 'Enrolled Curriculum'}
+            {hasLessons ? `${totalLessons} Lessons Enrolled` : 'Enrolled Curriculum'}
           </Text>
         </View>
         <View style={styles.percentBadge}>
-          <Text style={styles.percentText}>{completionPercent}%</Text>
+          <Text style={styles.percentText}>{hasLessons ? `${safePercent}%` : 'Enrolled'}</Text>
         </View>
       </View>
 
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, completionPercent))}%` }]} />
+          <View style={[styles.progressFill, { width: `${hasLessons ? safePercent : 15}%` }]} />
         </View>
         <View style={styles.progressFooterRow}>
           <Text style={styles.progressMetaText}>
-            {lessonsDone} of {totalLessons > 0 ? totalLessons : 1} Completed
+            {hasLessons
+              ? `${lessonsDone} of ${totalLessons} Lessons Completed`
+              : 'Ready to continue study track'}
           </Text>
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/about')}
@@ -257,7 +262,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   percentText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '800',
     color: '#FFFFFF',
   },

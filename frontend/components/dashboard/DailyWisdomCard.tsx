@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform, Share } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
@@ -11,12 +11,19 @@ interface DailyWisdomCardProps {
 }
 
 export function DailyWisdomCard({ arabic, translation, reference }: DailyWisdomCardProps) {
-  const handleShareWhatsApp = () => {
-    const msg = `${arabic}\n\n"${translation}"\n— ${reference}\n\n🕌 Madrasatu-s-Salikat Lil Banat`;
-    const encoded = encodeURIComponent(msg);
-    Linking.openURL(`whatsapp://send?text=${encoded}`).catch(() =>
-      Linking.openURL(`https://wa.me/?text=${encoded}`)
-    );
+  const handleShareWhatsApp = async () => {
+    const msg = `✨ Daily Wisdom — Madrasatu-s-Salikat Lil Banat ✨\n\n${arabic}\n\n"${translation}"\n— ${reference}\n\n🕌 Madrasatu-s-Salikat Lil Banat • Islamic Learning Hub`;
+    try {
+      await Share.share({
+        message: msg,
+        title: 'Daily Wisdom — Madrasatu-s-Salikat',
+      });
+    } catch {
+      const encoded = encodeURIComponent(msg);
+      Linking.openURL(`whatsapp://send?text=${encoded}`).catch(() =>
+        Linking.openURL(`https://wa.me/?text=${encoded}`)
+      );
+    }
   };
 
   return (
@@ -66,22 +73,22 @@ export function DailyWisdomCard({ arabic, translation, reference }: DailyWisdomC
 
 const styles = StyleSheet.create({
   cardContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FCFBF7',
     borderRadius: 20,
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.md,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E7E4DA',
+    borderColor: '#EFECE2',
     ...SHADOWS.premiumCard,
   },
   artworkContainer: {
     position: 'absolute',
     top: 0,
     right: 0,
-    width: 130,
-    height: 130,
-    opacity: 0.22,
+    width: 120,
+    height: 120,
+    opacity: 0.16,
   },
   lanternImage: {
     width: '100%',
@@ -89,8 +96,8 @@ const styles = StyleSheet.create({
   },
   artworkOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FFFFFF',
-    opacity: 0.15,
+    backgroundColor: '#FCFBF7',
+    opacity: 0.1,
   },
   contentWrap: {
     padding: SPACING.lg,
@@ -122,20 +129,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#E7E4DA',
   },
   arabicText: {
-    fontSize: 21,
+    fontSize: 22,
     color: '#17332C',
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 36,
+    lineHeight: 38,
     marginVertical: 6,
+    writingDirection: 'rtl',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   translationText: {
-    fontSize: 13,
-    color: '#71817B',
+    fontSize: 13.5,
+    color: '#5A6B65',
     textAlign: 'center',
     fontStyle: 'italic',
-    lineHeight: 20,
+    lineHeight: 21,
     marginTop: 4,
     marginBottom: 12,
   },
@@ -145,10 +153,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F0ECE1',
+    borderTopColor: '#EFECE2',
   },
   referenceText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#C6A15B',
     letterSpacing: 0.4,
@@ -158,14 +166,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: 'rgba(7, 91, 73, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(7, 91, 73, 0.15)',
+    borderColor: 'rgba(7, 91, 73, 0.16)',
   },
   shareBtnText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#075B49',
   },
