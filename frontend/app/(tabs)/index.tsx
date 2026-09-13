@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform, Animated, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
@@ -16,6 +17,12 @@ import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
 import { MADRASA_WEBSITE_URL } from '@/lib/links';
 import { useLanguage } from '@/context/LanguageContext';
 import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
+import { StudentLearningCard } from '@/components/dashboard/StudentLearningCard';
+import { DailyWisdomCard } from '@/components/dashboard/DailyWisdomCard';
+import { SpiritualMomentsRow } from '@/components/dashboard/SpiritualMomentsRow';
+import { PrayerTimesHeroCard } from '@/components/dashboard/PrayerTimesHeroCard';
+import { TodaysJourneyCard } from '@/components/dashboard/TodaysJourneyCard';
+import { QuickAccessGrid } from '@/components/dashboard/QuickAccessGrid';
 
 const HIJRI_MONTH_NORMALIZATION: Record<string, string> = {
   "Dhuʻl-Qiʻdah": 'Zul Qidah', 'Dhu’l-Qi’dah': 'Zul Qidah',
@@ -116,18 +123,25 @@ export default function HomeScreen() {
 
   const hijriDate = useMemo(() => formatHijri(now), [now]);
 
-  const prayerWindow = useMemo(() => {
-    if (!prayerSettings) return { current: null, next: null, progress: 0 };
+  const prayerCalculationData = useMemo(() => {
+    if (!prayerSettings) return { prayers: [] as PrayerTime[], current: null, next: null, progress: 0 };
     const calcSettings = getPrayerCalculationSettings(
       prayerSettings.method === "auto" ? prayerSettings.country : prayerSettings.method
     );
     const prayers = calculatePrayerTimes(now, prayerSettings.latitude, prayerSettings.longitude, calcSettings, prayerSettings.altitude);
-    return getPrayerWindow(prayers, now, prayerSettings.latitude, prayerSettings.longitude, calcSettings, prayerSettings.altitude);
+    const window = getPrayerWindow(prayers, now, prayerSettings.latitude, prayerSettings.longitude, calcSettings, prayerSettings.altitude);
+    return {
+      prayers,
+      current: window.current,
+      next: window.next,
+      progress: window.progress,
+    };
   }, [prayerSettings, now]);
 
-  const currentPrayer = prayerWindow.current;
-  const nextPrayer = prayerWindow.next;
-  const progressRatio = prayerWindow.progress;
+  const currentPrayer = prayerCalculationData.current;
+  const nextPrayer = prayerCalculationData.next;
+  const progressRatio = prayerCalculationData.progress;
+  const prayersList = prayerCalculationData.prayers;
 
   // Urdu Next Namaz Countdown (e.g. "عصر کا وقت 35 منٹ میں شروع ہوگا")
   const nextPrayerCountdownUrdu = useMemo(() => {
@@ -294,93 +308,100 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
         }
       >
-        {/* Section 1: Institutional Header Branding */}
-        <View style={[styles.heroSection, { paddingTop: insets.top + SPACING.xs }]}>
-          <View style={styles.headerActionsRow}>
-            {/* 1-Tap Language Quick Switcher */}
-            <TouchableOpacity
-              onPress={() => setLangSheetVisible(true)}
-              style={styles.langPillBtn}
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel="Change Language"
-              activeOpacity={0.8}
-            >
-              <Ionicons name="globe-outline" size={15} color="#C8A84E" />
-              <Text style={styles.langPillText}>{languageName}</Text>
-            </TouchableOpacity>
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity 
-              onPress={() => router.push('/search')} 
-              style={styles.headerActionBtn}
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel="Search"
-            >
-              <Ionicons name="search-outline" size={21} color={COLORS.surface} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => router.push('/(tabs)/notifications')} 
-              style={styles.headerActionBtn}
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-            >
-              <Ionicons name="notifications-outline" size={22} color={COLORS.surface} />
-              {badgeCount > 0 && (
-                <View style={styles.badgeDot}>
-                  <Text style={styles.badgeDotText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => router.push('/settings')} 
-              style={styles.headerActionBtn}
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel="Settings"
-            >
-              <Ionicons name="settings-outline" size={22} color={COLORS.surface} />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
-          <Text style={styles.madrasaName}>Madrasatu-s-Salikat Lil Banat</Text>
-          <Text style={styles.madrasaArabic}>مدرسۃ السالکات للبنات</Text>
-          <View style={styles.taglineRow}>
-            <View style={styles.goldLine} />
-            <Text style={styles.tagline}>Nurturing Knowledge & Faith</Text>
-            <View style={styles.goldLine} />
+        {/* Section 1: Institutional Header with Architectural Background */}
+        <View style={styles.heroSection}>
+          <Image
+            source={require('@/assets/images/islamic_header_bg.jpg')}
+            style={styles.heroBackgroundImage}
+            contentFit="cover"
+          />
+          <View style={styles.heroOverlay} />
+
+          <View style={[styles.heroContent, { paddingTop: insets.top + SPACING.xs }]}>
+            {/* Top Navigation Row */}
+            <View style={styles.headerActionsRow}>
+              {/* 1-Tap Language Quick Switcher */}
+              <TouchableOpacity
+                onPress={() => setLangSheetVisible(true)}
+                style={styles.langPillBtn}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Change Language"
+                activeOpacity={0.8}
+              >
+                <Ionicons name="globe-outline" size={14} color="#D8C28A" />
+                <Text style={styles.langPillText}>{languageName}</Text>
+              </TouchableOpacity>
+
+              <View style={{ flex: 1 }} />
+
+              <TouchableOpacity 
+                onPress={() => router.push('/search')} 
+                style={styles.headerActionBtn}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Search"
+              >
+                <Ionicons name="search-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => router.push('/(tabs)/notifications')} 
+                style={styles.headerActionBtn}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+              >
+                <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
+                {badgeCount > 0 && (
+                  <View style={styles.badgeDot}>
+                    <Text style={styles.badgeDotText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => router.push('/settings')} 
+                style={styles.headerActionBtn}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+              >
+                <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Bismillah */}
+            <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
+
+            {/* Dynamic Greeting & Subtitle */}
+            <View style={styles.greetingBox}>
+              <Text style={styles.greetingTitle}>
+                Assalamu Alaikum, {profile?.name ? profile.name.split(' ')[0] : 'Student'} 👋
+              </Text>
+              <Text style={styles.greetingSubtitle}>
+                Ready for today&apos;s learning? • {hijriDate}
+              </Text>
+            </View>
+
+            {/* Institutional Tagline */}
+            <View style={styles.taglineRow}>
+              <View style={styles.goldLine} />
+              <Text style={styles.tagline}>MADRASATU-S-SALIKAT LIL BANAT</Text>
+              <View style={styles.goldLine} />
+            </View>
           </View>
         </View>
 
-        {/* Section 2: Student Identity Card */}
-        <TouchableOpacity
-          style={styles.welcomeCard}
-          onPress={() => router.push('/(tabs)/about')}
-          activeOpacity={0.85}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel="Open Profile and Account Settings"
-        >
-          <View style={styles.welcomeInfo}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: '#C8A84E', letterSpacing: 0.5, marginBottom: 2 }}>
-              Student Portal
-            </Text>
-            {/* 1.1 — Time-based Islamic greeting */}
-            <Text style={styles.islamicGreetingText}>{islamicGreeting}</Text>
-            <Text style={styles.userName} numberOfLines={1}>{profile?.name || 'Student'}</Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>
-                {profile?.role === 'super_admin' || profile?.founder ? 'ADMINISTRATOR' : (profile?.role === 'teacher' ? 'TEACHER' : 'ENROLLED STUDENT')}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.avatarCircle}>
-             <Text style={styles.avatarText}>
-                {profile?.name ? profile.name.charAt(0).toUpperCase() : 'S'}
-             </Text>
-          </View>
-        </TouchableOpacity>
+        {/* Section 2: Student Identity & Learning Card */}
+        <StudentLearningCard
+          profile={profile}
+          resumeCourseName={resume?.courseName}
+          totalLessons={activeCourseProgress?.totalLessons}
+          lessonsDone={activeCourseProgress?.lessonsDone}
+          completionPercent={activeCourseProgress?.completionPercent}
+          coursesCount={courses?.length}
+        />
 
         {/* Global Quick Search Bar */}
         <TouchableOpacity
@@ -391,203 +412,44 @@ export default function HomeScreen() {
           accessibilityRole="button"
           accessibilityLabel="Search everything in app"
         >
-          <Ionicons name="search" size={19} color="#002E23" />
-          <Text style={styles.homeSearchPlaceholder}>Search courses, surahs, kitabs, duas, tools...</Text>
+          <Ionicons name="search" size={18} color="#075B49" />
+          <Text style={styles.homeSearchPlaceholder}>Search courses, lessons, library and more...</Text>
           <View style={styles.searchPillBadge}>
             <Text style={styles.searchPillBadgeText}>Search</Text>
           </View>
         </TouchableOpacity>
 
-        {/* Section 3: Daily Wisdom (Editorial Islamic Quote Card) */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.wisdomCard}>
-             <View style={styles.sectionHeaderRow}>
-               <Ionicons name="sparkles" size={15} color={COLORS.secondary} />
-               <Text style={styles.sectionEyebrow}>Daily Wisdom</Text>
-             </View>
-             <Text style={styles.arabicTextLarge}>{randomWisdom.arabic}</Text>
-             <Text style={styles.translationText}>&quot;{randomWisdom.translation}&quot;</Text>
-             <Text style={styles.referenceText}>— {randomWisdom.reference}</Text>
-             {/* 1.3 — WhatsApp Share button */}
-             <TouchableOpacity
-               style={styles.wisdomShareBtn}
-               onPress={() => {
-                 const msg = `${randomWisdom.arabic}\n\n"${randomWisdom.translation}"\n— ${randomWisdom.reference}\n\n🕌 Madrasatu-s-Salikat Lil Banat`;
-                 const encodedMsg = encodeURIComponent(msg);
-                 Linking.openURL(`whatsapp://send?text=${encodedMsg}`).catch(() =>
-                   Linking.openURL(`https://wa.me/?text=${encodedMsg}`)
-                 );
-               }}
-               activeOpacity={0.75}
-               accessible={true}
-               accessibilityRole="button"
-               accessibilityLabel="Share Daily Wisdom on WhatsApp"
-             >
-               <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
-               <Text style={styles.wisdomShareBtnText}>واٹس ایپ پر شیئر کریں</Text>
-             </TouchableOpacity>
-          </View>
-        </View>
+        {/* Section 3: Daily Wisdom */}
+        <DailyWisdomCard
+          arabic={randomWisdom.arabic}
+          translation={randomWisdom.translation}
+          reference={randomWisdom.reference}
+        />
 
-        {/* Section 4 & 5: Today's Dua & Hadith */}
-        <View style={styles.twoColumnGrid}>
-          <View style={[styles.gridCard, { flex: 1 }]}>
-             <View style={styles.sectionHeaderRow}>
-               <Ionicons name="moon-outline" size={15} color={COLORS.secondary} />
-               <Text style={styles.sectionEyebrow}>Today&apos;s Dua</Text>
-             </View>
-             <Text style={styles.arabicTextMedium}>{randomDua.arabic}</Text>
-             <Text style={styles.translationTextSmall}>&quot;{randomDua.translation}&quot;</Text>
-             <Text style={styles.referenceTextSmall}>{randomDua.reference}</Text>
-          </View>
-          <View style={[styles.gridCard, { flex: 1 }]}>
-             <View style={styles.sectionHeaderRow}>
-               <Ionicons name="book-outline" size={15} color={COLORS.secondary} />
-               <Text style={styles.sectionEyebrow}>Today&apos;s Hadith</Text>
-             </View>
-             <Text style={styles.arabicTextMedium}>{randomHadith.arabic}</Text>
-             <Text style={styles.translationTextSmall}>&quot;{randomHadith.translation}&quot;</Text>
-             <Text style={styles.referenceTextSmall}>{randomHadith.reference}</Text>
-          </View>
-        </View>
+        {/* Section 4: Today's Spiritual Moments (Dua + Hadith) */}
+        <SpiritualMomentsRow
+          dua={randomDua}
+          hadith={randomHadith}
+        />
 
-        {/* Section 6: Phase 2 — Prayer Times Card with Location UX Fallback */}
-        <View style={styles.sectionContainer}>
-          <TouchableOpacity 
-            style={styles.prayerCard}
-            onPress={() => router.push('/prayer-times')}
-            activeOpacity={0.92}
-            accessible={true}
-            accessibilityRole="button"
-            accessibilityLabel="Open Full Prayer Times and Compass"
-          >
-            <View style={styles.prayerHeader}>
-              <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={styles.prayerTitle}>Prayer Times</Text>
-                {isLocationUnavailable ? (
-                  <TouchableOpacity 
-                    style={styles.locationPromptBadge}
-                    onPress={() => router.push('/prayer-times')}
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel="Enable Location or Select City"
-                  >
-                    <Ionicons name="location" size={14} color={COLORS.secondary} />
-                    <Text style={styles.locationPromptText}>📍 Select City • Enable Location</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={styles.prayerLocation}>
-                    {prayerSettings?.city}{prayerSettings?.state && prayerSettings.state !== 'Permission needed' ? `, ${prayerSettings.state}` : ''}
-                  </Text>
-                )}
-              </View>
-              <TouchableOpacity 
-                onPress={() => router.push('/prayer-times')} 
-                style={styles.glassBtn}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel="View All Prayer Times"
-              >
-                <Ionicons name="time-outline" size={16} color={COLORS.secondary} />
-                <Text style={styles.glassBtnText}>View All</Text>
-              </TouchableOpacity>
-            </View>
-            {currentPrayer && nextPrayer ? (
-              <>
-                <View style={styles.prayerContentRow}>
-                  <View style={styles.prayerInfoCol}>
-                     <Text style={styles.prayerLabel}>Current</Text>
-                     <Text style={styles.prayerName}>{currentPrayer.name}</Text>
-                     <Text style={styles.prayerTime}>{formatTime(currentPrayer.time)}</Text>
-                  </View>
-                  <View style={styles.prayerDivider} />
-                  <View style={styles.prayerInfoCol}>
-                     <Text style={styles.prayerLabel}>Next</Text>
-                     <Text style={styles.prayerName}>{nextPrayer.name}</Text>
-                     <Text style={styles.prayerTime}>{formatTime(nextPrayer.time)}</Text>
-                  </View>
-                </View>
-                <View style={styles.progressTrack}>
-                   <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
-                </View>
+        {/* Section 5: Prayer Times Hero Card */}
+        <PrayerTimesHeroCard
+          city={prayerSettings?.city}
+          state={prayerSettings?.state}
+          isLocationUnavailable={isLocationUnavailable}
+          currentPrayer={currentPrayer}
+          nextPrayer={nextPrayer}
+          progressRatio={progressRatio}
+          urduCountdown={nextPrayerCountdownUrdu}
+          prayers={prayersList}
+          now={now}
+          formatTime={formatTime}
+        />
 
-                {/* Urdu Next Namaz Countdown Banner */}
-                {!!nextPrayerCountdownUrdu && (
-                  <TouchableOpacity
-                    style={styles.prayerCountdownBanner}
-                    onPress={() => router.push('/prayer-times')}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name="timer" size={16} color="#C8A84E" />
-                    <Text style={styles.prayerCountdownText}>
-                      {nextPrayerCountdownUrdu}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={14} color="#C8A84E" />
-                  </TouchableOpacity>
-                )}
-              </>
-            ) : (
-              <View style={styles.prayerFallbackBox}>
-                <Text style={styles.prayerFallbackText}>
-                  Setup your location to view accurate daily prayer schedules and real-time countdowns.
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Section 7: Islamic Utilities (Calendar, Digital Tasbeeh & Recordings) */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.islamicGridRow}>
-            <TouchableOpacity 
-               style={styles.islamicGridCard}
-               onPress={() => router.push('/islamic-calendar')}
-               accessible={true}
-               accessibilityRole="button"
-               accessibilityLabel={`Islamic Calendar: ${hijriDate}`}
-            >
-              <View style={[styles.islamicIconWrap, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="calendar" size={20} color="#D97706" />
-              </View>
-              <Text style={styles.islamicGridTitle}>Hijri Calendar</Text>
-              <Text style={styles.islamicGridSub} numberOfLines={1}>{hijriDate}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-               style={styles.islamicGridCard}
-               onPress={() => router.push('/tasbeeh' as any)}
-               accessible={true}
-               accessibilityRole="button"
-               accessibilityLabel="Digital Smart Tasbeeh"
-            >
-              <View style={[styles.islamicIconWrap, { backgroundColor: '#ECFDF5' }]}>
-                <Ionicons name="finger-print" size={20} color={COLORS.primary} />
-              </View>
-              <Text style={styles.islamicGridTitle}>Smart Tasbeeh</Text>
-              <Text style={styles.islamicGridSub} numberOfLines={1}>Daily Dhikr Counter</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-               style={styles.islamicGridCard}
-               onPress={() => router.push('/recordings' as any)}
-               accessible={true}
-               accessibilityRole="button"
-               accessibilityLabel="Class Audio Recordings"
-            >
-              <View style={[styles.islamicIconWrap, { backgroundColor: '#EFF6FF' }]}>
-                <Ionicons name="mic" size={20} color="#2563EB" />
-              </View>
-              <Text style={styles.islamicGridTitle}>Dars Audio</Text>
-              <Text style={styles.islamicGridSub} numberOfLines={1}>Class Recordings</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Section 8: Phase 3 — Continue Learning */}
+        {/* Section 6: Continue Learning */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Continue Learning</Text>
           {dataLoading ? (
-            /* R1 FIX: Loading skeleton — prevents flash of empty data while DataContext hydrates */
             <View style={styles.skeletonContinueCard}>
               <View style={styles.skeletonRow}>
                 <View style={styles.skeletonIconBox} />
@@ -606,20 +468,20 @@ export default function HomeScreen() {
                accessible={true}
                accessibilityRole="button"
                accessibilityLabel={`Continue ${resume.courseName}, lesson ${resume.lessonTitle}`}
+               activeOpacity={0.85}
             >
                <View style={styles.continueHeaderRow}>
-                 {/* 1.2 — Blinking pending badge on icon when lesson is not yet done */}
                  <View style={styles.resumeIconWrapper}>
                    <View style={styles.resumeIconBox}>
-                     <Ionicons name="play" size={20} color={COLORS.surface} />
+                     <Ionicons name="play" size={18} color="#FFFFFF" />
                    </View>
                    {isLessonPending && (
                      <Animated.View style={[styles.pendingPulseDot, { opacity: pulseAnim }]} />
                    )}
                  </View>
                  <View style={styles.resumeTextCol}>
-                   <Text style={styles.resumeCourseName}>{resume.courseName}</Text>
-                   <Text style={styles.resumeLessonName}>{resume.lessonTitle}</Text>
+                   <Text style={styles.resumeCourseName} numberOfLines={1}>{resume.courseName}</Text>
+                   <Text style={styles.resumeLessonName} numberOfLines={1}>{resume.lessonTitle}</Text>
                    {isLessonPending && (
                      <Text style={styles.pendingLessonLabel}>⏳ Sabaq mukammal nahi hua</Text>
                    )}
@@ -633,13 +495,13 @@ export default function HomeScreen() {
                </View>
                <View style={styles.continueBtnRow}>
                  <Text style={styles.continueBtnText}>Continue Learning</Text>
-                 <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+                 <Ionicons name="arrow-forward" size={14} color="#075B49" />
                </View>
             </TouchableOpacity>
           ) : (
             <View style={styles.emptyLearningCard}>
               <View style={styles.emptyLearningIconBox}>
-                <Ionicons name="book-outline" size={28} color={COLORS.primary} />
+                <Ionicons name="book-outline" size={26} color="#075B49" />
               </View>
               <View style={styles.emptyLearningTextCol}>
                 <Text style={styles.emptyLearningTitle}>Start Your Journey</Text>
@@ -653,6 +515,7 @@ export default function HomeScreen() {
                 accessible={true}
                 accessibilityRole="button"
                 accessibilityLabel="Explore Courses"
+                activeOpacity={0.8}
               >
                 <Text style={styles.exploreBtnText}>Explore Courses</Text>
               </TouchableOpacity>
@@ -660,93 +523,14 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Section 9: Phase 5 — Today's Goal Checklist */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Today&apos;s Goal</Text>
-          <View style={styles.checklistCard}>
-            {dataLoading ? (
-              /* R1 FIX: skeleton rows while DataContext hydrates */
-              [0, 1, 2].map((i) => (
-                <View key={i} style={[styles.checklistItemRow, i < 2 && styles.checklistItemBorder]}>
-                  <View style={styles.skeletonIconBox} />
-                  <View style={styles.skeletonTextCol}>
-                    <View style={[styles.skeletonLine, { width: i === 0 ? '65%' : i === 1 ? '55%' : '70%' }]} />
-                    <View style={[styles.skeletonLine, { width: '45%', marginTop: 6 }]} />
-                  </View>
-                </View>
-              ))
-            ) : (
-              checklistItems.map((item, idx) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.checklistItemRow,
-                    idx < checklistItems.length - 1 && styles.checklistItemBorder
-                  ]}
-                  onPress={() => router.push(item.route as any)}
-                  accessible={true}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${item.title}: ${item.completed ? 'Completed' : 'Pending'}`}
-                >
-                  <View style={[styles.checkboxCircle, item.completed && styles.checkboxCircleDone]}>
-                    <Ionicons 
-                      name={item.completed ? "checkmark" : "square-outline"} 
-                      size={item.completed ? 16 : 20} 
-                      color={item.completed ? COLORS.surface : COLORS.textMuted} 
-                    />
-                  </View>
-                  <View style={styles.checklistTextCol}>
-                    <Text style={[styles.checklistTitle, item.completed && styles.checklistTitleDone]}>{item.title}</Text>
-                    <Text style={styles.checklistSubtitle}>{item.subtitle}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
-        </View>
+        {/* Section 7: Today's Journey Checklist */}
+        <TodaysJourneyCard
+          items={checklistItems}
+          loading={dataLoading}
+        />
 
-        {/* Section 10: Phase 6 — Quick Access */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Quick Access</Text>
-          <View style={styles.quickAccessGrid}>
-             {[
-               { name: 'Quran Karim', icon: 'book-outline', route: '/quran' },
-               { name: 'My Courses', icon: 'book', route: '/(tabs)/courses' },
-               { name: 'Taharat Tracker', icon: 'heart-outline', route: '/taharat-tracker' },
-               { name: 'AI Sabaq Tutor', icon: 'sparkles', route: '/ai-assistant' },
-               { name: 'Flashcards', icon: 'card-outline', route: '/flashcards' },
-               { name: 'Dar-ul-Iftaa', icon: 'ribbon-outline', route: '/fatawa' },
-               { name: 'Referral Rewards', icon: 'gift-outline', route: '/referral' },
-               { name: 'Smart Tasbeeh', icon: 'finger-print', route: '/tasbeeh' },
-               { name: 'Sanad / Cert', icon: 'ribbon', route: '/(tabs)/certificate' },
-               { name: 'Pay Fees', icon: 'card', route: '/payment' },
-               { name: 'Live Classes', icon: 'videocam', route: '/live-class' },
-               { name: 'Dars Audio', icon: 'headset', route: '/recordings' },
-               { name: 'Library', icon: 'library', route: '/(tabs)/library' },
-               { name: 'Quiz', icon: 'help-circle', route: '/(tabs)/quiz' },
-               { name: 'Prayer Times', icon: 'time', route: '/prayer-times' },
-               { name: 'Qibla Finder', icon: 'compass', route: '/qibla' },
-               { name: 'Hijri Calendar', icon: 'calendar', route: '/islamic-calendar' },
-               { name: 'All Services', icon: 'grid', route: '/more' },
-             ].map((item, idx) => (
-               <TouchableOpacity 
-                 key={idx} 
-                 style={styles.quickAccessItem}
-                 onPress={() => router.push(item.route as any)}
-                 accessible={true}
-                 accessibilityRole="button"
-                 accessibilityLabel={item.name}
-                 activeOpacity={0.7}
-               >
-                 <View style={styles.quickAccessIcon}>
-                   <Ionicons name={item.icon as any} size={22} color={COLORS.primary} />
-                 </View>
-                 <Text style={styles.quickAccessText} numberOfLines={1}>{item.name}</Text>
-               </TouchableOpacity>
-             ))}
-          </View>
-        </View>
+        {/* Section 8: Quick Access Grid (ALL 18 SERVICES including Islamic Utilities: Smart Tasbeeh -> /tasbeeh) */}
+        <QuickAccessGrid />
 
         {/* Section 11: Phase 4 — Dashboard Statistics */}
         {(completedLessonsCount > 0 || quizAttemptsCount > 0 || coursesCompletedCount > 0) ? (
@@ -814,19 +598,58 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   heroSection: {
-    backgroundColor: COLORS.primary,
-    paddingBottom: 28,
-    alignItems: 'center',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    backgroundColor: '#043C32',
+    position: 'relative',
+    overflow: 'hidden',
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    paddingBottom: 38,
     ...SHADOWS.header,
+  },
+  heroBackgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.28,
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#043C32',
+    opacity: 0.65,
+  },
+  heroContent: {
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    width: '100%',
+  },
+  greetingBox: {
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  greetingTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  greetingSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#D8C28A',
+    marginTop: 2,
+    textAlign: 'center',
   },
   headerActionsRow: {
     flexDirection: 'row',
     width: '100%',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
     gap: SPACING.sm,
   },
@@ -1491,27 +1314,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.xs,
-    marginBottom: SPACING.sm,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: RADIUS.full,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E7E4DA',
     gap: 10,
     ...SHADOWS.card,
   },
   homeSearchPlaceholder: {
     flex: 1,
     fontSize: 13,
-    color: '#64748B',
+    color: '#71817B',
     fontWeight: '500',
   },
   searchPillBadge: {
-    backgroundColor: '#002E23',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: '#075B49',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: RADIUS.full,
   },
   searchPillBadgeText: {

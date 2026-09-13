@@ -1,35 +1,43 @@
 export const COLORS = {
-  primary: '#005F46', // deep institutional emerald
+  primary: '#075B49', // Primary Emerald
+  primaryDeep: '#043C32', // Deep Emerald for hero cards and headers
   primaryLight: '#0B6B53',
-  background: '#F7F8F6', // warm neutral
-  surface: '#FFFFFF',
-  surfaceAlt: '#F0F4F2',
-  text: '#12332A',
-  textMain: '#12332A',
-  textSecondary: '#60736B',
-  textMuted: '#60736B',
-  border: '#E2E8E4',
+  background: '#F7F5EF', // Warm Ivory Background
+  surface: '#FFFFFF', // Card
+  surfaceAlt: '#F0ECE1',
+  text: '#17332C', // Dark Text
+  textMain: '#17332C',
+  textSecondary: '#71817B', // Secondary Text
+  secondaryText: '#71817B', // Secondary Text alias
+  textMuted: '#71817B',
+  border: '#E7E4DA', // Border
   error: '#B42318',
-  success: '#0B6B53',
-  // Backward-compat aliases to keep existing screens functional.
-  secondary: '#C8A84E', // Gold accent
-  secondaryLight: '#E8D9A8', // Soft gold
-  goldBg: '#FDFBF4',
-  goldText: '#9A7A1A',
+  success: '#075B49',
+  // Premium Islamic Accents
+  gold: '#C6A15B', // Gold accent
+  lightChampagne: '#D8C28A', // Light Champagne
+  secondary: '#C6A15B', // Gold accent alias
+  secondaryLight: '#D8C28A', // Soft gold alias
+  goldBg: '#FCF9F0',
+  goldText: '#9A7328',
 };
 
 export const DARK_COLORS = {
   primary: '#0FA958', // Brighter green for dark mode readability
+  primaryDeep: '#064E3B',
   background: '#0B132B',
   surface: '#1C2541',
   text: '#F8FAFC',
   textMain: '#F8FAFC',
   textSecondary: '#94A3B8',
+  secondaryText: '#94A3B8',
   textMuted: '#94A3B8',
   border: '#2E3D5C',
   error: '#EF4444',
   success: '#10B981',
   primaryLight: '#1B3B36',
+  gold: '#F59E0B',
+  lightChampagne: '#D97706',
   secondary: '#F59E0B',
   secondaryLight: '#3B2F17',
   surfaceAlt: '#161F38',
@@ -100,18 +108,25 @@ export const TYPOGRAPHY = {
 
 export const SHADOWS = {
   card: {
-    shadowColor: COLORS.text,
+    shadowColor: '#0F3D35',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 2,
   },
+  premiumCard: {
+    shadowColor: '#07362E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 3,
+  },
   header: {
-    shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    shadowColor: '#043C32',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
   },
 };
 

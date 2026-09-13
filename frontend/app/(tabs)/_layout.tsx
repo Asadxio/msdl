@@ -41,7 +41,7 @@ type TabIconName =
 function TabIcon({ name, color, focused }: { name: TabIconName; color: string; focused: boolean }) {
   return (
     <View style={styles.tabIconContainer}>
-      <Ionicons name={name} size={20} color={color} />
+      <Ionicons name={name} size={21} color={color} />
       {focused ? <View style={styles.activeIndicator} /> : null}
     </View>
   );
@@ -137,7 +137,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
+        tabBarInactiveTintColor: '#71817B',
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
         tabBarHideOnKeyboard: true,
@@ -175,18 +175,23 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    borderTopLeftRadius: RADIUS.lg,
-    borderTopRightRadius: RADIUS.lg,
-    paddingTop: SPACING.xs,
-    paddingBottom: Platform.OS === 'ios' ? SPACING.lg : SPACING.sm,
-    height: Platform.OS === 'ios' ? 84 : 66,
+    borderTopColor: '#E7E4DA',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 6,
+    paddingBottom: Platform.OS === 'ios' ? SPACING.lg : 8,
+    height: Platform.OS === 'ios' ? 86 : 68,
+    shadowColor: '#07362E',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 4,
   },
   tabLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     marginTop: 2,
   },
   tabIconContainer: {
@@ -198,7 +203,7 @@ const styles = StyleSheet.create({
     width: 14,
     height: 3,
     borderRadius: 2,
-    backgroundColor: COLORS.primary,
-    marginTop: 4,
+    backgroundColor: '#C6A15B', // Small gold accent
+    marginTop: 3,
   },
 });
