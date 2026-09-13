@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#043C32',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#C6A15B',
   },
   avatarText: {

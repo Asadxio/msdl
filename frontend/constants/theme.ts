@@ -1,6 +1,7 @@
 export const COLORS = {
   primary: '#075B49', // Primary Emerald
   primaryDeep: '#043C32', // Deep Emerald for hero cards and headers
+  primaryDarkest: '#032F28', // Darkest Green for deep architectural overlays
   primaryLight: '#0B6B53',
   background: '#F7F5EF', // Warm Ivory Background
   surface: '#FFFFFF', // Card
@@ -25,6 +26,7 @@ export const COLORS = {
 export const DARK_COLORS = {
   primary: '#0FA958', // Brighter green for dark mode readability
   primaryDeep: '#064E3B',
+  primaryDarkest: '#02231E',
   background: '#0B132B',
   surface: '#1C2541',
   text: '#F8FAFC',

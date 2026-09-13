@@ -331,6 +331,7 @@ export default function HomeScreen() {
               >
                 <Ionicons name="globe-outline" size={14} color="#D8C28A" />
                 <Text style={styles.langPillText}>{languageName}</Text>
+                <Ionicons name="chevron-down" size={12} color="#D8C28A" />
               </TouchableOpacity>
 
               <View style={{ flex: 1 }} />
@@ -342,7 +343,7 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Search"
               >
-                <Ionicons name="search-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="search-outline" size={18} color="#FFFFFF" />
               </TouchableOpacity>
 
               <TouchableOpacity 
@@ -352,7 +353,7 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Notifications"
               >
-                <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="notifications-outline" size={18} color="#FFFFFF" />
                 {badgeCount > 0 && (
                   <View style={styles.badgeDot}>
                     <Text style={styles.badgeDotText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
@@ -367,17 +368,18 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Settings"
               >
-                <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="settings-outline" size={18} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
             {/* Bismillah */}
-            <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
+            <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</Text>
 
             {/* Dynamic Greeting & Subtitle */}
             <View style={styles.greetingBox}>
-              <Text style={styles.greetingTitle}>
-                Assalamu Alaikum, {profile?.name ? profile.name.split(' ')[0] : 'Taliba'} 👋
+              <Text style={styles.arabicGreeting}>السَّلَامُ عَلَيْكُمْ</Text>
+              <Text style={styles.greetingTitle} numberOfLines={1}>
+                {profile?.name ? profile.name.split(' ')[0] : 'Taliba'} 👋
               </Text>
               <Text style={styles.greetingSubtitle}>
                 Ready for today&apos;s learning? • {hijriDate}
@@ -628,21 +630,31 @@ const styles = StyleSheet.create({
   },
   greetingBox: {
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 4,
     marginBottom: 4,
   },
+  arabicGreeting: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    lineHeight: 28,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+  },
   greetingTitle: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.3,
     textAlign: 'center',
+    marginTop: 2,
   },
   greetingSubtitle: {
     fontSize: 12,
     fontWeight: '600',
     color: '#D8C28A',
-    marginTop: 2,
+    marginTop: 3,
     textAlign: 'center',
   },
   headerActionsRow: {
@@ -670,17 +682,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   headerActionBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   badgeDot: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: -2,
+    right: -2,
     backgroundColor: COLORS.error,
     borderRadius: 8,
     minWidth: 16,
@@ -689,7 +701,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: COLORS.primary,
+    borderColor: '#043C32',
   },
   badgeDotText: {
     color: COLORS.surface,
@@ -697,12 +709,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   bismillah: {
-    fontSize: 18,
-    color: COLORS.secondaryLight,
+    fontSize: 17,
+    color: '#D8C28A',
     fontWeight: '500',
-    marginBottom: 8,
+    marginBottom: 4,
     textAlign: 'center',
     writingDirection: 'rtl',
+    lineHeight: 28,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   madrasaName: {
@@ -724,19 +737,20 @@ const styles = StyleSheet.create({
   taglineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 10,
     gap: 10,
   },
   goldLine: {
     height: 1,
     width: 28,
-    backgroundColor: COLORS.secondary,
+    backgroundColor: '#C6A15B',
+    opacity: 0.6,
   },
   tagline: {
-    color: COLORS.secondary,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.8,
+    color: '#C6A15B',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.1,
   },
   welcomeCard: {
     backgroundColor: COLORS.surface,
@@ -1321,7 +1335,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     paddingHorizontal: SPACING.md,
     paddingVertical: 12,
-    borderRadius: RADIUS.full,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#E7E4DA',
     gap: 10,
