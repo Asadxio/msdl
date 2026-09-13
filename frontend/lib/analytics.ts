@@ -23,6 +23,7 @@ export type AnalyticsEventName =
   | 'approval_rejected'
   | 'role_missing'
   | 'missing_profile_document'
+  | 'profile_name_updated'
   | 'custom';
 
 export type AnalyticsEvent = {

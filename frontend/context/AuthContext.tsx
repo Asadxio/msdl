@@ -10,6 +10,7 @@ import {
   sendPasswordResetEmail,
   User,
   updateEmail,
+  updateProfile,
   EmailAuthProvider,
   reauthenticateWithCredential,
   reload,
@@ -50,6 +51,7 @@ export type UserProfile = {
   referral_count?: number;
   founder?: boolean;
   organization_id?: string;
+  name_updated_at?: any;
 };
 
 export type ProfileIssue = 'missing_profile_document' | 'profile_incomplete' | 'role_missing' | null;
@@ -85,6 +87,7 @@ type AuthContextType = {
   refreshProfile: () => Promise<void>;
   resendVerification: () => Promise<string | null>;
   changeEmailAddress: (newEmail: string, currentPassword?: string) => Promise<ChangeEmailResult>;
+  updateProfileName: (newName: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (email: string) => Promise<string | null>;
   refreshUser: () => Promise<boolean>;
   profileOffline: boolean;
@@ -105,6 +108,7 @@ const AuthContext = createContext<AuthContextType>({
   refreshProfile: async () => {},
   resendVerification: async () => null,
   changeEmailAddress: async () => ({ error: 'Not signed in' }),
+  updateProfileName: async () => ({ success: false, error: 'Not signed in' }),
   resetPassword: async () => null,
   refreshUser: async () => false,
   profileOffline: false,
@@ -860,6 +864,126 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateProfileName = useCallback(async (newName: string): Promise<{ success: boolean; error?: string }> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || !profile) {
+      return { success: false, error: 'User is not signed in.' };
+    }
+
+    if (profile.role !== 'student') {
+      return {
+        success: false,
+        error: 'Faculty and Admin names are tied to official courses. Please contact Madrasa administration to change your name.',
+      };
+    }
+
+    const trimmed = newName.trim();
+
+    // 1. Length validation (3 to 40 characters)
+    if (trimmed.length < 3 || trimmed.length > 40) {
+      return { success: false, error: 'Name must be between 3 and 40 characters.' };
+    }
+
+    // 2. Character validation (allow letters, spaces, Arabic/Urdu unicode characters, hyphens, apostrophes)
+    const validCharRegex = /^[\p{L}\s'-]+$/u;
+    if (!validCharRegex.test(trimmed)) {
+      return { success: false, error: 'Name can only contain letters, spaces, and hyphens.' };
+    }
+
+    // 3. Block restricted titles / impersonation keywords
+    const restrictedKeywords = ['admin', 'super admin', 'super_admin', 'moderator', 'principal', 'ustaadha', 'ustadha', 'founder', 'system', 'staff'];
+    const lowerName = trimmed.toLowerCase();
+    const hasRestricted = restrictedKeywords.some((kw) => lowerName.includes(kw));
+    if (hasRestricted) {
+      return {
+        success: false,
+        error: 'Name cannot contain official titles like "Admin", "Moderator", "Ustaadha", or "Founder".',
+      };
+    }
+
+    // 4. Check if unchanged
+    if (trimmed === profile.name) {
+      return { success: false, error: 'New name must be different from your current name.' };
+    }
+
+    // 5. 30-day cooldown check
+    if (profile.name_updated_at) {
+      let lastUpdatedMs: number | null = null;
+      if (profile.name_updated_at?.toMillis) {
+        lastUpdatedMs = profile.name_updated_at.toMillis();
+      } else if (profile.name_updated_at?.seconds) {
+        lastUpdatedMs = profile.name_updated_at.seconds * 1000;
+      } else if (typeof profile.name_updated_at === 'number') {
+        lastUpdatedMs = profile.name_updated_at;
+      } else if (profile.name_updated_at instanceof Date) {
+        lastUpdatedMs = profile.name_updated_at.getTime();
+      }
+
+      if (lastUpdatedMs) {
+        const cooldownPeriodMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+        const timePassed = Date.now() - lastUpdatedMs;
+        if (timePassed < cooldownPeriodMs) {
+          const daysRemaining = Math.ceil((cooldownPeriodMs - timePassed) / (24 * 60 * 60 * 1000));
+          return {
+            success: false,
+            error: `You can only change your name once every 30 days. Please wait ${daysRemaining} more day${daysRemaining > 1 ? 's' : ''}.`,
+          };
+        }
+      }
+    }
+
+    try {
+      const userRef = doc(db, 'users', currentUser.uid);
+      const publicProfileRef = doc(db, 'public_profiles', currentUser.uid);
+      const now = new Date();
+
+      // Update Firestore users collection
+      await updateDoc(userRef, {
+        name: trimmed,
+        name_updated_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
+
+      // Update public_profiles collection (merge so directory and chats stay in sync)
+      await setDoc(publicProfileRef, {
+        uid: currentUser.uid,
+        name: trimmed,
+        role: profile.role,
+        status: profile.status,
+        searchable: profile.status === 'approved',
+        is_active: profile.status === 'approved',
+        updated_at: serverTimestamp(),
+      }, { merge: true }).catch((err) => {
+        logger.warn('Failed to update public_profile name', { err });
+      });
+
+      // Update Firebase Auth displayName
+      await updateProfile(currentUser, { displayName: trimmed }).catch((err) => {
+        logger.warn('Failed to update auth displayName', { err });
+      });
+
+      // Update local state and cache
+      const updatedProfile: UserProfile = {
+        ...profile,
+        name: trimmed,
+        name_updated_at: now,
+      };
+      setProfile(updatedProfile);
+      await AsyncStorage.setItem(getProfileCacheKey(currentUser.uid), JSON.stringify(updatedProfile)).catch(() => {});
+
+      trackEvent('profile_name_updated', {
+        uid: currentUser.uid,
+        role: profile.role,
+      }, `profile-name-updated-${currentUser.uid}-${Date.now()}`);
+
+      return { success: true };
+    } catch (err: any) {
+      logger.error('Failed to update profile name:', err);
+      const msg = normalizeFirebaseError(err, 'Failed to update name. Please check your connection and try again.');
+      return { success: false, error: msg };
+    }
+  }, [profile]);
+
   const resetPassword = async (email: string): Promise<string | null> => {
     const safeEmail = email.trim().toLowerCase();
     if (!safeEmail) return 'Please enter your email';
@@ -908,11 +1032,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const contextValue = useMemo(() => ({
     user, profile, profileIssue, authLoading, emailVerified,
     signIn, signUp, signOut: signOutUser, refreshProfile,
-    resendVerification, changeEmailAddress, resetPassword, refreshUser, profileOffline,
+    resendVerification, changeEmailAddress, updateProfileName, resetPassword, refreshUser, profileOffline,
     showSignupVerificationPrompt, signupVerificationFlowActive, acknowledgeSignupVerificationPrompt,
   }), [
     user, profile, profileIssue, authLoading, emailVerified, profileOffline,
-    showSignupVerificationPrompt, signupVerificationFlowActive,
+    showSignupVerificationPrompt, signupVerificationFlowActive, updateProfileName,
   ]);
 
   return (

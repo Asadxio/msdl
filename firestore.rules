@@ -230,6 +230,23 @@ service cloud.firestore {
         && ((request.resource.data.role == 'assistant_teacher') ? isAdmin() : true);
     }
 
+    function isValidStudentNameUpdate(uid) {
+      return isSelf(uid)
+        && resource.data.role == 'student'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'name_updated_at', 'updated_at'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 3
+        && request.resource.data.name.size() <= 40
+        && !request.resource.data.name.lower().matches('.*(admin|moderator|principal|ustaadha|ustadha|founder|system).*')
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.name_updated_at is timestamp
+        && request.resource.data.updated_at is timestamp
+        && (!('name_updated_at' in resource.data) || request.resource.data.name_updated_at >= resource.data.name_updated_at + duration.value(30, 'd'));
+    }
+
     function isValidReferralCountIncrement() {
       return isApprovedVerifiedUser()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referral_count', 'updated_at'])
@@ -1189,10 +1206,11 @@ service cloud.firestore {
       // Self-signup profile creation.
       allow create: if isValidUserCreate(uid);
 
-      // Admin can fully update users; users can update own push/profile/login metadata or auto-activate on email verification.
+      // Admin can fully update users; users can update own push/profile/login metadata, safe name update, or auto-activate on email verification.
       allow update: if (isAdmin() && isValidUserUpdateByAdmin())
         || isValidEmailVerifiedStudentActivation(uid)
         || isValidSelfUserMetadataUpdate(uid)
+        || isValidStudentNameUpdate(uid)
         || isValidReferralCountIncrement();
       allow delete: if isAdmin() && (!resource.data.get('founder', false) || isSuperAdmin());
     }

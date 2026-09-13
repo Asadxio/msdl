@@ -15,6 +15,7 @@ import {
   Share,
   Animated,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -309,11 +310,97 @@ const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadra
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, updateProfileName } = useAuth();
   const { lessonProgress, courses, books } = useData();
   const router = useRouter();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
+
+  const [editNameModalVisible, setEditNameModalVisible] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState('');
+  const [isNameInputFocused, setIsNameInputFocused] = useState(false);
+
+  const lastUpdateMs = useMemo(() => {
+    if (!profile?.name_updated_at) return null;
+    if (profile.name_updated_at?.toMillis) return profile.name_updated_at.toMillis();
+    if (profile.name_updated_at?.seconds) return profile.name_updated_at.seconds * 1000;
+    if (typeof profile.name_updated_at === 'number') return profile.name_updated_at;
+    if (profile.name_updated_at instanceof Date) return profile.name_updated_at.getTime();
+    return null;
+  }, [profile?.name_updated_at]);
+
+  const COOLDOWN_DAYS = 30;
+  const COOLDOWN_MS = COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+  const isCooldownActive = useMemo(() => {
+    if (!lastUpdateMs) return false;
+    return (Date.now() - lastUpdateMs) < COOLDOWN_MS;
+  }, [lastUpdateMs, COOLDOWN_MS]);
+
+  const daysRemaining = useMemo(() => {
+    if (!lastUpdateMs || !isCooldownActive) return 0;
+    return Math.ceil((lastUpdateMs + COOLDOWN_MS - Date.now()) / (24 * 60 * 60 * 1000));
+  }, [lastUpdateMs, isCooldownActive, COOLDOWN_MS]);
+
+  const nextAllowedDateStr = useMemo(() => {
+    if (!lastUpdateMs) return '';
+    const d = new Date(lastUpdateMs + COOLDOWN_MS);
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }, [lastUpdateMs, COOLDOWN_MS]);
+
+  const handleOpenEditNameModal = useCallback(() => {
+    setNameDraft(profile?.name || '');
+    setNameError('');
+    setEditNameModalVisible(true);
+  }, [profile?.name]);
+
+  const handleSaveName = async () => {
+    if (savingName || isCooldownActive) return;
+    const trimmed = nameDraft.trim();
+    if (!trimmed) {
+      setNameError('Please enter your full name.');
+      return;
+    }
+    if (trimmed.length < 3 || trimmed.length > 40) {
+      setNameError('Name must be between 3 and 40 characters.');
+      return;
+    }
+    const validCharRegex = /^[\p{L}\s'-]+$/u;
+    if (!validCharRegex.test(trimmed)) {
+      setNameError('Name can only contain letters, spaces, and hyphens.');
+      return;
+    }
+    const restrictedKeywords = ['admin', 'super admin', 'super_admin', 'moderator', 'principal', 'ustaadha', 'ustadha', 'founder', 'system', 'staff'];
+    const lowerName = trimmed.toLowerCase();
+    if (restrictedKeywords.some((kw) => lowerName.includes(kw))) {
+      setNameError('Name cannot contain official titles like "Admin", "Moderator", "Ustaadha", or "Founder".');
+      return;
+    }
+    if (trimmed === profile?.name) {
+      setNameError('Please enter a new name different from your current one.');
+      return;
+    }
+    setNameError('');
+    setSavingName(true);
+    try {
+      const res = await updateProfileName(trimmed);
+      if (res.success) {
+        setEditNameModalVisible(false);
+        Alert.alert(
+          'Alhamdulillah! ✨',
+          'Your profile name has been updated successfully. Next name edit will be unlocked after 30 days.'
+        );
+      } else {
+        setNameError(res.error || 'Failed to update name.');
+      }
+    } catch (err: any) {
+      const msg = err?.message || 'Unexpected error occurred.';
+      setNameError(msg);
+    } finally {
+      setSavingName(false);
+    }
+  };
 
   const [inspirationIdx, setInspirationIdx] = useState(0);
   const lessonsCompletedCount = useMemo(() => Object.values(lessonProgress || {}).filter((p: any) => p?.completed).length, [lessonProgress]);
@@ -863,9 +950,37 @@ export default function AboutScreen() {
                   <View style={styles.avatarRing} />
                 </View>
                 <View style={styles.profileMainInfo}>
-                  <Text style={styles.premiumName}>
-                    {profile.name || user?.displayName || (isAdmin ? 'Executive Admin' : isTeacher ? 'Faculty Member' : 'Student')}
-                  </Text>
+                  <View style={styles.nameAndEditRow}>
+                    <Text style={styles.premiumName} numberOfLines={1}>
+                      {profile.name || user?.displayName || (isAdmin ? 'Executive Admin' : isTeacher ? 'Faculty Member' : 'Student')}
+                    </Text>
+                    {profile.role === 'student' ? (
+                      <TouchableOpacity
+                        onPress={handleOpenEditNameModal}
+                        style={styles.editNameIconBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Edit Profile Name"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="pencil-outline" size={15} color={THEME.primary} />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert(
+                            'Institutional Identity',
+                            'Faculty and Administration names are official credentials linked to course certifications and schedules. To modify staff records, please contact the administrator.'
+                          );
+                        }}
+                        style={styles.editNameIconBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Staff Identity Info"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="information-circle-outline" size={15} color={THEME.textMuted} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   <Text style={styles.studentIdText}>
                     {isAdmin ? 'SYS ID' : isTeacher ? 'FACULTY ID' : 'STUDENT ID'}: #{isAdmin ? 'SYS-ADM-' : isTeacher ? 'TCH-' : 'MST-'}{(user?.uid || profile?.uid || '000000').slice(0, 6).toUpperCase()}
                   </Text>
@@ -2241,6 +2356,114 @@ export default function AboutScreen() {
           <Text style={styles.inspirationSource}>— {ISLAMIC_INSPIRATIONS[inspirationIdx].source}</Text>
         </View>
       </ScrollView>
+
+      {/* ─── Edit Profile Name Modal ─── */}
+      <Modal
+        visible={editNameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditNameModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleBox}>
+                <View style={styles.modalIconCircle}>
+                  <Ionicons name="person-outline" size={20} color={THEME.primary} />
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>Edit Profile Name</Text>
+                  <Text style={styles.modalSubtitle}>طالبہ کا نام تبدیل کریں</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setEditNameModalVisible(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={22} color={THEME.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {isCooldownActive ? (
+              <View style={styles.cooldownAlertBox}>
+                <Ionicons name="time-outline" size={20} color="#D97706" />
+                <Text style={styles.cooldownAlertText}>
+                  Name change is on a 30-day security lock. You can change your name again on{' '}
+                  <Text style={{ fontWeight: '800' }}>{nextAllowedDateStr}</Text> ({daysRemaining} day{daysRemaining > 1 ? 's' : ''} remaining).
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.activeNoticeBox}>
+                <Ionicons name="shield-checkmark-outline" size={18} color="#16A34A" />
+                <Text style={styles.activeNoticeText}>
+                  You can change your profile name now. After saving, your name will be locked for 30 days.
+                </Text>
+              </View>
+            )}
+
+            <Text style={styles.modalNameInputLabel}>Full Name / پورا نام</Text>
+            <View style={[
+              styles.modalNameInputContainer,
+              isNameInputFocused && styles.modalNameInputFocused,
+              isCooldownActive && styles.modalNameInputDisabled,
+            ]}>
+              <TextInput
+                style={styles.textInputField}
+                value={nameDraft}
+                onChangeText={(t) => {
+                  setNameDraft(t);
+                  if (nameError) setNameError('');
+                }}
+                placeholder="Enter your real full name"
+                placeholderTextColor={THEME.textMuted}
+                editable={!isCooldownActive && !savingName}
+                maxLength={40}
+                onFocus={() => setIsNameInputFocused(true)}
+                onBlur={() => setIsNameInputFocused(false)}
+              />
+            </View>
+
+            <View style={styles.modalNameInputFooterRow}>
+              <Text style={styles.modalNameInputHelpText}>
+                Official titles like &quot;Admin&quot; or &quot;Ustaadha&quot; are prohibited.
+              </Text>
+              <Text style={styles.charCountText}>{nameDraft.length}/40</Text>
+            </View>
+
+            {!!nameError && (
+              <Text style={styles.errorText}>{nameError}</Text>
+            )}
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={styles.cancelModalBtn}
+                onPress={() => setEditNameModalVisible(false)}
+                disabled={savingName}
+              >
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.saveModalBtn,
+                  (isCooldownActive || savingName || !nameDraft.trim() || nameDraft.trim() === profile?.name) && styles.saveModalBtnDisabled,
+                ]}
+                onPress={handleSaveName}
+                disabled={isCooldownActive || savingName || !nameDraft.trim() || nameDraft.trim() === profile?.name}
+              >
+                {savingName ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.saveModalBtnText}>Save Name</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2249,6 +2472,192 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: THEME.background,
+  },
+  // Name Edit & Modal Styles
+  nameAndEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editNameIconBtn: {
+    padding: 5,
+    borderRadius: 8,
+    backgroundColor: '#E8F5EE',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: THEME.surface,
+    borderRadius: 20,
+    padding: 22,
+    borderWidth: 1.5,
+    borderColor: THEME.goldBorder,
+    ...SHADOWS.card,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalTitleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E8F5EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: THEME.textMain,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: THEME.textMuted,
+    marginTop: 1,
+  },
+  modalCloseBtn: {
+    padding: 6,
+  },
+  cooldownAlertBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFBEB',
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: 14,
+  },
+  cooldownAlertText: {
+    flex: 1,
+    fontSize: 12.5,
+    color: '#92400E',
+    lineHeight: 18,
+  },
+  activeNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    marginBottom: 14,
+  },
+  activeNoticeText: {
+    flex: 1,
+    fontSize: 12.5,
+    color: '#166534',
+    lineHeight: 18,
+  },
+  modalNameInputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: THEME.textMain,
+    marginBottom: 6,
+  },
+  modalNameInputContainer: {
+    borderWidth: 1.5,
+    borderColor: THEME.border,
+    borderRadius: 12,
+    backgroundColor: THEME.surfaceAlt,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalNameInputFocused: {
+    borderColor: THEME.primary,
+    backgroundColor: THEME.surface,
+  },
+  modalNameInputDisabled: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  textInputField: {
+    flex: 1,
+    fontSize: 15,
+    color: THEME.textMain,
+    padding: 0,
+  },
+  modalNameInputFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  modalNameInputHelpText: {
+    fontSize: 11,
+    color: THEME.textMuted,
+    flex: 1,
+  },
+  charCountText: {
+    fontSize: 11,
+    color: THEME.textMuted,
+    marginLeft: 8,
+  },
+  errorText: {
+    fontSize: 12,
+    color: THEME.error,
+    marginBottom: 10,
+    fontWeight: '600',
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelModalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelModalBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  saveModalBtn: {
+    flex: 1.4,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: THEME.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  saveModalBtnDisabled: {
+    backgroundColor: '#94A3B8',
+  },
+  saveModalBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   header: {
     backgroundColor: THEME.surface,
