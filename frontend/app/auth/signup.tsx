@@ -490,7 +490,7 @@ export default function SignupScreen() {
 
       const err = await signUp(
         name.trim(),
-        email.trim(),
+        email.trim().toLowerCase(),
         password,
         role,
         referralCode.trim(),

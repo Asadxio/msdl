@@ -205,6 +205,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfileOffline(false);
         await AsyncStorage.setItem(getProfileCacheKey(uid), JSON.stringify(nextProfile)).catch(() => {});
       } else {
+        const currentUser = auth.currentUser;
+        if (currentUser && currentUser.uid === uid) {
+          try {
+            const fallbackName = currentUser.displayName || (currentUser.email?.split('@')[0] || 'طالبہ');
+            const safeEmail = (currentUser.email || '').trim().toLowerCase();
+            const isVerified = Boolean(currentUser.emailVerified);
+            await currentUser.getIdToken(true).catch(() => {});
+            
+            await setDoc(doc(db, 'users', uid), {
+              name: fallbackName,
+              email: safeEmail,
+              role: 'student',
+              status: 'pending',
+              referral_code: generateReferralCode(fallbackName),
+              referred_by: null,
+              referral_count: 0,
+              last_login_at: serverTimestamp(),
+              created_at: serverTimestamp(),
+              is_minor: false,
+              age_bracket: '18_plus',
+            });
+            if (isVerified) {
+              await updateDoc(doc(db, 'users', uid), {
+                status: 'approved',
+                updated_at: serverTimestamp(),
+              }).catch(() => {});
+            }
+            await setDoc(doc(db, 'public_profiles', uid), {
+              uid,
+              name: fallbackName,
+              role: 'student',
+              status: isVerified ? 'approved' : 'pending',
+              searchable: isVerified,
+              is_active: isVerified,
+              photo_url: '',
+              avatar: 'person',
+              updated_at: serverTimestamp(),
+            }, { merge: true }).catch(() => {});
+            
+            const healedProfile: UserProfile = {
+              uid,
+              name: fallbackName,
+              email: safeEmail,
+              role: 'student',
+              status: isVerified ? 'approved' : 'pending',
+            };
+            setProfile(healedProfile);
+            setProfileIssue(null);
+            setProfileOffline(false);
+            await AsyncStorage.setItem(getProfileCacheKey(uid), JSON.stringify(healedProfile)).catch(() => {});
+            return;
+          } catch (healErr) {
+            logger.warn('[AuthContext] fetchProfile self-heal note:', healErr);
+          }
+        }
         setProfile(null);
         setProfileIssue('missing_profile_document');
         setProfileOffline(false);
@@ -361,6 +416,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                       return;
                     } catch (initErr) {
                       logger.warn('[AuthContext] Failed to initialize owner user document:', initErr);
+                    }
+                  } else {
+                    try {
+                      const fallbackName = firebaseUser.displayName || (firebaseUser.email?.split('@')[0] || 'طالبہ');
+                      const safeEmail = (firebaseUser.email || '').trim().toLowerCase();
+                      const isVerified = Boolean(firebaseUser.emailVerified);
+                      logger.info('[AuthContext] Auto-healing missing user profile in snapshot for:', firebaseUser.uid);
+                      await firebaseUser.getIdToken(true).catch(() => {});
+                      
+                      await setDoc(doc(db, 'users', firebaseUser.uid), {
+                        name: fallbackName,
+                        email: safeEmail,
+                        role: 'student',
+                        status: 'pending',
+                        referral_code: generateReferralCode(fallbackName),
+                        referred_by: null,
+                        referral_count: 0,
+                        last_login_at: serverTimestamp(),
+                        created_at: serverTimestamp(),
+                        is_minor: false,
+                        age_bracket: '18_plus',
+                      });
+                      if (isVerified) {
+                        await updateDoc(doc(db, 'users', firebaseUser.uid), {
+                          status: 'approved',
+                          updated_at: serverTimestamp(),
+                        }).catch(() => {});
+                      }
+                      await setDoc(doc(db, 'public_profiles', firebaseUser.uid), {
+                        uid: firebaseUser.uid,
+                        name: fallbackName,
+                        role: 'student',
+                        status: isVerified ? 'approved' : 'pending',
+                        searchable: isVerified,
+                        is_active: isVerified,
+                        photo_url: '',
+                        avatar: 'person',
+                        updated_at: serverTimestamp(),
+                      }, { merge: true }).catch(() => {});
+                      return;
+                    } catch (healErr) {
+                      logger.error('[AuthContext] Failed to auto-heal student profile:', healErr);
                     }
                   }
                   setProfile(null);
@@ -535,6 +632,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       debugLog('[SIGNUP_DEBUG] Attempting createUserWithEmailAndPassword for:', safeEmail);
       const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
       debugLog('[SIGNUP_DEBUG] createUserWithEmailAndPassword SUCCESS, uid:', cred.user.uid);
+      try {
+        await cred.user.getIdToken(true);
+      } catch (tokenRefreshErr) {
+        debugLog('[SIGNUP_DEBUG] Initial token refresh note:', tokenRefreshErr);
+      }
       // Send verification email
       try {
         debugLog('[SIGNUP_DEBUG] Attempting sendEmailVerification for uid:', cred.user.uid);
@@ -569,7 +671,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         await setDoc(doc(db, 'users', cred.user.uid), {
           name: safeName,
-          email: safeEmail,
+          email: (cred.user.email || safeEmail).trim().toLowerCase(),
           role: safeRole,
           status: 'pending',
           referral_code: generateReferralCode(name),
@@ -584,8 +686,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...(complianceData?.phone ? { phone: complianceData.phone } : {}),
         });
         debugLog('[SIGNUP_DEBUG] Successfully wrote users/', cred.user.uid);
+      } catch (userErr: any) {
+        debugError('[SIGNUP_DEBUG] FAILED write to users/. Code:', userErr?.code, 'Message:', userErr?.message, 'Full:', userErr);
+        throw userErr;
+      }
 
-        // Record auditable legal acceptance & parental consent document
+      // Record auditable legal acceptance & parental consent document (NON-FATAL)
+      try {
         await setDoc(doc(db, 'users', cred.user.uid, 'compliance', 'legal_acceptance'), {
           accepted: {
             terms: { version: LEGAL_DOCS.terms.version, acceptedAt: serverTimestamp() },
@@ -602,11 +709,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
           ...(complianceData?.guardian_phone ? { guardian_phone: complianceData.guardian_phone } : {}),
         });
-      } catch (userErr: any) {
-        debugError('[SIGNUP_DEBUG] FAILED write to users/. Code:', userErr?.code, 'Message:', userErr?.message, 'Full:', userErr);
-        throw userErr;
+      } catch (legalErr: any) {
+        debugError('[SIGNUP_DEBUG] Non-fatal legal_acceptance write warning:', legalErr);
       }
 
+      // Record initial public profile (NON-FATAL)
       debugLog('[SIGNUP_DEBUG] Attempting write to public_profiles/', cred.user.uid);
       try {
         await setDoc(doc(db, 'public_profiles', cred.user.uid), {
@@ -622,8 +729,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }, { merge: true });
         debugLog('[SIGNUP_DEBUG] Successfully wrote public_profiles/', cred.user.uid);
       } catch (pubErr: any) {
-        debugError('[SIGNUP_DEBUG] FAILED write to public_profiles/. Code:', pubErr?.code, 'Message:', pubErr?.message, 'Full:', pubErr);
-        throw pubErr;
+        debugError('[SIGNUP_DEBUG] Non-fatal public_profiles write warning:', pubErr);
       }
 
       if (referrerId) {

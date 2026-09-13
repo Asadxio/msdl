@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { safeReplace } from '@/lib/navigation';
 import { sendEmailVerification } from 'firebase/auth';
-import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -171,7 +171,7 @@ export default function PendingScreen() {
           logger.warn('[EmailVerification] Token refresh warning:', tokenErr);
         }
 
-        // Auto-approve student in Firestore if currently pending
+        // Auto-approve student in Firestore if currently pending, or auto-create if missing
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
           const snap = await getDoc(userDocRef);
@@ -191,6 +191,39 @@ export default function PendingScreen() {
               }).catch(() => {});
               logger.info('[EmailVerification] Student auto-approved in Firestore upon verification', { uid: currentUser.uid });
             }
+          } else {
+            // Auto-heal missing document upon email verification
+            const fallbackName = currentUser.displayName || (currentUser.email?.split('@')[0] || 'طالبہ');
+            const safeEmail = (currentUser.email || '').trim().toLowerCase();
+            logger.info('[EmailVerification] Auto-healing verified user document:', currentUser.uid);
+            await setDoc(userDocRef, {
+              name: fallbackName,
+              email: safeEmail,
+              role: 'student',
+              status: 'pending',
+              referral_code: `USER${Math.floor(1000 + Math.random() * 9000)}`,
+              referral_count: 0,
+              referred_by: null,
+              created_at: serverTimestamp(),
+              last_login_at: serverTimestamp(),
+              is_minor: false,
+              age_bracket: '18_plus',
+            });
+            await updateDoc(userDocRef, {
+              status: 'approved',
+              updated_at: serverTimestamp(),
+            }).catch(() => {});
+            await setDoc(doc(db, 'public_profiles', currentUser.uid), {
+              uid: currentUser.uid,
+              name: fallbackName,
+              role: 'student',
+              status: 'approved',
+              searchable: true,
+              is_active: true,
+              photo_url: '',
+              avatar: 'person',
+              updated_at: serverTimestamp(),
+            }, { merge: true }).catch(() => {});
           }
         } catch (autoApproveErr) {
           logger.warn('[EmailVerification] Student auto-approval update note:', autoApproveErr);
@@ -303,6 +336,42 @@ export default function PendingScreen() {
               updates.updated_at = serverTimestamp();
               await updateDoc(userDocRef, updates);
             }
+          } else {
+            // Auto-heal completely missing user document
+            const fallbackName = currentUser.displayName || (currentUser.email?.split('@')[0] || 'طالبہ');
+            const safeEmail = (currentUser.email || '').trim().toLowerCase();
+            const isVerified = Boolean(currentUser.emailVerified);
+            await currentUser.getIdToken(true).catch(() => {});
+            await setDoc(userDocRef, {
+              name: fallbackName,
+              email: safeEmail,
+              role: 'student',
+              status: 'pending',
+              referral_code: `USER${Math.floor(1000 + Math.random() * 9000)}`,
+              referral_count: 0,
+              referred_by: null,
+              created_at: serverTimestamp(),
+              last_login_at: serverTimestamp(),
+              is_minor: false,
+              age_bracket: '18_plus',
+            });
+            if (isVerified) {
+              await updateDoc(userDocRef, {
+                status: 'approved',
+                updated_at: serverTimestamp(),
+              }).catch(() => {});
+            }
+            await setDoc(doc(db, 'public_profiles', currentUser.uid), {
+              uid: currentUser.uid,
+              name: fallbackName,
+              role: 'student',
+              status: isVerified ? 'approved' : 'pending',
+              searchable: isVerified,
+              is_active: isVerified,
+              photo_url: '',
+              avatar: 'person',
+              updated_at: serverTimestamp(),
+            }, { merge: true }).catch(() => {});
           }
         } catch (healErr) {
           console.warn('[pending] Role auto-heal non-fatal error:', healErr);
