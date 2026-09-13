@@ -1,5 +1,6 @@
 import { loadCachedSurah, cacheSurah, saveDailyAyat, loadDailyAyat } from './quranStorage';
 import { STARTER_SURAHS } from './quranStarterSurahs';
+import { QURAN_AUDIO_FILENAMES } from '@/constants/quranAudioFiles';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MSDL — Quran API Layer
@@ -298,9 +299,14 @@ export function getAyatAudioUrl(surahNumber: number, ayatNumber: number): string
 
 /**
  * Returns full surah audio with Urdu translation (from user's website archive.org collection).
+ * Uses exact encoded archive.org filename with high-availability fallback.
  */
 export function getFullSurahUrduAudioUrl(surahNumber: number): string {
+  const filename = QURAN_AUDIO_FILENAMES[surahNumber - 1];
+  if (filename) {
+    return `https://archive.org/download/quran-arabic-to-urdu-hindi-verse-by-verse-tarjuma-audio/${encodeURIComponent(filename)}`;
+  }
   const sStr = String(surahNumber).padStart(3, '0');
-  return 'https://archive.org/download/quran-arabic-to-urdu-hindi-verse-by-verse-tarjuma-audio/' + sStr + '.mp3';
+  return `https://server8.mp3quran.net/afs/${sStr}.mp3`;
 }
 

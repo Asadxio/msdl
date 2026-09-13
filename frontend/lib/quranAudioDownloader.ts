@@ -92,11 +92,17 @@ export async function downloadSurahAudio(
   const file = getSurahAudioFile(surahNumber);
   const remoteUrl = getFullSurahUrduAudioUrl(surahNumber);
 
-  onProgress?.(5);
-
   try {
     onProgress?.(20);
-    const downloadedFile = await File.downloadFileAsync(remoteUrl, file, { idempotent: true });
+    let downloadedFile: any;
+    try {
+      downloadedFile = await File.downloadFileAsync(remoteUrl, file, { idempotent: true });
+    } catch (primaryErr) {
+      console.warn(`[QuranDownloader] Primary archive download failed for Surah ${surahNumber}, trying CDN fallback:`, primaryErr);
+      const sStr = String(surahNumber).padStart(3, '0');
+      const fallbackUrl = `https://server8.mp3quran.net/afs/${sStr}.mp3`;
+      downloadedFile = await File.downloadFileAsync(fallbackUrl, file, { idempotent: true });
+    }
     onProgress?.(85);
 
     if (!downloadedFile.exists || !downloadedFile.size) {
