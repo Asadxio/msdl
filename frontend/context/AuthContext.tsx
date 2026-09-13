@@ -755,15 +755,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           // Send congratulations notification
           const notifRef = doc(collection(db, 'notifications'));
+          const notifMessage = 'ماشاءاللہ! آپ کی دعوت سے ایک نئی بہن نے مدرسہ جوائن کر لیا ہے۔ اللہ تعالیٰ اس نیکی کو آپ کے لیے صدقہ جاریہ بنائے۔';
           await setDoc(notifRef, {
-            id: notifRef.id,
-            recipient_id: referrerId,
-            user_id: referrerId,
-            type: 'referral_success',
             title: '🌸 صدقہ جاریہ کی مبارکباد (New Sister Joined)',
-            body: 'ماشاءاللہ! آپ کی دعوت سے ایک نئی بہن نے مدرسہ جوائن کر لیا ہے۔ اللہ تعالیٰ اس نیکی کو آپ کے لیے صدقہ جاریہ بنائے۔',
+            message: notifMessage,
+            body: notifMessage,
+            user_id: referrerId,
+            recipient_id: referrerId,
+            actor_id: cred.user.uid,
+            event: 'referral_joined',
+            category: 'referral',
+            channel: 'announcements',
             route: '/referral',
-            read: false,
+            read: {},
             created_at: serverTimestamp(),
           });
           debugLog('[SIGNUP_DEBUG] Successfully updated referrer & recorded referral:', referrerId);

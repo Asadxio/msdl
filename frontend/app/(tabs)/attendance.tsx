@@ -370,7 +370,6 @@ export default function AttendanceScreen() {
                     marked_by_name: profile?.name || user.email || 'Teacher',
                     marked_at: serverTimestamp(),
                     updated_at: serverTimestamp(),
-                    created_at: serverTimestamp(),
                   };
                   if (cId) payload.course_id = cId;
 
