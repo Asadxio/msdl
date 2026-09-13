@@ -1,8 +1,9 @@
-import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState, usePathname } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { I18nManager, Platform, StyleSheet, View } from 'react-native';
 import { COLORS } from '@/constants/theme';
+import { evaluateRouteAuthorization } from '@/lib/navigationGuard';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
 import { DataProvider } from '@/context/DataContext';
@@ -88,6 +89,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const gateAnalyticsKeysRef = useRef(new Set<string>());
   const segments = useSegments();
   const segmentKey = segments.join('/');
+  const pathname = usePathname() || (segmentKey ? `/${segmentKey}` : '/');
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
   const navigationReady = Boolean(rootNavigationState?.key);
@@ -246,6 +248,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const inLegalGate = segments[0] === 'legal-gate';
     const holdingSignupVerificationPrompt = signupVerificationFlowActive && segmentKey === 'auth/signup';
 
+    const authDecision = evaluateRouteAuthorization(
+      pathname,
+      user,
+      profile
+    );
+
     if (onboardingStatus === 'required') {
       if (!inOnboardingEntry) {
         startupLog('Navigation complete', { action: 'replace', route: '/onboarding-entry', reason: 'onboarding-required' });
@@ -275,24 +283,31 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } else if (inUnauthorized && (profile?.status === 'approved' || isFounder)) {
       startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'authorized-user-on-unauthorized' });
       performReplace('/');
-    } else if (inAdmin && !isAdmin) {
-      startupLog('Navigation complete', { action: 'replace', route: '/unauthorized?required=admin', reason: 'admin-required' });
-      performReplace('/unauthorized?required=admin');
+    } else if (!authDecision.allowed && authDecision.redirectTo) {
+      startupLog('Navigation complete', { action: 'replace', route: authDecision.redirectTo, reason: authDecision.reason || 'route-auth-denied' });
+      performReplace(authDecision.redirectTo);
     } else if (profile?.status === 'rejected') {
       trackGateEvent('approval_rejected', 'account-rejected');
       if (emailVerified) trackGateEvent('user_stuck_after_verification', 'account-rejected');
       if (segments.join('/') !== 'auth/pending') {
-        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'account-status' });
-        performReplace('/auth/pending');
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending?state=rejected', reason: 'account-status' });
+        performReplace('/auth/pending?state=rejected');
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }
-    } else if (profile?.status === 'deactivated' || profile?.status === 'suspended') {
+    } else if (profile?.status === 'suspended') {
       if (emailVerified) trackGateEvent('user_stuck_after_verification', 'account-suspended');
-      // Deactivated/suspended users -> pending screen shows a blocked-account state
       if (segments.join('/') !== 'auth/pending') {
-        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending', reason: 'account-status' });
-        performReplace('/auth/pending');
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending?state=suspended', reason: 'account-suspended' });
+        performReplace('/auth/pending?state=suspended');
+      } else {
+        startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
+      }
+    } else if (profile?.status === 'deactivated') {
+      if (emailVerified) trackGateEvent('user_stuck_after_verification', 'account-deactivated');
+      if (segments.join('/') !== 'auth/pending') {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending?state=deactivated', reason: 'account-deactivated' });
+        performReplace('/auth/pending?state=deactivated');
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
       }

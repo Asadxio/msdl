@@ -18,6 +18,7 @@ import { hasPermission } from '@/lib/rbac';
 import { isFounderEmail } from '@/lib/founderPolicy';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { exportAdminCsvAndShare, ExportType } from '@/lib/adminExportService';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 type AnalyticsMetrics = {
   // Users
@@ -81,6 +82,7 @@ export default function AdminAnalyticsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { activeOrgId, isDefaultOrg } = useActiveOrganization();
   const isFounder = isFounderEmail(profile?.email || user?.email);
   const isAdmin = isFounder || hasPermission(profile, 'admin.analytics.read') || profile?.role === 'super_admin' || profile?.role === 'admin';
   const [loading, setLoading] = useState(true);
@@ -120,8 +122,9 @@ export default function AdminAnalyticsScreen() {
       const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const cutoffDateTs = Timestamp.fromDate(cutoffDate);
+      const tenantId = activeOrgId || DEFAULT_ORGANIZATION_ID;
 
-      // Parallel fetches — users by role
+      // Parallel fetches — users by role (Tenant scoped)
       const [
         studentsCount, teachersCount, adminsCount, activeUsersSnap,
         allCoursesCount, activeCoursesCount,
@@ -130,16 +133,50 @@ export default function AdminAnalyticsScreen() {
         liveClassesSnap,
         allPaymentsSnap,
       ] = await Promise.all([
-        getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))),
-        getCountFromServer(query(collection(db, 'users'), where('role', '==', 'teacher'))),
-        getCountFromServer(query(collection(db, 'users'), where('role', '==', 'admin'))),
-        getDocs(query(collection(db, 'users'), where('last_login_at', '>=', cutoffDateTs))),
-        getCountFromServer(collection(db, 'courses')),
-        getCountFromServer(query(collection(db, 'courses'), where('status', '==', 'active'))),
-        getCountFromServer(collection(db, 'quiz_results')),
-        getDocs(query(collection(db, 'attendance'), limit(2000))),
-        getDocs(query(collection(db, 'live_classes'), orderBy('started_at', 'desc'), limit(200))),
-        getDocs(query(collection(db, 'payments'), limit(2000))),
+        getCountFromServer(
+          isDefaultOrg
+            ? query(collection(db, 'users'), where('role', '==', 'student'))
+            : query(collection(db, 'users'), where('role', '==', 'student'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        getCountFromServer(
+          isDefaultOrg
+            ? query(collection(db, 'users'), where('role', '==', 'teacher'))
+            : query(collection(db, 'users'), where('role', '==', 'teacher'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        getCountFromServer(
+          isDefaultOrg
+            ? query(collection(db, 'users'), where('role', '==', 'admin'))
+            : query(collection(db, 'users'), where('role', '==', 'admin'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        getDocs(
+          isDefaultOrg
+            ? query(collection(db, 'users'), where('last_login_at', '>=', cutoffDateTs))
+            : query(collection(db, 'users'), where('last_login_at', '>=', cutoffDateTs), where('organization_id', '==', tenantId))
+        ).catch(() => ({ size: 0, docs: [] as any[] })),
+
+        getCountFromServer(
+          isDefaultOrg
+            ? collection(db, 'courses')
+            : query(collection(db, 'courses'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        getCountFromServer(
+          isDefaultOrg
+            ? query(collection(db, 'courses'), where('status', '==', 'active'))
+            : query(collection(db, 'courses'), where('status', '==', 'active'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        getCountFromServer(collection(db, 'quiz_results')).catch(() => ({ data: () => ({ count: 0 }) })),
+        getDocs(query(collection(db, 'attendance'), limit(2000))).catch(() => ({ forEach: () => {} })),
+        getDocs(query(collection(db, 'live_classes'), orderBy('started_at', 'desc'), limit(200))).catch(() => ({ size: 0 })),
+        getDocs(
+          isDefaultOrg
+            ? query(collection(db, 'payments'), limit(2000))
+            : query(collection(db, 'payments'), where('organization_id', '==', tenantId), limit(2000))
+        ).catch(() => ({ forEach: () => {} })),
       ]);
 
       // Attendance calculations
@@ -218,7 +255,7 @@ export default function AdminAnalyticsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [dateFilter, profile?.role, profile?.status]);
+  }, [dateFilter, profile?.role, profile?.status, activeOrgId, isDefaultOrg]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await loadAnalytics();

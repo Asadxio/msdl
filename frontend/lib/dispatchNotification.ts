@@ -113,6 +113,7 @@ export async function writeNotificationRecord(
           dedupe_id: input.dedupe_id,
           created_at: serverTimestamp(),
           created_at_ms: Date.now(),
+          ...(input.organization_id ? { organization_id: input.organization_id } : {}),
         };
 
         tx.set(notifRef, docData);
@@ -177,6 +178,7 @@ async function sendPushViaCloudFunction(params: {
   sendToAll: boolean;
   dedupeId: string;
   channel: string;
+  organization_id?: string;
 }): Promise<BackendPushResult> {
   try {
     // Convert data values to strings for FCM compatibility
@@ -193,6 +195,7 @@ async function sendPushViaCloudFunction(params: {
       title: params.title,
       body: params.body,
       data: stringData,
+      ...(params.organization_id ? { organization_id: params.organization_id } : {}),
       ...(params.sendToAll
         ? { sendToAll: true }
         : { recipientUids: params.recipientIds }),
@@ -250,8 +253,9 @@ export async function dispatchNotification(
         title: input.title,
         body: input.body,
         route,
-        data: { ...payload, is_broadcast: true },
+        data: { ...payload, is_broadcast: true, ...(input.organization_id ? { organization_id: input.organization_id } : {}) },
         dedupe_id: dedupeId,
+        organization_id: input.organization_id,
       });
       if (!alreadyExists) writtenRecipients = 1;
     } catch (err) {
@@ -310,8 +314,9 @@ export async function dispatchNotification(
             title: input.title,
             body: input.body,
             route,
-            data: payload,
+            data: { ...payload, ...(input.organization_id ? { organization_id: input.organization_id } : {}) },
             dedupe_id: dedupeId,
+            organization_id: input.organization_id,
           });
           if (!alreadyExists) writtenRecipients += 1;
         } catch (err) {
@@ -342,6 +347,7 @@ export async function dispatchNotification(
     sendToAll: isSendToAll,
     dedupeId,
     channel: input.channel,
+    organization_id: input.organization_id,
   });
 
   logger.info('[notification_dispatch_complete]', {

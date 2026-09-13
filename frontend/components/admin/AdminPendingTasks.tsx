@@ -1,8 +1,9 @@
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { ROUTES } from '@/lib/routes';
 
 const THEME = {
   primary: '#005F46',
@@ -34,9 +35,9 @@ type Props = {
 export const AdminPendingTasks = React.memo(function AdminPendingTasks({ counts }: Props) {
   const router = useRouter();
 
-  const handleNavigate = useCallback((route: string) => {
+  const handleNavigate = useCallback((route: Href) => {
     try {
-      router.push(route as any);
+      router.push(route);
     } catch (e) {
       console.warn('[AdminPendingTasks] Navigation error:', e);
     }
@@ -80,7 +81,7 @@ export const AdminPendingTasks = React.memo(function AdminPendingTasks({ counts 
           {approvals > 0 && (
             <TouchableOpacity
               style={[styles.taskCard, { borderLeftColor: THEME.warning }]}
-              onPress={() => handleNavigate('/admin/users')}
+              onPress={() => handleNavigate(ROUTES.admin.users)}
               activeOpacity={0.75}
               accessible={true}
               accessibilityRole="button"
@@ -100,7 +101,7 @@ export const AdminPendingTasks = React.memo(function AdminPendingTasks({ counts 
           {payments > 0 && (
             <TouchableOpacity
               style={[styles.taskCard, { borderLeftColor: THEME.success }]}
-              onPress={() => handleNavigate('/admin/payments')}
+              onPress={() => handleNavigate(ROUTES.admin.payments)}
               activeOpacity={0.75}
               accessible={true}
               accessibilityRole="button"
@@ -120,7 +121,7 @@ export const AdminPendingTasks = React.memo(function AdminPendingTasks({ counts 
           {privacy > 0 && (
             <TouchableOpacity
               style={[styles.taskCard, { borderLeftColor: '#6366F1' }]}
-              onPress={() => handleNavigate('/admin/privacy-requests')}
+              onPress={() => handleNavigate(ROUTES.admin.privacyRequests)}
               activeOpacity={0.75}
               accessible={true}
               accessibilityRole="button"
@@ -140,7 +141,7 @@ export const AdminPendingTasks = React.memo(function AdminPendingTasks({ counts 
           {moderation > 0 && (
             <TouchableOpacity
               style={[styles.taskCard, { borderLeftColor: THEME.error }]}
-              onPress={() => handleNavigate('/admin/moderation')}
+              onPress={() => handleNavigate(ROUTES.admin.moderation)}
               activeOpacity={0.75}
               accessible={true}
               accessibilityRole="button"

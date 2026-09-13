@@ -8,11 +8,8 @@ service cloud.firestore {
     function isOwner() {
       return isSignedIn() && (
         request.auth.uid in ['UYRU5CPF9jTf5FktUSVdRrxng7h2', 'qtdrDkqcHXSMDZpJe0YeWq1fBtJ2'] ||
-        (('email' in request.auth.token) && (
-          request.auth.token.email in ['sumraftm@gmail.com', 'xioasad@gmail.com', 'Sumraftm@gmail.com', 'Xioasad@gmail.com'] ||
-          request.auth.token.email.matches('^[sS][uU][mM][rR][aA][fF][tT][mM]@gmail\\.com$') ||
-          request.auth.token.email.matches('^[xX][iI][oO][aA][sS][aA][dD]@gmail\\.com$')
-        ))
+        (('email' in request.auth.token) &&
+          request.auth.token.email.lower() in ['sumraftm@gmail.com', 'xioasad@gmail.com'])
       );
     }
 
@@ -23,9 +20,7 @@ service cloud.firestore {
     }
 
     function isApprovedVerifiedUser() {
-      return isOwner() || (isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
+      return isVerified();
     }
 
 
@@ -38,9 +33,7 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isOwner() || (isVerified()
-        && roleOf(request.auth.uid) == 'super_admin'
-        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
+      return isOwner() || (isVerified() && roleOf(request.auth.uid) == 'super_admin');
     }
 
     function hasRole(uid, roles) {
@@ -48,23 +41,28 @@ service cloud.firestore {
     }
 
     function isModerator() {
-      return isOwner() || (isVerified()
-        && hasRole(request.auth.uid, ['moderator', 'admin', 'super_admin'])
-        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
+      return isSuperAdmin() || (isVerified() && roleOf(request.auth.uid) in ['moderator', 'admin']);
     }
 
     function isAdmin() {
-      return isOwner() || isSuperAdmin() || (isVerified()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && roleOf(request.auth.uid) in ['admin', 'super_admin']
-        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
+      return isSuperAdmin() || (isVerified() && roleOf(request.auth.uid) == 'admin');
+    }
+
+    function isTenantAdmin(targetOrgId) {
+      return isSuperAdmin() || ((isVerified() && roleOf(request.auth.uid) == 'admin') && (
+        (targetOrgId != null && targetOrgId != '' && targetOrgId != 'mslb-main' && (
+          exists(/databases/$(database)/documents/organization_memberships/$(targetOrgId + '_' + request.auth.uid)) ||
+          exists(/databases/$(database)/documents/organization_memberships/$(targetOrgId + ':' + request.auth.uid))
+        )) ||
+        ((targetOrgId == null || targetOrgId == '' || targetOrgId == 'mslb-main') && (
+          exists(/databases/$(database)/documents/organization_memberships/$('mslb-main_' + request.auth.uid)) ||
+          exists(/databases/$(database)/documents/organization_memberships/$('mslb-main:' + request.auth.uid))
+        ))
+      ));
     }
 
     function isTeacherOrAdmin() {
-      return isOwner() || isAdmin() || (isVerified()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && roleOf(request.auth.uid) in ['teacher', 'assistant_teacher', 'admin', 'super_admin', 'moderator']
-        && (!('status' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).status in ['approved', 'active']));
+      return isAdmin() || (isVerified() && roleOf(request.auth.uid) in ['teacher', 'assistant_teacher', 'moderator']);
     }
 
 
@@ -169,13 +167,15 @@ service cloud.firestore {
     function isValidUserUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone', 'founder']
+          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone', 'founder', 'organization_id', 'uid']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.email is string
         && request.resource.data.role in ['student', 'teacher', 'assistant_teacher', 'moderator', 'admin', 'super_admin']
         && request.resource.data.status in ['pending', 'approved', 'deactivated', 'rejected']
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string)
+        && (!('uid' in request.resource.data) || request.resource.data.uid is string)
         && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
         && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
         && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
@@ -247,10 +247,12 @@ service cloud.firestore {
     function isValidCourseWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'teacher_name', 'teacherName', 'teacher_id', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'subjects', 'organization_id', 'created_at', 'updated_at']
+          ['name', 'teacher_name', 'teacherName', 'teacher_id', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'subjects', 'organization_id', 'created_at', 'updated_at', 'status', 'assigned_teachers']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
+        && (!('status' in request.resource.data) || request.resource.data.status is string)
+        && (!('assigned_teachers' in request.resource.data) || request.resource.data.assigned_teachers is list)
         && (!('teacher_name' in request.resource.data) || request.resource.data.teacher_name is string)
         && (!('teacherName' in request.resource.data) || request.resource.data.teacherName is string)
         && (!('teacher_id' in request.resource.data) || request.resource.data.teacher_id is string)
@@ -308,7 +310,7 @@ service cloud.firestore {
             'title', 'message', 'user_id', 'target_roles', 'target_user_ids',
             'category', 'sound', 'read', 'hidden_by', 'created_at',
             'data', 'dedupe_id', 'created_at_ms', 'recipient_id', 'actor_id',
-            'channel', 'event', 'body', 'route'
+            'channel', 'event', 'body', 'route', 'organization_id'
           ]
         )
         && request.resource.data.title is string
@@ -317,6 +319,7 @@ service cloud.firestore {
         && request.resource.data.message.size() > 0
         && request.resource.data.user_id is string
         && request.resource.data.user_id.size() > 0
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string)
         && (!('target_roles' in request.resource.data) || request.resource.data.target_roles is list)
         && (!('target_user_ids' in request.resource.data) || request.resource.data.target_user_ids is list)
         && (!('category' in request.resource.data) || request.resource.data.category is string)
@@ -380,6 +383,14 @@ service cloud.firestore {
 
     function canReadNotification() {
       return isApprovedVerifiedUser()
+        && (
+          !('organization_id' in resource.data)
+          || resource.data.organization_id == null
+          || resource.data.organization_id == ''
+          || resource.data.organization_id == 'mslb-main'
+          || isSuperAdmin()
+          || (('organization_id' in userDoc(request.auth.uid)) && userDoc(request.auth.uid).organization_id == resource.data.organization_id)
+        )
         && (
           resource.data.user_id == 'all'
           || resource.data.user_id == request.auth.uid
@@ -724,7 +735,7 @@ service cloud.firestore {
     function isValidAttendanceRecord() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'user_email', 'date', 'status', 'marked_by', 'marked_by_uid', 'marked_by_name', 'created_at', 'marked_at', 'updated_at', 'live_class_id', 'course_id', 'duration_seconds']
+          ['user_id', 'user_name', 'user_email', 'date', 'status', 'marked_by', 'marked_by_uid', 'marked_by_name', 'created_at', 'marked_at', 'updated_at', 'live_class_id', 'course_id', 'duration_seconds', 'organization_id']
         )
         && isTeacherOrAdmin()
         && request.resource.data.user_id is string
@@ -738,6 +749,7 @@ service cloud.firestore {
         && request.resource.data.marked_by in ['teacher', 'admin', 'live_class']
         && request.resource.data.marked_by_uid == request.auth.uid
         && request.resource.data.marked_by_name is string
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string)
         && (!('user_name' in request.resource.data) || request.resource.data.user_name is string)
         && (!('user_email' in request.resource.data) || request.resource.data.user_email is string)
         && request.resource.data.marked_at is timestamp
@@ -912,16 +924,34 @@ service cloud.firestore {
         );
     }
 
+    function recordingOrgId(data) {
+      return ('organization_id' in data && data.organization_id != null && data.organization_id != '')
+        ? data.organization_id
+        : 'mslb-main';
+    }
+
+    function isMemberOfRecordingOrg(data) {
+      return isSuperAdmin()
+        || (recordingOrgId(data) == 'mslb-main' && (!('organization_id' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).organization_id == 'mslb-main'))
+        || ('organization_id' in userDoc(request.auth.uid) && userDoc(request.auth.uid).organization_id == recordingOrgId(data))
+        || exists(/databases/$(database)/documents/organization_memberships/$(recordingOrgId(data) + '_' + request.auth.uid))
+        || exists(/databases/$(database)/documents/organization_memberships/$(recordingOrgId(data) + ':' + request.auth.uid));
+    }
+
     function canReadRecordingData(data) {
       return isApprovedVerifiedUser()
+        && isMemberOfRecordingOrg(data)
         && (
-          !('live_class_id' in data)
-          || data.live_class_id == ''
-          || (data.live_class_id is string
-            && exists(/databases/$(database)/documents/live_classes/$(data.live_class_id))
-            && canReadLiveClassData(get(/databases/$(database)/documents/live_classes/$(data.live_class_id)).data))
+          isTeacherOrAdmin()
+          || (
+            ('course_id' in data)
+            && data.course_id is string
+            && data.course_id.size() > 0
+            && hasActiveEnrollmentForCourse(data.course_id)
+          )
         );
     }
+
 
     function isValidLiveParticipantShape(data, classId, userId) {
       return hasOnlyAllowedKeys(data, [
@@ -1222,15 +1252,21 @@ service cloud.firestore {
     // courses collection
     match /courses/{courseId} {
       allow read: if canReadCourseData(courseId, resource.data);
-      allow create, update: if isAdmin() && isValidCourseWrite();
-      allow delete: if isAdmin();
+      allow create, update: if isValidCourseWrite() && (
+        isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) &&
+        (resource == null || resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main') || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')))
+      );
+      allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
     // teachers collection
     match /teachers/{teacherId} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin() && isValidTeacherWrite();
-      allow delete: if isAdmin();
+      allow create, update: if isValidTeacherWrite() && (
+        isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) &&
+        (resource == null || resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main') || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')))
+      );
+      allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
     // library collection
@@ -1539,9 +1575,54 @@ service cloud.firestore {
 
     match /recordings/{recordingId} {
       allow read: if canReadRecordingData(resource.data);
-      allow create: if isTeacherOrAdmin();
-      allow update: if isTeacherOrAdmin() && (isAdmin() || resource.data.teacher_id == request.auth.uid);
-      allow delete: if isAdmin() || (isTeacherOrAdmin() && resource.data.teacher_id == request.auth.uid);
+      allow create: if isApprovedVerifiedUser()
+        && (
+          isSuperAdmin()
+          || (
+            isTeacherOrAdmin()
+            && ('organization_id' in request.resource.data)
+            && isMemberOfRecordingOrg(request.resource.data)
+            && (
+              isTenantAdmin(recordingOrgId(request.resource.data))
+              || (isApprovedTeacher() && request.resource.data.teacher_id == request.auth.uid)
+            )
+            && (!('course_id' in request.resource.data)
+                || request.resource.data.course_id == null
+                || request.resource.data.course_id == ''
+                || (exists(/databases/$(database)/documents/courses/$(request.resource.data.course_id))
+                    && (
+                      !('organization_id' in get(/databases/$(database)/documents/courses/$(request.resource.data.course_id)).data)
+                      || get(/databases/$(database)/documents/courses/$(request.resource.data.course_id)).data.organization_id == request.resource.data.organization_id
+                      || (request.resource.data.organization_id == 'mslb-main' && !('organization_id' in get(/databases/$(database)/documents/courses/$(request.resource.data.course_id)).data))
+                    )
+                )
+            )
+          )
+        );
+      allow update: if isApprovedVerifiedUser()
+        && (
+          isSuperAdmin()
+          || (
+            isMemberOfRecordingOrg(resource.data)
+            && (
+              isTenantAdmin(recordingOrgId(resource.data))
+              || (isApprovedTeacher() && resource.data.teacher_id == request.auth.uid)
+            )
+            && request.resource.data.course_id == resource.data.course_id
+            && request.resource.data.organization_id == resource.data.organization_id
+          )
+        );
+      allow delete: if isApprovedVerifiedUser()
+        && (
+          isSuperAdmin()
+          || (
+            isMemberOfRecordingOrg(resource.data)
+            && (
+              isTenantAdmin(recordingOrgId(resource.data))
+              || (isApprovedTeacher() && resource.data.teacher_id == request.auth.uid)
+            )
+          )
+        );
     }
 
     match /live_classes/{classId} {
@@ -1728,11 +1809,6 @@ service cloud.firestore {
       allow write: if false; // Cloud Function Admin SDK only
     }
 
-    // Deny all other document access by default.
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     match /moderation_reports/{id} {
       allow read: if isModeratorOrAbove() || (isSignedIn() && resource.data.reporter_id == request.auth.uid);
       allow create: if isSignedIn()
@@ -1826,6 +1902,11 @@ service cloud.firestore {
         && request.resource.data.whatsapp_number.size() >= 7
         && request.resource.data.created_at is timestamp;
       allow update, delete: if isAdmin();
+    }
+
+    // Deny all other document access by default.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

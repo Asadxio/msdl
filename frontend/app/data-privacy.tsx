@@ -14,11 +14,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { deleteUser } from 'firebase/auth';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { UIButton, InlineError } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { createPrivacyRequest } from '@/lib/legal';
-import { auth, db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,18 +63,11 @@ export default function DataPrivacyScreen() {
     try {
       const uid = user.uid;
 
-      // 1. Anonymize user profile document in Firestore
+      // 1. Record immediate deletion request in compliance audit trail
       try {
-        await updateDoc(doc(db, 'users', uid), {
-          status: 'deactivated',
-          name: '[Deleted Account]',
-          email: `deleted_${uid.slice(0, 8)}@madrasa.local`,
-          is_blocked: true,
-          deleted_at: serverTimestamp(),
-          updated_at: serverTimestamp(),
-        });
+        await createPrivacyRequest(uid, 'deletion', 'Immediate user self-service account deletion');
       } catch (e) {
-        console.warn('Could not update user doc before Auth delete:', e);
+        console.warn('Could not create privacy deletion request audit:', e);
       }
 
       // 2. Delete user from Firebase Auth

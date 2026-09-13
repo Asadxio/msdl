@@ -34,6 +34,7 @@ import { useData } from '@/context/DataContext';
 import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 import { exportAdminCsvAndShare } from '@/lib/adminExportService';
 import { withTimeout } from '@/lib/errors';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,8 +98,9 @@ export default function AttendanceScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const { courses, teachers, enrolledCourses, userEnrollments } = useData();
+  const { activeOrgId, isDefaultOrg } = useActiveOrganization();
 
-  const isTeacher = profile?.role === 'teacher';
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const canMark = isTeacher || isAdmin;
 
@@ -201,18 +203,26 @@ export default function AttendanceScreen() {
     return unsub;
   }, [canMark, selectedDate, user?.uid, reloadKey]);
 
-  // 2. Approved Students Listener (Teachers & Admins)
+  // 2. Approved Students Listener (Teachers & Admins - Tenant Scoped)
   useEffect(() => {
     if (!canMark) {
       setApprovedStudents([]);
       return;
     }
 
-    const usersQ = query(
-      collection(db, 'users'),
-      where('status', '==', 'approved'),
-      where('role', '==', 'student')
-    );
+    const currentOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
+    const usersQ = isDefaultOrg
+      ? query(
+          collection(db, 'users'),
+          where('status', '==', 'approved'),
+          where('role', '==', 'student')
+        )
+      : query(
+          collection(db, 'users'),
+          where('status', '==', 'approved'),
+          where('role', '==', 'student'),
+          where('organization_id', '==', currentOrg)
+        );
 
     const unsub = onSnapshot(
       usersQ,
@@ -238,7 +248,7 @@ export default function AttendanceScreen() {
     );
 
     return unsub;
-  }, [canMark, reloadKey]);
+  }, [canMark, reloadKey, activeOrgId, isDefaultOrg]);
 
   // ── Handlers & Actions ─────────────────────────────────────────────────────
 

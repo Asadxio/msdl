@@ -1,8 +1,9 @@
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { ROUTES } from '@/lib/routes';
 
 const THEME = {
   primary: '#005F46',
@@ -21,7 +22,7 @@ type ActionItem = {
   label: string;
   subLabel?: string;
   icon: keyof typeof Ionicons.glyphMap;
-  route: string;
+  route: Href;
   color: string;
 };
 
@@ -34,36 +35,36 @@ const ACTION_CATEGORIES: ActionCategory[] = [
   {
     title: 'Academic & Faculty',
     items: [
-      { id: 'users', label: 'Approve Students', subLabel: 'Roster Review', icon: 'person-add-outline', route: '/admin/users', color: '#10B981' },
-      { id: 'teachers', label: 'Manage Faculty', subLabel: 'Teachers Roster', icon: 'people-outline', route: '/admin/users', color: '#3B82F6' },
-      { id: 'courses', label: 'Manage Courses', subLabel: 'LMS Curriculum', icon: 'school-outline', route: '/admin/manage-academics', color: '#8B5CF6' },
-      { id: 'library', label: 'Manage Library', subLabel: 'Publish Books', icon: 'book-outline', route: '/admin/add-book', color: '#06B6D4' },
-      { id: 'attendance', label: 'Class Attendance', subLabel: 'Student Logs', icon: 'calendar-outline', route: '/attendance', color: '#6366F1' },
-      { id: 'certificates', label: 'Sanads & Credentials', subLabel: 'Academic Certificates', icon: 'ribbon-outline', route: '/(tabs)/certificate', color: '#D97706' },
+      { id: 'users', label: 'Approve Students', subLabel: 'Roster Review', icon: 'person-add-outline', route: ROUTES.admin.users, color: '#10B981' },
+      { id: 'teachers', label: 'Manage Faculty', subLabel: 'Teachers Roster', icon: 'people-outline', route: ROUTES.admin.academics, color: '#3B82F6' },
+      { id: 'courses', label: 'Manage Courses', subLabel: 'LMS Curriculum', icon: 'school-outline', route: ROUTES.admin.academics, color: '#8B5CF6' },
+      { id: 'library', label: 'Manage Library', subLabel: 'Publish Books', icon: 'book-outline', route: ROUTES.admin.addBook, color: '#06B6D4' },
+      { id: 'attendance', label: 'Class Attendance', subLabel: 'Student Logs', icon: 'calendar-outline', route: ROUTES.attendance, color: '#6366F1' },
+      { id: 'certificates', label: 'Sanads & Credentials', subLabel: 'Academic Certificates', icon: 'ribbon-outline', route: ROUTES.certificate, color: '#D97706' },
     ],
   },
   {
     title: 'Operations & Broadcasting',
     items: [
-      { id: 'live', label: 'Create Live Class', subLabel: 'Stream Host', icon: 'videocam-outline', route: '/live-class', color: '#EF4444' },
-      { id: 'recording', label: 'Upload Recording', subLabel: 'Lesson Video', icon: 'cloud-upload-outline', route: '/admin/manage-academics', color: '#F59E0B' },
-      { id: 'payments', label: 'Manage Payments', subLabel: 'Financial Audit', icon: 'card-outline', route: '/admin/payments', color: '#10B981' },
+      { id: 'live', label: 'Create Live Class', subLabel: 'Stream Host', icon: 'videocam-outline', route: ROUTES.liveClasses, color: '#EF4444' },
+      { id: 'recording', label: 'Upload Recording', subLabel: 'Lesson Video', icon: 'cloud-upload-outline', route: ROUTES.admin.academics, color: '#F59E0B' },
+      { id: 'payments', label: 'Manage Payments', subLabel: 'Financial Audit', icon: 'card-outline', route: ROUTES.admin.payments, color: '#10B981' },
     ],
   },
   {
     title: 'Communication & Outreach',
     items: [
-      { id: 'notify', label: 'Send Broadcast', subLabel: 'Notice Board', icon: 'notifications-outline', route: '/admin/send-push', color: '#EC4899' },
-      { id: 'push', label: 'Push Notifications', subLabel: 'FCM Alerts', icon: 'megaphone-outline', route: '/admin/send-push', color: '#8B5CF6' },
+      { id: 'notify', label: 'Send Broadcast', subLabel: 'Notice Board', icon: 'notifications-outline', route: ROUTES.admin.sendPush, color: '#EC4899' },
+      { id: 'push', label: 'Push Notifications', subLabel: 'FCM Alerts', icon: 'megaphone-outline', route: ROUTES.admin.sendPush, color: '#8B5CF6' },
     ],
   },
   {
     title: 'Governance & Security',
     items: [
-      { id: 'analytics', label: 'Analytics Dashboard', subLabel: 'LMS Telemetry', icon: 'bar-chart-outline', route: '/admin/analytics', color: '#3B82F6' },
-      { id: 'moderation', label: 'Moderation Queue', subLabel: 'Community Review', icon: 'shield-checkmark-outline', route: '/admin/moderation', color: '#F97316' },
-      { id: 'security', label: 'Security Diagnostics', subLabel: 'System Audit', icon: 'lock-closed-outline', route: '/admin/security', color: '#EF4444' },
-      { id: 'privacy', label: 'Privacy & GDPR', subLabel: 'Data Inquiries', icon: 'document-lock-outline', route: '/admin/privacy-requests', color: '#64748B' },
+      { id: 'analytics', label: 'Analytics Dashboard', subLabel: 'LMS Telemetry', icon: 'bar-chart-outline', route: ROUTES.admin.analytics, color: '#3B82F6' },
+      { id: 'moderation', label: 'Moderation Queue', subLabel: 'Community Review', icon: 'shield-checkmark-outline', route: ROUTES.admin.moderation, color: '#F97316' },
+      { id: 'security', label: 'Security Diagnostics', subLabel: 'System Audit', icon: 'lock-closed-outline', route: ROUTES.admin.security, color: '#EF4444' },
+      { id: 'privacy', label: 'Privacy & GDPR', subLabel: 'Data Inquiries', icon: 'document-lock-outline', route: ROUTES.admin.privacyRequests, color: '#64748B' },
     ],
   },
 ];
@@ -74,9 +75,9 @@ const IS_TABLET = width > 768;
 export const QuickAdminActions = React.memo(function QuickAdminActions() {
   const router = useRouter();
 
-  const handlePress = useCallback((route: string) => {
+  const handlePress = useCallback((route: Href) => {
     try {
-      router.push(route as any);
+      router.push(route);
     } catch (e) {
       console.warn('[QuickAdminActions] Navigation error:', e);
     }

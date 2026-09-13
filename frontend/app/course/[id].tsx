@@ -41,6 +41,7 @@ import { ScalePressable, ScreenRefreshControl, EmptyState } from "@/components/u
 import { useAuth } from "@/context/AuthContext";
 
 import { normalizeMeetUrl, prepareExternalUrl } from "@/lib/links";
+import { filterTeacherAssignedCourses } from "@/lib/enrollments";
 import { startLiveClass, subscribeActiveLiveClass, type LiveClass } from "@/lib/liveClasses";
 import { loadAssignmentDraft, saveAssignmentDraft } from "@/lib/lmsHardening";
 import {
@@ -183,20 +184,42 @@ export default function CourseDetailScreen() {
     course?.meet_link || course?.class_link || "",
   );
   const [activeTab, setActiveTab] = useState<'overview' | 'live' | 'audio' | 'curriculum'>('overview');
-  const isReviewer = profile?.role === "admin" || profile?.role === "teacher";
+  const currentTeacher = useMemo(() => {
+    return teachers.find(
+      (t) =>
+        t.id === user?.uid ||
+        (profile?.name && t.name?.toLowerCase().includes(profile.name.toLowerCase())),
+    );
+  }, [teachers, user?.uid, profile?.name]);
+
+  const isAssignedTeacher = useMemo(() => {
+    if (!course) return false;
+    return filterTeacherAssignedCourses([course], currentTeacher, user?.uid).length > 0;
+  }, [course, currentTeacher, user?.uid]);
+
+  const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
+  const isTeacher = profile?.role === "teacher" || profile?.role === "assistant_teacher";
+  const canManageClass = isAdmin || (profile?.role === "teacher" && isAssignedTeacher);
+  const isReviewer = isAdmin || (isTeacher && isAssignedTeacher);
   const isEnrolled = courseId ? isEnrolledInCourse(courseId) : false;
   const isStudent = profile?.role === "student";
   const isLockedForStudent = isStudent && !isEnrolled;
 
 
   useEffect(() => {
-    if (!courseId) return;
+    if (!courseId || isLockedForStudent) {
+      setActiveLiveClass(null);
+      return;
+    }
     const unsub = subscribeActiveLiveClass(courseId, setActiveLiveClass);
     return unsub;
-  }, [courseId]);
+  }, [courseId, isLockedForStudent]);
 
   useEffect(() => {
-    if (!courseId) return;
+    if (!courseId || isLockedForStudent) {
+      setRecordings([]);
+      return;
+    }
     try {
       const q = query(
         collection(db, "recordings"),
@@ -224,10 +247,13 @@ export default function CourseDetailScreen() {
       setRecordings([]);
       return () => {};
     }
-  }, [courseId]);
+  }, [courseId, isLockedForStudent]);
 
   const loadAudioLessons = async (reset = true) => {
-    if (!courseId) return;
+    if (!courseId || isLockedForStudent) {
+      if (reset) setAudioLessons([]);
+      return;
+    }
     setLoadingAudioLessons(true);
     try {
       const page = await fetchAudioLessonsPage(courseId, audioSearch, reset ? null : audioCursor);
@@ -309,11 +335,19 @@ export default function CourseDetailScreen() {
   };
 
   const openAudioUploadModal = () => {
+    if (!canManageClass) {
+      Alert.alert("Access denied", "Only the assigned teacher or an admin can upload audio lessons.");
+      return;
+    }
     resetAudioLessonForm();
     setAudioLessonModalVisible(true);
   };
 
   const openAudioEditModal = (lesson: AudioLesson) => {
+    if (!canManageClass) {
+      Alert.alert("Access denied", "Only the assigned teacher or an admin can edit audio lessons.");
+      return;
+    }
     setEditingAudioLesson(lesson);
     setAudioTitle(lesson.title);
     setAudioDescription(lesson.description || "");
@@ -324,6 +358,10 @@ export default function CourseDetailScreen() {
 
   const saveAudioLesson = async () => {
     if (!courseId || !user?.uid) return;
+    if (!canManageClass) {
+      Alert.alert("Access denied", "Only the assigned main teacher or an admin can manage audio lessons.");
+      return;
+    }
     if (!audioTitle.trim()) {
       Alert.alert("Title required", "Please enter an audio lesson title.");
       return;
@@ -359,6 +397,10 @@ export default function CourseDetailScreen() {
   };
 
   const confirmDeleteAudioLesson = (lesson: AudioLesson) => {
+    if (!canManageClass) {
+      Alert.alert("Access denied", "Only the assigned teacher or an admin can delete audio lessons.");
+      return;
+    }
     Alert.alert("Delete audio lesson", `Delete “${lesson.title}”? Students will no longer see this audio.`, [
       { text: "Cancel", style: "cancel" },
       {
@@ -544,6 +586,17 @@ export default function CourseDetailScreen() {
 
   const handleJoinClass = () => {
     try {
+      if (isLockedForStudent) {
+        Alert.alert(
+          "Enrollment Required",
+          "You are not enrolled in this course. Please enroll to attend live classes and access course materials.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Pay Fee & Enroll", onPress: () => router.push('/payment') }
+          ]
+        );
+        return;
+      }
       if (activeLiveClass?.id) {
         safePushLiveClass(activeLiveClass.id);
         return;
@@ -572,8 +625,8 @@ export default function CourseDetailScreen() {
 
   const openStartClassModal = () => {
     if (!course || !user?.uid || !profile) return;
-    if (profile.role !== "teacher" && profile.role !== "admin") {
-      Alert.alert("Access denied", "Only teachers/admins can start live classes.");
+    if (!canManageClass) {
+      Alert.alert("Access denied", "Only the assigned teacher or an admin can start live classes for this course.");
       return;
     }
     setMeetUrlInput(meetLink || "");
@@ -582,6 +635,10 @@ export default function CourseDetailScreen() {
 
   const handleStartLiveClass = async () => {
     if (!course || !user?.uid || !profile) return;
+    if (!canManageClass) {
+      Alert.alert("Access denied", "Only the assigned teacher or an admin can start live classes for this course.");
+      return;
+    }
     if (!meetUrlInput.trim()) {
       Alert.alert("Required", "Please enter a valid Google Meet URL.");
       return;
@@ -669,6 +726,10 @@ export default function CourseDetailScreen() {
     feedback?: string,
     grade?: string,
   ) => {
+    if (!isReviewer) {
+      Alert.alert("Access denied", "Only the assigned teacher or an admin can review submissions.");
+      return;
+    }
     setActiveSubmissionId(submissionId);
     setReviewFeedback(feedback || "");
     setReviewGrade(grade || "");
@@ -677,6 +738,10 @@ export default function CourseDetailScreen() {
 
   const reviewSubmissionHandler = async () => {
     if (!activeSubmissionId) return;
+    if (!isReviewer) {
+      Alert.alert("Access denied", "Only the assigned teacher or an admin can review submissions.");
+      return;
+    }
     if (!reviewFeedback.trim()) {
       Alert.alert(
         "Missing feedback",
@@ -723,6 +788,50 @@ export default function CourseDetailScreen() {
       // no-op: keep app responsive
     }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: "center", alignItems: "center" }]}>
+        <StatusBar barStyle="dark-content" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ marginTop: SPACING.md, color: COLORS.textMuted, fontSize: 14 }}>Loading course details...</Text>
+      </View>
+    );
+  }
+
+  if (!course) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, paddingHorizontal: SPACING.lg }]}>
+        <StatusBar barStyle="dark-content" />
+        <TouchableOpacity
+          style={{ flexDirection: "row", alignItems: "center", marginTop: SPACING.md, gap: 8 }}
+          onPress={() => goBackOrReplace(router, "/(tabs)/courses")}
+        >
+          <Ionicons name="arrow-back" size={22} color={COLORS.textMain} />
+          <Text style={{ color: COLORS.textMain, fontWeight: "700", fontSize: 15 }}>Return to Courses</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", gap: 12 }}>
+          <Ionicons name="alert-circle-outline" size={64} color={COLORS.textMuted} />
+          <Text style={{ fontSize: 20, fontWeight: "800", color: COLORS.textMain }}>Course Not Found</Text>
+          <Text style={{ fontSize: 14, color: COLORS.textMuted, textAlign: "center", maxWidth: 280 }}>
+            This course is either unavailable or has been archived.
+          </Text>
+          <TouchableOpacity
+            style={{
+              marginTop: SPACING.sm,
+              backgroundColor: COLORS.primary,
+              paddingVertical: 12,
+              paddingHorizontal: 24,
+              borderRadius: RADIUS.full,
+            }}
+            onPress={() => goBackOrReplace(router, "/(tabs)/courses")}
+          >
+            <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 14 }}>Browse All Courses</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -1102,7 +1211,7 @@ export default function CourseDetailScreen() {
                       : "Interactive classroom is currently offline. When your Ustaadha starts class, enrolled students will receive an instant notification."}
                   </Text>
                   <View style={styles.liveClassActions}>
-                    {isReviewer ? (
+                    {canManageClass ? (
                       <TouchableOpacity
                         style={[styles.startLiveBtn, startingLiveClass && styles.disabledBtn]}
                         activeOpacity={0.8}
@@ -1118,14 +1227,14 @@ export default function CourseDetailScreen() {
                       </TouchableOpacity>
                     ) : null}
                     <TouchableOpacity
-                      style={[styles.joinBtn, activeLiveClass ? styles.liveNowBtn : styles.offlineClassBtn]}
+                      style={[styles.joinBtn, isLockedForStudent ? styles.lockedClassBtn : (activeLiveClass ? styles.liveNowBtn : styles.offlineClassBtn)]}
                       testID="banner-join-class-btn"
                       activeOpacity={0.8}
                       onPress={handleJoinClass}
                     >
-                      <Ionicons name={activeLiveClass ? "radio" : "school-outline"} size={20} color="#FFFFFF" />
+                      <Ionicons name={isLockedForStudent ? "lock-closed" : (activeLiveClass ? "radio" : "school-outline")} size={20} color="#FFFFFF" />
                       <Text style={styles.joinBtnText}>
-                        {activeLiveClass ? "Join Live Classroom Now" : "Class Status: Offline"}
+                        {isLockedForStudent ? "Enrollment Required" : (activeLiveClass ? "Join Live Classroom Now" : "Class Status: Offline")}
                       </Text>
                     </TouchableOpacity>
 
@@ -1232,7 +1341,7 @@ export default function CourseDetailScreen() {
                     <Text style={styles.infoCardTitle}>Audio Lessons & Lectures</Text>
                     <Text style={styles.infoCardSubValue}>Teacher-uploaded Dars summaries for revision</Text>
                   </View>
-                  {isReviewer ? (
+                  {canManageClass ? (
                     <View style={styles.audioHeaderActions}>
                       <TouchableOpacity style={styles.audioUploadBtn} onPress={openAudioUploadModal}>
                         <Ionicons name="link-outline" size={16} color={COLORS.goldText} />
@@ -1300,7 +1409,7 @@ export default function CourseDetailScreen() {
                         <TouchableOpacity style={styles.audioIconBtn} onPress={() => downloadAudioLesson(lesson)}>
                           <Ionicons name="download-outline" size={18} color={COLORS.primary} />
                         </TouchableOpacity>
-                        {isReviewer ? (
+                        {canManageClass ? (
                           <>
                             <TouchableOpacity style={styles.audioIconBtn} onPress={() => openAudioEditModal(lesson)}>
                               <Ionicons name="create-outline" size={18} color={COLORS.primary} />
@@ -1745,7 +1854,7 @@ export default function CourseDetailScreen() {
 
           {/* Floating Bottom Quick Action */}
           <View style={styles.floatingActionRow}>
-            {meetLink ? (
+            {meetLink && !isLockedForStudent ? (
               <TouchableOpacity
                 style={styles.meetQuickActionBtn}
                 onPress={() => { void openExternalLink(meetLink); }}
@@ -1756,14 +1865,14 @@ export default function CourseDetailScreen() {
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
-              style={[styles.mainJoinActionBtn, activeLiveClass ? styles.liveNowBtn : styles.offlineClassBtn]}
+              style={[styles.mainJoinActionBtn, isLockedForStudent ? styles.lockedClassBtn : (activeLiveClass ? styles.liveNowBtn : styles.offlineClassBtn)]}
               testID="join-class-btn"
               activeOpacity={0.88}
               onPress={handleJoinClass}
             >
-              <Ionicons name={activeLiveClass ? "radio" : "school-outline"} size={18} color="#FFFFFF" />
+              <Ionicons name={isLockedForStudent ? "lock-closed" : (activeLiveClass ? "radio" : "school-outline")} size={18} color="#FFFFFF" />
               <Text style={styles.mainJoinActionText}>
-                {activeLiveClass ? "Join Live Classroom Now" : "Classroom (Offline)"}
+                {isLockedForStudent ? "Enrollment Required" : (activeLiveClass ? "Join Live Classroom Now" : "Classroom (Offline)")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2377,6 +2486,7 @@ const styles = StyleSheet.create({
   },
   liveNowBtn: { backgroundColor: "#16A34A" },
   offlineClassBtn: { backgroundColor: "#64748B" },
+  lockedClassBtn: { backgroundColor: "#D97706" },
   meetBackupLinkBtn: {
     flexDirection: "row",
     alignItems: "center",

@@ -111,84 +111,6 @@ export function TeacherDashboard({
     return filterTeacherAssignedCourses(courses, currentTeacher, user?.uid);
   }, [enrolledCourses, courses, teachers, user?.uid, profile?.name]);
 
-  // Real-time live classes listener
-  useEffect(() => {
-    const q = query(
-      collection(db, 'live_classes'),
-      where('status', 'in', ['live', 'scheduled']),
-      limit(5)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const list: LiveClassSummary[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          list.push({
-            id: d.id,
-            title: data.title || 'Untitled Class',
-            teacher_name: data.teacher_name || 'Teacher',
-            status: data.status === 'live' ? 'live' : 'scheduled',
-            class_time: data.class_time || data.time || 'Today',
-          });
-        });
-        setLiveClasses(list);
-        setLoadingSchedule(false);
-      },
-      () => {
-        setLoadingSchedule(false);
-      }
-    );
-    return () => unsub();
-  }, []);
-
-  // Real-time pending submissions listener for teacher reviews
-  useEffect(() => {
-    const q = query(
-      collection(db, 'submissions'),
-      where('status', '==', 'submitted'),
-      limit(6)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const list: PendingSubmission[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          list.push({
-            id: d.id,
-            assignment_id: data.assignment_id || 'Assignment',
-            course_id: data.course_id || '',
-            user_id: data.user_id || 'Student',
-            file_name: data.file_name || 'Submission',
-            submitted_at: data.submitted_at || null,
-          });
-        });
-        setPendingSubmissions(list);
-      },
-      () => {}
-    );
-    return () => unsub();
-  }, []);
-
-  // Real-time today's attendance records count
-  useEffect(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const q = query(
-      collection(db, 'attendance'),
-      where('date', '==', todayStr),
-      limit(50)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        setAttendanceCount(snap.size);
-      },
-      () => {}
-    );
-    return () => unsub();
-  }, []);
-
   // Set of assigned course IDs and names for academic scoping
   const assignedCourseMeta = useMemo(() => {
     const ids = new Set<string>();
@@ -200,6 +122,102 @@ export function TeacherDashboard({
     });
     return { ids, names };
   }, [myAssignedCourses]);
+
+  // Real-time live classes listener
+  useEffect(() => {
+    const q = query(
+      collection(db, 'live_classes'),
+      where('status', 'in', ['live', 'scheduled']),
+      limit(20)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list: LiveClassSummary[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const isMySession = data.teacher_id === user?.uid;
+          const isAssignedCourse = data.course_id && assignedCourseMeta.ids.has(String(data.course_id).toLowerCase());
+          if (assignedCourseMeta.ids.size === 0 || isMySession || isAssignedCourse) {
+            list.push({
+              id: d.id,
+              title: data.title || 'Untitled Class',
+              teacher_name: data.teacher_name || 'Teacher',
+              status: data.status === 'live' ? 'live' : 'scheduled',
+              class_time: data.class_time || data.time || 'Today',
+            });
+          }
+        });
+        setLiveClasses(list);
+        setLoadingSchedule(false);
+      },
+      () => {
+        setLoadingSchedule(false);
+      }
+    );
+    return () => unsub();
+  }, [assignedCourseMeta, user?.uid]);
+
+  // Real-time pending submissions listener for teacher reviews
+  useEffect(() => {
+    const q = query(
+      collection(db, 'submissions'),
+      where('status', '==', 'submitted'),
+      limit(25)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list: PendingSubmission[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const isAssignedCourse = data.course_id && assignedCourseMeta.ids.has(String(data.course_id).toLowerCase());
+          if (assignedCourseMeta.ids.size === 0 || isAssignedCourse) {
+            list.push({
+              id: d.id,
+              assignment_id: data.assignment_id || 'Assignment',
+              course_id: data.course_id || '',
+              user_id: data.user_id || 'Student',
+              file_name: data.file_name || 'Submission',
+              submitted_at: data.submitted_at || null,
+            });
+          }
+        });
+        setPendingSubmissions(list);
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [assignedCourseMeta]);
+
+  // Real-time today's attendance records count
+  useEffect(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const q = query(
+      collection(db, 'attendance'),
+      where('date', '==', todayStr),
+      limit(100)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (assignedCourseMeta.ids.size === 0) {
+          setAttendanceCount(snap.size);
+        } else {
+          let count = 0;
+          snap.forEach((d) => {
+            const data = d.data();
+            if (data.course_id && assignedCourseMeta.ids.has(String(data.course_id).toLowerCase())) {
+              count++;
+            }
+          });
+          setAttendanceCount(count);
+        }
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [assignedCourseMeta]);
 
   // Real-time student quiz results listener for teacher academic visibility
   useEffect(() => {
@@ -308,10 +326,12 @@ export function TeacherDashboard({
               </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.badgeRow}>
-                  <View style={styles.teacherBadge}>
-                    <Ionicons name="school" size={12} color="#FFFFFF" />
-                    <Text style={styles.teacherBadgeText}>FACULTY / USTAADHA</Text>
-                  </View>
+                    <View style={styles.teacherBadge}>
+                      <Ionicons name="school" size={12} color="#FFFFFF" />
+                      <Text style={styles.teacherBadgeText}>
+                        {profile?.role === 'assistant_teacher' ? "ASSISTANT TEACHER / MU'AWIN" : 'FACULTY / USTAADHA'}
+                      </Text>
+                    </View>
                   <View style={styles.verifiedPill}>
                     <Ionicons name="checkmark-circle" size={12} color="#059669" />
                     <Text style={styles.verifiedText}>Approved</Text>

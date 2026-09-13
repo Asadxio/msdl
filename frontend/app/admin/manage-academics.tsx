@@ -101,10 +101,10 @@ const INITIAL_COURSE: Omit<CourseItem, 'id'> = {
 export default function ManageAcademicsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const isFounder = isFounderEmail(profile?.email);
   const isAdmin = isFounder || hasPermission(profile, 'admin.academics.manage');
-  const { activeOrgId, activeOrg } = useActiveOrganization();
+  const { activeOrgId, activeOrg, isDefaultOrg } = useActiveOrganization();
 
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
@@ -249,9 +249,13 @@ export default function ManageAcademicsScreen() {
       console.warn('[manage-academics] lessons fetch failed:', lessonErr);
     }
 
-    // 4. Fetch Recordings
+    // 4. Fetch Recordings (Tenant-scoped)
     try {
-      const recordingSnap = await withTimeout(getDocs(collection(db, 'recordings')), 8000);
+      const currentOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
+      const recordingQuery = (!isDefaultOrg && activeOrgId)
+        ? query(collection(db, 'recordings'), where('organization_id', '==', currentOrg))
+        : query(collection(db, 'recordings'));
+      const recordingSnap = await withTimeout(getDocs(recordingQuery), 8000);
       const nextRecordings: RecordingItem[] = [];
       recordingSnap.forEach((d) => {
         const data = d.data();
@@ -269,16 +273,25 @@ export default function ManageAcademicsScreen() {
       console.warn('[manage-academics] recordings fetch failed:', recordingErr);
     }
 
-    // 5. Fetch Student Counts & List
+    // 5. Fetch Student Counts & List (Tenant-scoped)
     try {
+      const currentOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
+      const studentsCountQuery = isDefaultOrg
+        ? query(collection(db, 'users'), where('role', '==', 'student'))
+        : query(collection(db, 'users'), where('role', '==', 'student'), where('organization_id', '==', currentOrg));
+
       const studentsCountSnap = await withTimeout(
-        getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))),
+        getCountFromServer(studentsCountQuery),
         8000
       ).catch(() => ({ data: () => ({ count: 0 }) }));
       setStudentCount(studentsCountSnap.data().count || 0);
 
+      const usersQuery = isDefaultOrg
+        ? query(collection(db, 'users'), where('role', '==', 'student'))
+        : query(collection(db, 'users'), where('role', '==', 'student'), where('organization_id', '==', currentOrg));
+
       const usersSnap = await withTimeout(
-        getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
+        getDocs(usersQuery),
         8000
       ).catch(() => null);
       if (usersSnap) {
@@ -304,7 +317,7 @@ export default function ManageAcademicsScreen() {
     }
     setLoading(false);
     fetchingRef.current = false;
-  }, []);
+  }, [activeOrgId, isDefaultOrg]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await fetchData();
@@ -815,12 +828,24 @@ export default function ManageAcademicsScreen() {
     }
     try {
       setActionLoading(true);
+      // Determine authoritative organization from the selected course
+      const targetCourse = courses.find((c) => c.id === recordingCourseId);
+      const authoritativeOrgId = targetCourse?.organization_id || activeOrgId || DEFAULT_ORGANIZATION_ID;
+
+      // Prevent cross-tenant creation: custom tenant admin cannot create recordings for another tenant's course
+      if (!isDefaultOrg && activeOrgId && targetCourse?.organization_id && targetCourse.organization_id !== activeOrgId) {
+        Alert.alert('Permission Denied', 'You cannot add a recording to a course belonging to another organization.');
+        setActionLoading(false);
+        return;
+      }
+
       const payload = {
         title: recordingTitle.trim(),
         description: recordingDescription.trim(),
         file_url: recordingUrl.trim(),
         course_id: recordingCourseId,
         lesson_id: recordingLessonId || '',
+        organization_id: authoritativeOrgId,
         updated_at: serverTimestamp(),
       };
       if (editingRecordingId) {
@@ -834,6 +859,9 @@ export default function ManageAcademicsScreen() {
           addDoc(collection(db, 'recordings'), {
             ...payload,
             created_by: profile?.name || 'admin',
+            teacher_id: profile?.uid || user?.uid || '',
+            teacher_name: profile?.name || 'Admin',
+            status: 'published',
             created_at: serverTimestamp(),
           }),
           10000,

@@ -67,6 +67,10 @@ export type LiveClassCreateInput = {
   profile: UserProfile | null;
   purdahModeEnabled?: boolean;
   scheduledStartAt?: Date | null;
+  // organizationId: the caller's active org. Required for tenant scoping.
+  // Must be derived from the authenticated admin/teacher's own org context.
+  // Never accept from untrusted user input.
+  organizationId?: string;
 };
 
 export function normalizeLiveClass(id: string, data: any): LiveClass {
@@ -119,6 +123,8 @@ export async function startLiveClass(input: LiveClassCreateInput): Promise<strin
     current_ayah_or_page: 1,
     highlighted_words: [],
     recitation_queue: [],
+    // organization_id: only written when provided by caller's authorized org context
+    ...(input.organizationId ? { organization_id: input.organizationId } : {}),
     started_at: serverTimestamp(),
     created_at: serverTimestamp(),
     updated_at: serverTimestamp(),

@@ -67,7 +67,7 @@ export default function QuizScreen() {
   const params = useLocalSearchParams<{ courseId?: string; course_id?: string; category?: string }>();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
-  const isTeacher = profile?.role === 'teacher' || isAdmin;
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher' || isAdmin;
   
   // App State
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -639,8 +639,8 @@ export default function QuizScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.categoryGrid}>
-            {/* Teacher / Admin Action Banners */}
-            {isTeacher && (
+            {/* Admin Action Banners */}
+            {isAdmin && (
               <View style={{ gap: 8, marginBottom: 4 }}>
                 <TouchableOpacity
                   style={styles.aiQuizMakerBanner}
@@ -659,24 +659,22 @@ export default function QuizScreen() {
                   <Ionicons name="chevron-forward" size={18} color="#C8A84E" />
                 </TouchableOpacity>
 
-                {isAdmin && (
-                  <TouchableOpacity
-                    style={[styles.aiQuizMakerBanner, { backgroundColor: '#00382B', borderColor: 'rgba(200,168,78,0.3)' }]}
-                    onPress={() => router.push('/admin/manage-quizzes' as any)}
-                    activeOpacity={0.88}
-                  >
-                    <View style={styles.aiQuizMakerLeft}>
-                      <View style={[styles.aiQuizMakerIcon, { backgroundColor: '#00251C' }]}>
-                        <Ionicons name="list" size={20} color="#34D399" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.aiQuizMakerTitle, { color: '#FFFFFF' }]}>Manage Quiz Question Bank</Text>
-                        <Text style={[styles.aiQuizMakerSubtitle, { color: '#A7F3D0' }]}>Edit, update or delete any question from Firestore</Text>
-                      </View>
+                <TouchableOpacity
+                  style={[styles.aiQuizMakerBanner, { backgroundColor: '#00382B', borderColor: 'rgba(200,168,78,0.3)' }]}
+                  onPress={() => router.push('/admin/manage-quizzes' as any)}
+                  activeOpacity={0.88}
+                >
+                  <View style={styles.aiQuizMakerLeft}>
+                    <View style={[styles.aiQuizMakerIcon, { backgroundColor: '#00251C' }]}>
+                      <Ionicons name="list" size={20} color="#34D399" />
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#34D399" />
-                  </TouchableOpacity>
-                )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.aiQuizMakerTitle, { color: '#FFFFFF' }]}>Manage Quiz Question Bank</Text>
+                      <Text style={[styles.aiQuizMakerSubtitle, { color: '#A7F3D0' }]}>Edit, update or delete any question from Firestore</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#34D399" />
+                </TouchableOpacity>
               </View>
             )}
 

@@ -49,6 +49,7 @@ export type UserProfile = {
   referral_code?: string;
   referral_count?: number;
   founder?: boolean;
+  organization_id?: string;
 };
 
 export type ProfileIssue = 'missing_profile_document' | 'profile_incomplete' | 'role_missing' | null;
@@ -776,9 +777,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
     setProfileOffline(false);
     try {
-      // 2. Sign out from Firebase Auth (clears Google Play Services credential too)
+      // 2. Reset active tenant cache to default
+      const { resetActiveOrganization } = await import('@/lib/tenantContext');
+      await resetActiveOrganization().catch(() => {});
+
+      // 3. Sign out from Firebase Auth (clears Google Play Services credential too)
       await firebaseSignOut(auth);
-      // 3. Wipe ALL AsyncStorage — profile cache + any leftover session data
+      // 4. Wipe ALL AsyncStorage — profile cache + any leftover session data
       const allKeys = await AsyncStorage.getAllKeys().catch(() => [] as string[]);
       if (allKeys.length > 0) {
         await AsyncStorage.multiRemove(allKeys as string[]).catch(() => {});

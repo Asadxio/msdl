@@ -39,11 +39,10 @@ const APP_TOOLS = [
   { id: 'prayer', title: 'Prayer Times & Adhan', subtitle: 'Salah timings, Qibla direction & Settings', route: '/prayer-times', icon: 'time', badge: 'Waqt' },
   { id: 'tasbeeh', title: 'Smart Digital Tasbeeh', subtitle: 'Zikr counter with vibration feedback', route: '/tasbeeh', icon: 'finger-print', badge: 'Zikr' },
   { id: 'taharat', title: 'Taharat & Menstrual Tracker', subtitle: 'Specialized Islamic jurisprudence tracker for sisters', route: '/taharat-tracker', icon: 'water', badge: 'Fiqh' },
-  { id: 'fatwa', title: 'Dar-ul-Iftaa & Fatwa', subtitle: 'Ask questions to Muftiyan & Browse verified fatawa', route: '/fatwa', icon: 'chatbubbles', badge: 'Shariah' },
+  { id: 'fatwa', title: 'Dar-ul-Iftaa & Fatwa', subtitle: 'Ask questions to Muftiyan & Browse verified fatawa', route: '/fatawa', icon: 'chatbubbles', badge: 'Shariah' },
   { id: 'flashcards', title: 'Islamic Flashcards & Revision', subtitle: 'Active recall for Arabic vocabulary & Hadees', route: '/flashcards', icon: 'albums', badge: 'Learning' },
   { id: 'attendance', title: 'Attendance Register', subtitle: 'Class-wise attendance, lecture tracking & teacher records', route: '/(tabs)/attendance', icon: 'calendar', badge: 'Class' },
   { id: 'notifications', title: 'Announcements & Notifications', subtitle: 'Madrasa circulars and daily reminders', route: '/(tabs)/notifications', icon: 'notifications', badge: 'Updates' },
-  { id: 'downloads', title: 'Offline Kitabs & Audio', subtitle: 'Manage downloaded PDF notes and lectures', route: '/downloads', icon: 'download', badge: 'Offline' },
   { id: 'settings', title: 'App Settings & Preferences', subtitle: 'Theme, language, font size & audio cache', route: '/settings', icon: 'settings', badge: 'System' },
 ];
 
@@ -53,8 +52,8 @@ const ADMIN_ACTIONS = [
   { id: 'adm-users', title: 'Manage Users & Permissions', subtitle: 'Approve, deactivate, assign roles & grant free courses', route: '/admin/users', icon: 'people', badge: 'Admin' },
   { id: 'adm-academics', title: 'Manage Courses & Faculty', subtitle: 'Create courses, modules, assign ustaadha & rosters', route: '/admin/manage-academics', icon: 'school', badge: 'Admin' },
   { id: 'adm-payments', title: 'Fee Management & Transactions', subtitle: 'Track fee submissions, manual receipts & invoices', route: '/admin/payments', icon: 'card', badge: 'Admin' },
-  { id: 'adm-notif', title: 'Send Mass Broadcast', subtitle: 'Push notifications to all students or specific batches', route: '/admin/notifications', icon: 'megaphone', badge: 'Admin' },
-  { id: 'adm-reports', title: 'System Analytics & Audit Logs', subtitle: 'Security logs, activity tracking and usage trends', route: '/admin/logs', icon: 'shield-checkmark', badge: 'Admin' },
+  { id: 'adm-notif', title: 'Send Mass Broadcast', subtitle: 'Push notifications to all students or specific batches', route: '/admin/send-push', icon: 'megaphone', badge: 'Admin' },
+  { id: 'adm-reports', title: 'System Analytics & Audit Logs', subtitle: 'Security logs, activity tracking and usage trends', route: '/admin/security', icon: 'shield-checkmark', badge: 'Admin' },
 ];
 
 export default function GlobalSearchScreen() {

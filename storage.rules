@@ -28,6 +28,52 @@ service firebase.storage {
         && userDoc().status == 'approved';
     }
 
+    function isSuperAdmin() {
+      return isSignedIn()
+        && (
+          (request.auth.token.email in ['sumraftm@gmail.com', 'xioasad@gmail.com'])
+          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'super_admin')
+        );
+    }
+
+    function isTenantMember(orgId) {
+      return isApprovedVerifiedUser()
+        && (
+          orgId == 'mslb-main'
+          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organization_id == orgId)
+          || firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid))
+          || firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid))
+        );
+    }
+
+    function isTenantTeacherOrAdmin(orgId) {
+      return isApprovedVerifiedUser()
+        && (
+          isSuperAdmin()
+          || (orgId == 'mslb-main' && isTeacherOrAdmin())
+          || (
+            (
+              (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+               && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organization_id == orgId
+               && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'admin', 'super_admin'])
+              || (firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid))
+                  && firestore.get(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid)).data.role in ['teacher', 'admin', 'super_admin'])
+              || (firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid))
+                  && firestore.get(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid)).data.role in ['teacher', 'admin', 'super_admin'])
+            )
+          )
+        );
+    }
+
+    function isSafeRecordingUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 209715200
+        && request.resource.contentType in ['audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac', 'audio/mpeg', 'audio/webm'];
+    }
+
     function enrollmentDocId(uid, courseId) {
       return uid + ':' + courseId;
     }
@@ -206,11 +252,17 @@ service firebase.storage {
     }
 
     match /recordings/{classId}/{fileName} {
-      allow read: if isApprovedVerifiedUser();
-      allow create, update: if isTeacherOrAdmin()
-        && request.resource.size <= 209715200
-        && request.resource.contentType in ['audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac', 'audio/mpeg', 'audio/webm'];
-      allow delete: if isTeacherOrAdmin();
+      allow read: if isSuperAdmin()
+        || (isApprovedVerifiedUser()
+            && (
+              isAdmin()
+              || (firestore.exists(/databases/(default)/documents/live_classes/$(classId))
+                  && canReadLiveClassStorage(classId))
+              || isTeacherOrAdmin()
+            ));
+      allow create, update: if (isSuperAdmin() || isTeacherOrAdmin())
+        && isSafeRecordingUpload();
+      allow delete: if isSuperAdmin() || isAdmin();
     }
 
     match /assignment_submissions/{userId}/{fileName} {
@@ -231,6 +283,28 @@ service firebase.storage {
     }
 
     // ── Multi-Tenant SaaS Scoped Assets (/organizations/{orgId}/...) ───────────
+    // 1. Tenant Course Recordings (strict tenant + course enrollment isolation)
+    match /organizations/{orgId}/courses/{courseId}/recordings/{classId}/{fileName} {
+      allow read: if isSuperAdmin()
+        || (isTenantMember(orgId) && (
+             isTenantTeacherOrAdmin(orgId)
+             || hasActiveEnrollmentForCourse(courseId)
+           ));
+      allow create, update: if (isSuperAdmin() || (isTenantMember(orgId) && isTenantTeacherOrAdmin(orgId)))
+        && isSafeRecordingUpload();
+      allow delete: if isSuperAdmin() || (isTenantMember(orgId) && isTenantTeacherOrAdmin(orgId));
+    }
+
+    // 2. Tenant branding / root-level assets (e.g. logo.png)
+    match /organizations/{orgId}/{fileName} {
+      allow read: if isApprovedVerifiedUser() && isTenantMember(orgId);
+      allow write: if isApprovedVerifiedUser() && isTenantTeacherOrAdmin(orgId)
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 20971520;
+    }
+
+    // 3. Multi-tenant fallback / super admin catch-all partition
     match /organizations/{orgId}/{allPaths=**} {
       // Platform super admin can read/write across any tenant
       allow read, write: if isSignedIn()
@@ -239,27 +313,6 @@ service firebase.storage {
           || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
               && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'super_admin')
         );
-
-      // Institution members can access only their own organization's storage
-      allow read: if isApprovedVerifiedUser()
-        && (
-          firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid))
-          || firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid))
-          || orgId == 'mslb-main'
-        );
-
-      // Institution Admin can upload branding & public assets within their own organization
-      allow write: if isApprovedVerifiedUser()
-        && (
-          (firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid))
-            && firestore.get(/databases/(default)/documents/organization_memberships/$((orgId) + '_' + request.auth.uid)).data.role in ['admin', 'super_admin'])
-          || (firestore.exists(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid))
-            && firestore.get(/databases/(default)/documents/organization_memberships/$((orgId) + ':' + request.auth.uid)).data.role in ['admin', 'super_admin'])
-          || (orgId == 'mslb-main' && isAdmin())
-        )
-        && request.resource != null
-        && request.resource.size > 0
-        && request.resource.size <= 20971520;
     }
 
     match /{allPaths=**} {

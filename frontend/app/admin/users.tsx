@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
-import { collection, doc, updateDoc, deleteDoc, where, setDoc, getDocs, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, updateDoc, deleteDoc, where, setDoc, getDocs, serverTimestamp, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { UserProfile, useAuth } from '@/context/AuthContext';
@@ -24,6 +24,7 @@ import { ADMIN_DEFAULT_PAGE_SIZE, fetchCursorPage } from '@/lib/adminPagination'
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { getEnrollmentDocId } from '@/lib/enrollments';
 import { withTimeout } from '@/lib/errors';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 type UserWithId = UserProfile & { id: string };
 
@@ -34,6 +35,7 @@ export default function AdminUsersScreen() {
   const isFounder = isFounderEmail(profile?.email || user?.email);
   const isAdmin = isFounder || hasPermission(profile, 'admin.users.manage') || profile?.role === 'super_admin' || profile?.role === 'admin';
   const canBulk = isFounder || hasPermission(profile, 'admin.users.bulk') || profile?.role === 'super_admin' || profile?.role === 'admin';
+  const { activeOrgId, isDefaultOrg } = useActiveOrganization();
   const [users, setUsers] = useState<UserWithId[]>([]);
   const [availableCourses, setAvailableCourses] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +63,9 @@ export default function AdminUsersScreen() {
     }
     try {
       const extra: any[] = [];
+      if (!isDefaultOrg && activeOrgId) {
+        extra.push(where('organization_id', '==', activeOrgId));
+      }
       if (roleFilter !== 'all') extra.push(where('role', '==', roleFilter));
       if (statusFilter !== 'all') extra.push(where('status', '==', statusFilter));
       const page = await fetchCursorPage<UserWithId>({
@@ -80,7 +85,7 @@ export default function AdminUsersScreen() {
     }
     setLoading(false);
     setFetching(false);
-  }, [fetching, roleFilter, statusFilter, cursor, profile?.role, profile?.status]);
+  }, [fetching, roleFilter, statusFilter, cursor, profile?.role, profile?.status, activeOrgId, isDefaultOrg]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await fetchUsers('reset');
@@ -93,13 +98,24 @@ export default function AdminUsersScreen() {
     }
     if (isAdmin) {
       fetchUsers('reset');
-      getDocs(collection(db, 'courses')).then((snap) => {
-        const cList: Array<{ id: string; name: string }> = [];
-        snap.forEach((d) => cList.push({ id: d.id, name: d.data().name || 'Course' }));
-        setAvailableCourses(cList);
-      }).catch(() => {});
+      // Scope courses to active org — non-default orgs only see their own courses
+      void (async () => {
+        try {
+          const coursesRef = collection(db, 'courses');
+          const snap = (!isDefaultOrg && activeOrgId)
+            ? await getDocs(query(coursesRef, where('organization_id', '==', activeOrgId)))
+            : await getDocs(coursesRef);
+          const cList: Array<{ id: string; name: string }> = [];
+          snap.forEach((d) => cList.push({ id: d.id, name: d.data().name || 'Course' }));
+          setAvailableCourses(cList);
+        } catch {
+          // Silently ignore courses fetch failure
+        }
+      })();
     }
   }, [isAdmin, roleFilter, statusFilter]);
+
+
 
   const handleGrantCourseAccess = (u: UserWithId) => {
     if (!availableCourses.length) {
@@ -115,6 +131,7 @@ export default function AdminUsersScreen() {
             setDoc(doc(db, 'enrollments', enrollmentDocId), {
               user_id: u.id,
               course_id: c.id,
+              organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
               status: 'active',
               enrolled_at: serverTimestamp(),
               created_at: serverTimestamp(),
@@ -146,9 +163,26 @@ export default function AdminUsersScreen() {
     );
   };
 
-  const updateUser = async (uid: string, updates: Partial<UserProfile> & { updated_at?: any }) => {
+  const updateUser = async (uid: string, updates: Partial<UserProfile> & { updated_at?: any; organization_id?: string }) => {
     try {
-      const payload = { ...updates, updated_at: serverTimestamp() };
+      // When approving, stamp organization_id if the user doesn't already have one.
+      // This ensures users registered without an org_id are still found by tenant queries.
+      // We only stamp when updates.status === 'approved' AND the target user lacks organization_id.
+      // We use the admin's own activeOrgId — cross-tenant approval is not possible because
+      // an admin's activeOrgId is derived from their own authenticated org context.
+      let finalUpdates: Partial<UserProfile> & { updated_at?: any; organization_id?: string } = { ...updates };
+      if (updates.status === 'approved') {
+        const targetUser = users.find((x) => x.id === uid) as (UserWithId & { organization_id?: string }) | undefined;
+        if (!targetUser?.organization_id) {
+          // User has no org_id — safe to stamp with the admin's active org
+          finalUpdates = {
+            ...finalUpdates,
+            organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
+          };
+        }
+        // If targetUser already has organization_id, do NOT overwrite it (prevent cross-tenant reassignment)
+      }
+      const payload = { ...finalUpdates, updated_at: serverTimestamp() };
       await withTimeout(
         updateDoc(doc(db, 'users', uid), payload),
         10000,
@@ -182,6 +216,7 @@ export default function AdminUsersScreen() {
       Alert.alert('Error', err?.message || 'Failed to update');
     }
   };
+
   const toggleSelected = (uid: string) => setSelectedIds((prev) => (prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]));
   const [bulkEnrolling, setBulkEnrolling] = useState(false);
   const [bulkEnrollProgress, setBulkEnrollProgress] = useState('');
@@ -221,6 +256,7 @@ export default function AdminUsersScreen() {
                 setDoc(doc(db, 'enrollments', enrollmentDocId), {
                   user_id: uid,
                   course_id: c.id,
+                  organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
                   status: 'active',
                   enrolled_at: serverTimestamp(),
                   created_at: serverTimestamp(),

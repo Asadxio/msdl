@@ -26,6 +26,7 @@ import { IslamicReceiptModal } from '@/components/IslamicReceiptModal';
 import { shareReceiptToWhatsApp, type FeeReceiptData } from '@/lib/receiptGenerator';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { withTimeout } from '@/lib/errors';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
 
@@ -70,6 +71,7 @@ export default function AdminPaymentsScreen() {
   const { user, profile } = useAuth();
   const isFounder = isFounderEmail(profile?.email || user?.email);
   const isAdmin = isFounder || hasPermission(profile, 'admin.payments.review') || profile?.role === 'super_admin' || profile?.role === 'admin';
+  const { activeOrgId, isDefaultOrg } = useActiveOrganization();
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [error, setError] = useState('');
@@ -96,17 +98,22 @@ export default function AdminPaymentsScreen() {
       });
     }
     try {
+      const tenantExtra: any[] = [];
+      if (!isDefaultOrg && activeOrgId) {
+        tenantExtra.push(where('organization_id', '==', activeOrgId));
+      }
+
       if (statusFilter !== 'all') {
         const [statePage, statusPage] = await Promise.all([
-          fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, extra: [where('state', '==', statusFilter)] }),
-          fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, extra: [where('status', '==', statusFilter)] }),
+          fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, extra: [...tenantExtra, where('state', '==', statusFilter)] }),
+          fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, extra: [...tenantExtra, where('status', '==', statusFilter)] }),
         ]);
         const merged = new Map<string, PaymentItem>();
         [...statePage.items, ...statusPage.items].forEach((item: any) => merged.set(item.id, { ...item, status: paymentState(item) }));
         setPayments([...merged.values()].sort((a, b) => Number(b.created_at?.toDate?.() || 0) - Number(a.created_at?.toDate?.() || 0)).slice(0, ADMIN_DEFAULT_PAGE_SIZE));
         setCursor(null);
       } else {
-        const page = await fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, cursor: direction === 'reset' ? null : cursor, direction: direction === 'reset' ? 'next' : direction });
+        const page = await fetchCursorPage<PaymentItem>({ ref: collection(db, 'payments'), orderField: 'created_at', pageSize: ADMIN_DEFAULT_PAGE_SIZE, cursor: direction === 'reset' ? null : cursor, direction: direction === 'reset' ? 'next' : direction, extra: tenantExtra });
         setPayments(page.items.map((item: any) => ({ ...item, status: paymentState(item) })) as PaymentItem[]);
         setCursor(direction === 'prev' ? page.prevCursor : page.nextCursor);
       }
@@ -119,7 +126,7 @@ export default function AdminPaymentsScreen() {
       setLoading(false);
       setFetching(false);
     }
-  }, [cursor, fetching, isAdmin, statusFilter, profile?.role, profile?.status]);
+  }, [cursor, fetching, isAdmin, statusFilter, profile?.role, profile?.status, activeOrgId, isDefaultOrg]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await loadPayments('reset');

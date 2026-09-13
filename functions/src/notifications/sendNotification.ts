@@ -151,7 +151,8 @@ export const sendNotification = onCall(
     await assertOrgOperational(targetOrg, false);
 
     // If caller is NOT super_admin, verify caller's admin membership in the target organization
-    if (!isSuperAdminEmail(admin.email)) {
+    const isSuperAdmin = isSuperAdminEmail(admin.email) || admin.role === "super_admin";
+    if (!isSuperAdmin) {
       const canonicalId = `${targetOrg}_${admin.uid}`;
       const legacyId = `${targetOrg}:${admin.uid}`;
       const [m1, m2] = await Promise.all([
@@ -160,7 +161,10 @@ export const sendNotification = onCall(
       ]);
       const membershipDoc = m1.exists ? m1 : (m2.exists ? m2 : null);
 
-      if (targetOrg !== "mslb-main" && (!membershipDoc || !["admin", "super_admin"].includes(membershipDoc.data()?.role) || membershipDoc.data()?.status !== "active")) {
+      const hasActiveAdminMembership = membershipDoc && ["admin", "super_admin"].includes(membershipDoc.data()?.role) && membershipDoc.data()?.status === "active";
+      const isLegacyMainAdmin = targetOrg === "mslb-main" && admin.role === "admin";
+
+      if (!hasActiveAdminMembership && !isLegacyMainAdmin) {
         throw permissionDeniedError(`You are not an active administrator of organization '${targetOrg}'.`);
       }
     }
@@ -179,7 +183,27 @@ export const sendNotification = onCall(
       recipientUids = await getUidsForRole(payload.targetRole, targetOrg);
       logger.info(`[sendNotification] Role broadcast ${payload.targetRole} in org ${targetOrg}: ${recipientUids.length} users`);
     } else if (payload.recipientUids && payload.recipientUids.length > 0) {
-      recipientUids = payload.recipientUids.filter((u) => u && typeof u === "string");
+      const candidateUids = payload.recipientUids.filter((u) => u && typeof u === "string");
+      if (!isSuperAdmin && targetOrg !== "mslb-main") {
+        // Enforce that candidate UIDs belong to targetOrg
+        const allowedUids: string[] = [];
+        await Promise.all(
+          candidateUids.map(async (uid) => {
+            const uDoc = await db.collection("users").doc(uid).get();
+            if (uDoc.exists && uDoc.data()?.organization_id === targetOrg) {
+              allowedUids.push(uid);
+              return;
+            }
+            const mDoc = await db.collection("organization_memberships").doc(`${targetOrg}_${uid}`).get();
+            if (mDoc.exists && mDoc.data()?.status === "active") {
+              allowedUids.push(uid);
+            }
+          })
+        );
+        recipientUids = allowedUids;
+      } else {
+        recipientUids = candidateUids;
+      }
     } else if (payload.recipientUid) {
       recipientUids = [payload.recipientUid];
     } else {

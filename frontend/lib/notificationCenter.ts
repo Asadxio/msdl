@@ -83,7 +83,7 @@ export function resolveRouteFromNotificationData(data: Record<string, unknown>):
   if (courseId) return `/course/${courseId}`;
   const statusId = String(data.status_id || '').trim();
   if (statusId) return '/status';
-  return '/notifications';
+  return '/(tabs)/notifications';
 }
 
 

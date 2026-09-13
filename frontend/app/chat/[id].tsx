@@ -34,6 +34,7 @@ import { submitUgcReport, type ReportReason } from '@/lib/ugcReports';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { canSendMessage, canDeleteMessageForEveryone, canDeleteMessageForEveryoneWithWindow, canAddReaction } from '@/lib/chatPermissions';
 import { withTimeout } from '@/lib/errors';
+import { isFounderEmail } from '@/lib/founderPolicy';
 
 type ChatMeta = {
   id: string;
@@ -967,8 +968,8 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const isAdmin = profile?.role === 'admin';
-  const isTeacher = profile?.role === 'teacher';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin' || isFounderEmail(profile?.email || '');
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
   const chatParticipants = useMemo(() => {
     if (Array.isArray(chat?.participants) && chat.participants.length > 0) {
       return chat.participants.filter((uid) => typeof uid === 'string');

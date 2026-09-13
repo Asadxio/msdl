@@ -118,7 +118,7 @@ export default function ChatsScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
-  const isTeacher = profile?.role === 'teacher';
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

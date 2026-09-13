@@ -44,12 +44,15 @@ import type { Audio } from 'expo-av';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { goBackOrReplace } from '@/lib/navigation';
 import { dispatchNotification } from '@/lib/dispatchNotification';
+import { useActiveOrganization } from '@/lib/tenantContext';
+
 
 export default function LiveClassroomScreen() {
   const { id } = useLocalSearchParams();
   const classId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { activeOrgId } = useActiveOrganization();
 
   const [liveClass, setLiveClass] = useState<LiveClass | null>(null);
   const [loading, setLoading] = useState(true);
@@ -172,6 +175,7 @@ export default function LiveClassroomScreen() {
                   courseId: liveClass.course_id || '',
                   teacherId: user.uid,
                   teacherName: profile.name || liveClass.teacher_name || 'Ustaadha',
+                  organizationId: (liveClass as any)?.organization_id || activeOrgId || undefined,
                 },
                 (progress) => setSaveProgress(progress)
               );

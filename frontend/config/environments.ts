@@ -11,7 +11,7 @@ export const ENV = resolveAppEnv();
 
 export const ENV_CONFIG = {
   development: {
-    apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api',
+    apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || '',
     firebaseProjectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || '',
     analyticsEnabled: false,
   },

@@ -355,22 +355,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, [user?.uid]);
 
-  const isEnrolledInCourse = useCallback(
-    (courseId: string): boolean => {
-      if (!courseId) return false;
-      if (
-        profile?.role === 'admin' ||
-        profile?.role === 'super_admin' ||
-        profile?.role === 'teacher' ||
-        profile?.role === 'assistant_teacher'
-      ) {
-        return true;
-      }
-      return Boolean(userEnrollments[courseId]);
-    },
-    [profile?.role, userEnrollments],
-  );
-
   const enrolledCourses = useMemo(() => {
     if (profile?.role === 'admin' || profile?.role === 'super_admin') return courses;
     if (profile?.role === 'teacher' || profile?.role === 'assistant_teacher') {
@@ -384,16 +368,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return courses.filter((c) => Boolean(userEnrollments[c.id]));
   }, [courses, profile?.role, profile?.name, userEnrollments, teachers, user?.uid]);
 
+  const isEnrolledInCourse = useCallback(
+    (courseId: string): boolean => {
+      if (!courseId) return false;
+      if (
+        profile?.role === 'admin' ||
+        profile?.role === 'super_admin'
+      ) {
+        return true;
+      }
+      if (profile?.role === 'teacher' || profile?.role === 'assistant_teacher') {
+        return enrolledCourses.some((c) => c.id === courseId);
+      }
+      return Boolean(userEnrollments[courseId]);
+    },
+    [profile?.role, userEnrollments, enrolledCourses],
+  );
+
   const enrollStudent = useCallback(
     async (studentUid: string, courseId: string): Promise<boolean> => {
       if (!studentUid || !courseId) return false;
       try {
         const enrollmentDocId = `${studentUid}:${courseId}`;
+        const targetCourse = courses.find((c) => c.id === courseId);
+        const organization_id = targetCourse?.organization_id || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID;
         await setDoc(
           doc(db, 'enrollments', enrollmentDocId),
           {
             user_id: studentUid,
             course_id: courseId,
+            organization_id,
             status: 'active',
             enrolled_at: serverTimestamp(),
             created_at: serverTimestamp(),
@@ -410,7 +414,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     },
-    [user?.uid],
+    [user?.uid, courses],
   );
 
   const unenrollStudent = useCallback(
@@ -831,7 +835,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const progressQuery = query(collection(db, 'lesson_progress'), where('user_id', '==', user.uid));
-      const canReviewSubmissions = profile?.role === 'teacher' || profile?.role === 'admin';
+      const canReviewSubmissions =
+        profile?.role === 'teacher' ||
+        profile?.role === 'assistant_teacher' ||
+        profile?.role === 'admin' ||
+        profile?.role === 'super_admin';
       const submissionsQuery = canReviewSubmissions
         ? collection(db, 'submissions')
         : query(collection(db, 'submissions'), where('user_id', '==', user.uid));

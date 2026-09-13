@@ -24,6 +24,7 @@ import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { withTimeout } from '@/lib/errors';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 import * as Clipboard from 'expo-clipboard';
 import {
   fetchCourseEnrolledContacts,
@@ -97,6 +98,7 @@ export default function AdminSendPushScreen() {
   const { profile } = useAuth();
   const isAdmin = hasPermission(profile, 'admin.notifications.send');
   const { courses, teachers } = useData();
+  const { activeOrgId, isDefaultOrg } = useActiveOrganization();
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -140,11 +142,15 @@ export default function AdminSendPushScreen() {
   const [history, setHistory] = useState<SentNotificationItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Fetch stats on mount
+  // Fetch stats on mount (or when org changes)
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const uSnap = await getDocs(query(collection(db, 'users'), limitQ(300)));
+        const col = collection(db, 'users');
+        const statsQuery = isDefaultOrg
+          ? query(col, limitQ(300))
+          : query(col, where('organization_id', '==', activeOrgId || DEFAULT_ORGANIZATION_ID), limitQ(300));
+        const uSnap = await getDocs(statsQuery);
         setTotalUsersCount(uSnap.size);
         let tokens = 0;
         uSnap.forEach((d) => {
@@ -159,7 +165,7 @@ export default function AdminSendPushScreen() {
       }
     };
     void loadStats();
-  }, []);
+  }, [activeOrgId, isDefaultOrg]);
 
   const selectedUsers = useMemo(() => {
     return searchResults.filter((item) => selectedIds.includes(item.id));
@@ -210,7 +216,10 @@ export default function AdminSendPushScreen() {
         const prefix = q;
         const end = `${prefix}\uf8ff`;
         const col = collection(db, 'users');
-        const nameQuery = query(col, where('displayName', '>=', prefix), where('displayName', '<=', end), orderBy('displayName'), limitQ(20));
+        const tenantFilter = !isDefaultOrg && activeOrgId
+          ? [where('organization_id', '==', activeOrgId)]
+          : [];
+        const nameQuery = query(col, ...tenantFilter, where('displayName', '>=', prefix), where('displayName', '<=', end), orderBy('displayName'), limitQ(20));
         let snaps = await getDocs(nameQuery);
         const rows: SearchUser[] = [];
         if (!snaps.empty) {
@@ -219,7 +228,7 @@ export default function AdminSendPushScreen() {
             rows.push({ id: d.id, name: data.displayName || data.name || d.id, email: data.email, photoURL: data.photoURL || data.avatarURL });
           });
         } else {
-          const emailQuery = query(col, where('email', '>=', prefix), where('email', '<=', end), orderBy('email'), limitQ(20));
+          const emailQuery = query(col, ...tenantFilter, where('email', '>=', prefix), where('email', '<=', end), orderBy('email'), limitQ(20));
           snaps = await getDocs(emailQuery);
           snaps.forEach((d) => {
             const data = d.data() as any;
@@ -234,7 +243,7 @@ export default function AdminSendPushScreen() {
     };
     void runSearch();
     return () => { mounted = false; };
-  }, [search]);
+  }, [search, activeOrgId, isDefaultOrg]);
 
   // Target audience description
   const targetDescription = useMemo(() => {
@@ -331,9 +340,25 @@ export default function AdminSendPushScreen() {
 
     try {
       let targetUserIds: string[] = [];
-      const isSendToAll = targetMode === 'all';
+      let isSendToAll = false;
+      const tenantOrgId = activeOrgId || DEFAULT_ORGANIZATION_ID;
+      const isSuperAdmin = profile?.role === 'super_admin';
 
-      if (targetMode === 'class' && selectedCourseId) {
+      if (targetMode === 'all') {
+        if (isDefaultOrg && isSuperAdmin) {
+          // Global platform broadcast authority
+          isSendToAll = true;
+        } else {
+          // Institution-scoped broadcast: strictly resolve users of activeOrgId
+          const orgUsersQ = query(
+            collection(db, 'users'),
+            where('organization_id', '==', tenantOrgId)
+          );
+          const orgUserDocs = await getDocs(orgUsersQ);
+          targetUserIds = orgUserDocs.docs.map((d) => d.id).filter(Boolean);
+          isSendToAll = false;
+        }
+      } else if (targetMode === 'class' && selectedCourseId) {
         const enrolledQ = query(
           collection(db, 'enrollments'),
           where('course_id', '==', selectedCourseId),
@@ -342,14 +367,12 @@ export default function AdminSendPushScreen() {
         const enrolledDocs = await getDocs(enrolledQ);
         targetUserIds = enrolledDocs.docs.map((d) => d.data().user_id).filter(Boolean);
       } else if (targetMode === 'teachers') {
-        const teacherUidsFromData = teachers.map((t) => t.id).filter(Boolean);
-        if (teacherUidsFromData.length > 0) {
-          targetUserIds = teacherUidsFromData;
-        } else {
-          const teachersQ = query(collection(db, 'users'), where('role', '==', 'teacher'));
-          const teacherDocs = await getDocs(teachersQ);
-          targetUserIds = teacherDocs.docs.map((d) => d.id);
-        }
+        const tenantFilter = !isDefaultOrg && activeOrgId
+          ? [where('organization_id', '==', activeOrgId)]
+          : [];
+        const teachersQ = query(collection(db, 'users'), where('role', '==', 'teacher'), ...tenantFilter);
+        const teacherDocs = await getDocs(teachersQ);
+        targetUserIds = teacherDocs.docs.map((d) => d.id);
       } else if (targetMode === 'custom') {
         const pastedIds = userIdsText.split(/[,\n\s]+/).filter(Boolean);
         targetUserIds = Array.from(new Set([...selectedIds, ...pastedIds]));
@@ -366,6 +389,7 @@ export default function AdminSendPushScreen() {
           recipientIds: targetUserIds,
           sendToAll: isSendToAll,
           dedupeId: dedupe,
+          organization_id: tenantOrgId,
         }),
         30000
       );

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert, useColorScheme, AppState, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { safeReplace } from '@/lib/navigation';
 import { sendEmailVerification } from 'firebase/auth';
 import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { auth, db } from '@/lib/firebase';
 import { normalizeFirebaseError, withTimeout } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+import { VERIFICATION_ACTION_CODE_SETTINGS } from '@/lib/emailVerificationSettings';
 import {
   getVerificationFunnelRecord,
   markPendingScreenOpened,
@@ -27,6 +28,8 @@ type MessageState = { type: 'success' | 'error' | 'info'; text: string } | null;
 export default function PendingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ state?: string }>();
+  const explicitState = params?.state;
   const colorScheme = useColorScheme();
   const { user, signOut, refreshProfile, refreshUser, profile, profileIssue } = useAuth();
   const [checking, setChecking] = useState(false);
@@ -133,7 +136,7 @@ export default function PendingScreen() {
     // router.replace('/');
   }, [router, stopPolling, profile]);
 
-  const refreshVerificationStatus = useCallback(async (source: 'mount' | 'manual' | 'poll', showUnverifiedMessage = false) => {
+  const refreshVerificationStatus = useCallback(async (source: 'mount' | 'manual' | 'poll' | 'foreground' | 'deep_link', showUnverifiedMessage = false) => {
     if (verificationCheckInFlightRef.current) {
       logger.info('Verification status check skipped because another check is in flight', { source });
       return false;
@@ -164,7 +167,34 @@ export default function PendingScreen() {
       if (verified) {
         try {
           await auth.currentUser?.getIdToken(true);
-        } catch {}
+        } catch (tokenErr) {
+          logger.warn('[EmailVerification] Token refresh warning:', tokenErr);
+        }
+
+        // Auto-approve student in Firestore if currently pending
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const snap = await getDoc(userDocRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            const userRole = data.role || 'student';
+            if (userRole === 'student' && data.status === 'pending') {
+              await updateDoc(userDocRef, {
+                status: 'approved',
+                updated_at: serverTimestamp(),
+              });
+              await updateDoc(doc(db, 'public_profiles', currentUser.uid), {
+                status: 'approved',
+                searchable: true,
+                is_active: true,
+                updated_at: serverTimestamp(),
+              }).catch(() => {});
+              logger.info('[EmailVerification] Student auto-approved in Firestore upon verification', { uid: currentUser.uid });
+            }
+          }
+        } catch (autoApproveErr) {
+          logger.warn('[EmailVerification] Student auto-approval update note:', autoApproveErr);
+        }
       }
 
       if (!mountedRef.current) return verified;
@@ -222,10 +252,28 @@ export default function PendingScreen() {
       });
     }
 
+    // Instant foreground check when user returns from email/browser:
+    const appStateSub = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        logger.info('[EmailVerification] App foregrounded, triggering instant verification check');
+        void refreshVerificationStatus('foreground');
+      }
+    });
+
+    // Instant deep link listener when app is opened via URL scheme or app link:
+    const linkingSub = Linking.addEventListener('url', (event) => {
+      if (event.url && (event.url.includes('auth') || event.url.includes('verified') || event.url.includes('pending'))) {
+        logger.info('[EmailVerification] Deep link received in pending screen', { url: event.url });
+        void refreshVerificationStatus('deep_link');
+      }
+    });
+
     return () => {
       mountedRef.current = false;
       stopPolling();
       if (profileUnsub) profileUnsub();
+      appStateSub.remove();
+      linkingSub.remove();
     };
   }, [refreshVerificationStatus, stopPolling, navigateAfterVerified]);
 
@@ -290,7 +338,7 @@ export default function PendingScreen() {
     setResending(true);
     setMessage(null);
     try {
-      await withTimeout(sendEmailVerification(currentUser), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
+      await withTimeout(sendEmailVerification(currentUser, VERIFICATION_ACTION_CODE_SETTINGS), FIREBASE_AUTH_ACTION_TIMEOUT_MS);
       console.log('[EmailVerification] Verification email sent');
       logger.info('Verification email sent', { uid: currentUser.uid, email: currentUser.email });
       const nextResendCount = resendCount + 1;
@@ -341,23 +389,47 @@ export default function PendingScreen() {
     await handleSignOut(); // onPress={handleSignOut}
   };
 
-  // Deactivated state
-  if (isDeactivated || isRejected) {
+  // Differentiated Terminal / Blocker States (rejected, suspended, deactivated)
+  const effectiveState = explicitState || profile?.status;
+  if (effectiveState === 'rejected' || effectiveState === 'suspended' || effectiveState === 'deactivated') {
+    const isStateRejected = effectiveState === 'rejected';
+    const isStateSuspended = effectiveState === 'suspended';
+    const stateTitle = isStateRejected
+      ? 'Account Rejected'
+      : isStateSuspended
+        ? 'Account Suspended'
+        : 'Account Deactivated';
+
+    const stateSubtitle = isStateRejected
+      ? `Your registration was reviewed and declined by the madrasa administration.\nPlease contact institutional support if you believe this is an error.`
+      : isStateSuspended
+        ? `Your student/faculty access has been suspended by administration.\nPlease contact your madrasa office to resolve this suspension.`
+        : `Your account has been deactivated.\nPlease reach out to administrative support to reactivate your access.`;
+
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={styles.content}>
-          <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
-            <Ionicons name="close-circle-outline" size={48} color={COLORS.error} />
+          <View style={[styles.iconCircle, { backgroundColor: isStateSuspended ? '#FEF3C7' : '#FEF2F2' }]}>
+            <Ionicons
+              name={isStateSuspended ? 'warning-outline' : 'close-circle-outline'}
+              size={48}
+              color={isStateSuspended ? '#D97706' : COLORS.error}
+            />
           </View>
-          <Text style={styles.title}>{isRejected ? 'Account Rejected' : 'Account Suspended'}</Text>
-          <Text style={styles.subtitle}>
-            {isRejected
-              ? `Your signup request was rejected by an administrator.${'\n'}Please contact support for details.`
-              : `Your account is currently suspended.${'\n'}Please contact support for assistance.`}
-          </Text>
-          <TouchableOpacity style={[styles.logoutBtn, signingOut && styles.disabledBtn]} onPress={handlePendingSignOut} disabled={busy} testID="deactivated-logout-btn">
-            {signingOut ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="log-out-outline" size={18} color={COLORS.error} />}
+          <Text style={styles.title}>{stateTitle}</Text>
+          <Text style={styles.subtitle}>{stateSubtitle}</Text>
+          <TouchableOpacity
+            style={[styles.logoutBtn, signingOut && styles.disabledBtn]}
+            onPress={handlePendingSignOut}
+            disabled={busy}
+            testID="deactivated-logout-btn"
+          >
+            {signingOut ? (
+              <ActivityIndicator size="small" color={COLORS.error} />
+            ) : (
+              <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
+            )}
             <Text style={styles.logoutBtnText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
           </TouchableOpacity>
         </View>

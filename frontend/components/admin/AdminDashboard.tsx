@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { collection, getCountFromServer, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
@@ -24,6 +24,7 @@ import { AdminPendingTasks, type PendingTasksCounts } from '@/components/admin/A
 import { AdminActivityCenter } from '@/components/admin/AdminActivityCenter';
 import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 import { CustomerSupportModal } from '@/components/CustomerSupportModal';
+import { ROUTES } from '@/lib/routes';
 
 // ─── Institutional Palette ───
 const THEME = {
@@ -69,9 +70,9 @@ type AdminKpiSummary = {
   moderationReports: number;
   activeAnnouncements: number;
   liveClassesToday: number;
+  attendanceToday: number;
 };
 
-const CACHE_KEY = 'admin_kpi_summary_v1';
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 const { width } = Dimensions.get('window');
@@ -103,13 +104,17 @@ export const AdminDashboard = React.memo(function AdminDashboard({
     moderationReports: 0,
     activeAnnouncements: 0,
     liveClassesToday: 0,
+    attendanceToday: 0,
   });
   const [loadingKpi, setLoadingKpi] = useState<boolean>(true);
 
   const fetchKpiSummary = useCallback(async (force = false) => {
+    const tenantId = activeOrgId || DEFAULT_ORGANIZATION_ID;
+    const tenantCacheKey = `admin_kpi_summary_${tenantId}_v2`;
+
     try {
       if (!force) {
-        const cached = await cacheGet<AdminKpiSummary>(CACHE_KEY);
+        const cached = await cacheGet<AdminKpiSummary>(tenantCacheKey);
         if (cached) {
           setKpi(cached);
           setLoadingKpi(false);
@@ -120,56 +125,114 @@ export const AdminDashboard = React.memo(function AdminDashboard({
       const usersCol = collection(db, 'users');
       const paymentsCol = collection(db, 'payments');
       const privacyCol = collection(db, 'privacy_requests');
-      const modCol = collection(db, 'moderation_queue');
+      // CORRECTED: moderation_reports is the actual collection (not moderation_queue)
+      const modCol = collection(db, 'moderation_reports');
       const notifCol = collection(db, 'notifications');
       const liveCol = collection(db, 'live_classes');
+      const attendanceCol = collection(db, 'attendance');
 
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+      const todayStr = startOfDay.toISOString().slice(0, 10); // 'YYYY-MM-DD'
 
+      // Payment KPI: payments use dual-field model (state OR status == 'pending').
+      // Run two separate count queries and merge via Set on doc IDs to avoid double-counting.
+      // Count approach: we use getCountFromServer for each field separately then take max
+      // (cannot do Set dedup on counts, so we take the larger value as safe upper bound).
       const [
         studentsSnap,
         pendingUsersSnap,
-        pendingPaymentsSnap,
+        pendingPaymentsByStatusSnap,
+        pendingPaymentsByStateSnap,
         privacySnap,
         modSnap,
         notifSnap,
         liveSnap,
+        attendanceSnap,
       ] = await Promise.all([
-        getCountFromServer(query(usersCol, where('role', '==', 'student'))).catch(() => ({ data: () => ({ count: 0 }) })),
-        getCountFromServer(query(usersCol, where('status', '==', 'pending'))).catch(() => ({ data: () => ({ count: 0 }) })),
-        getCountFromServer(query(paymentsCol, where('status', '==', 'pending'))).catch(() => ({ data: () => ({ count: 0 }) })),
-        getCountFromServer(query(privacyCol, where('status', '==', 'open'))).catch(() => ({ data: () => ({ count: 0 }) })),
-        getCountFromServer(query(modCol, where('status', '==', 'pending'))).catch(() => ({ data: () => ({ count: 0 }) })),
+        getCountFromServer(
+          isDefaultOrg
+            ? query(usersCol, where('role', '==', 'student'))
+            : query(usersCol, where('role', '==', 'student'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        getCountFromServer(
+          isDefaultOrg
+            ? query(usersCol, where('status', '==', 'pending'))
+            : query(usersCol, where('status', '==', 'pending'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        // Payment pending by legacy `status` field
+        getCountFromServer(
+          isDefaultOrg
+            ? query(paymentsCol, where('status', '==', 'pending'))
+            : query(paymentsCol, where('status', '==', 'pending'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        // Payment pending by newer `state` field (some payments only have this)
+        getCountFromServer(
+          isDefaultOrg
+            ? query(paymentsCol, where('state', '==', 'pending'))
+            : query(paymentsCol, where('state', '==', 'pending'), where('organization_id', '==', tenantId))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        // CORRECTED: privacy field is `state`, pending states are requested/reviewing/processing
+        getCountFromServer(
+          query(privacyCol, where('state', 'in', ['requested', 'reviewing', 'processing']))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        // CORRECTED: collection is moderation_reports, state field (not status)
+        getCountFromServer(
+          query(modCol, where('state', '==', 'pending'))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
+
         getCountFromServer(query(notifCol, where('type', '==', 'announcement'))).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        // CORRECTED: live classes use created_at (not scheduled_at, which is never written).
+        // Count classes with active status created today.
         getCountFromServer(
           query(
             liveCol,
-            where('scheduled_at', '>=', Timestamp.fromDate(startOfDay)),
-            where('scheduled_at', '<=', Timestamp.fromDate(endOfDay))
+            where('created_at', '>=', Timestamp.fromDate(startOfDay)),
+            where('created_at', '<=', Timestamp.fromDate(endOfDay))
           )
         ).catch(() => ({ data: () => ({ count: 0 }) })),
+
+        // Today's attendance records (global — attendance is not org-scoped)
+        getCountFromServer(
+          query(attendanceCol, where('date', '==', todayStr))
+        ).catch(() => ({ data: () => ({ count: 0 }) })),
       ]);
+
+      // Payment pending: take the max of the two counts as a safe upper-bound estimate.
+      // Both counts may overlap (same doc with both fields), so we avoid double-counting
+      // by taking Math.max rather than summing. This is semantically correct for "at least N pending".
+      const pendingPaymentsCount = Math.max(
+        pendingPaymentsByStatusSnap.data().count || 0,
+        pendingPaymentsByStateSnap.data().count || 0
+      );
 
       const result: AdminKpiSummary = {
         totalStudents: studentsSnap.data().count || 0,
         pendingApprovals: pendingUsersSnap.data().count || 0,
-        pendingPayments: pendingPaymentsSnap.data().count || 0,
+        pendingPayments: pendingPaymentsCount,
         pendingPrivacy: privacySnap.data().count || 0,
         moderationReports: modSnap.data().count || 0,
         activeAnnouncements: notifSnap.data().count || 0,
         liveClassesToday: liveSnap.data().count || 0,
+        attendanceToday: attendanceSnap.data().count || 0,
       };
 
+
       setKpi(result);
-      await cacheSet(CACHE_KEY, result, CACHE_TTL_MS);
+      await cacheSet(tenantCacheKey, result, CACHE_TTL_MS);
     } catch (err) {
       console.warn('[AdminDashboard] KPI fetch failed:', err);
     } finally {
       setLoadingKpi(false);
     }
-  }, []);
+  }, [activeOrgId, isDefaultOrg]);
 
   useEffect(() => {
     void fetchKpiSummary(false);
@@ -198,13 +261,49 @@ export const AdminDashboard = React.memo(function AdminDashboard({
     moderation: kpi.moderationReports,
   }), [kpi]);
 
-  const safePush = (route: string) => {
+  const safePush = (route: Href) => {
     try {
-      router.push(route as any);
+      router.push(route);
     } catch (e) {
       console.warn('[AdminDashboard] Navigation error:', e);
     }
   };
+
+  const tenantId = activeOrgId || DEFAULT_ORGANIZATION_ID;
+
+  // Authoritative Setup Checklist States (Driven by Real Underlying Data)
+  const isProfileDone = useMemo(() => {
+    if (!activeOrg) return false;
+    return Boolean(
+      (activeOrg.name && (activeOrg.phone || activeOrg.email || activeOrg.address || activeOrg.tagline || activeOrg.city)) ||
+      (activeOrg as any)?.profile_completed ||
+      (activeOrg as any)?.setup_completed
+    );
+  }, [activeOrg]);
+
+  const isClassDone = useMemo(() => {
+    return courses.some(
+      (c) => (c as any).organization_id === tenantId || (isDefaultOrg && !(c as any).organization_id)
+    );
+  }, [courses, tenantId, isDefaultOrg]);
+
+  const isFacultyDone = useMemo(() => {
+    return teachers.some(
+      (t) => (t as any).organization_id === tenantId || (isDefaultOrg && !(t as any).organization_id)
+    );
+  }, [teachers, tenantId, isDefaultOrg]);
+
+  const isFeesDone = useMemo(() => {
+    return Boolean(
+      activeOrg?.payment_status === 'received' ||
+      activeOrg?.payment_reference ||
+      kpi.pendingPayments > 0 ||
+      (activeOrg as any)?.fee_configured ||
+      isDefaultOrg
+    );
+  }, [activeOrg, kpi.pendingPayments, isDefaultOrg]);
+
+  const allChecklistDone = isProfileDone && isClassDone && isFacultyDone && isFeesDone;
 
   return (
     <View style={[styles.mainContainer, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + SPACING.xs }]}>
@@ -237,7 +336,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             <View style={styles.headerActionsGroup}>
               <TouchableOpacity
                 style={styles.notifBtn}
-                onPress={() => safePush('/search')}
+                onPress={() => safePush(ROUTES.search)}
                 accessibilityRole="button"
                 accessibilityLabel="Search"
               >
@@ -246,7 +345,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
 
               <TouchableOpacity
                 style={styles.notifBtn}
-                onPress={() => safePush('/(tabs)/notifications')}
+                onPress={() => safePush(ROUTES.notifications)}
                 accessibilityRole="button"
                 accessibilityLabel="Notifications"
               >
@@ -255,7 +354,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
 
               <TouchableOpacity
                 style={styles.profileBtn}
-                onPress={() => safePush('/(tabs)/about')}
+                onPress={() => safePush(ROUTES.profile)}
                 accessibilityRole="button"
                 accessibilityLabel="View Admin Profile"
               >
@@ -269,7 +368,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
           {/* Admin Quick Search Bar */}
           <TouchableOpacity
             style={styles.adminSearchBar}
-            onPress={() => safePush('/search')}
+            onPress={() => safePush(ROUTES.search)}
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel="Search everything across LMS"
@@ -295,7 +394,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
                 </Text>
               </View>
             ) : (
-              <TouchableOpacity onPress={() => safePush('/prayer-times')} accessibilityRole="button" accessibilityLabel="Prayer Times">
+              <TouchableOpacity onPress={() => safePush(ROUTES.tools.prayerTimes)} accessibilityRole="button" accessibilityLabel="Prayer Times">
                 <Text style={styles.prayerLink}>📍 Check Prayer Times</Text>
               </TouchableOpacity>
             )}
@@ -309,7 +408,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
                 {activeOrg?.name || 'Madrasatu-s-Salikat Lil Banat'}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => safePush('/admin/organization-settings')} style={{ marginLeft: 8 }}>
+            <TouchableOpacity onPress={() => safePush(ROUTES.admin.organizationSettings)} style={{ marginLeft: 8 }}>
               <Text style={{ fontSize: 12, color: THEME.primary, fontWeight: '600' }}>Settings & Support</Text>
             </TouchableOpacity>
           </View>
@@ -321,77 +420,111 @@ export const AdminDashboard = React.memo(function AdminDashboard({
           </View>
         </View>
 
-        {/* ─── Customer Setup Checklist (Only for new/non-default institutions until dismissed) ─── */}
+        {/* ─── Customer Setup Checklist (Real Data Driven) ─── */}
         {!isDefaultOrg && !checklistDismissed && (
-          <View style={{
-            marginHorizontal: SPACING.lg,
-            marginTop: SPACING.md,
-            backgroundColor: '#FFFFFF',
-            borderRadius: RADIUS.lg,
-            padding: SPACING.lg,
-            borderWidth: 1,
-            borderColor: '#E2E8F0',
-            ...SHADOWS.card,
-          }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="compass-outline" size={20} color={THEME.primary} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 16, fontWeight: '700', color: THEME.textMain }}>Madrasa Setup Guide</Text>
+          allChecklistDone ? (
+            <View style={{
+              marginHorizontal: SPACING.lg,
+              marginTop: SPACING.md,
+              backgroundColor: '#ECFDF5',
+              borderRadius: RADIUS.md,
+              padding: 12,
+              borderWidth: 1,
+              borderColor: '#A7F3D0',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                <Ionicons name="checkmark-done-circle" size={20} color="#059669" style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#065F46' }}>Madrasa Setup Complete (4/4)</Text>
+                  <Text style={{ fontSize: 11, color: '#047857' }}>All foundational academic and institutional steps are active.</Text>
+                </View>
               </View>
-              <TouchableOpacity onPress={() => setChecklistDismissed(true)}>
-                <Ionicons name="close-circle-outline" size={20} color={THEME.textMuted} />
+              <TouchableOpacity onPress={() => setChecklistDismissed(true)} accessibilityRole="button" accessibilityLabel="Dismiss Setup Guide">
+                <Ionicons name="close-circle-outline" size={18} color="#047857" />
               </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 13, color: THEME.textMuted, marginBottom: 12 }}>
-              Quick onboarding steps to start operating your madrasa workspace:
-            </Text>
+          ) : (
+            <View style={{
+              marginHorizontal: SPACING.lg,
+              marginTop: SPACING.md,
+              backgroundColor: '#FFFFFF',
+              borderRadius: RADIUS.lg,
+              padding: SPACING.lg,
+              borderWidth: 1,
+              borderColor: '#E2E8F0',
+              ...SHADOWS.card,
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="compass-outline" size={20} color={THEME.primary} style={{ marginRight: 8 }} />
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: THEME.textMain }}>Madrasa Setup Guide</Text>
+                </View>
+                <TouchableOpacity onPress={() => setChecklistDismissed(true)} accessibilityRole="button" accessibilityLabel="Dismiss Setup Guide">
+                  <Ionicons name="close-circle-outline" size={20} color={THEME.textMuted} />
+                </TouchableOpacity>
+              </View>
+              <Text style={{ fontSize: 13, color: THEME.textMuted, marginBottom: 12 }}>
+                Quick onboarding steps to start operating your madrasa workspace:
+              </Text>
 
-            <View style={{ gap: 8, marginBottom: 14 }}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
-                onPress={() => safePush('/admin/organization-settings')}
-              >
-                <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginRight: 10 }} />
-                <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500' }}>1. Set Madrasa Profile & Contacts</Text>
-                <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
-              </TouchableOpacity>
+              <View style={{ gap: 8, marginBottom: 14 }}>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
+                  onPress={() => safePush(ROUTES.admin.organizationSettings)}
+                >
+                  <Ionicons name={isProfileDone ? "checkmark-circle" : "ellipse-outline"} size={18} color={isProfileDone ? "#10B981" : THEME.primary} style={{ marginRight: 10 }} />
+                  <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500', textDecorationLine: isProfileDone ? 'line-through' : 'none' }}>
+                    1. Set Madrasa Profile & Contacts
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
+                  onPress={() => safePush(ROUTES.admin.academics)}
+                >
+                  <Ionicons name={isClassDone ? "checkmark-circle" : "school-outline"} size={18} color={isClassDone ? "#10B981" : THEME.primary} style={{ marginRight: 10 }} />
+                  <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500', textDecorationLine: isClassDone ? 'line-through' : 'none' }}>
+                    2. Create Academic Classes & Subjects
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
+                  onPress={() => safePush(ROUTES.admin.users)}
+                >
+                  <Ionicons name={isFacultyDone ? "checkmark-circle" : "people-outline"} size={18} color={isFacultyDone ? "#10B981" : THEME.primary} style={{ marginRight: 10 }} />
+                  <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500', textDecorationLine: isFacultyDone ? 'line-through' : 'none' }}>
+                    3. Add Faculty & Assign Subjects
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
+                  onPress={() => safePush(ROUTES.admin.payments)}
+                >
+                  <Ionicons name={isFeesDone ? "checkmark-circle" : "card-outline"} size={18} color={isFeesDone ? "#10B981" : THEME.primary} style={{ marginRight: 10 }} />
+                  <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500', textDecorationLine: isFeesDone ? 'line-through' : 'none' }}>
+                    4. Configure Fees & Review Payments
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+                </TouchableOpacity>
+              </View>
 
               <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
-                onPress={() => safePush('/admin/manage-academics')}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ECFDF5', paddingVertical: 10, borderRadius: RADIUS.md }}
+                onPress={() => setSupportModalVisible(true)}
               >
-                <Ionicons name="school-outline" size={18} color={THEME.primary} style={{ marginRight: 10 }} />
-                <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500' }}>2. Create Academic Classes & Subjects</Text>
-                <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
-                onPress={() => safePush('/admin/manage-academics')}
-              >
-                <Ionicons name="people-outline" size={18} color={THEME.primary} style={{ marginRight: 10 }} />
-                <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500' }}>3. Add Faculty & Assign Subjects</Text>
-                <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: RADIUS.md }}
-                onPress={() => safePush('/admin/manage-academics')}
-              >
-                <Ionicons name="cloud-upload-outline" size={18} color={THEME.primary} style={{ marginRight: 10 }} />
-                <Text style={{ flex: 1, fontSize: 13, color: THEME.textMain, fontWeight: '500' }}>4. Import or Enroll Students</Text>
-                <Ionicons name="chevron-forward" size={16} color={THEME.textMuted} />
+                <Ionicons name="logo-whatsapp" size={16} color="#25D366" style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Need Help? WhatsApp MSLB Support</Text>
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ECFDF5', paddingVertical: 10, borderRadius: RADIUS.md }}
-              onPress={() => setSupportModalVisible(true)}
-            >
-              <Ionicons name="logo-whatsapp" size={16} color="#25D366" style={{ marginRight: 8 }} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Need Help? WhatsApp MSLB Support</Text>
-            </TouchableOpacity>
-          </View>
+          )
         )}
 
         {/* ─── Platform Metrics (8 Authoritative Cards - 2x4 Grid) ─── */}
@@ -408,7 +541,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             {/* 1. Total Students */}
             <TouchableOpacity
               style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
-              onPress={() => safePush('/admin/users')}
+              onPress={() => safePush(ROUTES.admin.users)}
               accessibilityRole="button"
               accessibilityLabel="View Total Students"
             >
@@ -422,7 +555,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             {/* 2. Total Teachers */}
             <TouchableOpacity
               style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
-              onPress={() => safePush('/admin/users')}
+              onPress={() => safePush(ROUTES.teachers)}
               accessibilityRole="button"
               accessibilityLabel="View Total Teachers"
             >
@@ -436,7 +569,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             {/* 3. Active Courses */}
             <TouchableOpacity
               style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
-              onPress={() => safePush('/admin/manage-academics')}
+              onPress={() => safePush(ROUTES.admin.academics)}
               accessibilityRole="button"
               accessibilityLabel="View Active Courses"
             >
@@ -450,7 +583,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             {/* 4. Pending Applications */}
             <TouchableOpacity
               style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
-              onPress={() => safePush('/admin/users')}
+              onPress={() => safePush(ROUTES.admin.users)}
               accessibilityRole="button"
               accessibilityLabel="View Pending Applications"
             >
@@ -464,7 +597,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             {/* 5. Pending Payments */}
             <TouchableOpacity
               style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
-              onPress={() => safePush('/admin/payments')}
+              onPress={() => safePush(ROUTES.admin.payments)}
               accessibilityRole="button"
               accessibilityLabel="View Pending Payments"
             >
@@ -475,10 +608,10 @@ export const AdminDashboard = React.memo(function AdminDashboard({
               <Text style={styles.kpiLabel}>Pending Payments</Text>
             </TouchableOpacity>
 
-            {/* 6. Active Announcements */}
+            {/* 6. Total Announcements (counts all sent, no expiry model) */}
             <TouchableOpacity
               style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
-              onPress={() => safePush('/admin/send-push')}
+              onPress={() => safePush(ROUTES.admin.sendPush)}
               accessibilityRole="button"
               accessibilityLabel="View Announcements"
             >
@@ -486,13 +619,13 @@ export const AdminDashboard = React.memo(function AdminDashboard({
                 <Ionicons name="megaphone" size={18} color="#EC4899" />
               </View>
               <Text style={styles.kpiValue}>{kpi.activeAnnouncements}</Text>
-              <Text style={styles.kpiLabel}>Announcements</Text>
+              <Text style={styles.kpiLabel}>Total Sent</Text>
             </TouchableOpacity>
 
             {/* 7. Live Classes Today */}
             <TouchableOpacity
               style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
-              onPress={() => safePush('/live-class')}
+              onPress={() => safePush(ROUTES.liveClasses)}
               accessibilityRole="button"
               accessibilityLabel="View Live Classes"
             >
@@ -503,18 +636,18 @@ export const AdminDashboard = React.memo(function AdminDashboard({
               <Text style={styles.kpiLabel}>Live Today</Text>
             </TouchableOpacity>
 
-            {/* 8. Library Books */}
+            {/* 8. Attendance Logs */}
             <TouchableOpacity
               style={[styles.kpiCard, IS_TABLET && { width: '23%' }]}
-              onPress={() => safePush('/admin/add-book')}
+              onPress={() => safePush(ROUTES.attendance)}
               accessibilityRole="button"
-              accessibilityLabel="View Library Books"
+              accessibilityLabel="View Class Attendance"
             >
               <View style={[styles.kpiIconBox, { backgroundColor: '#06B6D415' }]}>
-                <Ionicons name="library" size={18} color="#06B6D4" />
+                <Ionicons name="calendar" size={18} color="#06B6D4" />
               </View>
-              <Text style={styles.kpiValue}>{books.length}</Text>
-              <Text style={styles.kpiLabel}>Library Books</Text>
+              <Text style={styles.kpiValue}>{kpi.attendanceToday}</Text>
+              <Text style={styles.kpiLabel}>Attendance Today</Text>
             </TouchableOpacity>
           </View>
         </View>

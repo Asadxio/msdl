@@ -90,6 +90,19 @@ export async function setActiveOrganizationId(orgId: string): Promise<void> {
 }
 
 /**
+ * Reset active organization to default on logout or user switch.
+ */
+export async function resetActiveOrganization(): Promise<void> {
+  try {
+    cachedActiveOrgId = DEFAULT_ORGANIZATION_ID;
+    await AsyncStorage.removeItem(STORAGE_KEY_ACTIVE_ORG);
+    activeOrgListeners.forEach((listener) => listener(DEFAULT_ORGANIZATION_ID));
+  } catch (err) {
+    console.warn('[TenantContext] Failed to reset active org ID in storage:', err);
+  }
+}
+
+/**
  * Fetch organization metadata by ID with local caching.
  */
 export async function getOrganizationMetadata(orgId: string): Promise<Organization | null> {

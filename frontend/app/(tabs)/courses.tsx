@@ -143,16 +143,24 @@ export default function CoursesScreen() {
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
 
   const baseCourses = useMemo(() => {
+    const userOrgId = profile?.organization_id || 'mslb-main';
+    const isSuperAdmin = profile?.role === 'super_admin';
+
     if (isStudent) {
+      const orgCatalog = safeCourses.filter((c) => {
+        if (isSuperAdmin) return true;
+        const cOrg = c?.organization_id || 'mslb-main';
+        return cOrg === userOrgId;
+      });
       return academicTab === 'enrolled'
-        ? safeCourses.filter((c) => isEnrolledInCourse(c.id))
-        : safeCourses;
+        ? orgCatalog.filter((c) => isEnrolledInCourse(c.id))
+        : orgCatalog;
     }
     if (isTeacher) {
       return enrolledCourses;
     }
     return safeCourses;
-  }, [isStudent, isTeacher, academicTab, safeCourses, isEnrolledInCourse, enrolledCourses]);
+  }, [isStudent, isTeacher, academicTab, safeCourses, isEnrolledInCourse, enrolledCourses, profile?.organization_id, profile?.role]);
 
   const teacherOptions = useMemo(
     () => ['all', ...Array.from(new Set(baseCourses.map((course) => String(course?.teacher_name || '').trim()).filter(Boolean)))],
@@ -160,8 +168,16 @@ export default function CoursesScreen() {
   );
 
   const myEnrolledCount = useMemo(() => {
-    return safeCourses.filter((c) => isEnrolledInCourse(c.id)).length;
-  }, [safeCourses, isEnrolledInCourse]);
+    const userOrgId = profile?.organization_id || 'mslb-main';
+    const isSuperAdmin = profile?.role === 'super_admin';
+    return safeCourses.filter((c) => {
+      if (!isSuperAdmin) {
+        const cOrg = c?.organization_id || 'mslb-main';
+        if (cOrg !== userOrgId) return false;
+      }
+      return isEnrolledInCourse(c.id);
+    }).length;
+  }, [safeCourses, isEnrolledInCourse, profile?.organization_id, profile?.role]);
 
   const stats = useMemo(() => {
     let total = baseCourses.length;

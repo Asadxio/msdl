@@ -4,14 +4,15 @@ import {
   FlatList, Alert, Linking, TextInput, ScrollView, Modal, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { Audio, type AVPlaybackStatus } from 'expo-av';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 import { prepareExternalUrl } from '@/lib/links';
 import { EmptyState, FullScreenLoader, RetryState } from '@/components/ui';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
@@ -34,6 +35,7 @@ type RecordingItem = {
   file_url: string;
   storage_path?: string;
   course_id?: string;
+  organization_id?: string;
   lesson_id?: string;
   teacher_id?: string;
   teacher_name?: string;
@@ -49,8 +51,13 @@ export default function RecordingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { activeOrgId, isDefaultOrg } = useActiveOrganization();
+  const searchParams = useLocalSearchParams<{ recording_id?: string; course_id?: string }>();
+  const deepLinkRecordingId = Array.isArray(searchParams.recording_id) ? searchParams.recording_id[0] : searchParams.recording_id;
+  const deepLinkCourseId = Array.isArray(searchParams.course_id) ? searchParams.course_id[0] : searchParams.course_id;
+
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
-  const isTeacher = profile?.role === 'teacher' || isAdmin;
+  const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher' || isAdmin;
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -98,17 +105,73 @@ export default function RecordingsScreen() {
     };
   }, [soundObj]);
 
+  const stopActiveSound = useCallback(async () => {
+    if (soundObj) {
+      await soundObj.stopAsync().catch(() => {});
+      await soundObj.unloadAsync().catch(() => {});
+      setSoundObj(null);
+    }
+    setActivePlayingId(null);
+    setActivePlayingItem(null);
+    setIsPlaying(false);
+    setPlaybackPositionMs(0);
+    setPlaybackDurationMs(0);
+  }, [soundObj]);
+
   const fetchRecordings = useCallback(async () => {
     setLoading(true);
     setLoadError('');
     try {
+      const currentOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
+
+      // 1. Scoped Course Query
+      const coursesRef = collection(db, 'courses');
+      const coursesQuery = (!isDefaultOrg && activeOrgId)
+        ? query(coursesRef, where('organization_id', '==', currentOrg))
+        : query(coursesRef);
+
+      // 2. Scoped Recordings Query
+      const recordingsRef = collection(db, 'recordings');
+      const recordingsQuery = (!isDefaultOrg && activeOrgId)
+        ? query(recordingsRef, where('organization_id', '==', currentOrg), orderBy('created_at', 'desc'))
+        : query(recordingsRef, orderBy('created_at', 'desc'));
+
+      // 3. For Students: Academic Enrollment Check (Enrollment Isolation)
+      const isStudentRole = profile?.role === 'student';
+      let enrolledCourseIds: Set<string> | null = null;
+      if (isStudentRole && user?.uid) {
+        const enrollmentsRef = collection(db, 'enrollments');
+        const enrollSnap = await getDocs(
+          query(enrollmentsRef, where('user_id', '==', user.uid), where('status', '==', 'active'))
+        );
+        enrolledCourseIds = new Set<string>();
+        enrollSnap.forEach((d) => {
+          const cId = d.data()?.course_id;
+          if (cId) enrolledCourseIds!.add(cId);
+        });
+      }
+
       const [recordingSnap, courseSnap] = await Promise.all([
-        getDocs(query(collection(db, 'recordings'), orderBy('created_at', 'desc'))),
-        getDocs(collection(db, 'courses')),
+        getDocs(recordingsQuery),
+        getDocs(coursesQuery),
       ]);
+
+      const nextMap: CourseMap = {};
+      courseSnap.forEach((d) => {
+        const data = d.data() as { name?: string };
+        nextMap[d.id] = data.name || 'Course';
+      });
+
       const next: RecordingItem[] = [];
       recordingSnap.forEach((d) => {
         const data = d.data() as Partial<RecordingItem>;
+        const courseId = data.course_id ? String(data.course_id) : '';
+
+        // Academic Isolation: If student, they MUST be enrolled in the course to access recordings
+        if (isStudentRole && enrolledCourseIds && (!courseId || !enrolledCourseIds.has(courseId))) {
+          return; // Skip non-enrolled recording
+        }
+
         next.push({
           id: d.id,
           title: String(data.title || ''),
@@ -116,7 +179,8 @@ export default function RecordingsScreen() {
           notes_text: data.notes_text ? String(data.notes_text) : '',
           file_url: String(data.file_url || ''),
           storage_path: data.storage_path ? String(data.storage_path) : '',
-          course_id: data.course_id ? String(data.course_id) : '',
+          course_id: courseId,
+          organization_id: data.organization_id ? String(data.organization_id) : undefined,
           lesson_id: data.lesson_id ? String(data.lesson_id) : '',
           teacher_id: data.teacher_id ? String(data.teacher_id) : '',
           teacher_name: data.teacher_name ? String(data.teacher_name) : '',
@@ -126,20 +190,30 @@ export default function RecordingsScreen() {
           created_at: data.created_at,
         });
       });
-      const nextMap: CourseMap = {};
-      courseSnap.forEach((d) => {
-        const data = d.data() as { name?: string };
-        nextMap[d.id] = data.name || 'Course';
-      });
+
       setItems(next);
       setCourseMap(nextMap);
       await checkOfflineCacheForItems(next);
+
+      // Deep link resolution & validation
+      if (deepLinkCourseId && nextMap[deepLinkCourseId]) {
+        setSelectedCourseId(deepLinkCourseId);
+      }
+      if (deepLinkRecordingId) {
+        const matched = next.find((r) => r.id === deepLinkRecordingId);
+        if (!matched) {
+          Alert.alert(
+            'Recording Unavailable',
+            'This recording is either inaccessible under your active enrolled courses or does not belong to your organization.'
+          );
+        }
+      }
     } catch (error: unknown) {
       logFirestoreFailure(
         {
           collection: 'recordings/courses',
           operation: 'get',
-          query: 'recordings orderBy created_at desc and all courses',
+          query: 'recordings tenant/enrolled scoped fetch',
           role: profile?.role,
           status: profile?.status,
         },
@@ -149,11 +223,17 @@ export default function RecordingsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [profile?.role, profile?.status, checkOfflineCacheForItems]);
+  }, [profile?.role, profile?.status, user?.uid, activeOrgId, isDefaultOrg, deepLinkCourseId, deepLinkRecordingId, checkOfflineCacheForItems]);
 
+  // Tenant Switch Cleanup: Stop playing audio and clear state when active tenant changes
   useEffect(() => {
+    void stopActiveSound();
+    setItems([]);
+    setCourseMap({});
+    setSelectedCourseId('');
     fetchRecordings().catch(() => {});
-  }, [fetchRecordings]);
+  }, [activeOrgId, isDefaultOrg]);
+
 
   // Audio Play / Pause / Load Handler
   const handleTogglePlayback = async (item: RecordingItem) => {
@@ -224,19 +304,6 @@ export default function RecordingsScreen() {
     } finally {
       setPlaybackLoadingId(null);
     }
-  };
-
-  const stopActiveSound = async () => {
-    if (soundObj) {
-      await soundObj.stopAsync().catch(() => {});
-      await soundObj.unloadAsync().catch(() => {});
-      setSoundObj(null);
-    }
-    setActivePlayingId(null);
-    setActivePlayingItem(null);
-    setIsPlaying(false);
-    setPlaybackPositionMs(0);
-    setPlaybackDurationMs(0);
   };
 
   // Interactive Seek Scrubber Handler
@@ -336,8 +403,13 @@ export default function RecordingsScreen() {
   };
 
   const handleDeleteRecording = (item: RecordingItem) => {
+    if (!isDefaultOrg && activeOrgId && item.organization_id && item.organization_id !== activeOrgId) {
+      Alert.alert('Permission Denied', 'Cannot delete a recording belonging to another organization.');
+      return;
+    }
     const canDelete = isAdmin || (isTeacher && item.teacher_id === user?.uid);
     if (!canDelete) return;
+
 
     Alert.alert('Delete Recording', `Delete "${item.title || 'recording'}" permanently from the Madrasa library?`, [
       { text: 'Cancel', style: 'cancel' },
@@ -594,9 +666,11 @@ export default function RecordingsScreen() {
             }}
             ListEmptyComponent={
               <EmptyState
-                title="No recordings yet"
+                title={profile?.role === 'student' && Object.keys(courseMap).length === 0 ? 'No Enrolled Courses' : 'No recordings yet'}
                 message={
-                  search || selectedCourseId
+                  profile?.role === 'student' && Object.keys(courseMap).length === 0
+                    ? 'You must be enrolled in an active course to access class recordings.'
+                    : search || selectedCourseId
                     ? 'No recordings match your filter.'
                     : 'Live class recordings will appear here once teachers record audio sessions.'
                 }

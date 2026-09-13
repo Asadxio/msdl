@@ -33,6 +33,7 @@ export type DispatchNotificationInput = {
   data?: Record<string, unknown>;
   dedupeId?: string;
   sendToAll?: boolean;
+  organization_id?: string;
 };
 
 export type NotificationRecordInput = {
@@ -45,4 +46,5 @@ export type NotificationRecordInput = {
   route: string;
   data: Record<string, unknown>;
   dedupe_id: string;
+  organization_id?: string;
 };

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Email Verified | Madarsa Tus Salikat Lil Banat</title>
+  <style>
+    :root {
+      --green: #0F5132;
+      --green-dark: #0A3622;
+      --green-light: #E8F5E9;
+      --gold: #D4AF37;
+      --bg: #F7F6EF;
+      --card: #FFFFFF;
+      --text: #1F2937;
+      --muted: #6B7280;
+      --border: #E5E7EB;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: clamp(24px, 5vw, 44px);
+      box-shadow: 0 16px 36px rgba(15, 81, 50, 0.12);
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+    .badge-icon {
+      width: 80px;
+      height: 80px;
+      background: var(--green-light);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 40px;
+      border: 2px solid #C8E6C9;
+    }
+    h1 {
+      color: var(--green);
+      font-size: clamp(1.4rem, 4vw, 1.8rem);
+      margin: 0 0 8px;
+      line-height: 1.3;
+    }
+    .urdu-title {
+      font-size: 1.25rem;
+      color: var(--green-dark);
+      margin: 0 0 16px;
+      font-weight: 600;
+      direction: rtl;
+    }
+    .accent {
+      width: 60px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--gold);
+      margin: 0 auto 20px;
+    }
+    p {
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+      margin: 0 0 24px;
+    }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 14px 20px;
+      background: var(--green);
+      color: #FFFFFF;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1.05rem;
+      border-radius: 14px;
+      transition: background 0.2s, transform 0.1s;
+      box-shadow: 0 4px 14px rgba(15, 81, 50, 0.25);
+    }
+    .btn:hover {
+      background: var(--green-dark);
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+    .subtext {
+      margin-top: 18px;
+      font-size: 0.82rem;
+      color: #9CA3AF;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge-icon">✅</div>
+    <h1>Email Verified Successfully!</h1>
+    <div class="urdu-title">ای میل کی تصدیق ہو گئی ہے</div>
+    <div class="accent" aria-hidden="true"></div>
+    <p>
+      Aapka email verify ho chuka hai. Mobile app open ki ja rahi hai...<br/>
+      Agar app khud na khule toh neechay diye gaye button par click karein.
+    </p>
+    <a id="openAppBtn" class="btn" href="madars-tus-salikat-lilbanat://auth/pending">
+      📱 Open Madrasa App / ایپ کھولیں
+    </a>
+    <div class="subtext">
+      Madrasatu-s-Salikat Lil Banat • مدرسۃ السالکات للبنات
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var appScheme = "madars-tus-salikat-lilbanat://auth/pending";
+      var androidIntent = "intent://auth/pending#Intent;scheme=madars-tus-salikat-lilbanat;package=com.madrasatussalikat.lilbanat;end;";
+
+      // Auto-trigger app opening on load
+      function tryOpenApp() {
+        var isAndroid = /android/i.test(navigator.userAgent);
+        var targetUrl = isAndroid ? androidIntent : appScheme;
+
+        // Try standard scheme first
+        window.location.href = appScheme;
+
+        // Fallback to Android intent after 500ms if still in browser
+        if (isAndroid) {
+          setTimeout(function() {
+            window.location.href = androidIntent;
+          }, 500);
+        }
+      }
+
+      // Update button href for Android intent
+      var btn = document.getElementById("openAppBtn");
+      if (btn && /android/i.test(navigator.userAgent)) {
+        btn.addEventListener("click", function(e) {
+          e.preventDefault();
+          window.location.href = androidIntent;
+        });
+      }
+
+      // Execute on page load
+      if (document.readyState === "complete" || document.readyState === "interactive") {
+        tryOpenApp();
+      } else {
+        window.addEventListener("DOMContentLoaded", tryOpenApp);
+      }
+    })();
+  </script>
+</body>
+</html>

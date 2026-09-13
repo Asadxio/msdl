@@ -39,6 +39,7 @@ export async function createNotificationAsAdmin(
     data: { sound, channelId: channel },
     dedupeId: `admin:${category}:${userId}:${title.toLowerCase().slice(0, 24)}`,
     sendToAll: userId === 'all',
+    organization_id: profile?.organization_id || undefined,
   }).catch(() => {});
   return true;
 }
@@ -71,6 +72,7 @@ export async function createRoleNotificationAsAdmin(
       recipientIds: dedupedUserIds,
       data: { sound: payload.sound || 'default', channelId: 'announcements' },
       dedupeId: `role_notice:${title.toLowerCase().slice(0, 20)}:${Date.now()}`,
+      organization_id: profile?.organization_id || undefined,
     }).catch(() => {});
     return true;
   } catch (error) {

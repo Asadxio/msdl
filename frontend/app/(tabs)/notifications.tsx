@@ -32,6 +32,7 @@ type NotificationItem = {
   title: string;
   message: string;
   user_id: string;
+  organization_id?: string;
   category?: 'announcement' | 'notification' | 'class_reminder';
   sound?: 'default';
   read?: Record<string, boolean>;
@@ -146,8 +147,14 @@ export default function NotificationsScreen() {
     ];
     const byId = new Map<string, NotificationItem>();
     const publish = () => {
+      const userOrgId = profile?.organization_id || 'mslb-main';
+      const isSuper = profile?.role === 'super_admin';
       const next = Array.from(byId.values())
-        .filter((item) => !(Array.isArray(item.hidden_by) && item.hidden_by.includes(user.uid)))
+        .filter((item) => {
+          if (Array.isArray(item.hidden_by) && item.hidden_by.includes(user.uid)) return false;
+          if (item.organization_id && item.organization_id !== userOrgId && !isSuper) return false;
+          return true;
+        })
         .sort((a, b) => Number(b.created_at?.toDate?.()?.getTime?.() || 0) - Number(a.created_at?.toDate?.()?.getTime?.() || 0))
         .slice(0, 50);
       throttleRealtimeUpdates<NotificationItem[]>('notifications_stream', [next], (batches) => {
@@ -176,7 +183,7 @@ export default function NotificationsScreen() {
       cancelMetric();
       unsubs.forEach((unsub) => unsub());
     };
-  }, [profile?.role, user?.uid, reloadKey]);
+  }, [profile?.role, profile?.organization_id, user?.uid, reloadKey]);
 
   const markAsRead = async (item: NotificationItem) => {
     if (!user?.uid) return;

@@ -5,10 +5,11 @@
  */
 import { Audio } from 'expo-av';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { addDoc, collection, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, storage } from '@/lib/firebase';
 import { withTimeout } from '@/lib/errors';
 import { LIVE_OPS } from '@/lib/liveOpsConfig';
+import { DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,7 @@ export type ClassRecordingMeta = {
   courseId: string;
   teacherId: string;
   teacherName: string;
+  organizationId?: string; // Phase 57: Authoritative tenant context
 };
 
 export type SavedRecording = {
@@ -30,9 +32,11 @@ export type SavedRecording = {
   class_id: string;
   teacher_id: string;
   teacher_name: string;
+  organization_id: string; // Phase 57: Stamped authoritative organization
   duration_sec: number;
   size_bytes: number;
 };
+
 
 // ─── Permission ───────────────────────────────────────────────────────────────
 
@@ -110,6 +114,28 @@ export async function stopAndSaveRecording(
 
   onProgress?.(10);
 
+  // 1. Authoritative Course & Tenant Verification (Server/Trust Boundary)
+  if (!meta.courseId) {
+    throw new Error('Course ID is required to save recording.');
+  }
+  const courseSnap = await withTimeout(
+    getDoc(doc(db, 'courses', meta.courseId)),
+    10000,
+    'Course verification timed out'
+  );
+  if (!courseSnap.exists()) {
+    throw new Error(`Authoritative course "${meta.courseId}" not found. Cannot save recording.`);
+  }
+  const courseData = courseSnap.data();
+  const authoritativeOrgId = courseData?.organization_id || DEFAULT_ORGANIZATION_ID;
+
+  // Strict cross-tenant rejection: if caller context specified an organization, it MUST match the course's org
+  if (meta.organizationId && meta.organizationId !== authoritativeOrgId) {
+    throw new Error(
+      `Tenant mismatch: course belongs to organization "${authoritativeOrgId}", but context specified "${meta.organizationId}". Cross-tenant creation rejected.`
+    );
+  }
+
   const response = await fetch(uri);
   const blob = await response.blob();
   const sizeBytes = blob.size;
@@ -119,7 +145,8 @@ export async function stopAndSaveRecording(
   const dateStr = new Date().toISOString().split('T')[0];
   const safeTitle = meta.classTitle.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40);
   const fileName = `${dateStr}_${safeTitle}.m4a`;
-  const storagePath = `recordings/${meta.classId}/${fileName}`;
+  // Canonical tenant-scoped storage path
+  const storagePath = `organizations/${authoritativeOrgId}/courses/${meta.courseId}/recordings/${meta.classId}/${fileName}`;
   const storageRef = ref(storage, storagePath);
 
   await withTimeout(
@@ -147,10 +174,13 @@ export async function stopAndSaveRecording(
       class_id: meta.classId,
       teacher_id: meta.teacherId,
       teacher_name: meta.teacherName,
+      organization_id: authoritativeOrgId, // Stamped authoritative tenant
       duration_sec: durationSec,
       size_bytes: sizeBytes,
+      status: 'published',
       recorded_at: serverTimestamp(),
       created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
     }),
     15000,
     'Saving recording metadata timed out.'
@@ -168,10 +198,12 @@ export async function stopAndSaveRecording(
     class_id: meta.classId,
     teacher_id: meta.teacherId,
     teacher_name: meta.teacherName,
+    organization_id: authoritativeOrgId,
     duration_sec: durationSec,
     size_bytes: sizeBytes,
   };
 }
+
 
 // ─── Delete Recording ─────────────────────────────────────────────────────────
 

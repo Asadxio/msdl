@@ -6,6 +6,32 @@
   "storage": {
     "rules": "storage.rules"
   },
+  "hosting": {
+    "public": "web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/auth/verify-redirect",
+        "destination": "/verify-redirect.html"
+      },
+      {
+        "source": "/auth/login",
+        "destination": "/verify-redirect.html"
+      },
+      {
+        "source": "/privacy-policy",
+        "destination": "/privacy-policy.html"
+      },
+      {
+        "source": "/account-deletion",
+        "destination": "/account-deletion.html"
+      }
+    ]
+  },
   "functions": [
     {
       "source": "functions",
@@ -19,5 +45,22 @@
         "*.local"
       ]
     }
-  ]
+  ],
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "storage": {
+      "port": 9199
+    },
+    "functions": {
+      "port": 5001
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
 }

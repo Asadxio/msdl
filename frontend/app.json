@@ -51,7 +51,27 @@
       "package": "com.madrasatussalikat.lilbanat",
       "versionCode": 30,
       "allowBackup": false,
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "madars-tus-salikat-lilbanat"
+            },
+            {
+              "scheme": "https",
+              "host": "madrasa-app-50d6c.firebaseapp.com",
+              "pathPrefix": "/auth"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
