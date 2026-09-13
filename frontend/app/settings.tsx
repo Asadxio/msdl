@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity, Switch, Alert, ScrollView, Linking, Platform, Modal
 } from 'react-native';
@@ -23,6 +23,15 @@ import * as Notifications from 'expo-notifications';
 import { clearQuizCounts } from '@/lib/lmsHardening';
 import { useData } from '@/context/DataContext';
 import { subscribeToTelemetryErrors, type TelemetryErrorDoc } from '@/lib/telemetry';
+import {
+  getAppStorageBreakdown,
+  clearQuranAudioStorage,
+  clearAppCacheDirectory,
+  clearAllDisposableStorage,
+  formatBytes,
+  type StorageBreakdown,
+} from '@/lib/storageCleaner';
+import { openGooglePlayStore } from '@/lib/inAppReview';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
 const LARGE_TEXT_PREF_KEY = 'settings_large_text';
@@ -89,6 +98,107 @@ export default function SettingsScreen() {
 
   const isFounder = isFounderEmail(profile?.email || user?.email);
   const isAdminUser = isFounder || profile?.role === 'admin' || profile?.role === 'super_admin';
+
+  // Storage & Cache Cleaner State
+  const [storageStats, setStorageStats] = useState<StorageBreakdown | null>(null);
+  const [loadingStorage, setLoadingStorage] = useState(false);
+  const [cleaningStorage, setCleaningStorage] = useState(false);
+
+  const loadStorageStats = useCallback(async () => {
+    setLoadingStorage(true);
+    try {
+      const stats = await getAppStorageBreakdown();
+      setStorageStats(stats);
+    } catch {
+    } finally {
+      setLoadingStorage(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStorageStats();
+  }, [loadStorageStats]);
+
+  const handleClearQuranAudios = () => {
+    const sizeStr = storageStats ? formatBytes(storageStats.quranAudioBytes) : '0 B';
+    Alert.alert(
+      'Delete Offline Quran Audios',
+      `Are you sure you want to remove downloaded Quran audio recitations (${sizeStr})? Your reading bookmarks, notes, and progress will remain 100% safe. You can re-download surahs anytime.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Audio',
+          style: 'destructive',
+          onPress: async () => {
+            setCleaningStorage(true);
+            try {
+              const res = await clearQuranAudioStorage();
+              await loadStorageStats();
+              Alert.alert('Storage Cleaned', `Freed ${formatBytes(res.freedBytes)} across ${res.deletedCount} surah audio files.`);
+            } catch {
+              Alert.alert('Error', 'Failed to remove some audio files.');
+            } finally {
+              setCleaningStorage(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearTempCacheModern = () => {
+    const sizeStr = storageStats ? formatBytes(storageStats.cacheBytes) : '0 B';
+    Alert.alert(
+      'Clear App Cache',
+      `Clear temporary cache files (${sizeStr})? Fast loading is preserved and your active login session is not affected.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Cache',
+          style: 'destructive',
+          onPress: async () => {
+            setCleaningStorage(true);
+            try {
+              const res = await clearAppCacheDirectory();
+              await loadStorageStats();
+              Alert.alert('Cache Cleared', `Successfully cleaned ${formatBytes(res.freedBytes)} of temporary cache.`);
+            } catch {
+              Alert.alert('Error', 'Failed to clear cache.');
+            } finally {
+              setCleaningStorage(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearAllStorageModern = () => {
+    const sizeStr = storageStats ? formatBytes(storageStats.totalDisposableBytes) : '0 B';
+    Alert.alert(
+      'Clean All Offline Media & Cache',
+      `This will reclaim up to ${sizeStr} by clearing offline audio recitations and temporary app caches. Your account, login session, bookmarks, and quiz certificates will remain completely safe.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clean Everything',
+          style: 'destructive',
+          onPress: async () => {
+            setCleaningStorage(true);
+            try {
+              const res = await clearAllDisposableStorage();
+              await loadStorageStats();
+              Alert.alert('Storage Reclaimed', `Successfully reclaimed ${formatBytes(res.totalFreedBytes)} of device storage!`);
+            } catch {
+              Alert.alert('Error', 'Failed to complete cleaning.');
+            } finally {
+              setCleaningStorage(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Admin Diagnostics State
   const [diagLogsVisible, setDiagLogsVisible] = useState(false);
@@ -603,6 +713,101 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </SettingsSection>
 
+        {/* Section: Storage & Offline Data */}
+        <SettingsSection title="Storage & Offline Data" icon="server-outline" defaultOpen={false}>
+          <View style={styles.storageSummaryCard}>
+            <View style={styles.storageSummaryHeader}>
+              <View>
+                <Text style={styles.storageCardTitle}>Reclaimable Device Space</Text>
+                <Text style={styles.storageCardSubtitle}>Offline audios & temporary files</Text>
+              </View>
+              <View style={styles.storageBadge}>
+                <Text style={styles.storageBadgeText}>
+                  {loadingStorage ? 'Calculating...' : storageStats ? formatBytes(storageStats.totalDisposableBytes) : '0 B'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.storageMetricRow}>
+              <View style={styles.storageMetricItem}>
+                <Ionicons name="musical-notes-outline" size={18} color={COLORS.primary} />
+                <View style={{ marginLeft: 8 }}>
+                  <Text style={styles.storageMetricLabel}>Quran Audios</Text>
+                  <Text style={styles.storageMetricValue}>
+                    {storageStats ? `${formatBytes(storageStats.quranAudioBytes)} (${storageStats.quranAudioCount} surahs)` : '0 B'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.storageMetricItem}>
+                <Ionicons name="file-tray-full-outline" size={18} color="#0284C7" />
+                <View style={{ marginLeft: 8 }}>
+                  <Text style={styles.storageMetricLabel}>App Cache</Text>
+                  <Text style={styles.storageMetricValue}>
+                    {storageStats ? formatBytes(storageStats.cacheBytes) : '0 B'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={handleClearQuranAudios}
+            disabled={cleaningStorage || !storageStats || storageStats.quranAudioBytes === 0}
+          >
+            <View style={styles.linkRowLeft}>
+              <Ionicons name="trash-outline" size={20} color="#DC2626" />
+              <View>
+                <Text style={styles.linkText}>Delete Quran Audios</Text>
+                <Text style={styles.linkSubtext}>Free space by removing downloaded MP3s</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={handleClearTempCacheModern}
+            disabled={cleaningStorage}
+          >
+            <View style={styles.linkRowLeft}>
+              <Ionicons name="sparkles-outline" size={20} color={COLORS.primary} />
+              <View>
+                <Text style={styles.linkText}>Clear Temporary Cache</Text>
+                <Text style={styles.linkSubtext}>Fast 1-tap image & temporary file cleanup</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={handleClearAllStorageModern}
+            disabled={cleaningStorage}
+          >
+            <View style={styles.linkRowLeft}>
+              <Ionicons name="nuclear-outline" size={20} color="#D97706" />
+              <View>
+                <Text style={styles.linkText}>Clean All Offline Storage</Text>
+                <Text style={styles.linkSubtext}>Reclaim maximum space while preserving account</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.linkRow, { borderBottomWidth: 0 }]}
+            onPress={loadStorageStats}
+            disabled={loadingStorage}
+          >
+            <View style={styles.linkRowLeft}>
+              <Ionicons name="refresh-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.linkText}>{loadingStorage ? 'Analyzing storage...' : 'Refresh Storage Stats'}</Text>
+            </View>
+            <Ionicons name="sync" size={16} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        </SettingsSection>
+
         {/* Section 6: Language */}
         <SettingsSection title="Language / زبان / اللغة" icon="language-outline" defaultOpen={false}>
           <TouchableOpacity style={styles.linkRow} onPress={() => setLangModalVisible(true)}>
@@ -702,6 +907,17 @@ export default function SettingsScreen() {
               <View>
                 <Text style={styles.linkText}>Official Website</Text>
                 <Text style={styles.linkSubtext}>{MADRASA_WEBSITE_DISPLAY}</Text>
+              </View>
+            </View>
+            <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.linkRow} onPress={openGooglePlayStore}>
+            <View style={styles.linkRowLeft}>
+              <Ionicons name="star" size={20} color="#F59E0B" />
+              <View>
+                <Text style={styles.linkText}>Rate MSLB on Google Play ⭐</Text>
+                <Text style={styles.linkSubtext}>Help more sisters find authentic Islamic education</Text>
               </View>
             </View>
             <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
@@ -1223,6 +1439,66 @@ const styles = StyleSheet.create({
   langOptionDesc: {
     fontSize: 12,
     color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  storageSummaryCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: SPACING.sm,
+  },
+  storageSummaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  storageCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  storageCardSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  storageBadge: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+  },
+  storageBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0369A1',
+  },
+  storageMetricRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  storageMetricItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  storageMetricLabel: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+  },
+  storageMetricValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMain,
     marginTop: 2,
   },
 });

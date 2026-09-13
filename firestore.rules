@@ -1726,9 +1726,9 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // editable app settings (fees/social links/profile about content)
+    // editable app settings (fees/social links/profile about content/version control)
     match /app_settings/{docId} {
-      allow read: if isApprovedVerifiedUser();
+      allow read: if isApprovedVerifiedUser() || docId in ['version_control', 'platform'];
       allow write: if isAdmin() && (docId != 'platform' || isValidPlatformSettingsWrite(docId));
     }
 

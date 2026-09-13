@@ -1,8 +1,11 @@
 import { Stack, useRouter, useSegments, useRootNavigationState, usePathname } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { I18nManager, Platform, StyleSheet, View } from 'react-native';
+import { AppState, I18nManager, Platform, StyleSheet, View } from 'react-native';
 import { COLORS } from '@/constants/theme';
+import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
+import { ForceUpdateModal } from '@/components/ForceUpdateModal';
+import { fetchRemoteVersionConfig, evaluateVersionRequirements, type VersionStatus } from '@/lib/versionCheck';
 import { evaluateRouteAuthorization } from '@/lib/navigationGuard';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
@@ -61,8 +64,29 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'required' | 'complete'>('checking');
   const [splashHidden, setSplashHidden] = useState(true);
   const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
+  const [versionStatus, setVersionStatus] = useState<VersionStatus>({ type: 'ok' });
   const enteredAppTrackedRef = useRef<string | null>(null);
   const pushRegisteredUserRef = useRef<string | null>(null);
+
+  const checkVersion = useCallback(async () => {
+    try {
+      const config = await fetchRemoteVersionConfig();
+      if (config) {
+        const status = evaluateVersionRequirements(config);
+        setVersionStatus(status);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    checkVersion();
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        checkVersion();
+      }
+    });
+    return () => sub.remove();
+  }, [checkVersion]);
 
   // Sync safe user context with Crashlytics
   useEffect(() => {
@@ -552,6 +576,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <OnboardingProvider value={{ markEntryCompleteInSession }}>
       <View style={{ flex: 1 }}>
+        <NetworkStatusBanner />
+        <ForceUpdateModal status={versionStatus} onRefresh={checkVersion} />
         {children}
         {showLoader ? (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: COLORS.background }]}>
