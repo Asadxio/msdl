@@ -110,5 +110,11 @@ describe('Student Dashboard Redesign Verification', () => {
       expect(payFees?.icon).toBe('wallet-outline');
       expect(taharat?.icon).toBe('water-outline');
     });
+
+    it('Quick Access subtitles are concise to prevent text truncation on narrow screens', () => {
+      ALL_QUICK_ACCESS_SERVICES.forEach((service) => {
+        expect(service.subtitle.length).toBeLessThanOrEqual(16);
+      });
+    });
   });
 });

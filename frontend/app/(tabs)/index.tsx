@@ -377,7 +377,7 @@ export default function HomeScreen() {
             {/* Dynamic Greeting & Subtitle */}
             <View style={styles.greetingBox}>
               <Text style={styles.greetingTitle}>
-                Assalamu Alaikum, {profile?.name ? profile.name.split(' ')[0] : 'Student'} 👋
+                Assalamu Alaikum, {profile?.name ? profile.name.split(' ')[0] : 'Taliba'} 👋
               </Text>
               <Text style={styles.greetingSubtitle}>
                 Ready for today&apos;s learning? • {hijriDate}
@@ -614,12 +614,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: '100%',
     height: '100%',
-    opacity: 0.28,
+    opacity: 0.38,
   },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#043C32',
-    opacity: 0.65,
+    opacity: 0.55,
   },
   heroContent: {
     paddingHorizontal: SPACING.lg,

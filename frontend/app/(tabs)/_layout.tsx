@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { collection, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import * as Notifications from 'expo-notifications';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { stableQueryKey, subscribeDeduped, getListenerMetrics } from '@/lib/queryPerformance';
 import { trackPerformanceMetric } from '@/lib/performanceEngine';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
@@ -50,8 +51,12 @@ function TabIcon({ name, color, focused }: { name: TabIconName; color: string; f
 export default function TabLayout() {
   const { user, profile } = useAuth();
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadChats, setUnreadChats] = useState(0);
+
+  const bottomBarPadding = Platform.OS === 'ios' ? SPACING.lg : (insets.bottom > 0 ? insets.bottom + 4 : 8);
+  const bottomBarHeight = Platform.OS === 'ios' ? 86 : (60 + (insets.bottom > 0 ? insets.bottom : 8));
 
   useEffect(() => {
     if (!user?.uid) {
@@ -138,7 +143,13 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: '#71817B',
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            paddingBottom: bottomBarPadding,
+            height: bottomBarHeight,
+          },
+        ],
         tabBarLabelStyle: styles.tabLabel,
         tabBarHideOnKeyboard: true,
         lazy: true,

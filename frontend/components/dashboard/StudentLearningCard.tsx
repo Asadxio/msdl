@@ -96,7 +96,7 @@ export function StudentLearningCard({
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${hasLessons ? safePercent : 15}%` }]} />
+          <View style={[styles.progressFill, { width: `${hasLessons ? safePercent : 0}%` }]} />
         </View>
         <View style={styles.progressFooterRow}>
           <Text style={styles.progressMetaText}>
