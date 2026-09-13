@@ -88,14 +88,6 @@
           "color": "#0B5D4B"
         }
       ],
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#F8F6F0"
-        }
-      ],
       "expo-font",
       "@react-native-firebase/app",
       "@react-native-firebase/crashlytics"
