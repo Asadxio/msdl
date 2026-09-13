@@ -21,6 +21,7 @@ interface SubmitQuizResponse {
   percentage: number;
   passed: boolean;
   resultId: string;
+  certificateId?: string;
   duplicate?: boolean;
   breakdown?: {
     id: string;
@@ -182,7 +183,39 @@ export const submitQuiz = onCall(
 
     logger.info(`[submitQuiz] Result written resultId=${resultId} uid=${user.uid} score=${score}/${total}`);
 
+    // If student passed with >= 60%, automatically persist verified certificate via Admin SDK
+    let certificateId: string | undefined = undefined;
+    if (percentage >= 60) {
+      certificateId = `cert_quiz_${user.uid}_${category.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+      const studentName = String(request.data?.student_name || user.email || 'Student').trim();
+      const gradeLabel = percentage >= 90
+        ? 'Distinction (Mumtaz - ممتاز)'
+        : percentage >= 80
+        ? 'Excellent (Jayyid Jiddan - جيد جدا)'
+        : percentage >= 70
+        ? 'Very Good (Jayyid - جيد)'
+        : 'Pass (Maqbool - مقبول)';
+
+      await collections.certificates().doc(certificateId).set({
+        certificate_id: certificateId,
+        user_id: user.uid,
+        user_name: studentName,
+        course_name: `Quiz: ${category}`,
+        type: 'quiz_assessment',
+        quiz_category: category,
+        score,
+        total_questions: total,
+        percentage,
+        grade_label: gradeLabel,
+        completion_date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+        hijri_date: '1447 AH',
+        created_at: FieldValue.serverTimestamp(),
+      }).catch((certErr: any) => {
+        logger.warn(`[submitQuiz] Certificate creation warning:`, certErr);
+      });
+    }
+
     // Return graded result with breakdown and explanations for revision mode
-    return { score, total, percentage, passed, resultId, breakdown };
+    return { score, total, percentage, passed, resultId, certificateId, breakdown };
   }
 );

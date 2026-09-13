@@ -45,7 +45,7 @@ jest.mock('firebase/firestore', () => {
 describe('Sanad Verification & QR Code Module', () => {
   it('generates accurate verification URLs', () => {
     const url = getSanadVerificationUrl('MSLB-CERT-786');
-    expect(url).toBe('https://mslb.app/verify-sanad?id=MSLB-CERT-786');
+    expect(url).toBe('https://asadxio.github.io/madrasa-website/verify-sanad.html?id=MSLB-CERT-786');
   });
 
   it('generates high-res QR code URL with official styling', () => {

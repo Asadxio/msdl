@@ -54,10 +54,7 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/organization_memberships/$(targetOrgId + '_' + request.auth.uid)) ||
           exists(/databases/$(database)/documents/organization_memberships/$(targetOrgId + ':' + request.auth.uid))
         )) ||
-        ((targetOrgId == null || targetOrgId == '' || targetOrgId == 'mslb-main') && (
-          exists(/databases/$(database)/documents/organization_memberships/$('mslb-main_' + request.auth.uid)) ||
-          exists(/databases/$(database)/documents/organization_memberships/$('mslb-main:' + request.auth.uid))
-        ))
+        (targetOrgId == null || targetOrgId == '' || targetOrgId == 'mslb-main')
       ));
     }
 
@@ -226,8 +223,8 @@ service cloud.firestore {
         && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
         && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
         && (request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
-        && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
-        && ((request.resource.data.role == 'assistant_teacher') ? isAdmin() : true);
+        && ((request.resource.data.role in ['admin', 'super_admin']) ? (isAdmin() || isSuperAdmin()) : true)
+        && ((request.resource.data.role == 'assistant_teacher') ? (isTeacherOrAdmin() || isSelf(uid)) : true);
     }
 
     function isValidStudentNameUpdate(uid) {
@@ -447,7 +444,7 @@ service cloud.firestore {
       // Admin SDK bypasses these rules, but the rule set must not reject the unified schema.
       // INVARIANTS that MUST always hold regardless of schema version:
       //   user_id == auth.uid, state=pending, status=pending, provider=razorpay, amount>0
-      return isApprovedVerifiedUser()
+      return isSignedIn()
         && hasOnlyAllowedKeys(
           request.resource.data,
           [
@@ -537,6 +534,14 @@ service cloud.firestore {
         && request.resource.data.message.size() > 0
         && (!('rating' in request.resource.data) || request.resource.data.rating == null || (request.resource.data.rating is number && request.resource.data.rating >= 1 && request.resource.data.rating <= 5))
         && request.resource.data.created_at is timestamp;
+    }
+
+    function isValidFeedbackUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['message', 'rating', 'updated_at'])
+        && request.resource.data.user_id == resource.data.user_id
+        && (!('rating' in request.resource.data) || request.resource.data.rating == null || (request.resource.data.rating is number && request.resource.data.rating >= 1 && request.resource.data.rating <= 5))
+        && (!('message' in request.resource.data) || (request.resource.data.message is string && request.resource.data.message.size() > 0))
+        && request.resource.data.updated_at is timestamp;
     }
 
     function isChatParticipant() {
@@ -1433,11 +1438,11 @@ service cloud.firestore {
 
     // payments collection
     match /payments/{paymentId} {
-      allow get: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
-      allow list: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
-      allow create: if isApprovedVerifiedUser() && isValidPaymentCreate();
+      allow get: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow create: if isSignedIn() && isValidPaymentCreate();
       allow update: if (isAdmin() && isValidPaymentUpdateByAdmin())
-        || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid && isValidPaymentUpdateByOwner());
+        || (isSignedIn() && resource.data.user_id == request.auth.uid && isValidPaymentUpdateByOwner());
       allow delete: if isAdmin();
     }
 
@@ -1460,13 +1465,14 @@ service cloud.firestore {
 
     // modules/lessons/assignments and related learning data
     match /categories/{categoryId} {
-      allow read: if canReadLearningContent(resource.data);
+      allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
     }
 
     match /quizzes/{quizId} {
       allow read: if canReadLearningContent(resource.data);
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isTeacherOrAdmin();
+      allow delete: if isAdmin();
     }
 
     match /quiz_results/{resultId} {
@@ -1489,7 +1495,18 @@ service cloud.firestore {
     match /certificates/{certificateId} {
       allow get: if isSignedIn() && (resource.data.user_id == request.auth.uid || isTeacherOrAdmin());
       allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create: if isTeacherOrAdmin();
+      allow create: if isTeacherOrAdmin() || (
+        isSignedIn()
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.type == 'quiz_assessment'
+        && request.resource.data.percentage >= 60
+        && request.resource.data.score <= request.resource.data.total_questions
+        && hasOnlyAllowedKeys(request.resource.data, [
+             'certificate_id', 'user_id', 'user_name', 'course_name', 'type',
+             'quiz_category', 'score', 'total_questions', 'percentage',
+             'grade_label', 'completion_date', 'hijri_date', 'created_at'
+           ])
+      );
       allow update, delete: if isAdmin();
     }
 
@@ -1514,19 +1531,22 @@ service cloud.firestore {
     match /modules/{moduleId} {
       // Phase 8: Modules are course-specific content; require active enrollment.
       allow read: if canReadLearningContentForCourse(resource.data);
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isTeacherOrAdmin();
+      allow delete: if isAdmin();
     }
 
     match /lessons/{lessonId} {
       // Phase 8: Lessons are course-specific content; require active enrollment.
       allow read: if canReadLearningContentForCourse(resource.data);
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isTeacherOrAdmin();
+      allow delete: if isAdmin();
     }
 
     match /assignments/{assignmentId} {
       // Phase 8: Assignments are course-specific; require active enrollment.
       allow read: if canReadLearningContentForCourse(resource.data);
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isTeacherOrAdmin();
+      allow delete: if isAdmin();
     }
 
     match /lesson_progress/{progressId} {
@@ -1635,8 +1655,8 @@ service cloud.firestore {
               isTenantAdmin(recordingOrgId(resource.data))
               || (isApprovedTeacher() && resource.data.teacher_id == request.auth.uid)
             )
-            && request.resource.data.course_id == resource.data.course_id
-            && request.resource.data.organization_id == resource.data.organization_id
+            && (!('course_id' in resource.data) || !('course_id' in request.resource.data) || request.resource.data.course_id == resource.data.course_id)
+            && (!('organization_id' in resource.data) || !('organization_id' in request.resource.data) || request.resource.data.organization_id == resource.data.organization_id)
           )
         );
       allow delete: if isApprovedVerifiedUser()
@@ -1657,7 +1677,7 @@ service cloud.firestore {
       allow create: if isTeacherOrAdmin()
         && isValidLiveClassWrite()
         && (isAdmin() || request.resource.data.teacher_id == request.auth.uid)
-        && request.resource.data.status == 'live';
+        && request.resource.data.status in ['scheduled', 'waiting_room', 'live'];
       allow update: if (
           isLiveClassTeacherOrAdmin(resource.data)
           && isValidLiveClassWrite()
@@ -1732,12 +1752,13 @@ service cloud.firestore {
     match /feedback/{feedbackId} {
       allow read: if isApprovedVerifiedUser();
       allow create: if isApprovedVerifiedUser() && isValidFeedbackCreate();
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid && isValidFeedbackUpdate());
+      allow delete: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
     }
 
     // editable app settings (fees/social links/profile about content/version control)
     match /app_settings/{docId} {
-      allow read: if isApprovedVerifiedUser() || docId in ['version_control', 'platform'];
+      allow read: if isApprovedVerifiedUser() || docId in ['version_control', 'platform', 'global', 'fees'];
       allow write: if isAdmin() && (docId != 'platform' || isValidPlatformSettingsWrite(docId));
     }
 
@@ -1893,12 +1914,15 @@ service cloud.firestore {
         resource.data.student_id == request.auth.uid || 
         (resource.data.is_public == true && resource.data.status == 'answered')
       ));
-      allow create: if isApprovedVerifiedUser() && request.resource.data.student_id == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.student_id == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && (!('is_public' in request.resource.data) || request.resource.data.is_public == false);
       allow update: if isTeacherOrAdmin()
-        || (isApprovedVerifiedUser()
+        || (isSignedIn()
           && resource.data.student_id == request.auth.uid
           && resource.data.status == 'pending'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['question_text', 'updated_at']));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['question', 'question_text', 'updated_at']));
       allow delete: if isAdmin();
     }
 

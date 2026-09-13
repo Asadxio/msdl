@@ -466,9 +466,10 @@ export default function AboutScreen() {
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   
   const testimonials = useMemo(() => {
-    const liveItems = feedback.map((f, i) => ({
+    const liveItems = feedback.map((f) => ({
       id: f.id,
       user_name: f.user_name || 'Student',
+      user_id: f.user_id,
       rating: f.rating || 5,
       message: f.message,
       tag: (f as any).tag || 'Islamic Learning',
@@ -665,7 +666,7 @@ export default function AboutScreen() {
   };
 
   const saveFeedbackEdit = async () => {
-    if (!isAdmin || !editingFeedbackId) return;
+    if (!editingFeedbackId) return;
     try {
       await updateDoc(doc(db, 'feedback', editingFeedbackId), {
         message: editingFeedbackMsg.trim(),
@@ -680,7 +681,6 @@ export default function AboutScreen() {
   };
 
   const deleteFeedback = async (id: string) => {
-    if (!isAdmin) return;
     try {
       await deleteDoc(doc(db, 'feedback', id));
     } catch (error) {
@@ -2087,7 +2087,7 @@ export default function AboutScreen() {
                 <Text style={styles.luxuryMessageText}>"{item.message}"</Text>
               )}
 
-              {isAdmin && editingFeedbackId !== item.id && (
+              {(isAdmin || (user?.uid && (item as any).user_id === user.uid)) && editingFeedbackId !== item.id && (
                 <View style={styles.feedbackActions}>
                   <TouchableOpacity
                     onPress={() => {
