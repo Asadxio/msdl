@@ -32,6 +32,20 @@ import {
   type StorageBreakdown,
 } from '@/lib/storageCleaner';
 import { openGooglePlayStore } from '@/lib/inAppReview';
+import {
+  isAppLockEnabled,
+  isBiometricEnabled,
+  getLockTimeoutMs,
+  saveAppLockConfig,
+  disableAppLock,
+  checkBiometricCapabilities,
+  authenticateWithBiometrics,
+  TIMEOUT_OPTIONS,
+  APP_LOCK_BIOMETRIC_KEY,
+  APP_LOCK_TIMEOUT_KEY,
+  APP_LOCK_PIN_KEY,
+  type BiometricCapabilities,
+} from '@/lib/appLock';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
 const LARGE_TEXT_PREF_KEY = 'settings_large_text';
@@ -278,12 +292,43 @@ export default function SettingsScreen() {
 
   // Privacy & Security State
   const [appLockEnabled, setAppLockEnabled] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricCaps, setBiometricCaps] = useState<BiometricCapabilities>({
+    hasHardware: false,
+    isEnrolled: false,
+    biometricType: 'NONE',
+  });
+  const [lockTimeout, setLockTimeout] = useState(0);
   const [appPin, setAppPin] = useState('1234');
   const [hideSensitive, setHideSensitive] = useState(false);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [inputPin, setInputPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinStep, setPinStep] = useState<'enter' | 'create' | 'confirm'>('enter');
+
+  const toggleBiometric = async (value: boolean) => {
+    if (value) {
+      if (!biometricCaps.hasHardware) {
+        Alert.alert('Hardware Not Supported', 'Your device does not have biometric hardware (fingerprint or face sensor).');
+        return;
+      }
+      if (!biometricCaps.isEnrolled) {
+        Alert.alert('No Biometrics Enrolled', 'Please register your fingerprint or face in your phone Settings first.');
+        return;
+      }
+      const res = await authenticateWithBiometrics('Confirm your fingerprint to enable biometric unlock');
+      if (res.success) {
+        setBiometricEnabled(true);
+        await AsyncStorage.setItem(APP_LOCK_BIOMETRIC_KEY, 'true');
+        Alert.alert('Biometric Unlock Enabled', 'You can now unlock Madrasatu-s-Salikat using your fingerprint.');
+      } else {
+        Alert.alert('Verification Failed', 'Biometric could not be verified. Unlock was not enabled.');
+      }
+    } else {
+      setBiometricEnabled(false);
+      await AsyncStorage.setItem(APP_LOCK_BIOMETRIC_KEY, 'false');
+    }
+  };
 
   // Learning Preferences State
   const [autoResume, setAutoResume] = useState(true);
@@ -303,29 +348,35 @@ export default function SettingsScreen() {
   useEffect(() => {
     const loadPrefs = async () => {
       try {
-        const vals = await Promise.all([
-          AsyncStorage.getItem(NOTIFICATION_PREF_KEY),
-          AsyncStorage.getItem(LARGE_TEXT_PREF_KEY),
-          AsyncStorage.getItem(PRAYER_METHOD_KEY),
-          AsyncStorage.getItem(PRAYER_NOTIF_KEY),
-          AsyncStorage.getItem(ISLAMIC_REMINDERS_KEY),
-          AsyncStorage.getItem(NOTIF_SOUND_KEY),
-          AsyncStorage.getItem(NOTIF_VIBRATION_KEY),
-          AsyncStorage.getItem(NOTIF_QUIET_KEY),
-          AsyncStorage.getItem(PRAYER_MADHAB_KEY),
-          AsyncStorage.getItem(AZAN_SOUND_KEY),
-          AsyncStorage.getItem(FRIDAY_REMINDER_KEY),
-          AsyncStorage.getItem(ISLAMIC_REMINDER_TIME_KEY),
-          AsyncStorage.getItem(THEME_PREF_KEY),
-          AsyncStorage.getItem(FONT_SIZE_PREF_KEY),
-          AsyncStorage.getItem(REDUCE_MOTION_PREF_KEY),
-          AsyncStorage.getItem(APP_LOCK_KEY),
-          AsyncStorage.getItem(APP_PIN_KEY),
-          AsyncStorage.getItem(HIDE_SENSITIVE_KEY),
-          AsyncStorage.getItem(AUTO_RESUME_KEY),
-          AsyncStorage.getItem(AUTO_PLAY_KEY),
-          AsyncStorage.getItem(WIFI_ONLY_KEY),
-          AsyncStorage.getItem(REMEMBER_PDF_KEY),
+        const [vals, appLockVal, bioVal, timeoutVal, caps] = await Promise.all([
+          Promise.all([
+            AsyncStorage.getItem(NOTIFICATION_PREF_KEY),
+            AsyncStorage.getItem(LARGE_TEXT_PREF_KEY),
+            AsyncStorage.getItem(PRAYER_METHOD_KEY),
+            AsyncStorage.getItem(PRAYER_NOTIF_KEY),
+            AsyncStorage.getItem(ISLAMIC_REMINDERS_KEY),
+            AsyncStorage.getItem(NOTIF_SOUND_KEY),
+            AsyncStorage.getItem(NOTIF_VIBRATION_KEY),
+            AsyncStorage.getItem(NOTIF_QUIET_KEY),
+            AsyncStorage.getItem(PRAYER_MADHAB_KEY),
+            AsyncStorage.getItem(AZAN_SOUND_KEY),
+            AsyncStorage.getItem(FRIDAY_REMINDER_KEY),
+            AsyncStorage.getItem(ISLAMIC_REMINDER_TIME_KEY),
+            AsyncStorage.getItem(THEME_PREF_KEY),
+            AsyncStorage.getItem(FONT_SIZE_PREF_KEY),
+            AsyncStorage.getItem(REDUCE_MOTION_PREF_KEY),
+            AsyncStorage.getItem(APP_LOCK_KEY),
+            AsyncStorage.getItem(APP_PIN_KEY),
+            AsyncStorage.getItem(HIDE_SENSITIVE_KEY),
+            AsyncStorage.getItem(AUTO_RESUME_KEY),
+            AsyncStorage.getItem(AUTO_PLAY_KEY),
+            AsyncStorage.getItem(WIFI_ONLY_KEY),
+            AsyncStorage.getItem(REMEMBER_PDF_KEY),
+          ]),
+          isAppLockEnabled(),
+          isBiometricEnabled(),
+          getLockTimeoutMs(),
+          checkBiometricCapabilities(),
         ]);
         
         setNotificationsEnabled(vals[0] !== 'false');
@@ -343,7 +394,10 @@ export default function SettingsScreen() {
         if (vals[12] && (vals[12] === 'System Default' || vals[12] === 'Light Mode' || vals[12] === 'Dark Mode')) setTheme(vals[12] as any);
         if (vals[13] && (vals[13] === 'Small' || vals[13] === 'Medium' || vals[13] === 'Large' || vals[13] === 'Extra Large')) setFontSize(vals[13] as any);
         setReduceMotion(vals[14] === 'true');
-        setAppLockEnabled(vals[15] === 'true');
+        setAppLockEnabled(appLockVal);
+        setBiometricEnabled(bioVal);
+        setLockTimeout(timeoutVal);
+        setBiometricCaps(caps);
         if (vals[16]) setAppPin(vals[16]);
         setHideSensitive(vals[17] === 'true');
         setAutoResume(vals[18] !== 'false');
@@ -678,8 +732,12 @@ export default function SettingsScreen() {
             <View style={styles.linkRowLeft}>
               <Ionicons name="lock-closed-outline" size={20} color={COLORS.primary} />
               <View>
-                <Text style={styles.linkText}>App Lock (PIN/Biometrics)</Text>
-                <Text style={styles.linkSubtext}>{appLockEnabled ? 'Enabled (Security PIN Active)' : 'Disabled'}</Text>
+                <Text style={styles.linkText}>App Lock (PIN / Fingerprint)</Text>
+                <Text style={styles.linkSubtext}>
+                  {appLockEnabled
+                    ? `Enabled • ${biometricEnabled ? 'Fingerprint & PIN' : 'PIN Only'}`
+                    : 'Disabled (Tap to protect app)'}
+                </Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -687,6 +745,71 @@ export default function SettingsScreen() {
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </View>
           </TouchableOpacity>
+
+          {appLockEnabled && (
+            <>
+              {biometricCaps.hasHardware && (
+                <View style={styles.row}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.rowLabel}>Biometric Unlock</Text>
+                    <Text style={styles.rowSubtext}>Use Fingerprint or Face to open app</Text>
+                  </View>
+                  <Switch
+                    value={biometricEnabled}
+                    onValueChange={toggleBiometric}
+                    trackColor={{ true: COLORS.primary }}
+                  />
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => {
+                  const options = TIMEOUT_OPTIONS;
+                  Alert.alert('Auto-Lock Timeout', 'When should the app lock after leaving?', [
+                    ...options.map((opt) => ({
+                      text: opt.label,
+                      onPress: async () => {
+                        setLockTimeout(opt.value);
+                        await AsyncStorage.setItem(APP_LOCK_TIMEOUT_KEY, opt.value.toString());
+                      },
+                    })),
+                    { text: 'Cancel', style: 'cancel' },
+                  ]);
+                }}
+              >
+                <View style={styles.linkRowLeft}>
+                  <Ionicons name="timer-outline" size={20} color={COLORS.primary} />
+                  <View>
+                    <Text style={styles.linkText}>Auto-Lock Timeout</Text>
+                    <Text style={styles.linkSubtext}>
+                      {TIMEOUT_OPTIONS.find((o) => o.value === lockTimeout)?.label || 'Immediately on exit'}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => {
+                  setPinStep('create');
+                  setInputPin('');
+                  setConfirmPin('');
+                  setPinModalVisible(true);
+                }}
+              >
+                <View style={styles.linkRowLeft}>
+                  <Ionicons name="key-outline" size={20} color={COLORS.primary} />
+                  <View>
+                    <Text style={styles.linkText}>Change Security PIN</Text>
+                    <Text style={styles.linkSubtext}>Update your 4-digit code</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </>
+          )}
           
           <View style={styles.row}>
             <View style={{ flex: 1, paddingRight: 8 }}>
@@ -1163,9 +1286,10 @@ export default function SettingsScreen() {
                               if (pinStep === 'enter') {
                                 if (nextPin === appPin) {
                                   setAppLockEnabled(false);
-                                  await AsyncStorage.setItem(APP_LOCK_KEY, 'false');
+                                  setBiometricEnabled(false);
+                                  await disableAppLock();
                                   setPinModalVisible(false);
-                                  Alert.alert('App Lock Disabled', 'Security PIN has been removed.');
+                                  Alert.alert('App Lock Disabled', 'Security PIN and Biometrics have been disabled.');
                                 } else {
                                   Alert.alert('Incorrect PIN', 'Please try again.');
                                   setInputPin('');
@@ -1178,10 +1302,9 @@ export default function SettingsScreen() {
                                 if (nextPin === confirmPin) {
                                   setAppPin(nextPin);
                                   setAppLockEnabled(true);
-                                  await AsyncStorage.setItem(APP_PIN_KEY, nextPin);
-                                  await AsyncStorage.setItem(APP_LOCK_KEY, 'true');
+                                  await saveAppLockConfig(nextPin, biometricEnabled, lockTimeout);
                                   setPinModalVisible(false);
-                                  Alert.alert('App Lock Enabled', 'Your 4-digit PIN is set! App is now secured.');
+                                  Alert.alert('App Lock Enabled', 'Your 4-digit PIN is set! App is now protected with PIN and Biometrics.');
                                 } else {
                                   Alert.alert('PIN Mismatch', 'The PINs did not match. Let\'s try again.');
                                   setPinStep('create');

@@ -5,7 +5,14 @@ import { AppState, I18nManager, Platform, StyleSheet, View } from 'react-native'
 import { COLORS } from '@/constants/theme';
 import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { ForceUpdateModal } from '@/components/ForceUpdateModal';
+import { AppLockModal } from '@/components/AppLockModal';
 import { fetchRemoteVersionConfig, evaluateVersionRequirements, type VersionStatus } from '@/lib/versionCheck';
+import {
+  isAppLockEnabled,
+  recordBackgroundTimestamp,
+  shouldLockOnResume,
+  isSessionUnlocked,
+} from '@/lib/appLock';
 import { evaluateRouteAuthorization } from '@/lib/navigationGuard';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
@@ -78,15 +85,42 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
+  const [isAppLocked, setIsAppLocked] = useState(false);
+
+  // Initial check for App Lock on launch
+  useEffect(() => {
+    if (user?.uid) {
+      isAppLockEnabled().then((enabled) => {
+        if (enabled && !isSessionUnlocked()) {
+          setIsAppLocked(true);
+        }
+      });
+    } else {
+      setIsAppLocked(false);
+    }
+  }, [user?.uid]);
+
   useEffect(() => {
     checkVersion();
-    const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
+  }, [checkVersion]);
+
+  // Handle AppState transitions for background auto-locking & version checking
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        recordBackgroundTimestamp();
+      } else if (nextState === 'active') {
         checkVersion();
+        if (user?.uid) {
+          const mustLock = await shouldLockOnResume();
+          if (mustLock) {
+            setIsAppLocked(true);
+          }
+        }
       }
     });
     return () => sub.remove();
-  }, [checkVersion]);
+  }, [user?.uid, checkVersion]);
 
   // Sync safe user context with Crashlytics
   useEffect(() => {
@@ -578,6 +612,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       <View style={{ flex: 1 }}>
         <NetworkStatusBanner />
         <ForceUpdateModal status={versionStatus} onRefresh={checkVersion} />
+        <AppLockModal visible={isAppLocked} onUnlock={() => setIsAppLocked(false)} />
         {children}
         {showLoader ? (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: COLORS.background }]}>
