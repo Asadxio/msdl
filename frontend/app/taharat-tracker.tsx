@@ -333,7 +333,7 @@ export default function TaharatTrackerScreen() {
                 <View style={styles.namazCardHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Ionicons name="sparkles" size={18} color="#005F46" />
-                    <Text style={styles.namazCardTitle}>Daily Namaz Checklist (حسابِ نماز)</Text>
+                    <Text style={styles.namazCardTitle}>Daily Prayer Checklist</Text>
                   </View>
                   <View style={styles.namazBadge}>
                     <Text style={styles.namazBadgeText}>
@@ -343,21 +343,21 @@ export default function TaharatTrackerScreen() {
                         namazRecord.asr,
                         namazRecord.maghrib,
                         namazRecord.isha,
-                      ].filter(Boolean).length} / 5 ادا
+                      ].filter(Boolean).length} / 5 Offered
                     </Text>
                   </View>
                 </View>
                 <Text style={styles.namazCardSubtitle}>
-                  آپ حالتِ طہر (پاکی) میں ہیں۔ پنج وقتہ نماز کی پابندی فرمائیں اور ادا کر کے نشان لگائیں:
+                  You are currently in a state of purity (Tuhr). Observe your daily prayers and mark them as offered:
                 </Text>
 
                 <View style={styles.namazRowGrid}>
                   {[
-                    { key: 'fajr' as NamazPrayerKey, nameUrdu: 'فجر', nameEn: 'Fajr', icon: 'sunny-outline' },
-                    { key: 'dhuhr' as NamazPrayerKey, nameUrdu: 'ظہر', nameEn: 'Dhuhr', icon: 'sunny' },
-                    { key: 'asr' as NamazPrayerKey, nameUrdu: 'عصر', nameEn: 'Asr', icon: 'partly-sunny-outline' },
-                    { key: 'maghrib' as NamazPrayerKey, nameUrdu: 'مغرب', nameEn: 'Maghrib', icon: 'cloudy-night-outline' },
-                    { key: 'isha' as NamazPrayerKey, nameUrdu: 'عشاء', nameEn: 'Isha', icon: 'moon' },
+                    { key: 'fajr' as NamazPrayerKey, nameEn: 'Fajr', icon: 'sunny-outline' },
+                    { key: 'dhuhr' as NamazPrayerKey, nameEn: 'Dhuhr', icon: 'sunny' },
+                    { key: 'asr' as NamazPrayerKey, nameEn: 'Asr', icon: 'partly-sunny-outline' },
+                    { key: 'maghrib' as NamazPrayerKey, nameEn: 'Maghrib', icon: 'cloudy-night-outline' },
+                    { key: 'isha' as NamazPrayerKey, nameEn: 'Isha', icon: 'moon' },
                   ].map((p) => {
                     const done = namazRecord[p.key];
                     return (
@@ -372,9 +372,6 @@ export default function TaharatTrackerScreen() {
                           size={18}
                           color={done ? '#FFFFFF' : '#94A3B8'}
                         />
-                        <Text style={[styles.namazItemNameUrdu, done && styles.namazItemNameUrduDone]}>
-                          {p.nameUrdu}
-                        </Text>
                         <Text style={[styles.namazItemNameEn, done && styles.namazItemNameEnDone]}>
                           {p.nameEn}
                         </Text>
@@ -387,10 +384,10 @@ export default function TaharatTrackerScreen() {
               <View style={styles.shariahExemptCard}>
                 <View style={styles.shariahExemptHeader}>
                   <Ionicons name="heart-outline" size={20} color="#B91C1C" />
-                  <Text style={styles.shariahExemptTitle}>شرعی رخصت (Shariah Exemption)</Text>
+                  <Text style={styles.shariahExemptTitle}>Shariah Exemption (Rukhsah)</Text>
                 </View>
                 <Text style={styles.shariahExemptDesc}>
-                  حیض و نفاس کے ایام میں اللہ تعالیٰ کی طرف سے نماز اور تلاوت معاف ہے، اور ان نمازوں کی قضا بھی لازم نہیں۔ البتہ ذکر و اذکار، دعائیں اور استغفار جاری رکھیں۔
+                  During menstrual and postnatal periods (Hayd & Nifas), prayers and recitation are exempted by Divine mercy, and making up these missed prayers is not required. You may engage freely in personal Dhikr, Duas, and Istighfar.
                 </Text>
               </View>
             )}

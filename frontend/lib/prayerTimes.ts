@@ -197,25 +197,25 @@ export function getSunProgressPercent(now: Date, fajr: Date, isha: Date): number
 export function getMakruhWindows(sunrise: Date, sunset: Date, zawal: Date): MakruhWindow[] {
   return [
     {
-      label: 'Sunrise (Makruh)',
-      urduLabel: 'طلوعِ آفتاب (مکروہ وقت)',
+      label: 'Sunrise (Prohibited)',
+      urduLabel: 'Sunrise (Prohibited)',
       start: addMinutes(sunrise, -5),
       end: addMinutes(sunrise, 20),
-      reason: 'صلاۃ مکروہ ہے: طلوعِ آفتاب سے پہلے 5 منٹ اور طلوع کے بعد 20 منٹ تک نماز پڑھنا مکروہ تحریمی ہے۔',
+      reason: 'Salah is prohibited: from 5 minutes before sunrise until 20 minutes after sunrise.',
     },
     {
-      label: 'Zawal / Solar Noon (Makruh)',
-      urduLabel: 'زوال (مکروہ وقت)',
+      label: 'Solar Noon / Zawal (Prohibited)',
+      urduLabel: 'Solar Noon / Zawal (Prohibited)',
       start: addMinutes(zawal, -5),
       end: addMinutes(zawal, 5),
-      reason: 'صلاۃ مکروہ ہے: عین زوال (نصف النہار) کے وقت نماز پڑھنا مکروہ تحریمی ہے۔',
+      reason: 'Salah is prohibited: during exact solar noon (midday zenith).',
     },
     {
-      label: 'Sunset (Makruh)',
-      urduLabel: 'غروبِ آفتاب (مکروہ وقت)',
+      label: 'Sunset (Prohibited)',
+      urduLabel: 'Sunset (Prohibited)',
       start: addMinutes(sunset, -20),
       end: addMinutes(sunset, 5),
-      reason: 'صلاۃ مکروہ ہے: غروبِ آفتاب سے 20 منٹ پہلے سے نماز پڑھنا مکروہ تحریمی ہے۔',
+      reason: 'Salah is prohibited: from 20 minutes before sunset until Maghrib begins.',
     },
   ];
 }
@@ -324,17 +324,17 @@ export function calculatePrayerTimes(
   const tahajjud = new Date(isha.getTime() + (nightMs * 2) / 3);
 
   const times: PrayerTime[] = [
-    { name: 'Fajr', time: fajr, label: '', urduName: 'صبحِ صادق', kind: 'fard' },
-    { name: 'Sunrise', time: sunrise, label: '', urduName: 'طلوعِ آفتاب', kind: 'sun', isMakruh: true, makruhNote: 'مکروہ وقت: طلوع سے 20 منٹ بعد تک' },
-    { name: 'Ishraq', time: ishraq, label: '', urduName: 'اشراق', kind: 'nafl' },
-    { name: 'Chasht', time: chasht, label: '', urduName: 'چاشت', kind: 'nafl' },
-    { name: 'Dahwa-e-Kubra', time: dahwa, label: '', urduName: 'ضحوۂ کبریٰ', kind: 'marker' },
-    { name: 'Zawal', time: zawal, label: '', urduName: 'زوال (مکروہ)', kind: 'makruh', isMakruh: true, makruhNote: 'عین زوال پر نماز مکروہ تحریمی ہے' },
-    { name: 'Zuhr', time: zuhr, label: '', urduName: 'ظہر', kind: 'fard' },
-    { name: 'Asr', time: asr, label: '', urduName: 'عصر', kind: 'fard' },
-    { name: 'Maghrib', time: maghrib, label: '', urduName: 'مغرب + افطار', kind: 'fard' },
-    { name: 'Isha', time: isha, label: '', urduName: 'عشاء', kind: 'fard' },
-    { name: 'Tahajjud', time: tahajjud, label: '', urduName: 'تہجد', kind: 'nafl' },
+    { name: 'Fajr', time: fajr, label: '', urduName: 'Fajr', kind: 'fard' },
+    { name: 'Sunrise', time: sunrise, label: '', urduName: 'Sunrise', kind: 'sun', isMakruh: true, makruhNote: 'Prohibited: until 20m after sunrise' },
+    { name: 'Ishraq', time: ishraq, label: '', urduName: 'Ishraq', kind: 'nafl' },
+    { name: 'Chasht', time: chasht, label: '', urduName: 'Chasht (Duha)', kind: 'nafl' },
+    { name: 'Dahwa-e-Kubra', time: dahwa, label: '', urduName: 'Dahwa-e-Kubra', kind: 'marker' },
+    { name: 'Zawal', time: zawal, label: '', urduName: 'Solar Noon (Zawal)', kind: 'makruh', isMakruh: true, makruhNote: 'Prohibited: exact midday zenith' },
+    { name: 'Zuhr', time: zuhr, label: '', urduName: 'Zuhr', kind: 'fard' },
+    { name: 'Asr', time: asr, label: '', urduName: 'Asr', kind: 'fard' },
+    { name: 'Maghrib', time: maghrib, label: '', urduName: 'Maghrib (Iftar)', kind: 'fard' },
+    { name: 'Isha', time: isha, label: '', urduName: 'Isha', kind: 'fard' },
+    { name: 'Tahajjud', time: tahajjud, label: '', urduName: 'Tahajjud', kind: 'nafl' },
   ];
 
   return times

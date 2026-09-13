@@ -142,7 +142,7 @@ export function isFatwaQuery(query: string): boolean {
   return FATWA_TRIGGER_KEYWORDS.some((kw) => normalized.includes(kw));
 }
 
-export function getFatwaRedirectMessage(language: TutorLanguage = 'ur'): string {
+export function getFatwaRedirectMessage(language: TutorLanguage = 'en'): string {
   if (language === 'en') {
     return (
       '**Assalamu Alaykum wa Rahmatullahi wa Barakatuh, Dear Student!**\n\n' +

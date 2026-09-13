@@ -277,7 +277,7 @@ export default function TeacherFatawaManageScreen() {
                   color={isSelected ? '#FFFFFF' : '#CBD5E1'}
                 />
                 <Text style={[styles.catChipText, isSelected && styles.activeCatChipText]}>
-                  {item.arabicTitle}
+                  {item.title}
                 </Text>
               </TouchableOpacity>
             );
@@ -320,7 +320,7 @@ export default function TeacherFatawaManageScreen() {
                 <View style={styles.cardHeader}>
                   <View style={styles.categoryBadge}>
                     <Ionicons name={cat.icon as any} size={14} color={COLORS.primary} />
-                    <Text style={styles.categoryBadgeText}>{cat.arabicTitle}</Text>
+                    <Text style={styles.categoryBadgeText}>{cat.title}</Text>
                   </View>
 
                   <View style={styles.headerRightWrap}>

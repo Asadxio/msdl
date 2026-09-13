@@ -249,7 +249,7 @@ export default function DarUlIftaaScreen() {
                   onPress={() => setSelectedCategory(cat.key)}
                 >
                   <Text style={[styles.chipText, selectedCategory === cat.key && styles.chipTextActive]}>
-                    {cat.arabicTitle}
+                    {cat.title}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -299,7 +299,7 @@ export default function DarUlIftaaScreen() {
                   <View style={styles.cardHeader}>
                     <View style={styles.categoryBadge}>
                       <Ionicons name={cat.icon as any} size={14} color={COLORS.primary} />
-                      <Text style={styles.categoryBadgeText}>{cat.arabicTitle}</Text>
+                      <Text style={styles.categoryBadgeText}>{cat.title}</Text>
                     </View>
                     <View
                       style={[
@@ -365,7 +365,7 @@ export default function DarUlIftaaScreen() {
                   <View style={styles.cardHeader}>
                     <View style={styles.categoryBadge}>
                       <Ionicons name={cat.icon as any} size={14} color={COLORS.primary} />
-                      <Text style={styles.categoryBadgeText}>{cat.arabicTitle}</Text>
+                      <Text style={styles.categoryBadgeText}>{cat.title}</Text>
                     </View>
                     <Text style={styles.referenceBadge}>
                       {q.reference_kitab || 'Fiqh Reference'}
@@ -455,7 +455,7 @@ export default function DarUlIftaaScreen() {
                         <Text
                           style={[styles.catGridText, selected && styles.catGridTextSelected]}
                         >
-                          {cat.arabicTitle}
+                          {cat.title}
                         </Text>
                       </TouchableOpacity>
                     );

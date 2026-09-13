@@ -157,7 +157,7 @@ export default function FatawaDetailScreen() {
         <View style={styles.metaRow}>
           <View style={styles.catPill}>
             <Ionicons name={cat.icon as any} size={14} color={COLORS.primary} />
-            <Text style={styles.catPillText}>{cat.arabicTitle}</Text>
+            <Text style={styles.catPillText}>{cat.title}</Text>
           </View>
           <View
             style={[

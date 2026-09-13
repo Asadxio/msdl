@@ -37,42 +37,42 @@ export const FATAWA_CATEGORIES: Record<FatawaCategoryKey, FatawaCategoryDef> = {
     title: 'Taharat & Ghusl',
     arabicTitle: 'طَہَارَت وَ غُسْل',
     icon: 'water-outline',
-    description: 'Paki, napaaki, wuzu, ghusl, aur khawateen ke makhsoos masail.',
+    description: 'Purity, ritual purification (wudu & ghusl), and personal women\'s hygiene rulings.',
   },
   salah: {
     key: 'salah',
     title: 'Salah & Prayers',
     arabicTitle: 'صَلَاۃ وَ نَمَاز',
     icon: 'time-outline',
-    description: 'Namaz ke arkaan, qaza namazein, sajda sahw, aur auqaat.',
+    description: 'Pillars of prayer, missed prayers (qadha), Sajda Sahw, and prayer timings.',
   },
   sawm: {
     key: 'sawm',
     title: 'Sawm & Ramadan',
     arabicTitle: 'صَوْم وَ رَمَضَان',
     icon: 'moon-outline',
-    description: 'Roza, kaffara, fidya, aur Ramadan ke masail.',
+    description: 'Fasting regulations, Ramadan rulings, fidya, and kaffarah.',
   },
   purdah: {
     key: 'purdah',
     title: 'Purdah & Haya',
     arabicTitle: 'حِجَاب وَ پَرْدَہ',
     icon: 'shield-checkmark-outline',
-    description: 'Sharai purdah, libas, aur islami adab-o-haya.',
+    description: 'Islamic modesty, hijab guidelines, and dress code etiquette.',
   },
   family: {
     key: 'family',
     title: 'Family & Nikah',
     arabicTitle: 'نِکَاح وَ خَانْدَان',
     icon: 'heart-outline',
-    description: 'Nikah, huqooq-ul-ibad, walidain, aur aulad ki tarbiyat.',
+    description: 'Marriage, mutual spousal rights, parents, and child upbringing.',
   },
   general: {
     key: 'general',
     title: 'General Deeni Masail',
     arabicTitle: 'عَام دِینِی مَسَائِل',
     icon: 'book-outline',
-    description: 'Muamalat, aqaid, sunnat-o-bidat, aur rozmarrah masail.',
+    description: 'General religious questions, daily transactions, beliefs, and ethics.',
   },
 };
 
@@ -147,9 +147,9 @@ export async function askFatawaQuestion(params: {
         category: 'fatawa_question_asked',
         channel: 'announcements',
         event: 'system_alert',
-        title: 'نیا فقہی سوال (New Dar-ul-Ifta Question)',
-        message: `ایک طالبہ نے دار الافتاء میں نیا سوال پوچھا ہے: "${title}"`,
-        body: `ایک طالبہ نے دار الافتاء میں نیا سوال پوچھا ہے: "${title}"`,
+        title: 'New Dar-ul-Iftaa Question',
+        message: `A student has submitted a new question: "${title}"`,
+        body: `A student has submitted a new question: "${title}"`,
         route: '/fatawa/manage',
         read: {},
         dedupe_id: dedupeId,
@@ -218,7 +218,7 @@ export function subscribeToPublicFatawa(
       snapshot.forEach((docSnap) => {
         const item = docSnap.data() as FatawaQuestion;
         // Redact student name for privacy in public view
-        item.student_name = 'سائلہ (محفوظ برائے پردہ)';
+        item.student_name = 'Anonymous Student (Privacy Protected)';
         list.push(item);
       });
       callback(list);
@@ -306,7 +306,7 @@ export async function answerFatawaQuestion(params: {
       answered_by_uid: params.teacherUid,
       answered_by_name: params.teacherName || 'Muftiah / Ustaadha',
       answered_at: serverTimestamp(),
-      reference_kitab: params.referenceKitab?.trim() || 'کتبِ فقہ و فتاویٰ',
+      reference_kitab: params.referenceKitab?.trim() || 'Classical Books of Fiqh & Fatawa',
       is_public: params.isPublic,
       status: 'answered',
       updated_at: serverTimestamp(),
@@ -331,9 +331,9 @@ export async function answerFatawaQuestion(params: {
             event: 'system_alert',
             type: 'fatwa_answered',
             category: 'fatwa_answered',
-            title: 'شرعی مسئلہ کا جواب (Fatwa Answered)',
-            message: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
-            body: `آپ کے سوال "${qData.title}" کا جواب دار الافتاء کی طرف سے جاری کر دیا گیا ہے۔`,
+            title: 'Fatwa Answered',
+            message: `Your question "${qData.title}" has been answered by Dar-ul-Iftaa.`,
+            body: `Your question "${qData.title}" has been answered by Dar-ul-Iftaa.`,
             route: `/fatawa/${params.questionId}`,
             read: { [qData.student_id]: false },
             dedupe_id: dedupeId,

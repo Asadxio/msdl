@@ -502,11 +502,11 @@ export default function PrayerTimesScreen() {
                       <View style={s.nextContent}>
                         <View>
                           <Text style={s.nextLabel}>Next Prayer</Text>
-                          <Text style={s.nextName}>{nextPrayer.urduName}</Text>
+                          <Text style={s.nextName}>{nextPrayer.name}</Text>
                           <Text style={s.nextTime}>{fmt(nextPrayer.time)}</Text>
                           {prevPrayer && (
                             <Text style={s.prevLabel}>
-                              {prevPrayer.urduName} · {Math.floor((now.getTime() - prevPrayer.time.getTime()) / 60000)}m ago
+                              {prevPrayer.name} · {Math.floor((now.getTime() - prevPrayer.time.getTime()) / 60000)}m ago
                             </Text>
                           )}
                         </View>
@@ -548,7 +548,7 @@ export default function PrayerTimesScreen() {
                         <View style={[s.pBar, { backgroundColor: kd.bar }]} />
                         <View style={s.pCenter}>
                           <View style={s.pNameRow}>
-                            <Text style={[s.pUrdu, isNext && { color: GOLD_LT }]}>{prayer.urduName}</Text>
+                            <Text style={[s.pUrdu, isNext && { color: GOLD_LT }]}>{prayer.name}</Text>
                             <View style={[s.pBadge, { backgroundColor: kd.badge }]}>
                               <Text style={[s.pBadgeTxt, { color: kd.badgeTxt }]}>{kd.label}</Text>
                             </View>
@@ -582,7 +582,7 @@ export default function PrayerTimesScreen() {
                     return (
                       <View key={i} style={[s.makruhRow, active && s.makruhRowActive]}>
                         <View style={{ flex: 1 }}>
-                          <Text style={s.makruhRowLabel}>{w.urduLabel}</Text>
+                          <Text style={s.makruhRowLabel}>{w.label}</Text>
                           <Text style={s.makruhRowTime}>{fmt(w.start)} — {fmt(w.end)}</Text>
                         </View>
                         <View style={s.durChip}><Text style={s.durChipTxt}>{dur} min</Text></View>
@@ -654,8 +654,8 @@ export default function PrayerTimesScreen() {
               <View style={s.moonSection}>
                 <View style={s.moonHero}>
                   <Text style={s.moonEmoji}>{moonInfo.emoji}</Text>
-                  <Text style={s.moonPhaseUrdu}>{moonInfo.urduPhaseName}</Text>
-                  <Text style={s.moonPhaseEn}>{moonInfo.phaseName}</Text>
+                  <Text style={s.moonPhaseUrdu}>{moonInfo.phaseName}</Text>
+                  <Text style={s.moonPhaseEn}>Lunar Phase</Text>
                   <View style={s.moonCycleBar}>
                     <View style={[s.moonCycleFill, { width: ((moonInfo.phase / 29.5) * 100 + '%') as any }]} />
                     <View style={[s.moonCycleDot, { left: (Math.min(94, (moonInfo.phase / 29.5) * 100) + '%') as any }]} />

@@ -57,9 +57,9 @@ export default function IslamicCalendarScreen() {
 
       <View style={styles.heroCard} testID="islamic-calendar-screen">
         <Ionicons name="calendar-number-outline" size={42} color={COLORS.secondary} />
-        <Text style={styles.heroLabel}>Hijri Date</Text>
+        <Text style={styles.heroLabel}>Hijri Islamic Date</Text>
         <Text style={styles.hijriText}>{hijri}</Text>
-        <Text style={styles.urduText}>{urduHijri}</Text>
+        <Text style={styles.urduText}>Umm al-Qura Astronomical Calendar</Text>
       </View>
 
       <View style={styles.infoCard}>
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   heroCard: { backgroundColor: COLORS.primary, borderRadius: 28, padding: SPACING.xl, alignItems: 'center', gap: SPACING.sm, ...SHADOWS.card },
   heroLabel: { color: 'rgba(255,255,255,0.74)', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
   hijriText: { color: '#fff', fontSize: 28, fontWeight: '900', textAlign: 'center' },
-  urduText: { color: '#fff', fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  urduText: { color: 'rgba(255,255,255,0.85)', fontSize: 16, fontWeight: '700', textAlign: 'center' },
   infoCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.md, ...SHADOWS.card },
   infoLabel: { color: COLORS.textMuted, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
   infoValue: { color: COLORS.text, fontSize: 18, fontWeight: '900', marginTop: 4 },
