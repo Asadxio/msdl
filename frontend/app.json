@@ -2,7 +2,7 @@
   "expo": {
     "name": "Madars tus salikat Lilbanat - مدرسۃ السالکات للبنات",
     "slug": "frontend",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "madars-tus-salikat-lilbanat",
@@ -49,7 +49,7 @@
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.madrasatussalikat.lilbanat",
-      "versionCode": 30,
+      "versionCode": 40,
       "allowBackup": false,
       "googleServicesFile": "./google-services.json",
       "intentFilters": [
