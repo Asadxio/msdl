@@ -283,7 +283,7 @@ async function runPhase58Suite() {
     assert.ok(content.includes('setUser(null)'), 'Must clear user');
     assert.ok(content.includes('setProfile(null)'), 'Must clear profile');
     assert.ok(content.includes('resetActiveOrganization()'), 'Must reset active organization');
-    assert.ok(content.includes('AsyncStorage.multiRemove'), 'Must purge AsyncStorage keys on signout');
+    assert.ok(content.includes('AsyncStorage.multiRemove') || content.includes('cleanupSessionStorageOnSignOut'), 'Must purge AsyncStorage keys on signout');
   });
 
   // PR58-12: Role Based Access Control

@@ -317,6 +317,7 @@ export default function SignupScreen() {
   const [role, setRole] = useState<OnboardingRole>('student');
   const [referralCode, setReferralCode] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [whatsappConsent, setWhatsappConsent] = useState(true);
 
   // Age & Guardian Consent State (Phase 45A Child Safety)
   const [ageCategory, setAgeCategory] = useState<'adult' | 'minor'>('adult');
@@ -480,6 +481,7 @@ export default function SignupScreen() {
         is_minor: ageCategory === 'minor',
         age_bracket: ageCategory === 'minor' ? 'under_18' : '18_plus',
         phone: mobile.trim() ? `+91${mobile.trim()}` : '',
+        whatsapp_consent: Boolean(whatsappConsent),
         ...(ageCategory === 'minor'
           ? {
               guardian_name: guardianName.trim(),
@@ -905,6 +907,28 @@ export default function SignupScreen() {
                   <Text style={styles.hyperlink} onPress={() => router.push('/privacy')}>
                     Privacy Policy
                   </Text>.
+                </Text>
+              </View>
+
+              {/* 8B. WhatsApp Communication Consent (Optional / Transparent) */}
+              <View style={[styles.consentRow, { marginTop: 10 }]}>
+                <Pressable
+                  onPress={() => !loading && setWhatsappConsent(v => !v)}
+                  style={styles.checkboxTouch}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel="I agree to receive important admission and Madrasa updates on WhatsApp"
+                  accessibilityState={{ checked: whatsappConsent }}
+                  disabled={loading}
+                  testID="signup-whatsapp-consent-checkbox"
+                >
+                  <Ionicons 
+                    name={whatsappConsent ? 'checkbox' : 'square-outline'} 
+                    size={22} 
+                    color={whatsappConsent ? (isDarkMode ? '#10B981' : '#0F7660') : colors.textMuted} 
+                  />
+                </Pressable>
+                <Text style={[styles.consentLabel, { color: colors.textMain }]}>
+                  I agree to receive admission & Madrasa updates on WhatsApp (+91 63669 19122).
                 </Text>
               </View>
 

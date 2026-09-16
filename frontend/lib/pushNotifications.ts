@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import {
   arrayRemove, arrayUnion, doc, serverTimestamp, updateDoc, setDoc,
-  getDoc, getDocs, collection, query, limit,
+  getDoc, getDocs, collection, query, limit, deleteDoc,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { isExpoGo } from '@/lib/runtime';
@@ -21,6 +21,7 @@ export type NotificationPermissionResult = {
 };
 
 let lastRegisteredUserToken: string | null = null;
+let currentDeviceTokens: { expoToken?: string; nativeFcmToken?: string } = {};
 let registrationInProgress: Promise<string | null> | null = null;
 
 Notifications.setNotificationHandler({
@@ -146,6 +147,12 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
       const primaryToken = nativeFcmToken || token;
       if (!primaryToken) return null;
 
+      // Track current device tokens in-memory for clean deregistration on logout
+      currentDeviceTokens = {
+        expoToken: token || undefined,
+        nativeFcmToken: nativeFcmToken || undefined,
+      };
+
       // Deduplication check: Do not re-write to Firestore if this exact token is already registered for this user in this session
       const registrationKey = `${userId}:${primaryToken}`;
       if (lastRegisteredUserToken === registrationKey) {
@@ -190,16 +197,55 @@ export async function registerDevicePushToken(userId: string): Promise<string | 
 }
 
 export async function unregisterDevicePushToken(userId: string, token?: string | null): Promise<void> {
-  const safeToken = String(token || '').trim();
-  if (!userId || !safeToken) return;
+  const safeUserId = String(userId || '').trim();
+  if (!safeUserId) return;
+
+  const expoTokenToRemove = token?.trim() || currentDeviceTokens.expoToken;
+  const fcmTokenToRemove = currentDeviceTokens.nativeFcmToken;
+
   try {
-    await withTimeout(updateDoc(doc(db, 'users', userId), {
-      expo_push_tokens: arrayRemove(safeToken),
+    const userUpdates: Record<string, unknown> = {
       fcm_token_updated_at: serverTimestamp(),
-    }));
+    };
+    if (expoTokenToRemove) {
+      userUpdates.expo_push_tokens = arrayRemove(expoTokenToRemove);
+    }
+    if (fcmTokenToRemove) {
+      userUpdates.fcm_tokens = arrayRemove(fcmTokenToRemove);
+    }
+
+    if (expoTokenToRemove || fcmTokenToRemove) {
+      await withTimeout(
+        updateDoc(doc(db, 'users', safeUserId), userUpdates),
+        2500
+      ).catch((err) => {
+        console.log('[Notifications] unregister updateDoc users non-fatal note:', err);
+      });
+    }
+
+    // Clean up single device document from user_tokens collection
+    await withTimeout(
+      deleteDoc(doc(db, 'user_tokens', safeUserId)),
+      2500
+    ).catch((err) => {
+      console.log('[Notifications] unregister deleteDoc user_tokens non-fatal note:', err);
+    });
+
+    console.log('[Notifications] Current device push tokens cleanly unregistered for user:', safeUserId);
   } catch (error) {
     console.log('[Notifications] unregisterDevicePushToken ERROR', error);
+  } finally {
+    // Reset in-memory registration state so the next login can cleanly register
+    lastRegisteredUserToken = null;
+    currentDeviceTokens = {};
+    registrationInProgress = null;
   }
+}
+
+export function resetPushTokenMemoryCache(): void {
+  lastRegisteredUserToken = null;
+  currentDeviceTokens = {};
+  registrationInProgress = null;
 }
 
 type PushPayload = {

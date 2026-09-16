@@ -62,6 +62,53 @@ export async function createRazorpayOrder(
   return result.data;
 }
 
+export interface VerifyRazorpayPaymentRequest {
+  paymentDocId: string;
+  orderId: string;
+  paymentId: string;
+  signature: string;
+}
+
+export interface VerifyRazorpayPaymentResponse {
+  success: boolean;
+  verified: boolean;
+  alreadyCompleted?: boolean;
+  paymentDocId: string;
+  enrollmentId?: string;
+}
+
+/**
+ * Verify Razorpay payment on server via Cloud Function callable immediately after checkout completion.
+ * The server performs constant-time HMAC-SHA256 signature verification against RAZORPAY_KEY_SECRET,
+ * ensures order matching, and atomically finalizes payment status & course enrollment.
+ */
+export async function verifyRazorpayPayment(
+  request: VerifyRazorpayPaymentRequest
+): Promise<VerifyRazorpayPaymentResponse> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('Authentication required: Firebase Auth currentUser is null. Please sign in again.');
+  }
+
+  try {
+    await currentUser.getIdToken(true);
+  } catch (refreshErr) {
+    // Continue with cached token if offline
+  }
+
+  const verifyFn = httpsCallable<VerifyRazorpayPaymentRequest, VerifyRazorpayPaymentResponse>(
+    functions,
+    'verifyRazorpayPayment'
+  );
+  const result = await withTimeout(
+    verifyFn(request),
+    15000,
+    'Payment verification timed out. Webhook will reconcile shortly.'
+  );
+  return result.data;
+}
+
+
 /** @deprecated Phase 8: Maintained only for legacy backwards compatibility. Not used in automated online flow. */
 export interface SubmitPaymentReferenceRequest {
   paymentId: string;

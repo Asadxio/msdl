@@ -68,7 +68,7 @@ test('R2-01: Admin bypass requires role == super_admin or owner (not regular stu
 
 test('R2-02: Admin/Owner check requires server-controlled UID or trusted founder email', () => {
   const rules = fs.readFileSync(path.join(repoRoot, 'firestore.rules'), 'utf8');
-  assert.ok(rules.includes("isOwner()") && rules.includes("request.auth.token.email in"), 'Owner check validates explicit trusted founder emails');
+  assert.ok(rules.includes("isOwner()") && (rules.includes("request.auth.token.email.lower() in") || rules.includes("request.auth.token.email in")), 'Owner check validates explicit trusted founder emails');
 });
 
 test('R2-03: Admin bypass requires status == approved or active (server-controlled)', () => {

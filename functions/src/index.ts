@@ -10,6 +10,7 @@ export { getQuizCategoryCounts } from "./quiz/getQuizCategoryCounts";
 export { submitQuiz } from "./quiz/submitQuiz";
 export { razorpayWebhook } from "./payments/razorpayWebhook";
 export { createRazorpayOrder } from "./payments/createRazorpayOrder";
+export { verifyRazorpayPayment } from "./payments/verifyRazorpayPayment";
 /** @deprecated Phase 8: Maintained for legacy fallback; unused in modern automated online fees flow */
 export { submitPaymentReference } from "./payments/submitPaymentReference";
 export { adminPaymentAction } from "./payments/adminPaymentAction";
@@ -33,4 +34,11 @@ export {
   bulkImportStudents,
   inviteUserToOrganization,
 } from "./organizations/organizationService";
+
+// ─── Phase 65: New Student Welcome Message & Onboarding Communication ────────
+export {
+  onUserCreatedWelcomeTrigger,
+  retryStudentWelcomeMessage,
+  getWhatsAppProviderHealthCallable,
+} from "./onboarding/welcomeCommunication";
 

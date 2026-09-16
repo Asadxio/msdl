@@ -31,6 +31,7 @@ export const collections = {
   paymentGatewayEvents: () => db.collection("payment_gateway_events"),
   paymentProcessorAuditLogs: () => db.collection("payment_processor_audit_logs"),
   paymentVerificationQueue: () => db.collection("payment_verification_queue"),
+  onboardingCommunications: () => db.collection("onboarding_communications"),
 };
 
 /**

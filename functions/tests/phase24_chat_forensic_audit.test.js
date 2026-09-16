@@ -159,7 +159,7 @@ test('P24-20: Reading messages uses arrayUnion to prevent overwriting other user
 
 test('P24-21: Attack 01 — Non-participant reads direct chat => DENIED', () => {
   assert.ok(rules.includes("canReadChat()"));
-  assert.ok(rules.includes("isBroadcastChat() || isChatParticipant()"));
+  assert.ok(rules.includes("isBroadcastChat()") && rules.includes("isChatParticipant()"));
 });
 
 test('P24-22: Attack 02 — Non-participant reads messages => DENIED', () => {

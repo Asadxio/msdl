@@ -14,7 +14,7 @@ import { useData } from "@/context/DataContext";
 import { db, auth } from "@/lib/firebase";
 import { normalizeFirebaseError } from "@/lib/errors";
 import { logFirestoreFailure } from "@/lib/firestoreDebug";
-import { createRazorpayOrder } from "@/lib/razorpayFunctions";
+import { createRazorpayOrder, verifyRazorpayPayment } from "@/lib/razorpayFunctions";
 
 type PaymentType = "fees" | "sadqa" | "zakat" | "fitra" | "langar";
 
@@ -558,6 +558,26 @@ export default function PaymentFlowScreen() {
                   const data = JSON.parse(event.nativeEvent.data);
                   if (data.event === "PAYMENT_SUCCESS") {
                     setCheckoutModalVisible(false);
+                    const paymentId = data.payment_id;
+                    const orderId = data.order_id;
+                    const signature = data.signature;
+                    if (currentPaymentId && orderId && paymentId && signature) {
+                      verifyRazorpayPayment({
+                        paymentDocId: currentPaymentId,
+                        orderId,
+                        paymentId,
+                        signature,
+                      }).then((res) => {
+                        if (res?.success) {
+                          setStep(4);
+                          loadHistory().catch(() => {});
+                        }
+                      }).catch((err) => {
+                        // If verification callable has transient network latency,
+                        // onSnapshot listener and Razorpay Webhook will reconcile automatically
+                        logFirestoreFailure({ collection: "payments", operation: "update", query: "verifyRazorpayPayment callable fallback to webhook", role: profile?.role, status: profile?.status }, err);
+                      });
+                    }
                   } else if (data.event === "MODAL_CLOSED") {
                     setCheckoutModalVisible(false);
                   } else if (data.event === "PAYMENT_FAILED") {

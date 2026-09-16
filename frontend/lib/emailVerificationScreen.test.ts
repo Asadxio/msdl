@@ -21,7 +21,7 @@ describe('email verification pending screen audit', () => {
 
   it('resends verification through Firebase Auth and reports success or errors', () => {
     expect(source).toContain("import { sendEmailVerification } from 'firebase/auth';");
-    expect(source).toContain('await withTimeout(sendEmailVerification(currentUser), FIREBASE_AUTH_ACTION_TIMEOUT_MS);');
+    expect(source).toContain('await withTimeout(sendEmailVerification(currentUser, VERIFICATION_ACTION_CODE_SETTINGS), FIREBASE_AUTH_ACTION_TIMEOUT_MS);');
     expect(source).toContain('Verification email sent');
     expect(source).toContain('Verification email resend failed');
     expect(source).toContain("Alert.alert('Email Sent'");

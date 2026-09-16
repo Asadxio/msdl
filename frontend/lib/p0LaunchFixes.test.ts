@@ -21,6 +21,6 @@ describe('P0 launch blocker fixes', () => {
   it('live class join uses verified Google Meet url launching', () => {
     const source = fs.readFileSync(path.join(__dirname, '../app/live-class/[id].tsx'), 'utf8');
     expect(source).toContain('liveClass.meet_url');
-    expect(source).toContain('Linking.openURL(meetUrl)');
+    expect(source).toContain('Linking.openURL(effectiveUrl)');
   });
 });

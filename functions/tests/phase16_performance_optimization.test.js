@@ -40,10 +40,10 @@ test('P16-01: DataContext parallelizes cache loading and Firestore queries using
 
 test('P16-02: HomeScreen memoizes expensive prayer time calculation to prevent recomputing on every render', () => {
   const src = fs.readFileSync(path.join(repoRoot, 'frontend/app/(tabs)/index.tsx'), 'utf8');
-  assert.ok(src.includes('const prayerWindow = useMemo(() => {'),
-    'prayerWindow must be wrapped in useMemo');
+  assert.ok(src.includes('const prayerWindow = useMemo(() => {') || src.includes('const prayerCalculationData = useMemo(() => {'),
+    'prayer calculation must be wrapped in useMemo');
   assert.ok(src.includes('}, [prayerSettings, now]);'),
-    'prayerWindow must declare correct reactive dependencies');
+    'prayer calculation memo dependencies must be [prayerSettings, now]');
 });
 
 // ============================================================

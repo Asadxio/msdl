@@ -81,6 +81,7 @@ type AuthContextType = {
       guardian_name?: string;
       guardian_phone?: string;
       phone?: string;
+      whatsapp_consent?: boolean;
     }
   ) => Promise<string | null>;
   signOut: () => Promise<void>;
@@ -609,6 +610,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       guardian_name?: string;
       guardian_phone?: string;
       phone?: string;
+      whatsapp_consent?: boolean;
     }
   ): Promise<string | null> => {
     // Role protection - only student or teacher allowed
@@ -688,6 +690,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
           ...(complianceData?.guardian_phone ? { guardian_phone: complianceData.guardian_phone } : {}),
           ...(complianceData?.phone ? { phone: complianceData.phone } : {}),
+          whatsapp_consent: Boolean(complianceData?.whatsapp_consent ?? true),
+          whatsapp_consent_at: serverTimestamp(),
         });
         debugLog('[SIGNUP_DEBUG] Successfully wrote users/', cred.user.uid);
       } catch (userErr: any) {
@@ -1011,18 +1015,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
     setProfileOffline(false);
     try {
-      // 2. Reset active tenant cache to default
+      // 2. Clean up push tokens for current device BEFORE auth signOut (requires active auth token)
+      if (uid && auth.currentUser) {
+        try {
+          const { unregisterDevicePushToken } = await import('@/lib/pushNotifications');
+          await withTimeout(unregisterDevicePushToken(uid), 2500);
+        } catch (pushErr) {
+          logger.warn('Push token unregistration non-fatal note on logout:', pushErr);
+        }
+      }
+
+      // 3. Reset active tenant cache to default
       const { resetActiveOrganization } = await import('@/lib/tenantContext');
       await resetActiveOrganization().catch(() => {});
 
-      // 3. Sign out from Firebase Auth (clears Google Play Services credential too)
+      // 4. Sign out from Firebase Auth (clears Google Play Services credential too)
       await firebaseSignOut(auth);
-      // 4. Wipe ALL AsyncStorage — profile cache + any leftover session data
-      const allKeys = await AsyncStorage.getAllKeys().catch(() => [] as string[]);
-      if (allKeys.length > 0) {
-        await AsyncStorage.multiRemove(allKeys as string[]).catch(() => {});
-      }
-      logger.info('Signed out — cleared Firebase session + full AsyncStorage', { uid });
+
+      // 5. Selective AsyncStorage cleanup: purge all session/account data while preserving device utility preferences
+      const { cleanupSessionStorageOnSignOut } = await import('@/lib/sessionStorageCleanup');
+      await cleanupSessionStorageOnSignOut(uid);
+
+      logger.info('Signed out cleanly — push tokens unregistered, Firebase session ended, session storage cleaned', { uid });
     } catch (err) {
       logger.error('Sign out error (state already cleared):', err);
     }

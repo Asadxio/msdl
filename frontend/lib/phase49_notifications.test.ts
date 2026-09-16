@@ -39,9 +39,9 @@ describe('Phase 49 — Notification System & Delivery Pipeline Tests', () => {
       expect(route).toBe('/status');
     });
 
-    test('falls back to /notifications when no destination context provided', () => {
+    test('falls back to /(tabs)/notifications when no destination context provided', () => {
       const route = resolveRouteFromNotificationData({});
-      expect(route).toBe('/notifications');
+      expect(route).toBe('/(tabs)/notifications');
     });
   });
 

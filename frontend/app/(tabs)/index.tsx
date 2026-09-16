@@ -18,6 +18,7 @@ import { MADRASA_WEBSITE_URL } from '@/lib/links';
 import { useLanguage } from '@/context/LanguageContext';
 import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
 import { StudentLearningCard } from '@/components/dashboard/StudentLearningCard';
+import { PremiumWelcomeCard } from '@/components/dashboard/PremiumWelcomeCard';
 import { DailyWisdomCard } from '@/components/dashboard/DailyWisdomCard';
 import { SpiritualMomentsRow } from '@/components/dashboard/SpiritualMomentsRow';
 import { PrayerTimesHeroCard } from '@/components/dashboard/PrayerTimesHeroCard';
@@ -394,6 +395,14 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        {/* Section 1.5: Premium In-App Welcome Card (Student Onboarding) */}
+        {(!profile?.role || profile?.role === 'student') && (
+          <PremiumWelcomeCard
+            profile={profile}
+            onExplore={() => router.push('/(tabs)/courses')}
+          />
+        )}
 
         {/* Section 2: Student Identity & Learning Card */}
         <StudentLearningCard

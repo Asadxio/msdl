@@ -32,6 +32,6 @@ describe('phase 2 Islamic dashboard features', () => {
     expect(storageSource).toContain('AsyncStorage.getItem(PRAYER_SETTINGS_KEY)');
     // UI uses Urdu label "اگلی نماز" for accessibility; label prop still present for testing
     expect(prayerTimesSource).toContain('nextPrayer');
-    expect(moreSource).toContain('Google Camera Qibla Finder (Internet Required)');
+    expect(moreSource).toContain('Camera Qibla & Compass Direction');
   });
 });

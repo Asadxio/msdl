@@ -139,7 +139,7 @@ service cloud.firestore {
       return isSelf(uid)
         && hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone']
+          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone', 'whatsapp_consent', 'whatsapp_consent_at']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -157,6 +157,8 @@ service cloud.firestore {
         && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name is string)
         && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone is string)
         && (!('phone' in request.resource.data) || request.resource.data.phone is string)
+        && (!('whatsapp_consent' in request.resource.data) || request.resource.data.whatsapp_consent is bool)
+        && (!('whatsapp_consent_at' in request.resource.data) || request.resource.data.whatsapp_consent_at is timestamp)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
         && ((request.resource.data.role == 'assistant_teacher') ? roleOf(request.auth.uid) in ['admin', 'super_admin'] : true);
     }
@@ -1953,6 +1955,11 @@ service cloud.firestore {
         && request.resource.data.whatsapp_number.size() >= 7
         && request.resource.data.created_at is timestamp;
       allow update, delete: if isAdmin();
+    }
+
+    match /onboarding_communications/{userId} {
+      allow read: if isSignedIn() && (isSelf(userId) || isAdmin());
+      allow write: if false; // Server-only via Firebase Admin SDK
     }
 
     // Deny all other document access by default.
