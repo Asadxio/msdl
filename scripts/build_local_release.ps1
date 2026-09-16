@@ -18,5 +18,28 @@ if (Test-Path "app\.cxx") {
     Remove-Item -Recurse -Force "app\.cxx" -ErrorAction SilentlyContinue
 }
 
+# Remove existing release apk to ensure fresh build verification
+if (Test-Path "app\build\outputs\apk\release\app-release.apk") {
+    Remove-Item -Force "app\build\outputs\apk\release\app-release.apk" -ErrorAction SilentlyContinue
+}
+
 Write-Host "Starting Gradle assembleRelease..."
 .\gradlew.bat assembleRelease --daemon --build-cache
+
+$apkSource = "X:\frontend\android\app\build\outputs\apk\release\app-release.apk"
+if (Test-Path $apkSource) {
+    $apkItem = Get-Item $apkSource
+    Write-Host "Build Successful! APK size: $($apkItem.Length) bytes, timestamp: $($apkItem.LastWriteTime)"
+    
+    $targetArtifact = "C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\scratch\mslb-release-v46.apk"
+    $targetLocal = "C:\Users\xioas\.gemini\antigravity\scratch\msdl\mslb-release-v46.apk"
+    
+    Copy-Item $apkSource $targetArtifact -Force
+    Copy-Item $apkSource $targetLocal -Force
+    
+    $hash = Get-FileHash -Algorithm SHA256 $targetArtifact
+    Write-Host "SHA-256: $($hash.Hash)"
+    Write-Host "Artifact copied to: $targetArtifact"
+} else {
+    Write-Error "Gradle build finished but app-release.apk was not found!"
+}
