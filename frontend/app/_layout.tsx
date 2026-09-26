@@ -388,15 +388,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       } else {
         startupLog('Navigation complete', { route: 'auth/pending', reason: 'missing-profile-document' });
       }
+    } else if (profile?.status === 'pending' && !isFounder) {
+      if (segments.join('/') !== 'auth/pending') {
+        startupLog('Navigation complete', { action: 'replace', route: '/auth/pending?state=pending', reason: 'approval-pending' });
+        performReplace('/auth/pending?state=pending');
+      } else {
+        startupLog('Navigation complete', { route: 'auth/pending', reason: 'already-pending' });
+      }
     } else if (user) {
       if (user.uid && enteredAppTrackedRef.current !== user.uid) {
         enteredAppTrackedRef.current = user.uid;
         void markUserEnteredApp(user.uid);
       }
-      if (inAuth) {
+      if (inAuth && !inPendingAuthRoute) {
         startupLog('Navigation complete', { action: 'replace', route: '/', reason: 'approved-user-in-auth' });
         performReplace('/');
-      } else {
+      } else if (!inAuth) {
         startupLog('Navigation complete', { route: segmentKey || '/', reason: 'approved-user' });
       }
     }
