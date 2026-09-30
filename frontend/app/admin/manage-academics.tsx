@@ -9,9 +9,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import {
-  addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc, setDoc, getCountFromServer, query, where,
+  addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc, setDoc, getCountFromServer, query, where, limit,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { createNotificationAsAdmin, createRoleNotificationAsAdmin } from '@/lib/notifications';
@@ -23,8 +24,12 @@ import { getEnrollmentDocId } from '@/lib/enrollments';
 import { withTimeout } from '@/lib/errors';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
-
-
+import { AdminTeacherProfileModal } from '@/components/admin/AdminTeacherProfileModal';
+import {
+  type TeacherProfile,
+  getNextTeacherId,
+  fetchExistingTeacherIds,
+} from '@/lib/teacherIdentity';
 
 export type CourseSubject = {
   id: string;
@@ -45,6 +50,11 @@ type CourseItem = {
   meet_link: string;
   description: string;
   subjects?: CourseSubject[];
+  status?: 'active' | 'inactive';
+  admission_fee?: number;
+  course_fee?: number;
+  fee?: number;
+  assigned_teachers?: string[];
 };
 
 type TeacherItem = {
@@ -54,6 +64,17 @@ type TeacherItem = {
   title: string;
   photo_url?: string;
   assigned_courses: string[];
+  teacher_id?: string;
+  user_uid?: string;
+  email?: string;
+  phone?: string;
+  islamic_qualification?: string;
+  qualifications?: string[];
+  specializations?: string[];
+  experience_years?: number;
+  bio?: string;
+  status?: string;
+  verification_status?: string;
 };
 
 type LessonItem = {
@@ -96,6 +117,10 @@ const INITIAL_COURSE: Omit<CourseItem, 'id'> = {
   meet_link: '',
   description: '',
   subjects: [],
+  status: 'active',
+  admission_fee: 100,
+  course_fee: 500,
+  assigned_teachers: [],
 };
 
 export default function ManageAcademicsScreen() {
@@ -127,6 +152,8 @@ export default function ManageAcademicsScreen() {
   const [teacherTitle, setTeacherTitle] = useState('');
   const [teacherPhoto, setTeacherPhoto] = useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+  const [adminEditTeacher, setAdminEditTeacher] = useState<Partial<TeacherProfile> | null>(null);
+  const [showAdminTeacherModal, setShowAdminTeacherModal] = useState(false);
 
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   
@@ -197,6 +224,11 @@ export default function ManageAcademicsScreen() {
           meet_link: data.meet_link || data.class_link || data.classLink || '',
           description: data.description || '',
           subjects: rawSubjects,
+          status: (data.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
+          admission_fee: typeof data.admission_fee === 'number' ? data.admission_fee : 100,
+          course_fee: typeof data.course_fee === 'number' ? data.course_fee : (typeof data.fee === 'number' ? data.fee : 500),
+          fee: typeof data.fee === 'number' ? data.fee : (typeof data.course_fee === 'number' ? data.course_fee : 500),
+          assigned_teachers: Array.isArray(data.assigned_teachers) ? data.assigned_teachers : [],
         });
       });
       setCourses(nextCourses);
@@ -223,6 +255,17 @@ export default function ManageAcademicsScreen() {
           title: data.title || '',
           photo_url: data.photo_url || '',
           assigned_courses: Array.isArray(data.assigned_courses) ? data.assigned_courses : (Array.isArray(data.courses) ? data.courses : []),
+          teacher_id: data.teacher_id || '',
+          user_uid: data.user_uid || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          islamic_qualification: data.islamic_qualification || '',
+          qualifications: Array.isArray(data.qualifications) ? data.qualifications : [],
+          specializations: Array.isArray(data.specializations) ? data.specializations : [],
+          experience_years: data.experience_years,
+          bio: data.bio || '',
+          status: data.status || 'approved',
+          verification_status: data.verification_status || 'approved',
         });
       });
       setTeachers(nextTeachers);
@@ -375,11 +418,15 @@ export default function ManageAcademicsScreen() {
       Alert.alert('Select Student', 'Please select a student to enroll.');
       return;
     }
+    const courseObj = courses.find((c) => c.id === selectedRosterCourseId);
+    if (courseObj?.status === 'inactive') {
+      Alert.alert('Class Inactive', 'Cannot enroll students into an inactive class. Please activate the class first.');
+      return;
+    }
     try {
       setActionLoading(true);
       const enrollmentDocId = getEnrollmentDocId(selectedStudentToEnroll, selectedRosterCourseId);
       const studentObj = availableStudents.find((s) => s.uid === selectedStudentToEnroll);
-      const courseObj = courses.find((c) => c.id === selectedRosterCourseId);
       
       await withTimeout(
         setDoc(doc(db, 'enrollments', enrollmentDocId), {
@@ -533,7 +580,34 @@ export default function ManageAcademicsScreen() {
   const saveCourse = async () => {
     if (!isAdmin) return;
     if (!courseForm.name.trim()) {
-      Alert.alert('Missing', 'Course name is required');
+      Alert.alert('Missing Name', 'Course name is required.');
+      return;
+    }
+    if (!courseForm.description.trim()) {
+      Alert.alert('Missing Description', 'Please provide a brief course description or overview.');
+      return;
+    }
+
+    // Duplicate course name check in same organization
+    const currentOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
+    const duplicate = courses.find((c) =>
+      c.id !== editingCourseId &&
+      c.name.trim().toLowerCase() === courseForm.name.trim().toLowerCase() &&
+      (c.organization_id || DEFAULT_ORGANIZATION_ID) === currentOrg
+    );
+    if (duplicate) {
+      Alert.alert('Duplicate Course Name', `A course named "${courseForm.name.trim()}" already exists in this organization.`);
+      return;
+    }
+
+    const admissionFee = Number(courseForm.admission_fee ?? 100);
+    const courseFee = Number(courseForm.course_fee ?? 500);
+    if (isNaN(admissionFee) || admissionFee < 0) {
+      Alert.alert('Invalid Fee', 'Admission fee must be a valid non-negative number.');
+      return;
+    }
+    if (isNaN(courseFee) || courseFee < 0) {
+      Alert.alert('Invalid Fee', 'Course fee must be a valid non-negative number.');
       return;
     }
 
@@ -546,6 +620,13 @@ export default function ManageAcademicsScreen() {
       }
     }
 
+    // Aggregate teachers from course level and subject level
+    const leadTeacherId = courseForm.teacher_id ? [courseForm.teacher_id] : [];
+    const subjectTeacherIds = (courseForm.subjects || [])
+      .map((s) => s.teacher_id)
+      .filter((tid): tid is string => Boolean(tid));
+    const aggregatedTeachers = Array.from(new Set([...leadTeacherId, ...subjectTeacherIds]));
+
     const payload = {
       name: courseForm.name.trim(),
       teacher_name: courseForm.teacher_name.trim(),
@@ -555,6 +636,11 @@ export default function ManageAcademicsScreen() {
       meet_link: normalizedMeetLink,
       description: courseForm.description.trim(),
       subjects: Array.isArray(courseForm.subjects) ? courseForm.subjects : [],
+      status: courseForm.status || 'active',
+      admission_fee: admissionFee,
+      course_fee: courseFee,
+      fee: courseFee,
+      assigned_teachers: aggregatedTeachers,
       updated_at: serverTimestamp(),
     };
 
@@ -603,17 +689,16 @@ export default function ManageAcademicsScreen() {
         }
       }
 
-      // ── Auto-sync teacher's assigned_courses ──
-      // Jab course save ho aur teacher_id set ho, teacher doc mein course naam add karo
-      if (payload.teacher_id) {
+      // ── Auto-sync teachers' assigned_courses ──
+      for (const tid of aggregatedTeachers) {
         try {
-          const assignedTeacher = teachers.find((t) => t.id === payload.teacher_id);
+          const assignedTeacher = teachers.find((t) => t.id === tid);
           const currentAssigned: string[] = assignedTeacher?.assigned_courses || [];
           const courseName = payload.name;
           if (!currentAssigned.includes(courseName)) {
             const updatedList = [...currentAssigned, courseName];
             await withTimeout(
-              updateDoc(doc(db, 'teachers', payload.teacher_id), {
+              updateDoc(doc(db, 'teachers', tid), {
                 assigned_courses: updatedList,
                 courses: updatedList,
                 updated_at: serverTimestamp(),
@@ -622,18 +707,15 @@ export default function ManageAcademicsScreen() {
             );
           }
         } catch (syncErr) {
-          // Non-blocking — course save already succeeded
-          console.warn('[manage-academics] teacher assigned_courses sync failed:', syncErr);
+          console.warn(`[manage-academics] teacher ${tid} assigned_courses sync failed:`, syncErr);
         }
       }
-
 
       setCourseForm(INITIAL_COURSE);
       setEditingCourseId(null);
       setStarterModuleTitle('Bab 1 / Module 1: Introduction & Fundamentals');
       setStarterLessonTitle('Sabaq 1: Taaruf wa Ibtida (Overview)');
       setStarterLessonUrl('');
-
 
       // Trigger announcements in background (don't block UI)
       const announcementMessage = `${payload.name} - ${payload.schedule}${payload.class_time ? ` at ${payload.class_time}` : ''}`;
@@ -673,30 +755,162 @@ export default function ManageAcademicsScreen() {
       meet_link: course.meet_link,
       description: course.description,
       subjects: Array.isArray(course.subjects) ? course.subjects : [],
+      status: course.status || 'active',
+      admission_fee: course.admission_fee !== undefined ? course.admission_fee : 100,
+      course_fee: course.course_fee !== undefined ? course.course_fee : (course.fee !== undefined ? course.fee : 500),
+      assigned_teachers: course.assigned_teachers || [],
     });
   };
 
-  const removeCourse = (course: CourseItem) => {
-    Alert.alert('Delete Course', `Delete "${course.name}"?`, [
-      { text: 'Cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await withTimeout(
-              deleteDoc(doc(db, 'courses', course.id)),
-              10000,
-              'Deleting course timed out'
-            );
-            await fetchData();
-          } catch (error: any) {
-            logFirestoreFailure({ collection: 'courses', operation: 'delete', path: `courses/${course.id}`, query: 'delete course', role: profile?.role, status: profile?.status }, error);
-            Alert.alert('Delete Failed', error?.message || 'Could not delete course. Please try again.');
-          }
+  const toggleCourseStatus = async (course: CourseItem) => {
+    if (!isAdmin) return;
+    const newStatus: 'active' | 'inactive' = course.status === 'inactive' ? 'active' : 'inactive';
+    const actionLabel = newStatus === 'active' ? 'Activate' : 'Deactivate';
+    Alert.alert(
+      `${actionLabel} Course`,
+      `Are you sure you want to ${actionLabel.toLowerCase()} "${course.name}"? ${newStatus === 'inactive' ? 'New enrollments will be paused. Existing enrolled students will keep their learning access.' : 'Course will become available for new student enrollments.'}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: actionLabel,
+          style: newStatus === 'inactive' ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              await withTimeout(
+                updateDoc(doc(db, 'courses', course.id), {
+                  status: newStatus,
+                  updated_at: serverTimestamp(),
+                }),
+                10000
+              );
+              await createAdminLog(profile, {
+                action: 'course_status_toggle',
+                performed_by: profile?.email || profile?.name || 'admin',
+                target_id: course.id,
+                details: `Changed status of "${course.name}" to ${newStatus}`,
+              }).catch(() => {});
+              await fetchData();
+              Alert.alert('Status Updated', `"${course.name}" is now ${newStatus}.`);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Could not update course status.');
+            } finally {
+              setActionLoading(false);
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
+  };
+
+  const removeCourse = async (course: CourseItem) => {
+    if (!isAdmin) return;
+
+    try {
+      setActionLoading(true);
+      // Check ALL course-linked dependent collections to prevent orphaned academic history
+      const dependentCollections = [
+        { name: 'enrollments', label: 'Enrollments' },
+        { name: 'modules', label: 'Curriculum Modules' },
+        { name: 'lessons', label: 'Lessons' },
+        { name: 'assignments', label: 'Assignments' },
+        { name: 'submissions', label: 'Student Submissions' },
+        { name: 'quiz_results', label: 'Quiz Results' },
+        { name: 'attendance', label: 'Attendance Records' },
+        { name: 'live_classes', label: 'Live Classes' },
+        { name: 'recordings', label: 'Recordings' },
+        { name: 'certificates', label: 'Certificates' },
+        { name: 'lesson_progress', label: 'Lesson Progress' },
+        { name: 'quizzes', label: 'Quizzes' },
+        { name: 'payments', label: 'Payment Records' },
+      ];
+
+      const checks = await Promise.all(
+        dependentCollections.map(async (col) => {
+          try {
+            const snap = await getDocs(
+              query(collection(db, col.name), where('course_id', '==', course.id), limit(1))
+            );
+            return { label: col.label, count: snap.size };
+          } catch {
+            return { label: col.label, count: 0 };
+          }
+        })
+      );
+
+      const foundDependencies = checks.filter((c) => c.count > 0).map((c) => c.label);
+
+      if (foundDependencies.length > 0) {
+        setActionLoading(false);
+        Alert.alert(
+          'Cannot Delete Course with History',
+          `"${course.name}" has academic history/content and cannot be permanently deleted. Please deactivate the course instead.\n\nExisting records found in: ${foundDependencies.join(', ')}.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            course.status === 'active'
+              ? {
+                  text: 'Deactivate Course',
+                  onPress: () => toggleCourseStatus(course),
+                }
+              : { text: 'OK' },
+          ]
+        );
+        return;
+      }
+    } catch (checkErr) {
+      console.warn('[manage-academics] Course dependency check failed:', checkErr);
+    } finally {
+      setActionLoading(false);
+    }
+
+    Alert.alert(
+      'Delete Empty Course',
+      `This course has zero academic history or dependent content. Are you sure you want to permanently delete "${course.name}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              const deleteCourseFn = httpsCallable<{ courseId: string }, { success: boolean; message: string }>(
+                functions,
+                'deleteCourse'
+              );
+              await withTimeout(
+                deleteCourseFn({ courseId: course.id }),
+                15000,
+                'Deleting course timed out'
+              );
+              await fetchData();
+              Alert.alert('Course Deleted', `"${course.name}" has been permanently removed.`);
+            } catch (error: any) {
+              const errorMsg = error?.message || 'Could not delete course. Please try again.';
+              if (errorMsg.includes('academic history') || errorMsg.includes('deactivate')) {
+                Alert.alert(
+                  'Cannot Delete Course with History',
+                  errorMsg,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    course.status === 'active'
+                      ? {
+                          text: 'Deactivate Course',
+                          onPress: () => toggleCourseStatus(course),
+                        }
+                      : { text: 'OK' },
+                  ]
+                );
+              } else {
+                Alert.alert('Delete Failed', errorMsg);
+              }
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const addTeacher = async () => {
@@ -707,11 +921,16 @@ export default function ManageAcademicsScreen() {
     }
     try {
       setActionLoading(true);
+      const existingIds = await fetchExistingTeacherIds();
+      const nextTeacherId = getNextTeacherId(existingIds);
       await withTimeout(addDoc(collection(db, 'teachers'), {
         name: teacherName.trim(),
         organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
         title: teacherTitle.trim() || 'Teacher',
         photo_url: teacherPhoto.trim(),
+        teacher_id: nextTeacherId,
+        status: 'approved',
+        verification_status: 'approved',
         assigned_courses: [],
         courses: [],
         created_at: serverTimestamp(),
@@ -937,7 +1156,7 @@ export default function ManageAcademicsScreen() {
   const populateOfficialAcademics = () => {
     Alert.alert(
       'Feed Official Curriculum & Teachers',
-      'This will populate the 4 official Teachers (Sumra Fatma, Firdouse Banu, Afnaz Razviya, Anjum Razviya) and 5 Classes (Rabiya, Ula, Aaidadiya, Salisa, Qirat) along with starter modules and lessons. Proceed?',
+      'This will populate the 4 official Teachers (Sumra Fatma, Firdouse Banu, Afnaz Razviya, Anjum Razviya) and 12 Classes (Rabiya, Ula, Aidadiya, Salisa, Khamsa, Mubaligha, Madani Qaida, Urdu Course, Short Courses, Nazara, Arabic Grammar, Qirat Course) with exact fees. Proceed?',
       [
         { text: 'Cancel' },
         {
@@ -1001,7 +1220,7 @@ export default function ManageAcademicsScreen() {
                 }
               }
 
-              // 2. Official Classes / Courses Seed List
+              // 2. Official Classes / Courses Seed List (12 Required Courses)
               const coursesSeed = [
                 {
                   name: 'Rabiya',
@@ -1010,9 +1229,15 @@ export default function ManageAcademicsScreen() {
                   schedule: 'Mon to Thu',
                   class_time: '10:00 AM',
                   meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 500,
                   description: 'Is level mein students ko basic Islamic knowledge, zaroori masail aur achhi Islami aadaton ki buniyad sikhayi jayegi.',
                   moduleTitle: 'Bab 1: Buniyadi Islami Aqaid wa Masail',
                   lessonTitle: 'Sabaq 1: Taaruf wa Ibtidai Deeniyat',
+                  subjects: [
+                    { id: 'sub_rabiya_1', name: 'Deeniyat wa Aqaid', teacher_id: teacherNameToId['Sumra Fatma'] || '', teacher_name: 'Sumra Fatma', schedule: 'Mon-Wed' },
+                    { id: 'sub_rabiya_2', name: 'Tajweed-ul-Quran', teacher_id: teacherNameToId['Afnaz Razviya'] || '', teacher_name: 'Afnaz Razviya', schedule: 'Thu' },
+                  ],
                 },
                 {
                   name: 'Ula',
@@ -1021,20 +1246,32 @@ export default function ManageAcademicsScreen() {
                   schedule: 'Mon to Thu',
                   class_time: '11:00 AM',
                   meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 500,
                   description: 'Is class mein students apni Islami maloomat ko mazboot karenge aur deen ki buniyadi taleem ko behtar samjhenge.',
                   moduleTitle: 'Bab 1: Fiqh wa Sunnat ki Taleem',
                   lessonTitle: 'Sabaq 1: Kitab-ut-Taharah (Wudu wa Taharat ke Masail)',
+                  subjects: [
+                    { id: 'sub_ula_1', name: 'Fiqh-e-Islami', teacher_id: teacherNameToId['Sumra Fatma'] || '', teacher_name: 'Sumra Fatma', schedule: 'Mon-Tue' },
+                    { id: 'sub_ula_2', name: 'Sunnat wa Aadaab', teacher_id: teacherNameToId['Firdouse Banu'] || '', teacher_name: 'Firdouse Banu', schedule: 'Wed-Thu' },
+                  ],
                 },
                 {
-                  name: 'Aaidadiya',
+                  name: 'Aidadiya',
                   teacher_name: 'Sumra Fatma',
                   teacher_id: teacherNameToId['Sumra Fatma'] || '',
                   schedule: 'Mon to Fri',
                   class_time: '02:00 PM',
                   meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 500,
                   description: 'Is level mein students ki Islami maloomat aur samajh ko mazeed mazboot kiya jayega aur unki taleem ko behtar direction di jayegi.',
                   moduleTitle: 'Bab 1: Arbi Zaban wa Deeni Maloomat',
                   lessonTitle: 'Sabaq 1: Taaruf wa Ahmiyat-e-Ilm',
+                  subjects: [
+                    { id: 'sub_aida_1', name: 'Arbi Zaban', teacher_id: teacherNameToId['Sumra Fatma'] || '', teacher_name: 'Sumra Fatma', schedule: 'Mon-Wed' },
+                    { id: 'sub_aida_2', name: 'Deeni Maloomat', teacher_id: teacherNameToId['Anjum Razviya'] || '', teacher_name: 'Anjum Razviya', schedule: 'Thu-Fri' },
+                  ],
                 },
                 {
                   name: 'Salisa',
@@ -1043,26 +1280,161 @@ export default function ManageAcademicsScreen() {
                   schedule: 'Mon to Fri',
                   class_time: '03:30 PM',
                   meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 500,
                   description: 'Is class mein students ko Islami taleem ki mazeed gehrai se samajh di jayegi aur pehle seekhe hue ilm ko mazboot kiya jayega.',
                   moduleTitle: 'Bab 1: Usool wa Dars-e-Deen',
                   lessonTitle: 'Sabaq 1: Tafheem-e-Deen wa Masail-e-Zindagi',
+                  subjects: [
+                    { id: 'sub_salisa_1', name: 'Usool-e-Fiqh', teacher_id: teacherNameToId['Firdouse Banu'] || '', teacher_name: 'Firdouse Banu', schedule: 'Mon-Wed' },
+                    { id: 'sub_salisa_2', name: 'Dars-e-Deen', teacher_id: teacherNameToId['Sumra Fatma'] || '', teacher_name: 'Sumra Fatma', schedule: 'Thu-Fri' },
+                  ],
                 },
                 {
-                  name: 'Qirat',
+                  name: 'Khamsa',
+                  teacher_name: 'Firdouse Banu',
+                  teacher_id: teacherNameToId['Firdouse Banu'] || '',
+                  schedule: 'Mon to Fri',
+                  class_time: '04:30 PM',
+                  meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 500,
+                  description: 'Uloom-e-Islamia ki aala satah ki taleem, Tafseer, wa Hadees-e-Mubaraka ke muta\'laa par mushtamil darja.',
+                  moduleTitle: 'Bab 1: Tafseer-ul-Quran wa Usool',
+                  lessonTitle: 'Sabaq 1: Muqaddama-e-Tafseer',
+                  subjects: [
+                    { id: 'sub_khamsa_1', name: 'Tafseer-ul-Quran', teacher_id: teacherNameToId['Firdouse Banu'] || '', teacher_name: 'Firdouse Banu', schedule: 'Mon-Wed' },
+                    { id: 'sub_khamsa_2', name: 'Hadees-e-Mubaraka', teacher_id: teacherNameToId['Sumra Fatma'] || '', teacher_name: 'Sumra Fatma', schedule: 'Thu-Fri' },
+                  ],
+                },
+                {
+                  name: 'Mubaligha',
+                  teacher_name: 'Sumra Fatma',
+                  teacher_id: teacherNameToId['Sumra Fatma'] || '',
+                  schedule: 'Tue to Sat',
+                  class_time: '09:00 AM',
+                  meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 300,
+                  description: 'Dawat-o-Tableegh, Islami Akhlaq, aur Taleem-o-Tarbiyat ki tarbiyati class.',
+                  moduleTitle: 'Bab 1: Dawat-e-Deen wa Taleemat',
+                  lessonTitle: 'Sabaq 1: Tableegh-e-Deen ki Ahmiyat',
+                  subjects: [
+                    { id: 'sub_mub_1', name: 'Dawat-o-Tableegh', teacher_id: teacherNameToId['Sumra Fatma'] || '', teacher_name: 'Sumra Fatma', schedule: 'Tue-Thu' },
+                    { id: 'sub_mub_2', name: 'Islami Akhlaq', teacher_id: teacherNameToId['Firdouse Banu'] || '', teacher_name: 'Firdouse Banu', schedule: 'Fri-Sat' },
+                  ],
+                },
+                {
+                  name: 'Madani Qaida',
+                  teacher_name: 'Afnaz Razviya',
+                  teacher_id: teacherNameToId['Afnaz Razviya'] || '',
+                  schedule: 'Mon to Fri',
+                  class_time: '07:30 AM',
+                  meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 200,
+                  description: 'Quran-e-Majeed seekhne ki pehli buniyadi seedhi, huroof ki pehchan aur makharij ka ibtidai sabaq.',
+                  moduleTitle: 'Bab 1: Huroof-e-Mufradat',
+                  lessonTitle: 'Sabaq 1: Alif Baa Taa ki Pehchan',
+                  subjects: [
+                    { id: 'sub_qaida_1', name: 'Huroof-e-Mufradat', teacher_id: teacherNameToId['Afnaz Razviya'] || '', teacher_name: 'Afnaz Razviya', schedule: 'Mon-Wed' },
+                    { id: 'sub_qaida_2', name: 'Makharij wa Harkat', teacher_id: teacherNameToId['Afnaz Razviya'] || '', teacher_name: 'Afnaz Razviya', schedule: 'Thu-Fri' },
+                  ],
+                },
+                {
+                  name: 'Urdu Course',
+                  teacher_name: 'Anjum Razviya',
+                  teacher_id: teacherNameToId['Anjum Razviya'] || '',
+                  schedule: 'Mon to Wed',
+                  class_time: '12:00 PM',
+                  meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 100,
+                  description: 'Urdu zaban parhney, likhne aur samajhne ki sahulat ke liye aasan taleemi nizam.',
+                  moduleTitle: 'Bab 1: Urdu Rasmul Khat',
+                  lessonTitle: 'Sabaq 1: Huroof-e-Tahajji wa Alwahi Ilm',
+                  subjects: [
+                    { id: 'sub_urdu_1', name: 'Urdu Rasmul Khat', teacher_id: teacherNameToId['Anjum Razviya'] || '', teacher_name: 'Anjum Razviya', schedule: 'Mon-Tue' },
+                    { id: 'sub_urdu_2', name: 'Huroof-e-Tahajji', teacher_id: teacherNameToId['Anjum Razviya'] || '', teacher_name: 'Anjum Razviya', schedule: 'Wed' },
+                  ],
+                },
+                {
+                  name: 'Short Courses',
+                  teacher_name: 'Sumra Fatma',
+                  teacher_id: teacherNameToId['Sumra Fatma'] || '',
+                  schedule: 'Weekend Sessions',
+                  class_time: '11:00 AM',
+                  meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 0, // FREE course
+                  description: 'Mukhtasar arsay ke mufeed deeni courses (Namazi Course, Ramazan Tarbiyat, etc.) bila kisi fees ke.',
+                  moduleTitle: 'Bab 1: Zaroori Masail',
+                  lessonTitle: 'Sabaq 1: Taharat wa Namaz ke Aham Ahkam',
+                  subjects: [
+                    { id: 'sub_short_1', name: 'Zaroori Masail', teacher_id: teacherNameToId['Sumra Fatma'] || '', teacher_name: 'Sumra Fatma', schedule: 'Sat' },
+                    { id: 'sub_short_2', name: 'Namaz wa Tarbiyat', teacher_id: teacherNameToId['Firdouse Banu'] || '', teacher_name: 'Firdouse Banu', schedule: 'Sun' },
+                  ],
+                },
+                {
+                  name: 'Nazara',
+                  teacher_name: 'Afnaz Razviya',
+                  teacher_id: teacherNameToId['Afnaz Razviya'] || '',
+                  schedule: 'Mon to Fri',
+                  class_time: '08:30 AM',
+                  meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 300,
+                  description: 'Quran-e-Kareem ko dekh kar rawani aur makharij ke sath parhne ka intizam.',
+                  moduleTitle: 'Bab 1: Tilawat-e-Nazara',
+                  lessonTitle: 'Sabaq 1: Juz Amma Tilawat',
+                  subjects: [
+                    { id: 'sub_nazara_1', name: 'Tilawat-e-Nazara', teacher_id: teacherNameToId['Afnaz Razviya'] || '', teacher_name: 'Afnaz Razviya', schedule: 'Mon-Wed' },
+                    { id: 'sub_nazara_2', name: 'Tajweed Rules', teacher_id: teacherNameToId['Afnaz Razviya'] || '', teacher_name: 'Afnaz Razviya', schedule: 'Thu-Fri' },
+                  ],
+                },
+                {
+                  name: 'Arabic Grammar',
+                  teacher_name: 'Anjum Razviya',
+                  teacher_id: teacherNameToId['Anjum Razviya'] || '',
+                  schedule: 'Mon to Thu',
+                  class_time: '01:00 PM',
+                  meet_link: '',
+                  admission_fee: 100,
+                  course_fee: 400,
+                  description: 'Arbi zaban ki sarf wa nahw, qawaid aur Quran fahmi ke asool.',
+                  moduleTitle: 'Bab 1: Ilm-us-Seegha wa Qawaid',
+                  lessonTitle: 'Sabaq 1: Kalima aur uski Iqsam',
+                  subjects: [
+                    { id: 'sub_grammar_1', name: 'Ilm-us-Sarf', teacher_id: teacherNameToId['Anjum Razviya'] || '', teacher_name: 'Anjum Razviya', schedule: 'Mon-Tue' },
+                    { id: 'sub_grammar_2', name: 'Ilm-un-Nahw', teacher_id: teacherNameToId['Anjum Razviya'] || '', teacher_name: 'Anjum Razviya', schedule: 'Wed-Thu' },
+                  ],
+                },
+                {
+                  name: 'Qirat Course',
                   teacher_name: 'Afnaz Razviya',
                   teacher_id: teacherNameToId['Afnaz Razviya'] || '',
                   schedule: 'Daily (Morning & Evening)',
                   class_time: '08:00 AM',
                   meet_link: '',
-                  description: 'Is course mein Quran-e-Kareem ki sahi tilawat, makharij, pronunciation aur behtar fluency par tawajjoh di jayegi.',
+                  admission_fee: 100,
+                  course_fee: 500,
+                  description: 'Quran-e-Kareem ki sahi tilawat, makharij, pronunciation aur behtar fluency par tawajjoh di jayegi.',
                   moduleTitle: 'Bab 1: Makharij-ul-Huroof wa Tajweed',
                   lessonTitle: 'Sabaq 1: Huroof-e-Tahajji aur unke Sahi Makharij',
+                  subjects: [
+                    { id: 'sub_qirat_1', name: 'Makharij-ul-Huroof', teacher_id: teacherNameToId['Afnaz Razviya'] || '', teacher_name: 'Afnaz Razviya', schedule: 'Morning' },
+                    { id: 'sub_qirat_2', name: 'Tajweed wa Qirat', teacher_id: teacherNameToId['Afnaz Razviya'] || '', teacher_name: 'Afnaz Razviya', schedule: 'Evening' },
+                  ],
                 },
               ];
 
               for (const c of coursesSeed) {
                 const existing = courses.find((curr) => curr.name.trim().toLowerCase() === c.name.trim().toLowerCase());
                 let courseId = existing?.id;
+
+                const leadTeacherId = c.teacher_id ? [c.teacher_id] : [];
+                const subjectTeacherIds = (c.subjects || []).map((s) => s.teacher_id).filter(Boolean);
+                const aggregatedTeachers = Array.from(new Set([...leadTeacherId, ...subjectTeacherIds])).filter(Boolean);
 
                 const courseData = {
                   name: c.name,
@@ -1072,7 +1444,13 @@ export default function ManageAcademicsScreen() {
                   class_time: c.class_time,
                   meet_link: '',
                   description: c.description,
-                  subjects: [],
+                  admission_fee: c.admission_fee,
+                  course_fee: c.course_fee,
+                  fee: c.course_fee,
+                  status: 'active' as const,
+                  assigned_teachers: aggregatedTeachers,
+                  subjects: c.subjects || [],
+                  organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
                   updated_at: serverTimestamp(),
                 };
 
@@ -1105,18 +1483,39 @@ export default function ManageAcademicsScreen() {
                     updated_at: serverTimestamp(),
                   }), 10000);
                 }
+
+                // Sync each teacher's assigned_courses
+                for (const tid of aggregatedTeachers) {
+                  try {
+                    const existingTeacher = teachers.find((t) => t.id === tid);
+                    const currentCourses = existingTeacher?.assigned_courses || [];
+                    if (!currentCourses.includes(c.name)) {
+                      const updatedCourses = [...currentCourses, c.name];
+                      await withTimeout(
+                        updateDoc(doc(db, 'teachers', tid), {
+                          assigned_courses: updatedCourses,
+                          courses: updatedCourses,
+                          updated_at: serverTimestamp(),
+                        }),
+                        8000
+                      ).catch(() => {});
+                    }
+                  } catch (err) {
+                    // ignore non-blocking
+                  }
+                }
               }
 
               // Create notification for students
               await createRoleNotificationAsAdmin(profile, {
                 title: 'Official Madrasa Curriculum Updated',
-                message: 'New classes (Rabiya, Ula, Aaidadiya, Salisa, Qirat) are now active in Courses.',
+                message: 'All 12 official courses are now active with official curriculum and fees.',
                 roles: ['student'],
                 category: 'new_course',
               }).catch(() => {});
 
               await fetchData();
-              Alert.alert('Academics Populated', 'Successfully populated 4 Teachers and 5 Official Classes with curriculum!');
+              Alert.alert('Academics Populated', 'Successfully populated 4 Teachers and 12 Official Classes with curriculum and exact fees!');
             } catch (err: any) {
               Alert.alert('Population Failed', err?.message || 'Could not populate data.');
             } finally {
@@ -1176,7 +1575,7 @@ export default function ManageAcademicsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.populateBannerTitle}>Feed Official Curriculum & Faculty</Text>
             <Text style={styles.populateBannerSubtitle}>
-              1-Click auto-create 4 Teachers (Sumra Fatma, etc.) & 5 Classes (Rabiya, Ula, Aaidadiya, Salisa, Qirat)
+              1-Click auto-create 4 Teachers & 12 Classes with exact fees (Admission ₹100, Course fees ₹500/₹300/₹200/₹100/FREE/etc.)
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#D4AF37" />
@@ -1313,6 +1712,75 @@ export default function ManageAcademicsScreen() {
             />
           </View>
 
+          {/* Course Status Selector */}
+          <View style={{ marginBottom: 12 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textMain, marginBottom: 6 }}>
+              Course Status:
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={[
+                  styles.statusToggleBtn,
+                  courseForm.status !== 'inactive' && styles.statusToggleBtnActive,
+                ]}
+                onPress={() => setCourseForm((p) => ({ ...p, status: 'active' }))}
+              >
+                <Ionicons name="checkmark-circle" size={14} color={courseForm.status !== 'inactive' ? '#FFF' : '#059669'} />
+                <Text style={[styles.statusToggleBtnText, courseForm.status !== 'inactive' && styles.statusToggleBtnTextActive]}>
+                  Active (Admissions Open)
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.statusToggleBtn,
+                  courseForm.status === 'inactive' && styles.statusToggleBtnInactive,
+                ]}
+                onPress={() => setCourseForm((p) => ({ ...p, status: 'inactive' }))}
+              >
+                <Ionicons name="pause-circle" size={14} color={courseForm.status === 'inactive' ? '#FFF' : '#D97706'} />
+                <Text style={[styles.statusToggleBtnText, courseForm.status === 'inactive' && styles.statusToggleBtnTextInactive]}>
+                  Inactive (Admissions Paused)
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Fee Configuration */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 }}>
+                Admission Fee (₹):
+              </Text>
+              <TextInput
+                style={[styles.input, { marginBottom: 0 }]}
+                placeholder="100"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="numeric"
+                value={courseForm.admission_fee !== undefined ? String(courseForm.admission_fee) : '100'}
+                onChangeText={(v) => {
+                  const num = parseInt(v.replace(/[^0-9]/g, ''), 10);
+                  setCourseForm((p) => ({ ...p, admission_fee: isNaN(num) ? 0 : num }));
+                }}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMain, marginBottom: 4 }}>
+                Course Fee (₹, 0 = Free):
+              </Text>
+              <TextInput
+                style={[styles.input, { marginBottom: 0 }]}
+                placeholder="500"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="numeric"
+                value={courseForm.course_fee !== undefined ? String(courseForm.course_fee) : '500'}
+                onChangeText={(v) => {
+                  const num = parseInt(v.replace(/[^0-9]/g, ''), 10);
+                  setCourseForm((p) => ({ ...p, course_fee: isNaN(num) ? 0 : num }));
+                }}
+              />
+            </View>
+          </View>
+
           <TextInput style={styles.input} placeholder="Schedule (e.g. Mon-Thu)" placeholderTextColor={COLORS.textMuted} value={courseForm.schedule} onChangeText={(v) => setCourseForm((p) => ({ ...p, schedule: v }))} />
           <TextInput style={styles.input} placeholder="Class time (e.g. 10:00 AM / 14:30)" placeholderTextColor={COLORS.textMuted} value={courseForm.class_time} onChangeText={(v) => setCourseForm((p) => ({ ...p, class_time: v }))} />
           <TextInput style={styles.input} placeholder="Google Meet link" placeholderTextColor={COLORS.textMuted} value={courseForm.meet_link} onChangeText={(v) => setCourseForm((p) => ({ ...p, meet_link: v }))} autoCapitalize="none" />
@@ -1439,7 +1907,18 @@ export default function ManageAcademicsScreen() {
           {courses.length === 0 ? <Text style={styles.helper}>No courses added yet.</Text> : courses.map((course) => (
             <View key={course.id} style={styles.itemRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.itemTitle}>{course.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={styles.itemTitle}>{course.name}</Text>
+                  <View style={[styles.statusPill, course.status === 'inactive' ? styles.statusPillInactive : styles.statusPillActive]}>
+                    <Text style={[styles.statusPillText, course.status === 'inactive' ? styles.statusPillTextInactive : styles.statusPillTextActive]}>
+                      {course.status === 'inactive' ? 'Inactive' : 'Active'}
+                    </Text>
+                  </View>
+                </View>
+                {/* Fees Breakdown */}
+                <Text style={[styles.itemMeta, { color: COLORS.primary, fontWeight: '700', marginTop: 2 }]}>
+                  Admission: ₹{course.admission_fee ?? 100} • Course: {course.course_fee === 0 ? 'FREE' : `₹${course.course_fee ?? course.fee ?? 500}`}
+                </Text>
                 {/* Teacher assignment status */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
                   <Ionicons
@@ -1465,8 +1944,34 @@ export default function ManageAcademicsScreen() {
                   </Text>
                 ) : null}
               </View>
-              <TouchableOpacity onPress={() => editCourse(course)} style={styles.smallBtn}><Text style={styles.smallBtnText}>Edit</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => removeCourse(course)} style={[styles.smallBtn, styles.deleteSmallBtn]}><Text style={[styles.smallBtnText, { color: COLORS.error }]}>Delete</Text></TouchableOpacity>
+              <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                <View style={{ flexDirection: 'row', gap: 4 }}>
+                  <TouchableOpacity
+                    onPress={() => toggleCourseStatus(course)}
+                    style={[styles.smallBtn, { backgroundColor: course.status === 'inactive' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)' }]}
+                  >
+                    <Text style={[styles.smallBtnText, { color: course.status === 'inactive' ? '#059669' : '#D97706' }]}>
+                      {course.status === 'inactive' ? 'Activate' : 'Pause'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedRosterCourseId(course.id);
+                    }}
+                    style={[styles.smallBtn, { backgroundColor: 'rgba(59,130,246,0.1)' }]}
+                  >
+                    <Text style={[styles.smallBtnText, { color: '#2563EB' }]}>Roster</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 4 }}>
+                  <TouchableOpacity onPress={() => editCourse(course)} style={styles.smallBtn}>
+                    <Text style={styles.smallBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => removeCourse(course)} style={[styles.smallBtn, styles.deleteSmallBtn]}>
+                    <Text style={[styles.smallBtnText, { color: COLORS.error }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           ))}
         </View>
@@ -1600,9 +2105,25 @@ export default function ManageAcademicsScreen() {
               onPress={() => setSelectedTeacherId(teacher.id)}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.itemTitle}>{teacher.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.itemTitle}>{teacher.name}</Text>
+                  {teacher.teacher_id ? (
+                    <View style={{ backgroundColor: '#EDE9FE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: '#6D28D9' }}>{teacher.teacher_id}</Text>
+                    </View>
+                  ) : null}
+                </View>
                 <Text style={styles.itemMeta}>{teacher.title}</Text>
               </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setAdminEditTeacher(teacher as any);
+                  setShowAdminTeacherModal(true);
+                }}
+                style={[styles.smallBtn, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', marginRight: 6 }]}
+              >
+                <Text style={[styles.smallBtnText, { color: '#166534' }]}>Edit Profile</Text>
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => removeTeacher(teacher)} style={[styles.smallBtn, styles.deleteSmallBtn]}>
                 <Text style={[styles.smallBtnText, { color: COLORS.error }]}>Remove</Text>
               </TouchableOpacity>
@@ -1679,6 +2200,12 @@ export default function ManageAcademicsScreen() {
           ))}
         </View>
       </ScrollView>
+      <AdminTeacherProfileModal
+        visible={showAdminTeacherModal}
+        onClose={() => setShowAdminTeacherModal(false)}
+        initialTeacher={adminEditTeacher}
+        onTeacherSaved={fetchData}
+      />
     </View>
   );
 }
@@ -2132,5 +2659,60 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#065F46',
+  },
+  statusToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  statusToggleBtnActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  statusToggleBtnInactive: {
+    backgroundColor: '#D97706',
+    borderColor: '#D97706',
+  },
+  statusToggleBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  statusToggleBtnTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  statusToggleBtnTextInactive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  statusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  statusPillActive: {
+    backgroundColor: 'rgba(16,185,129,0.15)',
+  },
+  statusPillInactive: {
+    backgroundColor: 'rgba(245,158,11,0.15)',
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  statusPillTextActive: {
+    color: '#059669',
+  },
+  statusPillTextInactive: {
+    color: '#D97706',
   },
 });

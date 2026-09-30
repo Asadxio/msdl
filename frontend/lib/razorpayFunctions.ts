@@ -167,3 +167,27 @@ export async function adminRefundPayment(request: AdminRefundPaymentRequest): Pr
   return result.data;
 }
 
+export interface EnrollInFreeCourseRequest {
+  courseId: string;
+}
+
+export interface EnrollInFreeCourseResponse {
+  success: boolean;
+  enrollmentId: string;
+  alreadyEnrolled?: boolean;
+}
+
+/**
+ * Directly enrolls an approved student in a verified FREE course (e.g., Short Courses).
+ */
+export async function enrollInFreeCourse(request: EnrollInFreeCourseRequest): Promise<EnrollInFreeCourseResponse> {
+  const enrollFn = httpsCallable<EnrollInFreeCourseRequest, EnrollInFreeCourseResponse>(functions, 'enrollInFreeCourse');
+  const result = await withTimeout(
+    enrollFn(request),
+    15000,
+    'Free enrollment timed out. Please check your connection.'
+  );
+  return result.data;
+}
+
+

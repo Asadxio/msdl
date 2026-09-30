@@ -247,6 +247,12 @@ export default function TeacherDetailScreen() {
               <View style={styles.statusDot} />
               <Text style={styles.facultyStatusText}>APPROVED FACULTY • Certified Scholar</Text>
             </View>
+            <View style={styles.facultyIdPill}>
+              <Ionicons name="id-card-outline" size={12} color={COLORS.primary} />
+              <Text style={styles.facultyIdPillText}>
+                {teacher.teacher_id ? teacher.teacher_id : `TCH-${(teacher.id || '0000').slice(0, 4).toUpperCase()}`}
+              </Text>
+            </View>
           </View>
 
           {/* 1-Tap Guidance Chat Action Button */}
@@ -340,6 +346,18 @@ export default function TeacherDetailScreen() {
               <Text style={styles.sectionSubtitle}>Islamic degrees and teaching certifications</Text>
             </View>
           </View>
+
+          {teacher.islamic_qualification ? (
+            <View style={styles.islamicSanadBanner}>
+              <View style={styles.sanadIconBox}>
+                <Ionicons name="ribbon" size={20} color="#D97706" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sanadTitle}>Certified Islamic Sanad</Text>
+                <Text style={styles.sanadBody}>{teacher.islamic_qualification}</Text>
+              </View>
+            </View>
+          ) : null}
 
           {qualificationsList.length > 0 ? (
             <View style={styles.qualificationsList}>
@@ -596,6 +614,53 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#15803D',
     letterSpacing: 0.5,
+  },
+  facultyIdPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  facultyIdPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1D4ED8',
+    letterSpacing: 0.5,
+  },
+  islamicSanadBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: SPACING.md,
+    gap: 12,
+  },
+  sanadIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sanadTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  sanadBody: {
+    fontSize: 12,
+    color: '#78350F',
+    lineHeight: 17,
   },
   chatActionBtn: {
     flexDirection: 'row',

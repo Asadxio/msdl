@@ -315,6 +315,43 @@ service firebase.storage {
         );
     }
 
+    // ── TEACHER CREDENTIAL DOCUMENTS ─────────────────────────────────────────
+    // Private path: teacher_credentials/{teacherUid}/{documentId}
+    // Teachers: read + write ONLY their own credential files.
+    // Admins: full read/write/delete for credential review.
+    // Everyone else: DENIED.
+    match /teacher_credentials/{teacherUid}/{documentId} {
+      // Teachers upload/view their own credentials
+      allow read: if isSignedIn()
+        && (
+          // Owner
+          request.auth.uid == teacherUid
+          // Admin reviewing credentials
+          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+        );
+
+      allow write: if isSignedIn()
+        && (
+          // Owner uploads their own credential — constrained to safe file types + size
+          (request.auth.uid == teacherUid
+            && request.resource.size <= 10 * 1024 * 1024
+            && request.resource.contentType.matches('application/pdf|image/(jpeg|png|gif|webp)'))
+          // Admin can write (for reject/delete operations)
+          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+        );
+
+      allow delete: if isSignedIn()
+        && (
+          // Owner can remove their own uploaded file
+          request.auth.uid == teacherUid
+          // Admin can delete as part of review
+          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+        );
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

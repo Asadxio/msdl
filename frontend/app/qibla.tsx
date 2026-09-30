@@ -22,7 +22,7 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { Magnetometer } from 'expo-sensors';
 import { Camera, CameraView } from 'expo-camera';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import { goBackOrReplace } from '@/lib/navigation';
 import { withTimeout } from '@/lib/errors';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -176,6 +176,7 @@ export default function QiblaScreen() {
   const [cameraMode, setCameraMode]           = useState(false);
   const [cameraPermission, setCameraPermission] = useState<CameraPermission>('idle');
   const [mapMode, setMapMode]                 = useState(false);
+  const [mapError, setMapError]               = useState(false);
 
   const qibla    = useMemo(() => calculateQiblaState(location, heading), [heading, location]);
   const accuracy = getCompassAccuracyLabel(headingAccuracy) as AccuracyLabel;
@@ -369,6 +370,178 @@ export default function QiblaScreen() {
       { text: 'Open', onPress: () => Linking.canOpenURL(GOOGLE_QIBLA_FINDER_URL).then((s) => s ? Linking.openURL(GOOGLE_QIBLA_FINDER_URL) : Promise.reject()).catch(showQiblaOpenErr) },
     ]);
   }, [showQiblaOpenErr]);
+
+  const openExternalGoogleMaps = useCallback(() => {
+    const userLat = Number(location.latitude) || 14.97286;
+    const userLng = Number(location.longitude) || 75.33385;
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${userLat},${userLng}&destination=${KAABA_COORDINATES.latitude},${KAABA_COORDINATES.longitude}&travelmode=driving`;
+    Linking.canOpenURL(url).then((supported) => {
+      if (supported) {
+        Linking.openURL(url);
+      } else {
+        Linking.openURL(`https://maps.google.com/?q=${KAABA_COORDINATES.latitude},${KAABA_COORDINATES.longitude}`);
+      }
+    }).catch(() => {
+      Alert.alert('Map Error', 'Unable to open Google Maps.');
+    });
+  }, [location.latitude, location.longitude]);
+
+  const mapHtml = useMemo(() => {
+    const userLat = Number(location.latitude) || 14.97286;
+    const userLng = Number(location.longitude) || 75.33385;
+    const kaabaLat = KAABA_COORDINATES.latitude;
+    const kaabaLng = KAABA_COORDINATES.longitude;
+    const userLabel = (location.city || 'Your Location').replace(/['"\\]/g, '');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #map { width: 100%; height: 100%; background: #0A1A12; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .leaflet-container { background: #0A1A12; }
+    .user-marker {
+      width: 14px;
+      height: 14px;
+      background: #10B981;
+      border: 2px solid #FFFFFF;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #10B981;
+      position: relative;
+    }
+    .user-pulse {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.4);
+      top: -9px;
+      left: -9px;
+      animation: pulse 2s infinite ease-out;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.4); opacity: 1; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+    .kaaba-marker {
+      width: 28px;
+      height: 28px;
+      background: #D4AF37;
+      border: 2px solid #FFFFFF;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 12px rgba(212, 175, 55, 0.9);
+      font-size: 14px;
+      line-height: 28px;
+      text-align: center;
+    }
+    .custom-popup .leaflet-popup-content-wrapper {
+      background: #0E2218;
+      color: #FFFFFF;
+      border: 1px solid #D4AF37;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+    }
+    .custom-popup .leaflet-popup-tip {
+      background: #0E2218;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    try {
+      var userLat = ${userLat};
+      var userLng = ${userLng};
+      var kaabaLat = ${kaabaLat};
+      var kaabaLng = ${kaabaLng};
+
+      var map = L.map('map', {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([(userLat + kaabaLat) / 2, (userLng + kaabaLng) / 2], 3);
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd'
+      }).addTo(map);
+
+      function getGreatCirclePoints(lat1, lon1, lat2, lon2, pointsCount) {
+        var toRad = function(deg) { return deg * Math.PI / 180; };
+        var toDeg = function(rad) { return rad * 180 / Math.PI; };
+        var phi1 = toRad(lat1), lambda1 = toRad(lon1);
+        var phi2 = toRad(lat2), lambda2 = toRad(lon2);
+        var delta = 2 * Math.asin(Math.sqrt(
+          Math.pow(Math.sin((phi1 - phi2) / 2), 2) +
+          Math.cos(phi1) * Math.cos(phi2) * Math.pow(Math.sin((lambda1 - lambda2) / 2), 2)
+        ));
+        var points = [];
+        for (var i = 0; i <= pointsCount; i++) {
+          var f = i / pointsCount;
+          var A = Math.sin((1 - f) * delta) / Math.sin(delta);
+          var B = Math.sin(f * delta) / Math.sin(delta);
+          var x = A * Math.cos(phi1) * Math.cos(lambda1) + B * Math.cos(phi2) * Math.cos(lambda2);
+          var y = A * Math.cos(phi1) * Math.sin(lambda1) + B * Math.cos(phi2) * Math.sin(lambda2);
+          var z = A * Math.sin(phi1) + B * Math.sin(phi2);
+          var phiN = Math.atan2(z, Math.sqrt(x * x + y * y));
+          var lambdaN = Math.atan2(y, x);
+          points.push([toDeg(phiN), toDeg(lambdaN)]);
+        }
+        return points;
+      }
+
+      var polyPoints = getGreatCirclePoints(userLat, userLng, kaabaLat, kaabaLng, 25);
+      
+      L.polyline(polyPoints, {
+        color: 'rgba(212, 175, 55, 0.35)',
+        weight: 7,
+        lineCap: 'round'
+      }).addTo(map);
+
+      L.polyline(polyPoints, {
+        color: '#D4AF37',
+        weight: 3,
+        lineCap: 'round',
+        dashArray: '6, 6'
+      }).addTo(map);
+
+      var userIcon = L.divIcon({
+        className: 'user-marker-wrap',
+        html: '<div class="user-pulse"></div><div class="user-marker"></div>',
+        iconSize: [14, 14],
+        iconAnchor: [7, 7]
+      });
+      L.marker([userLat, userLng], { icon: userIcon }).addTo(map)
+        .bindPopup('<b>${userLabel}</b>', { className: 'custom-popup' });
+
+      var kaabaIcon = L.divIcon({
+        className: 'kaaba-marker-wrap',
+        html: '<div class="kaaba-marker">🕋</div>',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+      L.marker([kaabaLat, kaabaLng], { icon: kaabaIcon }).addTo(map)
+        .bindPopup('<b>Al-Kaaba</b><br/>Masjid al-Haram, Makkah', { className: 'custom-popup' });
+
+      map.fitBounds([[userLat, userLng], [kaabaLat, kaabaLng]], {
+        padding: [25, 25],
+        maxZoom: 6
+      });
+    } catch(e) {
+      console.error(e);
+    }
+  </script>
+</body>
+</html>`;
+  }, [location.latitude, location.longitude, location.city]);
 
   const openNativeCameraMode = useCallback(async () => {
     setEntryVisible(false); setMapMode(false); setCameraPermission('requesting');
@@ -683,7 +856,7 @@ export default function QiblaScreen() {
               <Text style={styles.actionTitle}>AR Camera</Text>
               <Text style={styles.actionSub}>Google Qibla AR</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionCard} onPress={() => setMapMode((v) => !v)}>
+            <TouchableOpacity style={styles.actionCard} onPress={() => { setMapError(false); setMapMode((v) => !v); }}>
               <View style={styles.actionIconWrap}><Ionicons name="map" size={22} color={GOLD_PRIMARY} /></View>
               <Text style={styles.actionTitle}>{mapMode ? 'Hide Map' : 'Map View'}</Text>
               <Text style={styles.actionSub}>Qibla bearing line</Text>
@@ -693,14 +866,53 @@ export default function QiblaScreen() {
           {/* MAP VIEW */}
           {mapMode && (
             <View style={styles.mapCard} testID="qibla-map-mode">
-              <MapView style={styles.map} initialRegion={{ latitude: location.latitude, longitude: location.longitude, latitudeDelta: 50, longitudeDelta: 50 }}>
-                <Marker coordinate={location} title="Your location" />
-                <Marker coordinate={KAABA_COORDINATES} title="Al-Kaaba" description="Masjid al-Haram, Makkah" />
-                <Polyline coordinates={qiblaLine} strokeWidth={3} strokeColor={GOLD_PRIMARY} geodesic />
-              </MapView>
+              <View style={styles.mapWrapper}>
+                {!mapError ? (
+                  <WebView
+                    originWhitelist={['*']}
+                    source={{ html: mapHtml }}
+                    style={styles.map}
+                    scrollEnabled={false}
+                    bounces={false}
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                    startInLoadingState={true}
+                    renderLoading={() => (
+                      <View style={styles.mapLoading}>
+                        <ActivityIndicator size="small" color={GOLD_PRIMARY} />
+                      </View>
+                    )}
+                    onError={() => setMapError(true)}
+                  />
+                ) : (
+                  <View style={styles.mapOfflineFallback}>
+                    <Ionicons name="compass" size={32} color={GOLD_PRIMARY} />
+                    <Text style={styles.mapOfflineTitle}>Qibla Vector Trajectory</Text>
+                    <Text style={styles.mapOfflineSubtitle}>
+                      {location.city || 'Detected Position'} → Al-Kaaba, Makkah
+                    </Text>
+                    <Text style={styles.mapOfflineCoords}>
+                      Bearing: {Math.round(qibla.qiblaAngle)}° ({qibla.directionAbbreviation}) · Distance: {formatDistanceToKaaba(qibla.distanceKm)}
+                    </Text>
+                  </View>
+                )}
+              </View>
               <View style={styles.mapMeta}>
-                <Ionicons name="navigate" size={13} color={GOLD_PRIMARY} />
-                <Text style={styles.mapMetaTxt}>{formatDistanceToKaaba(qibla.distanceKm)} · {qibla.directionLongText}</Text>
+                <View style={styles.mapMetaInfo}>
+                  <Ionicons name="navigate" size={13} color={GOLD_PRIMARY} />
+                  <Text style={styles.mapMetaTxt}>
+                    {formatDistanceToKaaba(qibla.distanceKm)} · {qibla.directionLongText} ({Math.round(qibla.qiblaAngle)}°)
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.openExternalMapBtn}
+                  onPress={openExternalGoogleMaps}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open in Google Maps"
+                >
+                  <Ionicons name="open-outline" size={12} color={GOLD_PRIMARY} style={{ marginRight: 4 }} />
+                  <Text style={styles.openExternalMapTxt}>Google Maps</Text>
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -832,9 +1044,18 @@ const styles = StyleSheet.create({
 
   // Map
   mapCard: { backgroundColor: CARD_BG, borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: CARD_BORDER },
-  map:     { width: '100%', height: 220 },
-  mapMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 12, backgroundColor: CARD_BG },
+  mapWrapper: { width: '100%', height: 260, backgroundColor: DARK_BG, overflow: 'hidden' },
+  map:     { width: '100%', height: 260, backgroundColor: DARK_BG },
+  mapLoading: { ...StyleSheet.absoluteFillObject, backgroundColor: DARK_BG, justifyContent: 'center', alignItems: 'center' },
+  mapOfflineFallback: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, gap: 6 },
+  mapOfflineTitle: { color: W, fontSize: 15, fontWeight: '800' },
+  mapOfflineSubtitle: { color: GOLD_PRIMARY, fontSize: 13, fontWeight: '700' },
+  mapOfflineCoords: { color: W60, fontSize: 12, marginTop: 4 },
+  mapMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, backgroundColor: CARD_BG },
+  mapMetaInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   mapMetaTxt: { color: GOLD_PRIMARY, fontWeight: '800', fontSize: 12 },
+  openExternalMapBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: W10, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: CARD_BORDER },
+  openExternalMapTxt: { color: GOLD_PRIMARY, fontSize: 11, fontWeight: '700' },
 
   // Tips
   tipsCard:     { backgroundColor: CARD_BG, borderRadius: 22, padding: 16, gap: 10, borderWidth: 1, borderColor: CARD_BORDER },

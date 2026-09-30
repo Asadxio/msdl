@@ -25,11 +25,8 @@ import { invalidArgumentError, notFoundError } from "../shared/errors";
 import {
   WHATSAPP_API_TOKEN,
   WHATSAPP_PHONE_NUMBER_ID,
-  WHATSAPP_BUSINESS_ACCOUNT_ID,
-  SMS_GATEWAY_API_KEY,
-  SELF_HOSTED_WHATSAPP_URL,
-  SELF_HOSTED_WHATSAPP_API_KEY,
 } from "../config/secrets";
+
 import {
   dispatchWelcomeWhatsApp,
   checkWhatsAppProviderHealth,
@@ -641,14 +638,8 @@ export const onUserCreatedWelcomeTrigger = onDocumentCreated(
   {
     document: "users/{userId}",
     region: "us-central1",
-    secrets: [
-      WHATSAPP_API_TOKEN,
-      WHATSAPP_PHONE_NUMBER_ID,
-      WHATSAPP_BUSINESS_ACCOUNT_ID,
-      SMS_GATEWAY_API_KEY,
-      SELF_HOSTED_WHATSAPP_URL,
-      SELF_HOSTED_WHATSAPP_API_KEY,
-    ],
+    // Phase 74.1: Optional WhatsApp secrets decoupled to prevent blocking core functions deployment.
+    // In-App and FCM onboarding operates independently; WhatsApp remains PENDING CONFIGURATION.
   },
   async (event) => {
     const snap = event.data;
@@ -696,14 +687,8 @@ export const onUserCreatedWelcomeTrigger = onDocumentCreated(
 export const retryStudentWelcomeMessage = onCall(
   {
     region: "us-central1",
-    secrets: [
-      WHATSAPP_API_TOKEN,
-      WHATSAPP_PHONE_NUMBER_ID,
-      WHATSAPP_BUSINESS_ACCOUNT_ID,
-      SMS_GATEWAY_API_KEY,
-      SELF_HOSTED_WHATSAPP_URL,
-      SELF_HOSTED_WHATSAPP_API_KEY,
-    ],
+    // Phase 74.1: Optional WhatsApp secrets decoupled to prevent blocking core functions deployment.
+    // In-App and FCM onboarding operates independently; WhatsApp remains PENDING CONFIGURATION.
   },
   async (request: https.CallableRequest<{ targetUserId: string; force?: boolean; providerType?: WhatsAppProviderType }>) => {
     // 1. Verify caller has Admin role
@@ -762,12 +747,7 @@ export const retryStudentWelcomeMessage = onCall(
 export const getWhatsAppProviderHealthCallable = onCall(
   {
     region: "us-central1",
-    secrets: [
-      WHATSAPP_API_TOKEN,
-      WHATSAPP_PHONE_NUMBER_ID,
-      SELF_HOSTED_WHATSAPP_URL,
-      SELF_HOSTED_WHATSAPP_API_KEY,
-    ],
+    // Phase 74.1: Optional WhatsApp secrets decoupled to prevent blocking core functions deployment.
   },
   async (request: https.CallableRequest<{ providerType?: WhatsAppProviderType }>) => {
     await requireAdminUser(request);

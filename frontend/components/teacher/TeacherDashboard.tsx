@@ -24,6 +24,8 @@ import { DAILY_WISDOM, HADITHS } from '@/constants/wisdomData';
 import { MADRASA_WEBSITE_URL, MADRASA_WEBSITE_DISPLAY } from '@/lib/links';
 import * as Linking from 'expo-linking';
 import { filterTeacherAssignedCourses } from '@/lib/enrollments';
+import { TeacherSelfProfileModal } from '@/components/teacher/TeacherSelfProfileModal';
+import { getTeacherAcademicScope, getTeacherAssignedSubjects } from '@/lib/teacherScoping';
 
 interface TeacherDashboardProps {
   profile: UserProfile | null;
@@ -38,6 +40,7 @@ interface TeacherDashboardProps {
 
 interface LiveClassSummary {
   id: string;
+  course_id?: string;
   title: string;
   teacher_name: string;
   status: 'live' | 'scheduled';
@@ -98,30 +101,77 @@ export function TeacherDashboard({
     new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
   );
 
+  const [selfProfileModalVisible, setSelfProfileModalVisible] = useState(false);
+  const [enrollmentCounts, setEnrollmentCounts] = useState<Record<string, number>>({});
+  const [totalEnrolledStudents, setTotalEnrolledStudents] = useState<number>(0);
+
+  // Match canonical teacher record by UID, user_uid, or normalized name
+  const currentTeacher = useMemo(() => {
+    return teachers.find(
+      (t) =>
+        t.id === user?.uid ||
+        t.user_uid === user?.uid ||
+        (profile?.name && t.name?.toLowerCase().includes(profile.name.toLowerCase()))
+    );
+  }, [teachers, user?.uid, profile?.name]);
+
+  // Authoritative academic scope for this teacher
+  const academicScope = useMemo(() => {
+    return getTeacherAcademicScope(courses, currentTeacher, user?.uid);
+  }, [courses, currentTeacher, user?.uid]);
+
   // Filter courses strictly assigned to this teacher
   const myAssignedCourses = useMemo(() => {
+    if (academicScope.assignedCourses.length > 0) {
+      return academicScope.assignedCourses;
+    }
     if (Array.isArray(enrolledCourses) && enrolledCourses.length > 0) {
       return enrolledCourses;
     }
-    const currentTeacher = teachers.find(
-      (t) =>
-        t.id === user?.uid ||
-        (profile?.name && t.name?.toLowerCase().includes(profile.name.toLowerCase()))
-    );
     return filterTeacherAssignedCourses(courses, currentTeacher, user?.uid);
-  }, [enrolledCourses, courses, teachers, user?.uid, profile?.name]);
+  }, [academicScope.assignedCourses, enrolledCourses, courses, currentTeacher, user?.uid]);
 
   // Set of assigned course IDs and names for academic scoping
   const assignedCourseMeta = useMemo(() => {
-    const ids = new Set<string>();
-    const names = new Set<string>();
+    const ids = new Set<string>(academicScope.assignedCourseIds);
+    const names = new Set<string>(academicScope.assignedCourseNames);
     myAssignedCourses.forEach((c: any) => {
       if (c.id) ids.add(String(c.id).toLowerCase());
       if (c.name) names.add(String(c.name).toLowerCase());
       if (c.title) names.add(String(c.title).toLowerCase());
     });
     return { ids, names };
-  }, [myAssignedCourses]);
+  }, [academicScope, myAssignedCourses]);
+
+  // Real-time enrollments listener to get student counts by course
+  useEffect(() => {
+    const q = query(
+      collection(db, 'enrollments'),
+      limit(500)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const counts: Record<string, number> = {};
+        const studentSet = new Set<string>();
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data.status === 'cancelled') return;
+          const cId = String(data.course_id || '').toLowerCase();
+          if (cId) {
+            counts[cId] = (counts[cId] || 0) + 1;
+            if (assignedCourseMeta.ids.has(cId) && (data.user_id || data.student_id)) {
+              studentSet.add(data.user_id || data.student_id);
+            }
+          }
+        });
+        setEnrollmentCounts(counts);
+        setTotalEnrolledStudents(studentSet.size);
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [assignedCourseMeta]);
 
   // Real-time live classes listener
   useEffect(() => {
@@ -141,6 +191,7 @@ export function TeacherDashboard({
           if (assignedCourseMeta.ids.size === 0 || isMySession || isAssignedCourse) {
             list.push({
               id: d.id,
+              course_id: data.course_id || '',
               title: data.title || 'Untitled Class',
               teacher_name: data.teacher_name || 'Teacher',
               status: data.status === 'live' ? 'live' : 'scheduled',
@@ -157,6 +208,28 @@ export function TeacherDashboard({
     );
     return () => unsub();
   }, [assignedCourseMeta, user?.uid]);
+
+  // Derived course mapping for pending submissions
+  const pendingSubmissionsByCourse = useMemo(() => {
+    const counts: Record<string, number> = {};
+    pendingSubmissions.forEach((s) => {
+      const cId = String(s.course_id || '').toLowerCase();
+      if (cId) counts[cId] = (counts[cId] || 0) + 1;
+    });
+    return counts;
+  }, [pendingSubmissions]);
+
+  // Derived course mapping for live classes
+  const liveClassesByCourse = useMemo(() => {
+    const map = new Map<string, LiveClassSummary>();
+    liveClasses.forEach((lc: any) => {
+      const cId = String(lc.course_id || '').toLowerCase();
+      if (cId && !map.has(cId)) {
+        map.set(cId, lc);
+      }
+    });
+    return map;
+  }, [liveClasses]);
 
   // Real-time pending submissions listener for teacher reviews
   useEffect(() => {
@@ -340,9 +413,20 @@ export function TeacherDashboard({
                 <Text style={styles.teacherName} numberOfLines={1}>
                   {profile?.name || 'Faculty Member'}
                 </Text>
-                <Text style={styles.teacherIdText}>
-                  ID: #TCH-{user?.uid ? user.uid.slice(0, 6).toUpperCase() : '000000'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
+                  <Text style={styles.teacherIdText}>
+                    ID: #{currentTeacher?.teacher_id || (user?.uid ? `TCH-${user.uid.slice(0, 4).toUpperCase()}` : 'TCH-0001')}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.editProfileBtn}
+                    onPress={() => setSelfProfileModalVisible(true)}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Edit Faculty Profile"
+                  >
+                    <Ionicons name="create-outline" size={11} color="#FFFFFF" />
+                    <Text style={styles.editProfileBtnText}>Edit Profile</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
@@ -387,399 +471,244 @@ export function TeacherDashboard({
         </View>
 
         {/* ========================================================================= */}
-        {/* SECTION 2: TEACHING OVERVIEW METRICS (CLICKABLE KPIS)                      */}
-        {/* ========================================================================= */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Teaching Overview</Text>
-          <View style={styles.metricsGrid}>
-            <TouchableOpacity
-              style={styles.metricCard}
-              activeOpacity={0.8}
-              onPress={() => router.push('/(tabs)/courses' as any)}
-            >
-              <View style={[styles.metricIconWrap, { backgroundColor: '#ECFDF5' }]}>
-                <Ionicons name="book" size={20} color={COLORS.primary} />
-              </View>
-              <Text style={styles.metricNumber}>{myAssignedCourses.length}</Text>
-              <Text style={styles.metricLabel}>My Courses</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.metricCard}
-              activeOpacity={0.8}
-              onPress={() => router.push('/live-class' as any)}
-            >
-              <View style={[styles.metricIconWrap, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="videocam" size={20} color="#D97706" />
-              </View>
-              <Text style={styles.metricNumber}>{liveClasses.length}</Text>
-              <Text style={styles.metricLabel}>Live Classes</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.metricCard}
-              activeOpacity={0.8}
-              onPress={() => router.push('/(tabs)/attendance' as any)}
-            >
-              <View style={[styles.metricIconWrap, { backgroundColor: '#EFF6FF' }]}>
-                <Ionicons name="people" size={20} color="#2563EB" />
-              </View>
-              <Text style={styles.metricNumber}>{attendanceCount}</Text>
-              <Text style={styles.metricLabel}>Attendance Log</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.metricCard}
-              activeOpacity={0.8}
-              onPress={() => router.push('/(tabs)/courses' as any)}
-            >
-              <View style={[styles.metricIconWrap, { backgroundColor: '#FDF2F8' }]}>
-                <Ionicons name="clipboard" size={20} color="#DB2777" />
-              </View>
-              <Text style={styles.metricNumber}>{pendingSubmissions.length}</Text>
-              <Text style={styles.metricLabel}>Submissions</Text>
-            </TouchableOpacity>
-
-            <View style={styles.metricCard}>
-              <View style={[styles.metricIconWrap, { backgroundColor: '#F3E8FF' }]}>
-                <Ionicons name="school" size={20} color="#7C3AED" />
-              </View>
-              <Text style={styles.metricNumber}>{quizResults.length}</Text>
-              <Text style={styles.metricLabel}>Quiz Results</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ========================================================================= */}
-        {/* SECTION 3: TEACHING QUICK ACTIONS (CATEGORIZED 2-COL GRID)                 */}
-        {/* ========================================================================= */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Teaching Actions</Text>
-
-          {/* Academic & Curriculum */}
-          <Text style={styles.categorySubheading}>ACADEMIC & CURRICULUM</Text>
-          <View style={styles.actionsGrid}>
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/courses' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#ECFDF5' }]}>
-                <Ionicons name="library" size={20} color={COLORS.primary} />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Assigned Courses</Text>
-                <Text style={styles.actionSubtitle}>Manage syllabus & lessons</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/library' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="book-outline" size={20} color="#D97706" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Islamic Library</Text>
-                <Text style={styles.actionSubtitle}>Reference books & PDFs</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* Classroom & Live Sessions */}
-          <Text style={[styles.categorySubheading, { marginTop: 14 }]}>CLASSROOM & STUDENTS</Text>
-          <View style={styles.actionsGrid}>
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/live-class' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#EFF6FF' }]}>
-                <Ionicons name="videocam-outline" size={20} color="#2563EB" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Live Classroom</Text>
-                <Text style={styles.actionSubtitle}>Start or host live stream</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/attendance' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#F0FDF4' }]}>
-                <Ionicons name="checkbox-outline" size={20} color="#16A34A" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Mark Attendance</Text>
-                <Text style={styles.actionSubtitle}>Daily student presence</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/recordings' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="mic-outline" size={20} color="#D97706" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Dars Recordings</Text>
-                <Text style={styles.actionSubtitle}>Audio & Tajweed notes</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/quiz' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#FDF2F8' }]}>
-                <Ionicons name="trophy-outline" size={20} color="#DB2777" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Student Quizzes</Text>
-                <Text style={styles.actionSubtitle}>Evaluate assessments</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/chats' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#FAF5FF' }]}>
-                <Ionicons name="chatbubbles-outline" size={20} color="#9333EA" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Faculty & Student Chat</Text>
-                <Text style={styles.actionSubtitle}>Direct 1-on-1 guidance</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/certificate' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#FEF9C3' }]}>
-                <Ionicons name="ribbon-outline" size={20} color="#CA8A04" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Issue Sanads / Certs</Text>
-                <Text style={styles.actionSubtitle}>Official graduation credentials</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/tasbeeh' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#ECFDF5' }]}>
-                <Ionicons name="finger-print-outline" size={20} color="#059669" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Smart Tasbeeh</Text>
-                <Text style={styles.actionSubtitle}>Daily Dhikr & Wazaif</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              activeOpacity={0.7}
-              onPress={() => router.push('/admin/manage-academics' as any)}
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: '#EFF6FF' }]}>
-                <Ionicons name="school-outline" size={20} color="#2563EB" />
-              </View>
-              <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Manage Academics</Text>
-                <Text style={styles.actionSubtitle}>Curriculum & module structure</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* ========================================================================= */}
-        {/* SECTION 3.5: 7-DAY VISUAL WEEKLY TIMETABLE & AUTOMATION WIDGET           */}
+        {/* SECTION 2: MY CLASSES (ASSIGNED COURSES & SUBJECTS)                       */}
         {/* ========================================================================= */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeaderRow}>
             <View>
-              <Text style={styles.sectionTitle}>Weekly Teaching Timetable</Text>
-              <Text style={styles.sectionSubtitle}>Class schedules & quick session launcher</Text>
+              <Text style={styles.sectionTitle}>My Classes & My Courses</Text>
+              <Text style={styles.sectionSubtitle}>Teaching Overview • Courses and subjects assigned to your faculty profile</Text>
             </View>
-            <TouchableOpacity
-              style={styles.quickRecordPill}
-              onPress={() => router.push('/live-class' as any)}
-            >
-              <Ionicons name="radio-button-on" size={13} color="#fff" />
-              <Text style={styles.quickRecordText}>Start Class</Text>
-            </TouchableOpacity>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{myAssignedCourses.length} Classes</Text>
+            </View>
           </View>
 
-          {/* 7 Days Strip */}
-          <View style={styles.daysStripRow}>
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName, idx) => {
-              const currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
-              const isToday = idx === currentDayIndex;
-              const isSelected = idx === selectedDayIdx;
+          {myAssignedCourses.length > 0 ? (
+            myAssignedCourses.map((c: any) => {
+              const courseIdStr = String(c.id || '').toLowerCase();
+              const assignedSubjects = getTeacherAssignedSubjects(c, currentTeacher, user?.uid);
+              const enrolledCount = enrollmentCounts[courseIdStr] || 0;
+              const nextLive = liveClassesByCourse.get(courseIdStr);
+              const pendingCount = pendingSubmissionsByCourse[courseIdStr] || 0;
+
               return (
-                <TouchableOpacity
-                  key={dayName}
-                  style={[
-                    styles.dayPill,
-                    isSelected && styles.dayPillSelected,
-                    isToday && !isSelected && styles.dayPillToday,
-                  ]}
-                  onPress={() => setSelectedDayIdx(idx)}
-                >
-                  <Text
-                    style={[
-                      styles.dayPillName,
-                      isSelected && styles.dayPillNameSelected,
-                      isToday && !isSelected && styles.dayPillNameToday,
-                    ]}
-                  >
-                    {dayName}
-                  </Text>
-                  {isToday && (
-                    <View
-                      style={[
-                        styles.todayDot,
-                        isSelected ? { backgroundColor: '#fff' } : { backgroundColor: COLORS.primary },
-                      ]}
-                    />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Day Schedule Content Card */}
-          <View style={styles.timetableContentCard}>
-            <View style={styles.timetableHeader}>
-              <Ionicons name="calendar" size={16} color={COLORS.primary} />
-              <Text style={styles.timetableDayTitle}>
-                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][selectedDayIdx]}’s
-                Teaching Schedule
-              </Text>
-            </View>
-
-            {myAssignedCourses.length > 0 ? (
-              <View style={styles.timetableCoursesList}>
-                {myAssignedCourses.map((c, idx) => (
-                  <View key={c.id || idx} style={styles.timetableRow}>
-                    <View style={styles.timetableCourseMeta}>
-                      <Text style={styles.timetableCourseTitle} numberOfLines={1}>
-                        {c.name || (c as any).title || 'Madrasa Course'}
+                <View key={c.id} style={styles.myClassCard}>
+                  {/* Top: Course Title & Enrolled Badge */}
+                  <View style={styles.myClassTopRow}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.myClassTitle} numberOfLines={1}>
+                        {c.name || c.title || 'Course'}
                       </Text>
-                      <Text style={styles.timetableCourseTiming}>
-                        {c.schedule || c.time || c.class_time || 'Regular Class Session • 1 Hour'}
+                      <Text style={styles.myClassCategory}>
+                        {c.level || c.category || 'Islamic Curriculum'}
                       </Text>
                     </View>
-                    <View style={styles.timetableActions}>
-                      <TouchableOpacity
-                        style={styles.timetableAttendanceBtn}
-                        onPress={() => router.push('/(tabs)/attendance' as any)}
-                      >
-                        <Ionicons name="checkbox-outline" size={14} color={COLORS.primary} />
-                        <Text style={styles.timetableAttendanceText}>Register</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.timetableLaunchBtn}
-                        onPress={() => router.push('/live-class' as any)}
-                      >
-                        <Ionicons name="play" size={12} color="#fff" />
-                        <Text style={styles.timetableLaunchText}>Host</Text>
-                      </TouchableOpacity>
+                    <View style={styles.enrolledPill}>
+                      <Ionicons name="people" size={13} color={COLORS.primary} />
+                      <Text style={styles.enrolledPillText}>{enrolledCount} Enrolled</Text>
                     </View>
                   </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.timetableEmptyText}>
-                No specific classes scheduled for this day. Tap "+ Schedule Live Class" below.
-              </Text>
-            )}
-          </View>
-        </View>
 
-        {/* ========================================================================= */}
-        {/* SECTION 4: UPCOMING TEACHING SCHEDULE & LIVE SESSIONS                     */}
-        {/* ========================================================================= */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Live Class Schedule</Text>
-            <TouchableOpacity onPress={() => router.push('/live-class' as any)}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
+                  {/* Subjects taught by this teacher */}
+                  <View style={styles.subjectsRow}>
+                    <Text style={styles.subjectsLabel}>Subjects:</Text>
+                    <View style={styles.subjectPillsWrap}>
+                      {assignedSubjects.length > 0 ? (
+                        assignedSubjects.map((sub, sIdx) => (
+                          <View key={sub.id || sIdx} style={styles.subjectBadge}>
+                            <Ionicons name="book-outline" size={11} color={COLORS.primary} />
+                            <Text style={styles.subjectBadgeText}>{sub.name}</Text>
+                          </View>
+                        ))
+                      ) : (
+                        <View style={styles.subjectBadge}>
+                          <Ionicons name="book-outline" size={11} color={COLORS.primary} />
+                          <Text style={styles.subjectBadgeText}>All Course Subjects</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
 
-          {loadingSchedule ? (
-            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 20 }} />
-          ) : liveClasses.length > 0 ? (
-            liveClasses.map((cls) => (
-              <View key={cls.id} style={styles.classCard}>
-                <View style={styles.classStatusPill}>
-                  <View
-                    style={[
-                      styles.statusDot,
-                      { backgroundColor: cls.status === 'live' ? '#EF4444' : '#3B82F6' },
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.classStatusText,
-                      { color: cls.status === 'live' ? '#EF4444' : '#3B82F6' },
-                    ]}
-                  >
-                    {cls.status === 'live' ? 'LIVE NOW' : 'SCHEDULED'}
-                  </Text>
+                  {/* Timings & Live Class status */}
+                  <View style={styles.classDetailsRow}>
+                    <View style={styles.classDetailCol}>
+                      <Ionicons name="time-outline" size={13} color={COLORS.textSecondary} />
+                      <Text style={styles.classDetailText} numberOfLines={1}>
+                        {c.schedule || c.time || 'Regular Session'}
+                      </Text>
+                    </View>
+                    {nextLive ? (
+                      <View style={[styles.classDetailCol, { backgroundColor: '#FEF3C7', paddingHorizontal: 6, borderRadius: RADIUS.sm }]}>
+                        <Ionicons name="videocam" size={12} color="#D97706" />
+                        <Text style={[styles.classDetailText, { color: '#B45309', fontWeight: '700' }]} numberOfLines={1}>
+                          Live: {nextLive.title}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* Pending assignments notice if any */}
+                  {pendingCount > 0 && (
+                    <View style={styles.pendingTasksNotice}>
+                      <Ionicons name="alert-circle" size={13} color="#D97706" />
+                      <Text style={styles.pendingTasksNoticeText}>
+                        {pendingCount} pending task submission{pendingCount > 1 ? 's' : ''} to grade
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Quick Action buttons for this specific class */}
+                  <View style={styles.myClassBtnGrid}>
+                    <TouchableOpacity
+                      style={styles.myClassActionBtn}
+                      onPress={() => router.push({ pathname: '/teacher/students', params: { courseId: c.id } } as any)}
+                    >
+                      <Ionicons name="people-outline" size={13} color={COLORS.primary} />
+                      <Text style={styles.myClassActionBtnText}>Students</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.myClassActionBtn}
+                      onPress={() => router.push({ pathname: '/teacher/lessons', params: { courseId: c.id } } as any)}
+                    >
+                      <Ionicons name="create-outline" size={13} color={COLORS.primary} />
+                      <Text style={styles.myClassActionBtnText}>Lessons</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.myClassActionBtn}
+                      onPress={() => router.push({ pathname: '/teacher/assignments', params: { courseId: c.id } } as any)}
+                    >
+                      <Ionicons name="clipboard-outline" size={13} color={COLORS.primary} />
+                      <Text style={styles.myClassActionBtnText}>Tasks</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.myClassActionBtn}
+                      onPress={() => router.push({ pathname: '/(tabs)/attendance', params: { courseId: c.id } } as any)}
+                    >
+                      <Ionicons name="checkbox-outline" size={13} color={COLORS.primary} />
+                      <Text style={styles.myClassActionBtnText}>Attendance</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <Text style={styles.classTitle}>{cls.title}</Text>
-                <Text style={styles.classMeta}>Time: {cls.class_time} • Instructor: {cls.teacher_name}</Text>
-                <TouchableOpacity
-                  style={styles.classJoinBtn}
-                  onPress={() => router.push(`/live-class/${cls.id}` as any)}
-                >
-                  <Ionicons name="play" size={14} color="#FFFFFF" />
-                  <Text style={styles.classJoinText}>
-                    {cls.status === 'live' ? 'Enter Classroom' : 'Manage Session'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ))
+              );
+            })
           ) : (
-            <View style={styles.emptyScheduleCard}>
-              <Ionicons name="calendar-outline" size={28} color={COLORS.textMuted} />
-              <Text style={styles.emptyScheduleTitle}>No Live Classes Scheduled</Text>
-              <Text style={styles.emptyScheduleText}>
-                You can schedule a new online lecture or interactive session anytime.
+            <View style={styles.emptyClassCard}>
+              <Ionicons name="school-outline" size={32} color={COLORS.textSecondary} />
+              <Text style={styles.emptyClassTitle}>No Assigned Courses</Text>
+              <Text style={styles.emptyClassText}>
+                You do not have any teaching courses assigned yet. Please contact the administrator.
               </Text>
-              <TouchableOpacity
-                style={styles.createScheduleBtn}
-                onPress={() => router.push('/live-class' as any)}
-              >
-                <Ionicons name="add-circle-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.createScheduleBtnText}>Schedule Live Class</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
 
         {/* ========================================================================= */}
-        {/* SECTION 5: PENDING WORK & SUBMISSION REVIEWS                              */}
+        {/* SECTION 3: MY STUDENTS PREVIEW                                            */}
         {/* ========================================================================= */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Pending Evaluations</Text>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>My Students & Rosters</Text>
+              <Text style={styles.sectionSubtitle}>Enrolled learners across your assigned courses</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/teacher/students' as any)}>
+              <Text style={styles.viewAllText}>View All ({totalEnrolledStudents})</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.previewCard}>
+            <View style={styles.previewTopRow}>
+              <View style={styles.previewStatBox}>
+                <Text style={styles.previewStatNum}>{totalEnrolledStudents}</Text>
+                <Text style={styles.previewStatLabel}>Total Students</Text>
+              </View>
+              <View style={styles.previewStatDivider} />
+              <View style={styles.previewStatBox}>
+                <Text style={styles.previewStatNum}>{myAssignedCourses.length}</Text>
+                <Text style={styles.previewStatLabel}>Active Classes</Text>
+              </View>
+              <View style={styles.previewStatDivider} />
+              <View style={styles.previewStatBox}>
+                <Text style={styles.previewStatNum}>{attendanceCount}</Text>
+                <Text style={styles.previewStatLabel}>Today’s Present</Text>
+              </View>
+            </View>
+
+            <View style={styles.previewActionsRow}>
+              <TouchableOpacity
+                style={styles.previewPrimaryBtn}
+                onPress={() => router.push('/teacher/students' as any)}
+              >
+                <Ionicons name="list-outline" size={15} color="#FFFFFF" />
+                <Text style={styles.previewPrimaryBtnText}>Open Student Rosters</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.previewSecondaryBtn}
+                onPress={() => router.push('/teacher/progress' as any)}
+              >
+                <Ionicons name="trending-up-outline" size={15} color={COLORS.primary} />
+                <Text style={styles.previewSecondaryBtnText}>Progress & KPIs</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* ========================================================================= */}
+        {/* SECTION 4: LESSON AUTHORING PREVIEW / ENTRY                               */}
+        {/* ========================================================================= */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Lesson Authoring</Text>
+              <Text style={styles.sectionSubtitle}>Create modules & publish learning materials</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/teacher/lessons' as any)}>
+              <Text style={styles.viewAllText}>Open Editor</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.authoringBannerCard}>
+            <View style={styles.authoringLeft}>
+              <View style={styles.authoringIconBox}>
+                <Ionicons name="book" size={24} color={COLORS.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.authoringCardTitle}>Course Syllabus & Materials</Text>
+                <Text style={styles.authoringCardDesc}>
+                  Author lessons, structure chapters/baab, attach audio recitations, and share reference PDFs.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.authoringLaunchBtn}
+              onPress={() => router.push('/teacher/lessons' as any)}
+            >
+              <Ionicons name="add-circle-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.authoringLaunchBtnText}>Author / Manage Lessons</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ========================================================================= */}
+        {/* SECTION 5: ASSIGNMENT CREATION AND EVALUATION PREVIEW                     */}
+        {/* ========================================================================= */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Assignments & Evaluations</Text>
+              <Text style={styles.sectionSubtitle}>Pending Evaluations • Homework, essays & voice recitations</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/teacher/assignments' as any)}>
+              <Text style={styles.viewAllText}>Manage Tasks</Text>
+            </TouchableOpacity>
+          </View>
+
           {pendingSubmissions.length > 0 ? (
-            pendingSubmissions.map((sub) => (
+            pendingSubmissions.slice(0, 3).map((sub) => (
               <View key={sub.id} style={styles.submissionCard}>
                 <View style={styles.submissionLeft}>
                   <View style={styles.submissionIcon}>
@@ -790,25 +719,42 @@ export function TeacherDashboard({
                       {sub.file_name || 'Assignment Task'}
                     </Text>
                     <Text style={styles.submissionMeta}>
-                      Student UID: #{sub.user_id.slice(0, 6).toUpperCase()} • Needs Review
+                      Student: #{sub.user_id.slice(0, 6).toUpperCase()} • Awaiting Review
                     </Text>
                   </View>
                 </View>
                 <TouchableOpacity
                   style={styles.reviewBtn}
-                  onPress={() => (sub.course_id ? router.push(`/course/${sub.course_id}` as any) : router.push('/(tabs)/courses' as any))}
+                  onPress={() => router.push({ pathname: '/teacher/assignments', params: { tab: 'submissions' } } as any)}
                 >
-                  <Text style={styles.reviewBtnText}>Review</Text>
+                  <Text style={styles.reviewBtnText}>Grade</Text>
                 </TouchableOpacity>
               </View>
             ))
           ) : (
             <View style={styles.allClearCard}>
               <Ionicons name="checkmark-done-circle" size={32} color="#059669" />
-              <Text style={styles.allClearTitle}>All Submissions Reviewed</Text>
-              <Text style={styles.allClearSubtitle}>No pending student tasks require evaluation right now.</Text>
+              <Text style={styles.allClearTitle}>All Submissions Evaluated</Text>
+              <Text style={styles.allClearSubtitle}>No pending student work requires grading right now.</Text>
             </View>
           )}
+
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+            <TouchableOpacity
+              style={[styles.previewPrimaryBtn, { flex: 1 }]}
+              onPress={() => router.push({ pathname: '/teacher/assignments', params: { tab: 'create' } } as any)}
+            >
+              <Ionicons name="add" size={15} color="#FFFFFF" />
+              <Text style={styles.previewPrimaryBtnText}>+ New Assignment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.previewSecondaryBtn, { flex: 1 }]}
+              onPress={() => router.push({ pathname: '/teacher/assignments', params: { tab: 'submissions' } } as any)}
+            >
+              <Ionicons name="checkbox-outline" size={15} color={COLORS.primary} />
+              <Text style={styles.previewSecondaryBtnText}>Review ({pendingSubmissions.length})</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ========================================================================= */}
@@ -1037,7 +983,357 @@ export function TeacherDashboard({
         </Modal>
 
         {/* ========================================================================= */}
-        {/* SECTION 6: ISLAMIC INSPIRATION FOR TEACHERS                               */}
+        {/* SECTION 7: 7-DAY VISUAL WEEKLY TIMETABLE                                  */}
+        {/* ========================================================================= */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Weekly Teaching Timetable</Text>
+              <Text style={styles.sectionSubtitle}>Class schedules & quick session launcher</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.quickRecordPill}
+              onPress={() => router.push('/live-class' as any)}
+            >
+              <Ionicons name="radio-button-on" size={13} color="#fff" />
+              <Text style={styles.quickRecordText}>Start Class</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 7 Days Strip */}
+          <View style={styles.daysStripRow}>
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName, idx) => {
+              const currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+              const isToday = idx === currentDayIndex;
+              const isSelected = idx === selectedDayIdx;
+              return (
+                <TouchableOpacity
+                  key={dayName}
+                  style={[
+                    styles.dayPill,
+                    isSelected && styles.dayPillSelected,
+                    isToday && !isSelected && styles.dayPillToday,
+                  ]}
+                  onPress={() => setSelectedDayIdx(idx)}
+                >
+                  <Text
+                    style={[
+                      styles.dayPillName,
+                      isSelected && styles.dayPillNameSelected,
+                      isToday && !isSelected && styles.dayPillNameToday,
+                    ]}
+                  >
+                    {dayName}
+                  </Text>
+                  {isToday && (
+                    <View
+                      style={[
+                        styles.todayDot,
+                        isSelected ? { backgroundColor: '#fff' } : { backgroundColor: COLORS.primary },
+                      ]}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Day Schedule Content Card */}
+          <View style={styles.timetableContentCard}>
+            <View style={styles.timetableHeader}>
+              <Ionicons name="calendar" size={16} color={COLORS.primary} />
+              <Text style={styles.timetableDayTitle}>
+                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][selectedDayIdx]}’s Teaching Schedule
+              </Text>
+            </View>
+
+            {myAssignedCourses.length > 0 ? (
+              <View style={styles.timetableCoursesList}>
+                {myAssignedCourses.map((c: any, idx: number) => (
+                  <View key={c.id || idx} style={styles.timetableRow}>
+                    <View style={styles.timetableCourseMeta}>
+                      <Text style={styles.timetableCourseTitle} numberOfLines={1}>
+                        {c.name || c.title || 'Madrasa Course'}
+                      </Text>
+                      <Text style={styles.timetableCourseTiming}>
+                        {c.schedule || c.time || c.class_time || 'Regular Class Session • 1 Hour'}
+                      </Text>
+                    </View>
+                    <View style={styles.timetableActions}>
+                      <TouchableOpacity
+                        style={styles.timetableAttendanceBtn}
+                        onPress={() => router.push({ pathname: '/(tabs)/attendance', params: { courseId: c.id } } as any)}
+                      >
+                        <Ionicons name="checkbox-outline" size={14} color={COLORS.primary} />
+                        <Text style={styles.timetableAttendanceText}>Register</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.timetableLaunchBtn}
+                        onPress={() => router.push('/live-class' as any)}
+                      >
+                        <Ionicons name="play" size={12} color="#fff" />
+                        <Text style={styles.timetableLaunchText}>Host</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.timetableEmptyText}>
+                No specific classes scheduled for this day. Tap "+ Schedule Live Class" below.
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* ========================================================================= */}
+        {/* SECTION 8: LIVE CLASS SCHEDULE                                            */}
+        {/* ========================================================================= */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Live Class Schedule</Text>
+            <TouchableOpacity onPress={() => router.push('/live-class' as any)}>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loadingSchedule ? (
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 20 }} />
+          ) : liveClasses.length > 0 ? (
+            liveClasses.map((cls) => (
+              <View key={cls.id} style={styles.classCard}>
+                <View style={styles.classStatusPill}>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      { backgroundColor: cls.status === 'live' ? '#EF4444' : '#3B82F6' },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.classStatusText,
+                      { color: cls.status === 'live' ? '#EF4444' : '#3B82F6' },
+                    ]}
+                  >
+                    {cls.status === 'live' ? 'LIVE NOW' : 'SCHEDULED'}
+                  </Text>
+                </View>
+                <Text style={styles.classTitle}>{cls.title}</Text>
+                <Text style={styles.classMeta}>Time: {cls.class_time} • Instructor: {cls.teacher_name}</Text>
+                <TouchableOpacity
+                  style={styles.classJoinBtn}
+                  onPress={() => router.push(`/live-class/${cls.id}` as any)}
+                >
+                  <Ionicons name="play" size={14} color="#FFFFFF" />
+                  <Text style={styles.classJoinText}>
+                    {cls.status === 'live' ? 'Enter Classroom' : 'Manage Session'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyScheduleCard}>
+              <Ionicons name="calendar-outline" size={28} color={COLORS.textSecondary} />
+              <Text style={styles.emptyScheduleTitle}>No Live Classes Scheduled</Text>
+              <Text style={styles.emptyScheduleText}>
+                You can schedule a new online lecture or interactive session anytime.
+              </Text>
+              <TouchableOpacity
+                style={styles.createScheduleBtn}
+                onPress={() => router.push('/live-class' as any)}
+              >
+                <Ionicons name="add-circle-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.createScheduleBtnText}>Schedule Live Class</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* ========================================================================= */}
+        {/* SECTION 9: TEACHING QUICK ACTIONS                                          */}
+        {/* ========================================================================= */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Teaching Actions</Text>
+
+          {/* Academic & Curriculum */}
+          <Text style={styles.categorySubheading}>ACADEMIC & CURRICULUM</Text>
+          <View style={styles.actionsGrid}>
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/teacher/lessons' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="school-outline" size={20} color="#2563EB" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Manage Lessons</Text>
+                <Text style={styles.actionSubtitle}>Curriculum & modules</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/teacher/students' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="people-outline" size={20} color={COLORS.primary} />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Student Rosters</Text>
+                <Text style={styles.actionSubtitle}>View assigned students</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/teacher/assignments' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FDF2F8' }]}>
+                <Ionicons name="clipboard-outline" size={20} color="#DB2777" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Assignments & Tasks</Text>
+                <Text style={styles.actionSubtitle}>Create and grade</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/teacher/progress' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FAF5FF' }]}>
+                <Ionicons name="trending-up-outline" size={20} color="#9333EA" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Student Progress</Text>
+                <Text style={styles.actionSubtitle}>Class KPIs & completion</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Classroom & Live Sessions */}
+          <Text style={[styles.categorySubheading, { marginTop: 14 }]}>CLASSROOM & STUDENTS</Text>
+          <View style={styles.actionsGrid}>
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/live-class' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="videocam-outline" size={20} color="#2563EB" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Live Classroom</Text>
+                <Text style={styles.actionSubtitle}>Start or host live stream</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/(tabs)/attendance' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#F0FDF4' }]}>
+                <Ionicons name="checkbox-outline" size={20} color="#16A34A" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Mark Attendance</Text>
+                <Text style={styles.actionSubtitle}>Attendance Log & presence</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/recordings' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="mic-outline" size={20} color="#D97706" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Dars Recordings</Text>
+                <Text style={styles.actionSubtitle}>Audio & Tajweed notes</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/(tabs)/quiz' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FDF2F8' }]}>
+                <Ionicons name="trophy-outline" size={20} color="#DB2777" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Student Quizzes</Text>
+                <Text style={styles.actionSubtitle}>Evaluate assessments</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/(tabs)/chats' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FAF5FF' }]}>
+                <Ionicons name="chatbubbles-outline" size={20} color="#9333EA" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Faculty & Student Chat</Text>
+                <Text style={styles.actionSubtitle}>Direct 1-on-1 guidance</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/(tabs)/library' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="book-outline" size={20} color="#D97706" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Islamic Library</Text>
+                <Text style={styles.actionSubtitle}>Reference books & PDFs</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/(tabs)/certificate' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#FEF9C3' }]}>
+                <Ionicons name="ribbon-outline" size={20} color="#CA8A04" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Issue Sanads / Certs</Text>
+                <Text style={styles.actionSubtitle}>Graduation credentials</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              activeOpacity={0.7}
+              onPress={() => router.push('/tasbeeh' as any)}
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="finger-print-outline" size={20} color="#059669" />
+              </View>
+              <View style={styles.actionTextWrap}>
+                <Text style={styles.actionTitle}>Smart Tasbeeh</Text>
+                <Text style={styles.actionSubtitle}>Daily Dhikr & Wazaif</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ========================================================================= */}
+        {/* SECTION 10: ISLAMIC INSPIRATION FOR TEACHERS                              */}
         {/* ========================================================================= */}
         <View style={styles.sectionContainer}>
           <View style={styles.hadithCard}>
@@ -1077,6 +1373,13 @@ export function TeacherDashboard({
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <TeacherSelfProfileModal
+        visible={selfProfileModalVisible}
+        onClose={() => setSelfProfileModalVisible(false)}
+        userUid={user?.uid || ''}
+        currentTeacher={currentTeacher}
+        onProfileUpdated={onRefresh}
+      />
     </View>
   );
 }
@@ -1902,5 +2205,308 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  editProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  editProfileBtnText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+
+  // Section 2: My Classes Styles
+  myClassCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  myClassTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  myClassTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.textMain,
+  },
+  myClassCategory: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  enrolledPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  enrolledPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  subjectsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginVertical: 4,
+  },
+  subjectsLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  subjectPillsWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  subjectBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  subjectBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textMain,
+  },
+  classDetailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surfaceAlt,
+    gap: 8,
+  },
+  classDetailCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  classDetailText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  pendingTasksNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: RADIUS.sm,
+    marginTop: 6,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  pendingTasksNoticeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B45309',
+  },
+  myClassBtnGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    gap: 6,
+  },
+  myClassActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingVertical: 7,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    gap: 4,
+  },
+  myClassActionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  emptyClassCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyClassTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  emptyClassText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  // Section 3: My Students Preview Styles
+  previewCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  previewTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingBottom: SPACING.sm,
+  },
+  previewStatBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  previewStatNum: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  previewStatLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  previewStatDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: COLORS.border,
+  },
+  previewActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surfaceAlt,
+  },
+  previewPrimaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    gap: 6,
+  },
+  previewPrimaryBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  previewSecondaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    gap: 6,
+  },
+  previewSecondaryBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+
+  // Section 4: Lesson Authoring Banner Styles
+  authoringBannerCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
+  },
+  authoringLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: SPACING.sm,
+  },
+  authoringIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  authoringCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  authoringCardDesc: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  authoringLaunchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    gap: 6,
+    marginTop: 4,
+  },
+  authoringLaunchBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

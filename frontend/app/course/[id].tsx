@@ -54,6 +54,7 @@ import {
   type AudioLesson,
 } from "@/lib/audioLessons";
 import { saveDarsPlaybackPosition, loadDarsPlaybackPosition } from "@/lib/quranStorage";
+import { enrollInFreeCourse } from "@/lib/razorpayFunctions";
 
 
 
@@ -204,6 +205,20 @@ export default function CourseDetailScreen() {
   const isEnrolled = courseId ? isEnrolledInCourse(courseId) : false;
   const isStudent = profile?.role === "student";
   const isLockedForStudent = isStudent && !isEnrolled;
+  const [enrollingFree, setEnrollingFree] = useState(false);
+
+  const handleFreeEnroll = async () => {
+    if (!courseId || enrollingFree) return;
+    try {
+      setEnrollingFree(true);
+      await enrollInFreeCourse({ courseId });
+      Alert.alert("Mubarak! 🎓", "Aapka is free course mein kamyabi ke sath dakhila ho gaya hai.");
+    } catch (err: any) {
+      Alert.alert("Enrollment Error", err?.message || "Failed to complete free enrollment.");
+    } finally {
+      setEnrollingFree(false);
+    }
+  };
 
 
   useEffect(() => {
@@ -1074,8 +1089,13 @@ export default function CourseDetailScreen() {
                       <Ionicons name="library" size={20} color="#059669" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.infoCardTitle}>Academic Subjects & Faculty</Text>
-                      <Text style={styles.infoCardSubValue}>Course syllabus subjects and assigned ustaadhas</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.infoCardTitle}>Academic Topics & Faculty</Text>
+                        <View style={{ backgroundColor: 'rgba(5, 150, 105, 0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '600', color: '#059669' }}>Provisional</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.infoCardSubValue}>Academic curriculum & assigned faculty (Official syllabus pending board approval)</Text>
                     </View>
                   </View>
                   <View style={{ gap: 8, marginTop: 4 }}>
@@ -1128,25 +1148,60 @@ export default function CourseDetailScreen() {
 
               {/* Enrollment Required Notice for Unenrolled Students */}
               {isLockedForStudent ? (
-                <View style={styles.enrollPromptCard}>
-                  <View style={styles.enrollPromptIconCircle}>
-                    <Ionicons name="lock-closed" size={22} color="#D97706" />
+                course.status === 'inactive' ? (
+                  <View style={[styles.enrollPromptCard, { backgroundColor: '#F8FAFC', borderColor: '#CBD5E1' }]}>
+                    <View style={[styles.enrollPromptIconCircle, { backgroundColor: '#E2E8F0' }]}>
+                      <Ionicons name="pause-circle" size={24} color="#64748B" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.enrollPromptTitle, { color: '#334155' }]}>Admissions Currently Paused</Text>
+                      <Text style={[styles.enrollPromptSub, { color: '#64748B' }]}>
+                        This course is currently marked inactive by administration. New student enrollments are temporarily closed.
+                      </Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.enrollPromptTitle}>Enrollment Required for Full Access</Text>
-                    <Text style={styles.enrollPromptSub}>
-                      You are currently viewing the course overview. To attend live purdah classrooms, listen to audio dars lectures, and submit assignments, please enroll in this class.
-                    </Text>
+                ) : (
+                  <View style={styles.enrollPromptCard}>
+                    <View style={styles.enrollPromptIconCircle}>
+                      <Ionicons name="lock-closed" size={22} color="#D97706" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.enrollPromptTitle}>Enrollment Required for Full Access</Text>
+                      <Text style={styles.enrollPromptSub}>
+                        Admission Fee: ₹{course.admission_fee ?? 100} • Course Fee: {course.course_fee === 0 ? "FREE (بلامعاوضہ)" : `₹${course.course_fee ?? 500}`}
+                      </Text>
+                      <Text style={[styles.enrollPromptSub, { marginTop: 4 }]}>
+                        To attend live purdah classrooms, listen to audio dars lectures, and submit assignments, please enroll in this class.
+                      </Text>
+                    </View>
+                    {course.course_fee === 0 ? (
+                      <TouchableOpacity
+                        style={[styles.enrollPromptBtn, { backgroundColor: '#059669' }]}
+                        onPress={handleFreeEnroll}
+                        disabled={enrollingFree}
+                        activeOpacity={0.85}
+                      >
+                        {enrollingFree ? (
+                          <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                          <>
+                            <Text style={styles.enrollPromptBtnText}>Enroll Free</Text>
+                            <Ionicons name="checkmark-circle-outline" size={14} color="#FFF" />
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.enrollPromptBtn}
+                        onPress={() => router.push({ pathname: '/payment', params: { courseId: course.id } })}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.enrollPromptBtnText}>Pay Fee & Enroll</Text>
+                        <Ionicons name="arrow-forward" size={14} color="#FFF" />
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  <TouchableOpacity
-                    style={styles.enrollPromptBtn}
-                    onPress={() => router.push('/payment')}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.enrollPromptBtnText}>Pay Fee & Enroll</Text>
-                    <Ionicons name="arrow-forward" size={14} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
+                )
               ) : null}
             </>
           )}

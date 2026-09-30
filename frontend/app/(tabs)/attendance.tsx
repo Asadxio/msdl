@@ -12,6 +12,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   addDoc,
@@ -100,14 +101,23 @@ export default function AttendanceScreen() {
   const { courses, teachers, enrolledCourses, userEnrollments } = useData();
   const { activeOrgId, isDefaultOrg } = useActiveOrganization();
 
+  const { courseId: paramCourseId } = useLocalSearchParams<{ courseId?: string }>();
+
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const canMark = isTeacher || isAdmin;
 
   // Selected Date & Course filter
   const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('all');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(paramCourseId || 'all');
   const [searchStudentQuery, setSearchStudentQuery] = useState('');
+
+  // Update selectedCourseId if param changes
+  useEffect(() => {
+    if (paramCourseId) {
+      setSelectedCourseId(paramCourseId);
+    }
+  }, [paramCourseId]);
 
   // Data states
   const [history, setHistory] = useState<AttendanceItem[]>([]);
@@ -141,7 +151,10 @@ export default function AttendanceScreen() {
     }
     if (isTeacher) {
       const currentTeacher = teachers.find(
-        (t) => t.id === user?.uid || t.name === profile?.name
+        (t) =>
+          t.id === user?.uid ||
+          t.user_uid === user?.uid ||
+          (profile?.name && t.name?.toLowerCase().includes(profile.name.toLowerCase()))
       );
       return filterTeacherAssignedCourses(courses, currentTeacher, user?.uid);
     }

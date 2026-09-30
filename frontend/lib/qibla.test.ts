@@ -55,8 +55,7 @@ describe('qibla calculations', () => {
     expect(qiblaScreen).toContain("params.mode === 'native-camera'");
     expect(qiblaScreen).toContain('https://qiblafinder.withgoogle.com/');
     expect(qiblaScreen).toContain('QIBLA_LOCATION_CACHE_KEY');
-    expect(qiblaScreen).toContain('react-native-maps');
-    expect(qiblaScreen).not.toContain('WebView');
+    expect(qiblaScreen).toContain('WebView');
     expect(qiblaScreen).not.toContain('expo-web-browser');
     expect(qiblaScreen).toContain('formatDistanceToKaaba(qibla.distanceKm)');
   });

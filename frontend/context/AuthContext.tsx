@@ -210,6 +210,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfileOffline(false);
         await AsyncStorage.setItem(getProfileCacheKey(uid), JSON.stringify(nextProfile)).catch(() => {});
       } else {
+        if (isSigningUpRef.current) {
+          logger.info('[AuthContext] fetchProfile skipped auto-heal because signUp is in-flight for uid:', uid);
+          return;
+        }
         const currentUser = auth.currentUser;
         if (currentUser && currentUser.uid === uid) {
           try {
@@ -321,6 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const authStartupCompletedRef = useRef(false);
   const authLoaderClearReasonRef = useRef<string | null>(null);
+  const isSigningUpRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -407,6 +412,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setProfileOffline(Boolean(snap.metadata.fromCache && !snap.metadata.hasPendingWrites));
                 if (!snap.exists()) {
                   startupLog('Profile loaded', { exists: false, fromCache: snap.metadata.fromCache });
+                  if (isSigningUpRef.current) {
+                    startupLog('Profile document missing while signUp is in-flight; skipping auto-heal');
+                    return;
+                  }
                   if (isOwnerEmail(firebaseUser.email)) {
                     try {
                       await setDoc(doc(db, 'users', firebaseUser.uid), {
@@ -634,32 +643,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     setSignupVerificationFlowActive(true);
-     try {
-      debugLog('[SIGNUP_DEBUG] Attempting createUserWithEmailAndPassword for:', safeEmail);
-      const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
-      debugLog('[SIGNUP_DEBUG] createUserWithEmailAndPassword SUCCESS, uid:', cred.user.uid);
-      try {
-        await cred.user.getIdToken(true);
-      } catch (tokenRefreshErr) {
-        debugLog('[SIGNUP_DEBUG] Initial token refresh note:', tokenRefreshErr);
-      }
-      // Send verification email
-      try {
-        debugLog('[SIGNUP_DEBUG] Attempting sendEmailVerification for uid:', cred.user.uid);
-        trackEvent('verification_email_delivery_attempt', {
-          source: 'signup',
-          status: 'requested',
-          uid: cred.user.uid,
-          emailDomain: safeEmail.split('@')[1] || 'unknown',
-        }, `verification-email-signup-requested-${cred.user.uid}`);
-        await withTimeout(sendEmailVerification(cred.user, VERIFICATION_ACTION_CODE_SETTINGS));
-        debugLog('[SIGNUP_DEBUG] sendEmailVerification SUCCESS for uid:', cred.user.uid);
-        void markVerificationEmailSent(cred.user.uid);
-      } catch (error: any) {
-        debugError('[SIGNUP_DEBUG] FAILED sendEmailVerification. Code:', error?.code, 'Message:', error?.message);
-        trackEmailVerificationError('verification_email_send_failed', error, { uid: cred.user.uid });
-      }
-
+    isSigningUpRef.current = true;
+    try {
       let referrerId: string | null = null;
       const normalizedCode = (referralCode || '').trim().toUpperCase();
       if (normalizedCode) {
@@ -673,7 +658,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      debugLog('[SIGNUP_DEBUG] Attempting write to users/', cred.user.uid);
+      debugLog('[SIGNUP_DEBUG] Attempting createUserWithEmailAndPassword for:', safeEmail);
+      const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
+      debugLog('[SIGNUP_DEBUG] createUserWithEmailAndPassword SUCCESS, uid:', cred.user.uid);
+
+      // Write users/{uid} document immediately to establish authoritative profile before any background listeners
+      debugLog('[SIGNUP_DEBUG] Attempting immediate write to users/', cred.user.uid);
       try {
         await setDoc(doc(db, 'users', cred.user.uid), {
           name: safeName,
@@ -695,8 +685,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         debugLog('[SIGNUP_DEBUG] Successfully wrote users/', cred.user.uid);
       } catch (userErr: any) {
-        debugError('[SIGNUP_DEBUG] FAILED write to users/. Code:', userErr?.code, 'Message:', userErr?.message, 'Full:', userErr);
+        debugError('[SIGNUP_DEBUG] FAILED write to users/. Rolling back auth user. Code:', userErr?.code, 'Message:', userErr?.message);
+        // Rollback orphaned Firebase Auth account so subsequent attempt does not throw 'email-already-in-use'
+        await cred.user.delete().catch((delErr) => {
+          debugError('[SIGNUP_DEBUG] Auth user rollback deletion warning:', delErr);
+        });
         throw userErr;
+      }
+
+      try {
+        await cred.user.getIdToken(true);
+      } catch (tokenRefreshErr) {
+        debugLog('[SIGNUP_DEBUG] Initial token refresh note:', tokenRefreshErr);
+      }
+
+      // Send verification email
+      try {
+        debugLog('[SIGNUP_DEBUG] Attempting sendEmailVerification for uid:', cred.user.uid);
+        trackEvent('verification_email_delivery_attempt', {
+          source: 'signup',
+          status: 'requested',
+          uid: cred.user.uid,
+          emailDomain: safeEmail.split('@')[1] || 'unknown',
+        }, `verification-email-signup-requested-${cred.user.uid}`);
+        await withTimeout(sendEmailVerification(cred.user, VERIFICATION_ACTION_CODE_SETTINGS));
+        debugLog('[SIGNUP_DEBUG] sendEmailVerification SUCCESS for uid:', cred.user.uid);
+        void markVerificationEmailSent(cred.user.uid);
+      } catch (error: any) {
+        debugError('[SIGNUP_DEBUG] FAILED sendEmailVerification. Code:', error?.code, 'Message:', error?.message);
+        trackEmailVerificationError('verification_email_send_failed', error, { uid: cred.user.uid });
       }
 
       // Record auditable legal acceptance & parental consent document (NON-FATAL)
@@ -743,7 +760,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (referrerId) {
         debugLog('[SIGNUP_DEBUG] Recording referral attribution:', referrerId);
         try {
-          // Multi-level gamified counter removed; write clean attribution record
           const recordId = 'ref_' + cred.user.uid;
           const nameParts = safeName.split(/\s+/);
           const maskedName = (nameParts[0] || 'طالبہ') + ' (محفوظ برائے پردہ)';
@@ -784,17 +800,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         debugError('[SIGNUP_DEBUG] Welcome notification dispatch failed:', err);
       });
       setShowSignupVerificationPrompt(false);
-      setSignupVerificationFlowActive(false);
       await fetchProfile(cred.user.uid);
       return null;
     } catch (err: any) {
-      setSignupVerificationFlowActive(false);
       const code = err?.code || '';
-      if (code === 'auth/email-already-in-use') return 'Email already registered';
+      if (code === 'auth/email-already-in-use') {
+        // Auto-heal recovery: If this user was previously created in Auth during an interrupted signup,
+        // recover by signing them in and completing their profile transparently!
+        try {
+          debugLog('[SIGNUP_DEBUG] Email already registered; attempting recovery sign-in for:', safeEmail);
+          const recoveryCred = await signInWithEmailAndPassword(auth, safeEmail, normalizedPassword);
+          if (recoveryCred.user) {
+            const userDocRef = doc(db, 'users', recoveryCred.user.uid);
+            const userSnap = await getDoc(userDocRef);
+            if (!userSnap.exists() || userSnap.data()?.status === 'pending') {
+              debugLog('[SIGNUP_DEBUG] Found pending/incomplete profile during signup retry; completing profile write');
+              await setDoc(userDocRef, {
+                name: safeName,
+                email: (recoveryCred.user.email || safeEmail).trim().toLowerCase(),
+                role: safeRole,
+                status: 'pending',
+                referral_code: generateReferralCode(name),
+                referral_count: userSnap.exists() ? (userSnap.data()?.referral_count ?? 0) : 0,
+                last_login_at: serverTimestamp(),
+                created_at: userSnap.exists() ? (userSnap.data()?.created_at ?? serverTimestamp()) : serverTimestamp(),
+                is_minor: Boolean(complianceData?.is_minor),
+                age_bracket: complianceData?.age_bracket || (complianceData?.is_minor ? 'under_18' : '18_plus'),
+                ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
+                ...(complianceData?.guardian_phone ? { guardian_phone: complianceData.guardian_phone } : {}),
+                ...(complianceData?.phone ? { phone: complianceData.phone } : {}),
+                whatsapp_consent: Boolean(complianceData?.whatsapp_consent ?? true),
+                whatsapp_consent_at: serverTimestamp(),
+              }, { merge: true });
+
+              await setDoc(doc(db, 'public_profiles', recoveryCred.user.uid), {
+                uid: recoveryCred.user.uid,
+                name: safeName,
+                role: safeRole,
+                status: 'pending',
+                searchable: false,
+                is_active: false,
+                photo_url: '',
+                avatar: 'person',
+                updated_at: serverTimestamp(),
+              }, { merge: true }).catch(() => {});
+
+              void markSignupCompleted(recoveryCred.user.uid);
+              setShowSignupVerificationPrompt(false);
+              await fetchProfile(recoveryCred.user.uid);
+              return null; // Seamless recovery success!
+            }
+          }
+        } catch (recoveryErr: any) {
+          debugLog('[SIGNUP_DEBUG] Orphaned account recovery skipped/failed:', recoveryErr?.message);
+        }
+        return 'Email already registered';
+      }
       if (code === 'auth/weak-password') return 'Password must be at least 6 characters';
       if (code === 'auth/invalid-email') return 'Invalid email format';
       if (code === 'auth/network-request-failed') return 'Network error. Check your internet connection';
       return normalizeFirebaseError(err, 'Signup failed. Please try again');
+    } finally {
+      isSigningUpRef.current = false;
+      setSignupVerificationFlowActive(false);
     }
   };
 

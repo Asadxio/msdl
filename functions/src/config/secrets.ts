@@ -30,22 +30,53 @@ export const RAZORPAY_KEY_SECRET = defineSecret('RAZORPAY_KEY_SECRET');
 export const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 
 /**
+ * Optional Secret Accessor interface matching SecretParam interface
+ */
+export interface OptionalSecretParam {
+  name: string;
+  value: () => string;
+}
+
+/**
+ * Creates an optional secret accessor that resolves dynamically without registering
+ * an unfulfilled SecretParam in Firebase Functions v2 deployment manifests.
+ * Prevents missing WhatsApp secrets from blocking unrelated core Cloud Functions deployment.
+ */
+function defineOptionalSecret(name: string): OptionalSecretParam {
+  return {
+    name,
+    value: (): string => {
+      const val = process.env[name];
+      if (!val) {
+        throw new Error(`Secret parameter "${name}" is not configured in environment or Secret Manager.`);
+      }
+      return val;
+    },
+  };
+}
+
+/**
  * Meta WhatsApp Cloud API credentials for Official Madrasa WhatsApp Business Sender (+91 63669 19122)
  * Bound ONLY to server-side onboarding communication functions.
  * NEVER exposed to client, APK, or public documents.
+ * 
+ * Phase 74.1: Decoupled to allow independent deployment of core academic & payment functions.
+ * When real credentials are provided by institution, configure via:
+ *   firebase functions:secrets:set WHATSAPP_API_TOKEN
+ *   firebase functions:secrets:set WHATSAPP_PHONE_NUMBER_ID
  */
-export const WHATSAPP_API_TOKEN = defineSecret('WHATSAPP_API_TOKEN');
-export const WHATSAPP_PHONE_NUMBER_ID = defineSecret('WHATSAPP_PHONE_NUMBER_ID');
-export const WHATSAPP_BUSINESS_ACCOUNT_ID = defineSecret('WHATSAPP_BUSINESS_ACCOUNT_ID');
+export const WHATSAPP_API_TOKEN = defineOptionalSecret('WHATSAPP_API_TOKEN');
+export const WHATSAPP_PHONE_NUMBER_ID = defineOptionalSecret('WHATSAPP_PHONE_NUMBER_ID');
+export const WHATSAPP_BUSINESS_ACCOUNT_ID = defineOptionalSecret('WHATSAPP_BUSINESS_ACCOUNT_ID');
 
 /**
  * Optional Transactional SMS gateway API key
  */
-export const SMS_GATEWAY_API_KEY = defineSecret('SMS_GATEWAY_API_KEY');
+export const SMS_GATEWAY_API_KEY = defineOptionalSecret('SMS_GATEWAY_API_KEY');
 
 /**
  * Self-Hosted WhatsApp Gateway credentials (e.g. Baileys / Evolution API standalone container)
  * Bound ONLY to server-side functions.
  */
-export const SELF_HOSTED_WHATSAPP_URL = defineSecret('SELF_HOSTED_WHATSAPP_URL');
-export const SELF_HOSTED_WHATSAPP_API_KEY = defineSecret('SELF_HOSTED_WHATSAPP_API_KEY');
+export const SELF_HOSTED_WHATSAPP_URL = defineOptionalSecret('SELF_HOSTED_WHATSAPP_URL');
+export const SELF_HOSTED_WHATSAPP_API_KEY = defineOptionalSecret('SELF_HOSTED_WHATSAPP_API_KEY');

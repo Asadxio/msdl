@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
-import { collection, doc, updateDoc, deleteDoc, where, setDoc, getDocs, serverTimestamp, query } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, deleteDoc, where, setDoc, getDocs, serverTimestamp, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { UserProfile, useAuth } from '@/context/AuthContext';
@@ -25,6 +25,13 @@ import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { getEnrollmentDocId } from '@/lib/enrollments';
 import { withTimeout } from '@/lib/errors';
 import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { AdminTeacherProfileModal } from '@/components/admin/AdminTeacherProfileModal';
+import {
+  saveTeacherProfileAsAdmin,
+  type TeacherProfile,
+} from '@/lib/teacherIdentity';
+import { allocateNextTeacherId } from '@/lib/teacherIdCounter';
+
 
 type UserWithId = UserProfile & { id: string };
 
@@ -46,6 +53,8 @@ export default function AdminUsersScreen() {
   const [roleFilter, setRoleFilter] = useState<'all' | AppRole>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | UserWithId['status']>('all');
   const [fetching, setFetching] = useState(false);
+  const [selectedTeacherForEdit, setSelectedTeacherForEdit] = useState<Partial<TeacherProfile> | null>(null);
+  const [showTeacherProfileModal, setShowTeacherProfileModal] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -203,6 +212,35 @@ export default function AdminUsersScreen() {
           10000,
           'Updating public profile timed out'
         ).catch(() => {});
+      }
+      // ── Teacher name sync ──────────────────────────────────────────────────
+      // If Admin edits the name of a Teacher via the Users list, propagate to
+      // teachers/{uid} to prevent the two documents from diverging.
+      if (updates.name) {
+        const uTarget = users.find((x) => x.id === uid);
+        const targetRole = uTarget?.role;
+        if (targetRole === 'teacher' || targetRole === 'assistant_teacher') {
+          try {
+            const teacherRef = doc(db, 'teachers', uid);
+            const teacherSnap = await withTimeout(
+              getDoc(teacherRef),
+              5000,
+              'Teacher name sync read timed out',
+            );
+            if (teacherSnap.exists()) {
+              await withTimeout(
+                updateDoc(teacherRef, {
+                  name: updates.name.trim(),
+                  updated_at: serverTimestamp(),
+                }),
+                5000,
+                'Teacher name sync write timed out',
+              );
+            }
+          } catch (syncErr) {
+            console.warn('[admin/users] teacher name sync skipped:', syncErr);
+          }
+        }
       }
       await createAdminLog(profile, {
         action: 'user_update',
@@ -384,6 +422,27 @@ export default function AdminUsersScreen() {
               previousRole: u.role,
               nextRole,
             });
+            if (nextRole === 'teacher') {
+              try {
+                const nextTeacherId = await allocateNextTeacherId();
+                await saveTeacherProfileAsAdmin({
+                  id: u.id,
+                  user_uid: u.id,
+                  name: u.name || 'Teacher',
+                  email: u.email || '',
+                  phone: u.phone || '',
+                  teacher_id: nextTeacherId,
+                  title: 'Teacher',
+                  organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
+                  status: 'approved',
+                  verification_status: 'pending',
+                  assigned_courses: [],
+                  courses: [],
+                }, profile);
+              } catch (autoErr) {
+                console.warn('[admin/users] auto teacher profile creation warning:', autoErr);
+              }
+            }
             await createAdminLog(profile, { action: 'user_role_update', performed_by: profile?.email || profile?.name || 'admin', target_id: u.id, details: `${currentRole}->${nextRole}` }).catch(() => {});
             await fetchUsers();
           } catch (err: any) {
@@ -472,6 +531,27 @@ export default function AdminUsersScreen() {
                 <TouchableOpacity style={styles.courseAccessBtn} onPress={() => handleGrantCourseAccess(item)} testID={`grant-course-btn-${item.id}`}>
                   <Ionicons name="school" size={14} color="#059669" />
                   <Text style={styles.courseAccessBtnText}>Grant Course Free</Text>
+                </TouchableOpacity>
+              )}
+              {item.role === 'teacher' && (
+                <TouchableOpacity
+                  style={styles.courseAccessBtn}
+                  onPress={() => {
+                    setSelectedTeacherForEdit({
+                      id: item.id,
+                      user_uid: item.id,
+                      name: item.name,
+                      email: item.email,
+                      phone: item.phone,
+                      status: (item.status as any) || 'approved',
+                      photo_url: item.photo_url,
+                    });
+                    setShowTeacherProfileModal(true);
+                  }}
+                  testID={`edit-teacher-profile-btn-${item.id}`}
+                >
+                  <Ionicons name="ribbon-outline" size={14} color="#059669" />
+                  <Text style={styles.courseAccessBtnText}>Faculty Profile</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity style={styles.roleBtn} onPress={() => handleToggleRole(item)} testID={`toggle-role-btn-${item.id}`}>
@@ -583,6 +663,12 @@ export default function AdminUsersScreen() {
           }
         />
       )}
+      <AdminTeacherProfileModal
+        visible={showTeacherProfileModal}
+        onClose={() => setShowTeacherProfileModal(false)}
+        initialTeacher={selectedTeacherForEdit}
+        onTeacherSaved={fetchUsers}
+      />
     </View>
   );
 }

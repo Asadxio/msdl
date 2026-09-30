@@ -144,7 +144,7 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.email is string
-        && request.resource.data.email.lower() == request.auth.token.email.lower()
+        && (!('email' in request.auth.token) || request.auth.token.email == null || request.resource.data.email.lower() == request.auth.token.email.lower())
         && request.resource.data.role in ['student', 'teacher']
         && request.resource.data.status == 'pending'
         && request.resource.data.created_at is timestamp
@@ -166,26 +166,44 @@ service cloud.firestore {
     function isValidUserUpdateByAdmin() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'updated_at', 'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at', 'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone', 'founder', 'organization_id', 'uid']
+          [
+            'name', 'email', 'role', 'status', 'created_at', 'updated_at',
+            'fcm_tokens', 'expo_push_tokens', 'fcm_token_updated_at',
+            'photo_url', 'avatar', 'referral_code', 'referred_by', 'referral_count',
+            'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone',
+            'whatsapp_consent', 'whatsapp_consent_at', 'name_updated_at',
+            'imported_by', 'imported_at',
+            'moderation_state', 'moderation_reason', 'suspension_until', 'moderated_at',
+            'founder', 'organization_id', 'uid'
+          ]
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.email is string
         && request.resource.data.role in ['student', 'teacher', 'assistant_teacher', 'moderator', 'admin', 'super_admin']
-        && request.resource.data.status in ['pending', 'approved', 'deactivated', 'rejected']
-        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string)
+        && request.resource.data.status in ['pending', 'approved', 'active', 'deactivated', 'rejected', 'suspended']
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id == null || request.resource.data.organization_id is string)
         && (!('uid' in request.resource.data) || request.resource.data.uid is string)
         && (!('photo_url' in request.resource.data) || isBlankOrHttpsUrl(request.resource.data.photo_url))
-        && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
-        && (!('referral_code' in request.resource.data) || request.resource.data.referral_code is string)
+        && (!('avatar' in request.resource.data) || request.resource.data.avatar == null || request.resource.data.avatar is string)
+        && (!('referral_code' in request.resource.data) || request.resource.data.referral_code == null || request.resource.data.referral_code is string)
         && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
         && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
         && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
         && (!('is_minor' in request.resource.data) || request.resource.data.is_minor is bool)
-        && (!('age_bracket' in request.resource.data) || request.resource.data.age_bracket is string)
-        && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name is string)
-        && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone is string)
-        && (!('phone' in request.resource.data) || request.resource.data.phone is string)
+        && (!('age_bracket' in request.resource.data) || request.resource.data.age_bracket == null || request.resource.data.age_bracket is string)
+        && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name == null || request.resource.data.guardian_name is string)
+        && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone == null || request.resource.data.guardian_phone is string)
+        && (!('phone' in request.resource.data) || request.resource.data.phone == null || request.resource.data.phone is string)
+        && (!('whatsapp_consent' in request.resource.data) || request.resource.data.whatsapp_consent is bool)
+        && (!('whatsapp_consent_at' in request.resource.data) || request.resource.data.whatsapp_consent_at is timestamp)
+        && (!('name_updated_at' in request.resource.data) || request.resource.data.name_updated_at is timestamp)
+        && (!('imported_by' in request.resource.data) || request.resource.data.imported_by is string)
+        && (!('imported_at' in request.resource.data) || request.resource.data.imported_at is timestamp)
+        && (!('moderation_state' in request.resource.data) || request.resource.data.moderation_state is string)
+        && (!('moderation_reason' in request.resource.data) || request.resource.data.moderation_reason is string)
+        && (!('suspension_until' in request.resource.data) || request.resource.data.suspension_until == null || request.resource.data.suspension_until is timestamp)
+        && (!('moderated_at' in request.resource.data) || request.resource.data.moderated_at is timestamp)
         && (!('founder' in request.resource.data) || request.resource.data.founder is bool)
         && (isOwner() || request.auth.uid != resource.id || request.resource.data.role == resource.data.role)
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
@@ -260,10 +278,38 @@ service cloud.firestore {
         && request.resource.data.updated_at is timestamp;
     }
 
+    function isValidPendingStudentProfileUpdate(uid) {
+      return isSelf(uid)
+        && resource.data.role == 'student'
+        && resource.data.status == 'pending'
+        && request.resource.data.role == 'student'
+        && request.resource.data.status == 'pending'
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.created_at is timestamp
+        && hasOnlyAllowedKeys(
+          request.resource.data,
+          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone', 'whatsapp_consent', 'whatsapp_consent_at', 'updated_at']
+        )
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && (!('referral_code' in request.resource.data) || request.resource.data.referral_code == null || request.resource.data.referral_code is string)
+        && (!('referred_by' in request.resource.data) || request.resource.data.referred_by == null || request.resource.data.referred_by is string)
+        && (!('referral_count' in request.resource.data) || request.resource.data.referral_count is number)
+        && (!('last_login_at' in request.resource.data) || request.resource.data.last_login_at is timestamp)
+        && (!('is_minor' in request.resource.data) || request.resource.data.is_minor is bool)
+        && (!('age_bracket' in request.resource.data) || request.resource.data.age_bracket == null || request.resource.data.age_bracket is string)
+        && (!('guardian_name' in request.resource.data) || request.resource.data.guardian_name == null || request.resource.data.guardian_name is string)
+        && (!('guardian_phone' in request.resource.data) || request.resource.data.guardian_phone == null || request.resource.data.guardian_phone is string)
+        && (!('phone' in request.resource.data) || request.resource.data.phone == null || request.resource.data.phone is string)
+        && (!('whatsapp_consent' in request.resource.data) || request.resource.data.whatsapp_consent is bool)
+        && (!('whatsapp_consent_at' in request.resource.data) || request.resource.data.whatsapp_consent_at is timestamp)
+        && (!('updated_at' in request.resource.data) || request.resource.data.updated_at is timestamp);
+    }
+
     function isValidCourseWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'teacher_name', 'teacherName', 'teacher_id', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'subjects', 'organization_id', 'created_at', 'updated_at', 'status', 'assigned_teachers']
+          ['name', 'teacher_name', 'teacherName', 'teacher_id', 'schedule', 'time', 'class_time', 'description', 'class_link', 'classLink', 'meet_link', 'subjects', 'organization_id', 'created_at', 'updated_at', 'status', 'assigned_teachers', 'course_fee', 'admission_fee', 'fee']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -280,13 +326,22 @@ service cloud.firestore {
         && (!('classLink' in request.resource.data) || request.resource.data.classLink is string)
         && (!('meet_link' in request.resource.data) || request.resource.data.meet_link is string)
         && (!('subjects' in request.resource.data) || request.resource.data.subjects is list)
-        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string);
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string)
+        && (!('course_fee' in request.resource.data) || request.resource.data.course_fee is number)
+        && (!('admission_fee' in request.resource.data) || request.resource.data.admission_fee is number)
+        && (!('fee' in request.resource.data) || request.resource.data.fee is number);
     }
 
     function isValidTeacherWrite() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'title', 'courses', 'assigned_courses', 'photo_url', 'bio', 'qualifications', 'specializations', 'experience_years', 'languages', 'organization_id', 'created_at', 'updated_at']
+          [
+            'name', 'title', 'courses', 'assigned_courses', 'photo_url', 'bio',
+            'qualifications', 'specializations', 'experience_years', 'languages',
+            'organization_id', 'created_at', 'updated_at',
+            'teacher_id', 'user_uid', 'email', 'phone', 'status', 'verification_status',
+            'islamic_qualification', 'verified_by', 'verified_at'
+          ]
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -299,7 +354,48 @@ service cloud.firestore {
         && (!('qualifications' in request.resource.data) || request.resource.data.qualifications is list || request.resource.data.qualifications is string)
         && (!('specializations' in request.resource.data) || request.resource.data.specializations is list || request.resource.data.specializations is string)
         && (!('languages' in request.resource.data) || request.resource.data.languages is list || request.resource.data.languages is string)
-        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string);
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string)
+        && (!('teacher_id' in request.resource.data) || request.resource.data.teacher_id is string)
+        && (!('user_uid' in request.resource.data) || request.resource.data.user_uid is string)
+        && (!('email' in request.resource.data) || request.resource.data.email is string)
+        && (!('phone' in request.resource.data) || request.resource.data.phone is string)
+        && (!('status' in request.resource.data) || request.resource.data.status is string)
+        && (!('verification_status' in request.resource.data) || request.resource.data.verification_status is string)
+        && (!('islamic_qualification' in request.resource.data) || request.resource.data.islamic_qualification is string)
+        // verified_by records which admin performed the verification (string identity)
+        && (!('verified_by' in request.resource.data) || request.resource.data.verified_by is string)
+        // verified_at records when verification occurred (timestamp)
+        && (!('verified_at' in request.resource.data) || request.resource.data.verified_at is timestamp);
+    }
+
+    function isValidTeacherSelfProfileUpdate(teacherId) {
+      return isTeacherOrAdmin()
+        && (request.auth.uid == teacherId || (('user_uid' in resource.data) && resource.data.user_uid == request.auth.uid))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'title', 'bio', 'photo_url', 'qualifications', 'islamic_qualification',
+          'specializations', 'experience_years', 'languages', 'updated_at'
+        ])
+        && (!('teacher_id' in resource.data) || request.resource.data.teacher_id == resource.data.teacher_id)
+        && (!('user_uid' in resource.data) || request.resource.data.user_uid == resource.data.user_uid)
+        && (!('organization_id' in resource.data) || request.resource.data.organization_id == resource.data.organization_id)
+        && (!('status' in resource.data) || request.resource.data.status == resource.data.status)
+        && (!('verification_status' in resource.data) || request.resource.data.verification_status == resource.data.verification_status)
+        && (!('assigned_courses' in resource.data) || request.resource.data.assigned_courses == resource.data.assigned_courses)
+        && (!('courses' in resource.data) || request.resource.data.courses == resource.data.courses)
+        // Teachers may not self-modify credential verification metadata
+        && (!('verified_by' in resource.data) || request.resource.data.verified_by == resource.data.verified_by)
+        && (!('verified_at' in resource.data) || request.resource.data.verified_at == resource.data.verified_at)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && (!('title' in request.resource.data) || request.resource.data.title is string)
+        && (!('bio' in request.resource.data) || request.resource.data.bio is string)
+        && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string)
+        && (!('islamic_qualification' in request.resource.data) || request.resource.data.islamic_qualification is string)
+        && (!('experience_years' in request.resource.data) || request.resource.data.experience_years is string || request.resource.data.experience_years is number)
+        && (!('qualifications' in request.resource.data) || request.resource.data.qualifications is list || request.resource.data.qualifications is string)
+        && (!('specializations' in request.resource.data) || request.resource.data.specializations is list || request.resource.data.specializations is string)
+        && (!('languages' in request.resource.data) || request.resource.data.languages is list || request.resource.data.languages is string)
+        && request.resource.data.updated_at is timestamp;
     }
 
     function isValidLibraryWrite() {
@@ -469,8 +565,9 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && request.resource.data.provider == 'razorpay'
         && request.resource.data.currency == 'INR'
-        // Legacy-only optional fields
-        && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar'])
+        // Payment types: fees, sadqa, zakat, fitra, langar, admission, course_enrollment
+        && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar', 'admission', 'course_enrollment'])
+        && (!('payment_type' in request.resource.data) || request.resource.data.payment_type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar', 'admission', 'course_enrollment'])
         && (!('transaction_ref' in request.resource.data) || (request.resource.data.transaction_ref is string && request.resource.data.transaction_ref.size() >= 4 && request.resource.data.transaction_ref.size() <= 80 && request.resource.data.transaction_ref.matches('^[a-zA-Z0-9_./# -]+$')))
         && (!('review_mode' in request.resource.data) || request.resource.data.review_mode == 'manual')
         && (!('submitted_at' in request.resource.data) || request.resource.data.submitted_at is timestamp)
@@ -860,7 +957,7 @@ service cloud.firestore {
           'meet_url', 'started_at', 'ended_at', 'created_at', 'updated_at',
           'purdah_mode_enabled', 'active_board_view', 'current_ayah_or_page',
           'highlighted_words', 'recitation_queue', 'active_speaker_name', 'active_speaker_uid',
-          'class_time', 'time', 'participant_count'
+          'class_time', 'time', 'participant_count', 'organization_id'
         ])
         && request.resource.data.course_id is string
         && request.resource.data.teacher_id is string
@@ -874,6 +971,7 @@ service cloud.firestore {
         && (!('recitation_queue' in request.resource.data) || request.resource.data.recitation_queue is list)
         && (!('active_speaker_name' in request.resource.data) || request.resource.data.active_speaker_name is string)
         && (!('active_speaker_uid' in request.resource.data) || request.resource.data.active_speaker_uid is string)
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id is string)
         && (!('started_at' in request.resource.data) || request.resource.data.started_at is timestamp)
         && (!('ended_at' in request.resource.data) || request.resource.data.ended_at is timestamp)
         && (!('participant_count' in request.resource.data) || (request.resource.data.participant_count is number && request.resource.data.participant_count >= 0 && request.resource.data.participant_count <= 500))
@@ -1216,7 +1314,7 @@ service cloud.firestore {
     // users collection
     match /users/{uid} {
       // Users can read their own profile; signed-in users can list users for app pickers/referrals.
-      allow get: if isAdmin() || isSelf(uid);
+      allow get: if isAdmin() || isSelf(uid) || isTeacherOrAdmin();
       allow list: if isAdmin() || isTeacherOrAdmin() || (isSignedIn() && request.query.limit <= 2);
 
       // Self-signup profile creation.
@@ -1227,7 +1325,8 @@ service cloud.firestore {
         || isValidEmailVerifiedStudentActivation(uid)
         || isValidSelfUserMetadataUpdate(uid)
         || isValidStudentNameUpdate(uid)
-        || isValidReferralCountIncrement();
+        || isValidReferralCountIncrement()
+        || isValidPendingStudentProfileUpdate(uid);
       allow delete: if isAdmin() && (!resource.data.get('founder', false) || isSuperAdmin());
     }
 
@@ -1291,17 +1390,60 @@ service cloud.firestore {
         isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) &&
         (resource == null || resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main') || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')))
       );
-      allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
+      // Phase 74: Direct client deletion is permanently blocked.
+      // Course deletion requires the trusted deleteCourse Cloud Function with 13-collection dependency verification.
+      allow delete: if false;
     }
 
     // teachers collection
     match /teachers/{teacherId} {
       allow read: if isSignedIn();
-      allow create, update: if isValidTeacherWrite() && (
+      allow create: if isValidTeacherWrite() && (
         isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) &&
         (resource == null || resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main') || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')))
       );
+      allow update: if (isValidTeacherWrite() && (
+        isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) &&
+        (resource == null || resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main') || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')))
+      )) || isValidTeacherSelfProfileUpdate(teacherId);
       allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
+    }
+
+    // ── TEACHER CREDENTIAL DOCUMENTS (Firestore metadata) ─────────────────────
+    // Stores metadata for credential files uploaded to Storage.
+    // Path: teacher_credential_docs/{teacherUid}/documents/{documentId}
+    // Teachers: read + create own docs; CANNOT modify verification_status.
+    // Admins: full read + update (to set verified/rejected + review note).
+    // Students / public: DENIED.
+    match /teacher_credential_docs/{teacherUid}/documents/{documentId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == teacherUid || isAdmin());
+
+      allow create: if isSignedIn()
+        && request.auth.uid == teacherUid
+        && request.resource.data.keys().hasOnly([
+          'document_id', 'teacher_uid', 'filename', 'content_type',
+          'uploaded_at', 'uploaded_by', 'storage_path', 'verification_status'
+        ])
+        && request.resource.data.teacher_uid == teacherUid
+        && request.resource.data.uploaded_by == request.auth.uid
+        && request.resource.data.verification_status == 'pending'
+        && request.resource.data.filename is string
+        && request.resource.data.content_type is string;
+
+      allow update: if isAdmin()
+        && request.resource.data.teacher_uid == resource.data.teacher_uid
+        && request.resource.data.keys().hasOnly([
+          'document_id', 'teacher_uid', 'filename', 'content_type',
+          'uploaded_at', 'uploaded_by', 'storage_path',
+          'verification_status', 'reviewed_by', 'reviewed_at', 'review_note'
+        ])
+        && request.resource.data.verification_status in ['pending', 'verified', 'rejected'];
+
+      allow delete: if isAdmin()
+        || (isSignedIn()
+          && request.auth.uid == teacherUid
+          && resource.data.verification_status == 'pending');
     }
 
     // library collection
@@ -1310,6 +1452,7 @@ service cloud.firestore {
       allow create, update: if isAdmin() && isValidLibraryWrite();
       allow delete: if isAdmin();
     }
+
 
     // attendance collection
     match /attendance/{attendanceId} {
@@ -1552,7 +1695,7 @@ service cloud.firestore {
     }
 
     match /lesson_progress/{progressId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
       allow create, update: if isAdmin()
         || (isSignedIn()
           && request.resource.data.user_id == request.auth.uid

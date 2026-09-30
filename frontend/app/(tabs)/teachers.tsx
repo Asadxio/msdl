@@ -72,10 +72,17 @@ function TeacherCard({ teacher, isOnly }: { teacher: Teacher; isOnly: boolean })
             <Text style={styles.avatarInitial}>{initial}</Text>
           </View>
         )}
-        <View style={styles.verifiedTag}>
-          <Ionicons name="shield-checkmark" size={11} color="#059669" />
-          <Text style={styles.verifiedTagText}>APPROVED FACULTY</Text>
-        </View>
+        {teacher.verification_status === 'verified' ? (
+          <View style={styles.verifiedTag}>
+            <Ionicons name="shield-checkmark" size={11} color="#059669" />
+            <Text style={styles.verifiedTagText}>VERIFIED FACULTY</Text>
+          </View>
+        ) : (
+          <View style={[styles.verifiedTag, styles.pendingTag]}>
+            <Ionicons name="time-outline" size={11} color="#92400E" />
+            <Text style={[styles.verifiedTagText, styles.pendingTagText]}>FACULTY</Text>
+          </View>
+        )}
       </View>
       <View style={styles.cardBody}>
         <Text style={styles.teacherName}>{teacher.name}</Text>
@@ -227,6 +234,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#15803D',
     letterSpacing: 0.4,
+  },
+  pendingTag: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  pendingTagText: {
+    color: '#92400E',
   },
   cardBody: { padding: SPACING.md, gap: SPACING.xs },
   teacherName: { ...TYPOGRAPHY.heading, color: COLORS.text, textAlign: 'center' },

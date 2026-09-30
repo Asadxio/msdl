@@ -47,7 +47,7 @@ export function filterEnrolledCourses<T extends { id: string }>(
  */
 export function filterTeacherAssignedCourses<T extends { id: string; name?: string; teacher_name?: string; teacher_id?: string; subjects?: Array<{ teacher_id?: string; teacher_name?: string }> }>(
   courses: T[],
-  teacher: { id?: string; name?: string; assigned_courses?: string[]; courses?: string[] } | null | undefined,
+  teacher: { id?: string; name?: string; teacher_id?: string; assigned_courses?: string[]; courses?: string[] } | null | undefined,
   userUid?: string
 ): T[] {
   if (!courses || !Array.isArray(courses)) return [];
@@ -59,9 +59,10 @@ export function filterTeacherAssignedCourses<T extends { id: string; name?: stri
     : (Array.isArray(teacher?.courses) ? teacher.courses.map((s) => String(s || '').trim().toLowerCase()) : []);
 
   return courses.filter((c) => {
-    // 1. Direct teacher_id match
+    // 1. Direct teacher_id match (by UID, doc id, or institutional teacher_id)
     if (userUid && c.teacher_id && String(c.teacher_id).trim() === userUid) return true;
     if (teacher?.id && c.teacher_id && String(c.teacher_id).trim() === teacher.id) return true;
+    if (teacher?.teacher_id && c.teacher_id && String(c.teacher_id).trim() === teacher.teacher_id) return true;
 
     // 2. Direct teacher_name match
     if (teacherNameNorm && c.teacher_name && String(c.teacher_name).trim().toLowerCase().includes(teacherNameNorm)) return true;
@@ -75,6 +76,8 @@ export function filterTeacherAssignedCourses<T extends { id: string; name?: stri
     if (Array.isArray(c.subjects)) {
       const subjectMatch = c.subjects.some((sub) => {
         if (userUid && sub.teacher_id && String(sub.teacher_id).trim() === userUid) return true;
+        if (teacher?.id && sub.teacher_id && String(sub.teacher_id).trim() === teacher.id) return true;
+        if (teacher?.teacher_id && sub.teacher_id && String(sub.teacher_id).trim() === teacher.teacher_id) return true;
         if (teacherNameNorm && sub.teacher_name && String(sub.teacher_name).trim().toLowerCase().includes(teacherNameNorm)) return true;
         return false;
       });

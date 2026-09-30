@@ -1,9 +1,15 @@
+import { setGlobalOptions } from "firebase-functions/v2";
+
 /**
- * MSLB Firebase Cloud Functions — Phase 1 Foundation
- * 
- * Entry point for all Cloud Functions.
- * Each function is in its own module for clean separation of security boundaries.
+ * Configure global options for all Cloud Functions v2.
+ * cpu: 'gcf_gen1' (0.166 vCPU for 256MB) ensures all 26 functions together
+ * consume ~4.3 vCPUs, comfortably within the GCP regional 20 vCPU quota limit.
  */
+setGlobalOptions({
+  region: "us-central1",
+  cpu: "gcf_gen1",
+  maxInstances: 10,
+});
 export { sendNotification } from "./notifications/sendNotification";
 export { getQuizQuestions } from "./quiz/getQuizQuestions";
 export { getQuizCategoryCounts } from "./quiz/getQuizCategoryCounts";
@@ -15,6 +21,7 @@ export { verifyRazorpayPayment } from "./payments/verifyRazorpayPayment";
 export { submitPaymentReference } from "./payments/submitPaymentReference";
 export { adminPaymentAction } from "./payments/adminPaymentAction";
 export { adminRefundPayment } from "./payments/adminRefundPayment";
+export { enrollInFreeCourse } from "./payments/enrollInFreeCourse";
 export { generateCertificate } from "./certificates/generateCertificate";
 export { createStatusCheck } from "./status/statusChecks";
 
@@ -41,4 +48,7 @@ export {
   retryStudentWelcomeMessage,
   getWhatsAppProviderHealthCallable,
 } from "./onboarding/welcomeCommunication";
+
+// ─── Phase 74: Production Course Delete Safety (13 Dependency Checks) ───────────
+export { deleteCourse } from "./courses/deleteCourse";
 

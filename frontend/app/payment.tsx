@@ -16,7 +16,7 @@ import { normalizeFirebaseError } from "@/lib/errors";
 import { logFirestoreFailure } from "@/lib/firestoreDebug";
 import { createRazorpayOrder, verifyRazorpayPayment } from "@/lib/razorpayFunctions";
 
-type PaymentType = "fees" | "sadqa" | "zakat" | "fitra" | "langar";
+type PaymentType = "fees" | "admission" | "sadqa" | "zakat" | "fitra" | "langar";
 
 interface PaymentHistoryItem {
   id: string;
@@ -106,14 +106,18 @@ export default function PaymentFlowScreen() {
     load().catch(() => {});
   }, [user?.uid]);
 
+  const selectedCourse = useMemo(() => courses.find((course) => course.id === selectedCourseId) || null, [courses, selectedCourseId]);
+
   useEffect(() => {
-    if (paymentType === "fees") {
-      setAmount(String(feesAmount || ""));
+    if (paymentType === "admission") {
+      setAmount(String(selectedCourse?.admission_fee ?? 100));
+    } else if (paymentType === "fees") {
+      const fee = selectedCourse?.course_fee !== undefined ? selectedCourse.course_fee : (feesAmount || 500);
+      setAmount(String(fee));
     }
-  }, [feesAmount, paymentType]);
+  }, [feesAmount, paymentType, selectedCourse]);
 
   const parsedAmount = useMemo(() => Number(amount || 0), [amount]);
-  const selectedCourse = useMemo(() => courses.find((course) => course.id === selectedCourseId) || null, [courses, selectedCourseId]);
 
   useEffect(() => {
     if (params.courseId) {
@@ -160,7 +164,16 @@ export default function PaymentFlowScreen() {
   }, [currentPaymentId, step]);
 
   const onContinueToReview = () => {
-    const rawAmt = paymentType === "fees" ? (feesAmount || 500) : Number(amount || 0);
+    const rawAmt = paymentType === "admission" 
+      ? (selectedCourse?.admission_fee ?? 100)
+      : paymentType === "fees" 
+      ? (selectedCourse?.course_fee ?? feesAmount ?? 500) 
+      : Number(amount || 0);
+
+    if (paymentType === "fees" && selectedCourse?.course_fee === 0) {
+      setError("This course is free. Please enroll directly from the course page without payment.");
+      return;
+    }
     if (!Number.isFinite(rawAmt) || rawAmt <= 0) {
       setError("Please enter a valid amount greater than 0.");
       return;
@@ -173,6 +186,10 @@ export default function PaymentFlowScreen() {
       setError("Please select the course this fee payment is for.");
       return;
     }
+    if (paymentType === "admission" && !effCourseId) {
+      setError("Please select the course this admission payment is for.");
+      return;
+    }
     setError("");
     setStep(2);
   };
@@ -180,7 +197,7 @@ export default function PaymentFlowScreen() {
   const checkoutHtml = useMemo(() => {
     if (!checkoutData) return "";
     const { keyId, orderId, amount: orderAmt, currency } = checkoutData;
-    const courseTitle = selectedCourse?.name || (paymentType === "fees" ? "Madrasa Course Fee" : paymentType.toUpperCase());
+    const courseTitle = selectedCourse?.name || (paymentType === "fees" ? "Madrasa Course Fee" : paymentType === "admission" ? "Admission Fee" : paymentType.toUpperCase());
     const studentName = profile?.name || user?.displayName || "Student";
     const studentEmail = profile?.email || user?.email || "";
 
@@ -263,6 +280,10 @@ export default function PaymentFlowScreen() {
       setError("Please select the course this fee payment is for.");
       return;
     }
+    if (paymentType === "admission" && !effCourseId) {
+      setError("Please select the course this admission payment is for.");
+      return;
+    }
 
     setError("");
     setOpeningPayment(true);
@@ -270,7 +291,7 @@ export default function PaymentFlowScreen() {
     try {
       // ...(paymentType === 'fees' ? { course_id: selectedCourseId } : {})
       const orderData = await createRazorpayOrder({
-        courseId: paymentType === "fees" ? effCourseId : undefined,
+        courseId: (paymentType === "fees" || paymentType === "admission") ? effCourseId : undefined,
         paymentType,
       });
 
@@ -331,16 +352,19 @@ export default function PaymentFlowScreen() {
               <View style={styles.paymentCategory}>
                 <View style={styles.paymentCategoryHeader}>
                   <Ionicons name="school-outline" size={18} color={COLORS.primary} />
-                  <Text style={styles.paymentCategoryTitle}>Course Fees</Text>
+                  <Text style={styles.paymentCategoryTitle}>Academic Fees & Admission</Text>
                 </View>
                 <View style={styles.choiceRow}>
                   <TouchableOpacity style={[styles.choiceChip, paymentType === "fees" && styles.choiceChipActive]} onPress={() => setPaymentType("fees")}>
-                    <Text style={[styles.choiceText, paymentType === "fees" && styles.choiceTextActive]}>FEES</Text>
+                    <Text style={[styles.choiceText, paymentType === "fees" && styles.choiceTextActive]}>COURSE FEES</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.choiceChip, paymentType === "admission" && styles.choiceChipActive]} onPress={() => setPaymentType("admission")}>
+                    <Text style={[styles.choiceText, paymentType === "admission" && styles.choiceTextActive]}>ADMISSION (₹100)</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {paymentType === "fees" ? (
+              {(paymentType === "fees" || paymentType === "admission") ? (
                 <View style={styles.paymentCategory}>
                   <View style={styles.paymentCategoryHeader}>
                     <Ionicons name="book-outline" size={18} color={COLORS.primary} />
@@ -360,6 +384,14 @@ export default function PaymentFlowScreen() {
                 </View>
               ) : null}
 
+              {paymentType === "fees" && selectedCourse?.course_fee === 0 ? (
+                <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: 12, borderRadius: RADIUS.md, marginBottom: SPACING.md }}>
+                  <Text style={{ color: '#059669', fontSize: 13, fontWeight: '600' }}>
+                    ✨ This is a FREE course! You can enroll directly from the course page without making a payment.
+                  </Text>
+                </View>
+              ) : null}
+
               <View style={styles.paymentCategory}>
                 <View style={styles.paymentCategoryHeader}>
                   <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
@@ -376,10 +408,10 @@ export default function PaymentFlowScreen() {
 
               <Text style={styles.label}>Amount (INR)</Text>
               <TextInput
-                style={[styles.input, paymentType === "fees" && styles.inputDisabled]}
+                style={[styles.input, (paymentType === "fees" || paymentType === "admission") && styles.inputDisabled]}
                 keyboardType="numeric"
                 value={amount}
-                editable={paymentType !== "fees"}
+                editable={paymentType !== "fees" && paymentType !== "admission"}
                 onChangeText={setAmount}
                 placeholder="Enter amount"
                 placeholderTextColor={COLORS.textMuted}

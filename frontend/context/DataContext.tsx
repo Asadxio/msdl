@@ -42,6 +42,40 @@ export type CourseSubject = {
   schedule?: string;
 };
 
+export const OFFICIAL_COURSE_FEES: Record<string, number> = {
+  'rabiya': 500,
+  'rabiya jamat': 500,
+  'ula': 500,
+  'ula jamat': 500,
+  'aidadiya': 500,
+  'aaidadiya': 500,
+  'aidadiya jamat': 500,
+  'aaidadiya jamat': 500,
+  'salisa': 500,
+  'salisa jamat': 500,
+  'khamsa': 500,
+  'khamsa jamat': 500,
+  'mubaligha': 300,
+  'mubaligha course': 300,
+  'madani qaida': 200,
+  'urdu': 100,
+  'urdu course': 100,
+  'short courses': 0,
+  'short course': 0,
+  'nazara': 300,
+  'nazara course': 300,
+  'arabic grammar': 400,
+  'qirat': 500,
+  'qirat course': 500,
+};
+
+export function resolveOfficialCourseFee(name: string, explicitFee?: number): number {
+  if (typeof explicitFee === 'number') return explicitFee;
+  const key = String(name || '').trim().toLowerCase();
+  if (OFFICIAL_COURSE_FEES[key] !== undefined) return OFFICIAL_COURSE_FEES[key];
+  return 500;
+}
+
 export type Course = {
   id: string;
   name: string;
@@ -55,10 +89,17 @@ export type Course = {
   class_link: string;
   meet_link?: string;
   subjects?: CourseSubject[];
+  course_fee?: number;
+  admission_fee?: number;
+  fee?: number;
+  status?: 'active' | 'inactive';
+  assigned_teachers?: string[];
 };
 
 export type Teacher = {
   id: string;
+  user_uid?: string;
+  teacher_id?: string;
   name: string;
   organization_id?: string;
   title: string;
@@ -67,9 +108,14 @@ export type Teacher = {
   photo_url?: string;
   bio?: string;
   qualifications?: string[] | string;
+  islamic_qualification?: string;
   specializations?: string[] | string;
   experience_years?: string | number;
   languages?: string[] | string;
+  verification_status?: 'approved' | 'pending' | 'verified';
+  email?: string;
+  phone?: string;
+  status?: string;
 };
 
 export type Book = {
@@ -515,6 +561,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           class_link: data.classLink || data.class_link || data.meet_link || '',
           meet_link: data.meet_link || data.class_link || data.classLink || '',
           subjects: rawSubjects,
+          admission_fee: typeof data.admission_fee === 'number' ? data.admission_fee : 100,
+          course_fee: resolveOfficialCourseFee(data.name, typeof data.course_fee === 'number' ? data.course_fee : (typeof data.fee === 'number' ? data.fee : undefined)),
+          fee: resolveOfficialCourseFee(data.name, typeof data.fee === 'number' ? data.fee : (typeof data.course_fee === 'number' ? data.course_fee : undefined)),
+          status: data.status || 'active',
+          assigned_teachers: Array.isArray(data.assigned_teachers) ? data.assigned_teachers : undefined,
         });
       });
       const teachersData: Teacher[] = [];
@@ -522,6 +573,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const data = doc.data();
         teachersData.push({
           id: doc.id,
+          user_uid: data.user_uid || doc.id,
+          teacher_id: data.teacher_id || undefined,
           name: data.name || '',
           organization_id: data.organization_id || 'mslb-main',
           title: data.title || '',
@@ -530,9 +583,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           photo_url: data.photo_url || '',
           bio: data.bio || '',
           qualifications: data.qualifications || undefined,
+          islamic_qualification: data.islamic_qualification || undefined,
           specializations: data.specializations || undefined,
           experience_years: data.experience_years != null ? data.experience_years : undefined,
           languages: data.languages || undefined,
+          verification_status: data.verification_status || 'approved',
+          email: data.email || undefined,
+          phone: data.phone || undefined,
+          status: data.status || undefined,
         });
       });
 
@@ -1070,6 +1128,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         file_url: params.fileUrl || '',
         text_answer: params.textAnswer || '',
         status: 'submitted',
+        submitted_at: serverTimestamp(),
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),
       }, { merge: true }));

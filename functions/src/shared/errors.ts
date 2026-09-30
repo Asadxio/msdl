@@ -16,3 +16,6 @@ export const invalidArgumentError = (detail?: string) =>
   new https.HttpsError("invalid-argument", detail ?? "Invalid request.");
 export const resourceExhaustedError = (detail?: string) =>
   new https.HttpsError("resource-exhausted", detail ?? "Resource exhausted.");
+export const failedPreconditionError = (detail?: string) =>
+  new https.HttpsError("failed-precondition", detail ?? "Operation failed precondition.");
+

@@ -27,6 +27,7 @@ import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY } from '@/constants/theme'
 import { db } from '@/lib/firebase';
 import { useData } from '@/context/DataContext';
 import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 
 import { goBackOrReplace } from '@/lib/navigation';
 
@@ -43,9 +44,9 @@ export default function LiveClassesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
-  const { courses } = useData();
+  const { courses, teachers } = useData();
   const { activeOrgId, isDefaultOrg } = useActiveOrganization();
-  const isAdminOrTeacher = profile?.role === 'admin' || profile?.role === 'teacher' || profile?.role === 'super_admin';
+  const isAdminOrTeacher = profile?.role === 'admin' || profile?.role === 'teacher' || profile?.role === 'assistant_teacher' || profile?.role === 'super_admin';
   const [classes, setClasses] = useState<LiveClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'live' | 'scheduled'>('live');
@@ -241,11 +242,26 @@ export default function LiveClassesScreen() {
     );
   };
 
-  // Filter courses to active org for the create dropdown
+  const currentTeacher = useMemo(() => {
+    return teachers?.find(
+      (t) =>
+        t.id === profile?.uid ||
+        t.user_uid === profile?.uid ||
+        (profile?.name && t.name?.toLowerCase().includes(profile.name.toLowerCase()))
+    );
+  }, [teachers, profile?.uid, profile?.name]);
+
+  // Filter courses to active org for the create dropdown (scoped strictly for teachers)
   const orgCourses = useMemo(() => {
-    if (isDefaultOrg) return courses;
-    return courses.filter((c) => !c.organization_id || c.organization_id === (activeOrgId || DEFAULT_ORGANIZATION_ID));
-  }, [courses, isDefaultOrg, activeOrgId]);
+    let pool = isDefaultOrg
+      ? courses
+      : courses.filter((c) => !c.organization_id || c.organization_id === (activeOrgId || DEFAULT_ORGANIZATION_ID));
+
+    if (profile?.role === 'teacher' || profile?.role === 'assistant_teacher') {
+      pool = filterTeacherAssignedCourses(pool, currentTeacher, profile?.uid);
+    }
+    return pool;
+  }, [courses, isDefaultOrg, activeOrgId, profile?.role, profile?.uid, currentTeacher]);
 
   return (
     <View style={styles.container}>

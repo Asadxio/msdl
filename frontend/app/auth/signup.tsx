@@ -16,7 +16,6 @@ import {
   TextInput,
   Image,
   Pressable,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -175,121 +174,6 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
   );
 });
 
-const SegmentedControl = React.memo(function SegmentedControl({
-  activeRole,
-  onChange,
-  disabled
-}: {
-  activeRole: OnboardingRole;
-  onChange: (role: OnboardingRole) => void;
-  disabled?: boolean;
-}) {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === 'dark';
-  const colors = getThemeColors(isDarkMode);
-  
-  const [width, setWidth] = useState(0);
-  const animatedValue = useRef(new Animated.Value(activeRole === 'student' ? 0 : 1)).current;
-  
-  useEffect(() => {
-    Animated.spring(animatedValue, {
-      toValue: activeRole === 'student' ? 0 : 1,
-      damping: 18,
-      stiffness: 180,
-      useNativeDriver: false,
-    }).start();
-  }, [activeRole]);
-  
-  const activeBgWidth = (width - 8) / 2;
-  const translateX = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, activeBgWidth > 0 ? activeBgWidth : 0],
-  });
-
-  const handleSelectRole = (r: OnboardingRole) => {
-    if (disabled || r === activeRole) return;
-    try {
-      void Haptics.selectionAsync();
-    } catch {}
-    onChange(r);
-  };
-
-  return (
-    <View style={styles.inputContainer}>
-      <Text style={[styles.inputLabel, { color: colors.textMuted }]}>User Type</Text>
-      <View 
-        style={[
-          styles.segmentedContainer, 
-          { 
-            backgroundColor: isDarkMode ? '#132C23' : '#F1F5F3',
-            borderColor: isDarkMode ? '#1E4437' : '#E2E8E5',
-          }
-        ]}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      >
-        <Animated.View style={[
-          styles.segmentedActiveBg,
-          {
-            width: activeBgWidth > 0 ? activeBgWidth : '48%',
-            transform: [{ translateX }],
-            backgroundColor: isDarkMode ? '#005F46' : '#005F46',
-            shadowColor: '#005F46',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 4,
-            elevation: 3,
-          }
-        ]} />
-        <Pressable
-          style={styles.segmentedOption}
-          onPress={() => handleSelectRole('student')}
-          accessibilityRole="button"
-          accessibilityLabel="Select Student"
-          accessibilityState={{ selected: activeRole === 'student' }}
-          testID="role-student-btn"
-        >
-          <View style={styles.segmentedOptionContent}>
-            <Ionicons 
-              name="school-outline" 
-              size={15} 
-              color={activeRole === 'student' ? '#FFFFFF' : (isDarkMode ? '#94A3B8' : '#60736B')} 
-              style={{ marginRight: 6 }} 
-            />
-            <Text style={[
-              styles.segmentedText,
-              { color: activeRole === 'student' ? '#FFFFFF' : (isDarkMode ? '#94A3B8' : '#60736B') }
-            ]}>
-              Student
-            </Text>
-          </View>
-        </Pressable>
-        <Pressable
-          style={styles.segmentedOption}
-          onPress={() => handleSelectRole('teacher')}
-          accessibilityRole="button"
-          accessibilityLabel="Select Teacher"
-          accessibilityState={{ selected: activeRole === 'teacher' }}
-          testID="role-teacher-btn"
-        >
-          <View style={styles.segmentedOptionContent}>
-            <Ionicons 
-              name="person-outline" 
-              size={15} 
-              color={activeRole === 'teacher' ? '#FFFFFF' : (isDarkMode ? '#94A3B8' : '#60736B')} 
-              style={{ marginRight: 6 }} 
-            />
-            <Text style={[
-              styles.segmentedText,
-              { color: activeRole === 'teacher' ? '#FFFFFF' : (isDarkMode ? '#94A3B8' : '#60736B') }
-            ]}>
-              Teacher
-            </Text>
-          </View>
-        </Pressable>
-      </View>
-    </View>
-  );
-});
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -314,7 +198,7 @@ export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState<OnboardingRole>('student');
+  const role: OnboardingRole = 'student';
   const [referralCode, setReferralCode] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [whatsappConsent, setWhatsappConsent] = useState(true);
@@ -725,14 +609,7 @@ export default function SignupScreen() {
                 ) : null}
               </View>
 
-              {/* 6. User Type Segmented Control */}
-              <SegmentedControl
-                activeRole={role}
-                onChange={setRole}
-                disabled={loading}
-              />
-
-              {/* 6B. Student Age Category & Child Safety (Phase 45A) */}
+              {/* 6. Student Age Category & Child Safety (Phase 45A) */}
               {role === 'student' && (
                 <View style={styles.ageSection}>
                   <Text style={[styles.inputLabel, { color: colors.textMuted }]}>
@@ -1274,40 +1151,6 @@ const styles = StyleSheet.create({
   requirementActive: {
     color: '#10B981',
     fontWeight: '600',
-  },
-
-  // Segmented Control
-  segmentedContainer: {
-    height: 50,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
-    padding: 4,
-    borderWidth: 1,
-  },
-  segmentedActiveBg: {
-    position: 'absolute',
-    left: 4,
-    height: '84%',
-    borderRadius: 10,
-  },
-  segmentedOption: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    zIndex: 2,
-  },
-  segmentedOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segmentedText: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    letterSpacing: 0.3,
   },
 
   // Consent checkbox

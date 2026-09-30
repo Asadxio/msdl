@@ -651,6 +651,10 @@ export default function RootLayout() {
               <Stack.Screen name="search" options={{ animation: 'fade' }} />
               <Stack.Screen name="course/[id]" />
               <Stack.Screen name="teacher/[id]" />
+              <Stack.Screen name="teacher/students" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="teacher/lessons" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="teacher/assignments" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="teacher/progress" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="book/[id]" />
               <Stack.Screen name="chat/[id]" />
               <Stack.Screen name="call/[id]" options={{ animation: 'slide_from_right' }} />

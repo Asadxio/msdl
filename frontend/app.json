@@ -49,7 +49,12 @@
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.madrasatussalikat.lilbanat",
-      "versionCode": 46,
+      "versionCode": 47,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC4L8fnfXisqAzeEH0snYuxncP-gHMU6yA"
+        }
+      },
       "allowBackup": false,
       "googleServicesFile": "./google-services.json",
       "intentFilters": [

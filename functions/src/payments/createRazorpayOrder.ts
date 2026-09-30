@@ -53,16 +53,47 @@ export const createRazorpayOrder = onCall(
     if (typeof currency !== 'string' || currency !== 'INR') {
       throw invalidArgumentError('Only INR currency is supported.');
     }
-    const validPaymentTypes = ['fees', 'course_enrollment', 'sadqa', 'zakat', 'fitra', 'langar'];
+    const validPaymentTypes = ['fees', 'course_enrollment', 'admission', 'sadqa', 'zakat', 'fitra', 'langar'];
     if (!validPaymentTypes.includes(paymentType)) {
       throw invalidArgumentError(`Invalid payment type: ${paymentType}`);
     }
+
+    const STANDARD_COURSE_FEES: Record<string, number> = {
+      'rabiya': 500,
+      'rabiya jamat': 500,
+      'ula': 500,
+      'ula jamat': 500,
+      'aidadiya': 500,
+      'aaidadiya': 500,
+      'aidadiya jamat': 500,
+      'aaidadiya jamat': 500,
+      'salisa': 500,
+      'salisa jamat': 500,
+      'khamsa': 500,
+      'khamsa jamat': 500,
+      'mubaligha': 300,
+      'mubaligha course': 300,
+      'madani qaida': 200,
+      'urdu course': 100,
+      'urdu': 100,
+      'short courses': 0,
+      'short course': 0,
+      'nazara': 300,
+      'nazara course': 300,
+      'arabic grammar': 400,
+      'qirat': 500,
+      'qirat course': 500,
+    };
 
     // 3. If courseId is provided, verify course exists and user is not already enrolled
     if (courseId) {
       const courseSnap = await collections.courses().doc(courseId).get();
       if (!courseSnap.exists) {
         throw invalidArgumentError(`Course not found: ${courseId}`);
+      }
+      const courseData = courseSnap.data()!;
+      if (courseData.status === 'inactive' || courseData.status === 'archived') {
+        throw invalidArgumentError('This course is currently inactive and not accepting new enrollments.');
       }
 
       const enrollmentSnap = await collections.enrollments().doc(`${user.uid}:${courseId}`).get();
@@ -86,17 +117,48 @@ export const createRazorpayOrder = onCall(
 
     // 5. Read authoritative pricing from Firestore (server-side only)
     const settingsSnap = await db.collection('app_settings').doc('platform').get();
-    if (!settingsSnap.exists) {
-      throw internalError('Payment configuration not found.');
-    }
-    const settings = settingsSnap.data()!;
+    const settings = settingsSnap.exists ? settingsSnap.data()! : {};
     
     // Server-side authoritative amount in paise
     let feesAmountPaise = 0;
-    if (paymentType === 'fees' || paymentType === 'course_enrollment') {
-      const paiseValue = Number(settings.fees_amount_paise ?? 0);
-      const inrValue = Number(settings.fees_amount ?? 0);
-      feesAmountPaise = paiseValue > 0 ? paiseValue : (inrValue > 0 ? inrValue * 100 : 0);
+    if (paymentType === 'admission') {
+      // Admission Fee: ₹100 for every course
+      let admissionInr = 100;
+      if (courseId) {
+        const courseSnap = await collections.courses().doc(courseId).get();
+        if (courseSnap.exists) {
+          const cData = courseSnap.data()!;
+          if (typeof cData.admission_fee === 'number' && cData.admission_fee > 0) {
+            admissionInr = cData.admission_fee;
+          }
+        }
+      }
+      feesAmountPaise = admissionInr * 100;
+    } else if (paymentType === 'fees' || paymentType === 'course_enrollment') {
+      let courseFeeInr = 500;
+      if (courseId) {
+        const courseSnap = await collections.courses().doc(courseId).get();
+        if (courseSnap.exists) {
+          const cData = courseSnap.data()!;
+          const courseNameKey = String(cData.name || '').trim().toLowerCase();
+          if (typeof cData.course_fee === 'number') {
+            courseFeeInr = cData.course_fee;
+          } else if (typeof cData.fee === 'number') {
+            courseFeeInr = cData.fee;
+          } else if (STANDARD_COURSE_FEES[courseNameKey] !== undefined) {
+            courseFeeInr = STANDARD_COURSE_FEES[courseNameKey];
+          } else {
+            courseFeeInr = Number(settings.fees_amount ?? 500);
+          }
+        }
+      } else {
+        courseFeeInr = Number(settings.fees_amount ?? 500);
+      }
+
+      if (courseFeeInr === 0) {
+        throw invalidArgumentError('This course is free. Please use free enrollment instead.');
+      }
+      feesAmountPaise = courseFeeInr * 100;
     } else {
       const inrValue = Number(settings.fees_amount ?? 500);
       feesAmountPaise = inrValue * 100;
