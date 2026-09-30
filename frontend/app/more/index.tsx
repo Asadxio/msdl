@@ -1,6 +1,6 @@
 import { ScreenRefreshControl, ScalePressable } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, Linking, Share, Platform } from 'react-native';
 import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL, MADRASA_WEBSITE_DISPLAY } from '@/lib/links';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import Constants from 'expo-constants';
 import { COLORS, SHADOWS, SPACING, TYPOGRAPHY, RADIUS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
+import { TeacherAccessCodeModal } from '@/components/teacher/TeacherAccessCodeModal';
 
 /* ─────────────────────────────────── Types ──────────────────────────────── */
 
@@ -160,6 +161,7 @@ export default function MoreLandingScreen() {
   const totalCourses = useMemo(() => Array.isArray(courses) ? courses.length : 0, [courses]);
   const totalBooks = useMemo(() => Array.isArray(books) ? books.length : 0, [books]);
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const [teacherCodeModalVisible, setTeacherCodeModalVisible] = useState(false);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await new Promise(r => setTimeout(r, 500));
@@ -306,6 +308,25 @@ export default function MoreLandingScreen() {
           ))}
         </View>
       </View>
+
+      {/* ─── Faculty Access Banner ─── */}
+      <ScalePressable
+        style={styles.facultyQuickCard}
+        onPress={() => setTeacherCodeModalVisible(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Enter Teacher Code"
+      >
+        <View style={styles.facultyCardIcon}>
+          <Ionicons name="key" size={22} color="#D97706" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.facultyCardTitle}>Enter Teacher Code / استاد کوڈ</Text>
+          <Text style={styles.facultyCardSub}>
+            Activate your Ustaadha/Teacher account & courses
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#D97706" />
+      </ScalePressable>
 
       {/* ─── Menu Sections ─── */}
       {MENU_SECTIONS.filter(s => s.adminOnly ? isAdmin : true).map((section) => (
@@ -469,6 +490,11 @@ export default function MoreLandingScreen() {
         <Text style={styles.footerTitle}>Madrasa Tus Salikat Lil Banat</Text>
         {appVersion && <Text style={styles.footerVersion}>Version {appVersion}</Text>}
       </View>
+
+      <TeacherAccessCodeModal
+        visible={teacherCodeModalVisible}
+        onClose={() => setTeacherCodeModalVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -487,6 +513,39 @@ const styles = StyleSheet.create({
   header: { marginBottom: 24 },
   title: { ...TYPOGRAPHY.title, fontSize: 24, color: '#0F172A', letterSpacing: -0.4, fontWeight: '800', marginBottom: 4 },
   subtitle: { ...TYPOGRAPHY.body, fontSize: 14, color: '#64748B', lineHeight: 20 },
+  
+  /* Faculty Quick Card */
+  facultyQuickCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    borderRadius: CARD_RADIUS,
+    padding: 16,
+    marginBottom: 24,
+    gap: 12,
+    ...SHADOWS.card,
+  },
+  facultyCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  facultyCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  facultyCardSub: {
+    fontSize: 12,
+    color: '#78350F',
+    lineHeight: 16,
+  },
   
   /* Profile Card */
   profileCard: {

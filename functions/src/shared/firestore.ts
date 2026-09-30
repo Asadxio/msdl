@@ -32,6 +32,7 @@ export const collections = {
   paymentProcessorAuditLogs: () => db.collection("payment_processor_audit_logs"),
   paymentVerificationQueue: () => db.collection("payment_verification_queue"),
   onboardingCommunications: () => db.collection("onboarding_communications"),
+  teachers: () => db.collection("teachers"),
 };
 
 /**

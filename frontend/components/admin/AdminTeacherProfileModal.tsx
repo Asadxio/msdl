@@ -22,6 +22,7 @@ import {
 import { allocateNextTeacherId } from '@/lib/teacherIdCounter';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 
 interface AdminTeacherProfileModalProps {
   visible: boolean;
@@ -194,8 +195,9 @@ export function AdminTeacherProfileModal({
       Alert.alert('Required', 'Please enter faculty name.');
       return;
     }
-    if (!userUid.trim()) {
-      Alert.alert('Required', 'Teacher User UID is required for canonical single-identity linking.');
+    const resolvedDocId = userUid.trim() || initialTeacher?.id || initialTeacher?.user_uid || '';
+    if (!resolvedDocId) {
+      Alert.alert('Required', 'Teacher record ID or User UID is required to save.');
       return;
     }
     if (!isValidTeacherId(teacherId)) {
@@ -206,8 +208,8 @@ export function AdminTeacherProfileModal({
     setSaving(true);
     try {
       const canonicalTeacher: TeacherProfile = {
-        id: userUid.trim(),
-        user_uid: userUid.trim(),
+        id: resolvedDocId,
+        user_uid: userUid.trim() || initialTeacher?.user_uid || resolvedDocId,
         teacher_id: teacherId.trim(),
         name: name.trim(),
         title: title.trim() || 'Faculty Member',
@@ -321,18 +323,44 @@ export function AdminTeacherProfileModal({
             </TouchableOpacity>
           </View>
 
+          {/* Teacher Access Code Sharing Card */}
+          <View style={styles.accessCodeCard}>
+            <View style={styles.accessCodeHeader}>
+              <Ionicons name="key" size={16} color={COLORS.primary} />
+              <Text style={styles.accessCodeTitle}>Teacher Access / Invite Code</Text>
+            </View>
+            <View style={styles.accessCodeRow}>
+              <Text style={styles.accessCodeText}>{teacherId || 'TCH-????'}</Text>
+              <TouchableOpacity
+                style={styles.copyCodeBtn}
+                onPress={async () => {
+                  if (teacherId) {
+                    await Clipboard.setStringAsync(teacherId);
+                    Alert.alert('Copied! ✓', `Teacher Code "${teacherId}" copied to clipboard. Share this with ${name || 'the teacher'} on WhatsApp.`);
+                  }
+                }}
+              >
+                <Ionicons name="copy-outline" size={14} color="#FFFFFF" />
+                <Text style={styles.copyCodeBtnText}>Copy Code</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.accessCodeHint}>
+              Yeh code teacher ko WhatsApp karein. Jab wo app me yeh code dalengi, unka account aur courses automatic link ho jayenge (UID copy-paste karne ki zaroorat nahi).
+            </Text>
+          </View>
+
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Firebase Auth UID (Primary Identity Link) *</Text>
+            <Text style={styles.label}>Firebase Auth UID (Auto-linked via Code)</Text>
             <TextInput
               style={[styles.input, styles.monoInput]}
               value={userUid}
               onChangeText={setUserUid}
-              placeholder="Firebase User UID"
+              placeholder="Auto-linked when teacher enters code"
               placeholderTextColor={COLORS.textMuted}
               editable={!initialTeacher?.user_uid}
             />
             <Text style={styles.fieldHint}>
-              Immutable identity anchor: links users/{`{uid}`} directly to teachers/{`{uid}`}.
+              Jab teacher apna code enter karengi, unka UID yahan automatically link ho jayega.
             </Text>
           </View>
 
@@ -846,5 +874,64 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontSize: 13,
     fontWeight: '600',
+  },
+  accessCodeCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  accessCodeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  accessCodeTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  accessCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  accessCodeText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 1.5,
+  },
+  copyCodeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  copyCodeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  accessCodeHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 16,
   },
 });

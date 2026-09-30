@@ -52,3 +52,6 @@ export {
 // ─── Phase 74: Production Course Delete Safety (13 Dependency Checks) ───────────
 export { deleteCourse } from "./courses/deleteCourse";
 
+// ─── Teacher Claim / Access Code System ───────────────────────────────────────
+export { claimTeacherAccessCode } from "./teachers/claimTeacherAccessCode";
+

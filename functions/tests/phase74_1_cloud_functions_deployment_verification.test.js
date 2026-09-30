@@ -77,6 +77,7 @@ async function runTestSuite() {
       'retryStudentWelcomeMessage',
       'getWhatsAppProviderHealthCallable',
       'deleteCourse',
+      'claimTeacherAccessCode',
     ];
 
     for (const exp of expected) {

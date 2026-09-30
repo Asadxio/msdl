@@ -1,17 +1,22 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, StatusBar, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, StatusBar, TouchableOpacity, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY, getTeacherAvatar } from '@/constants/theme';
 import { useData, Teacher } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
 import { EmptyState, FadeInView, ScalePressable, ScreenRefreshControl } from '@/components/ui';
 import { normalizeGoogleDriveFileUrl } from '@/lib/links';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import * as Clipboard from 'expo-clipboard';
+import { TeacherAccessCodeModal } from '@/components/teacher/TeacherAccessCodeModal';
 
 function TeacherCard({ teacher, isOnly }: { teacher: Teacher; isOnly: boolean }) {
   const router = useRouter();
   const { courses } = useData();
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const avatarUri = teacher.photo_url ? normalizeGoogleDriveFileUrl(teacher.photo_url) : getTeacherAvatar(teacher.id);
   const initial = (teacher.name || 'T').charAt(0).toUpperCase();
 
@@ -106,6 +111,23 @@ function TeacherCard({ teacher, isOnly }: { teacher: Teacher; isOnly: boolean })
           {teacher.courses && teacher.courses.length > 0 ? `Teaches: ${teacher.courses.join(', ')}` : 'Dedicated Madrasa Faculty'}
         </Text>
 
+        {/* Admin Quick Code Copy Badge */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={styles.adminCodeBadge}
+            onPress={async () => {
+              const codeToCopy = (teacher as any).teacher_id || teacher.id;
+              await Clipboard.setStringAsync(codeToCopy);
+              Alert.alert('Copied! ✓', `Teacher Code "${codeToCopy}" copied. Send this to ${teacher.name} on WhatsApp.`);
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="key-outline" size={12} color="#92400E" />
+            <Text style={styles.adminCodeText}>Code: {(teacher as any).teacher_id || 'TCH-0001'}</Text>
+            <Ionicons name="copy-outline" size={11} color="#92400E" />
+          </TouchableOpacity>
+        )}
+
         {/* Dual Actions: Message + View Profile */}
         <View style={styles.actionButtonsRow}>
           <TouchableOpacity
@@ -129,6 +151,7 @@ function TeacherCard({ teacher, isOnly }: { teacher: Teacher; isOnly: boolean })
 
 export default function TeachersScreen() {
   const { teachers, loading, error, refetch } = useData();
+  const [teacherCodeModalVisible, setTeacherCodeModalVisible] = useState(false);
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     if (refetch) await refetch();
   });
@@ -144,6 +167,14 @@ export default function TeachersScreen() {
             <Text style={styles.headerTitle}>Our Teachers</Text>
             <Text style={styles.headerSubtitle}>Guiding with knowledge & wisdom</Text>
           </View>
+          <TouchableOpacity
+            style={styles.claimCodeHeaderBtn}
+            onPress={() => setTeacherCodeModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="key" size={13} color="#D97706" />
+            <Text style={styles.claimCodeHeaderBtnText}>Teacher Code</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.refreshBtn} onPress={refetch}>
             <Ionicons name="refresh" size={16} color={COLORS.primary} />
           </TouchableOpacity>
@@ -167,6 +198,11 @@ export default function TeachersScreen() {
           ))}
         </ScrollView>
       )}
+
+      <TeacherAccessCodeModal
+        visible={teacherCodeModalVisible}
+        onClose={() => setTeacherCodeModalVisible(false)}
+      />
     </View>
   );
 }
@@ -184,6 +220,41 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.textMain },
   headerSubtitle: { fontSize: 13, fontWeight: '500', color: COLORS.textSecondary, marginTop: 2 },
+  claimCodeHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: RADIUS.xxl,
+  },
+  claimCodeHeaderBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  adminCodeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  adminCodeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400E',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
   refreshBtn: {
     width: 36, height: 36, borderRadius: RADIUS.xxl,
     borderWidth: 1, borderColor: COLORS.border,

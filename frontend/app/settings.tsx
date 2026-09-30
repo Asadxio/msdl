@@ -19,6 +19,7 @@ import AdminHealthDashboard from '@/components/AdminHealthDashboard';
 import { useLanguage, type Language } from '@/context/LanguageContext';
 import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
 import { BugReportModal, FeatureSuggestModal, FaqModal } from '@/components/SupportModals';
+import { TeacherAccessCodeModal } from '@/components/teacher/TeacherAccessCodeModal';
 import * as Notifications from 'expo-notifications';
 import { clearQuizCounts } from '@/lib/lmsHardening';
 import { useData } from '@/context/DataContext';
@@ -106,6 +107,7 @@ export default function SettingsScreen() {
   const [bugModalVisible, setBugModalVisible] = useState(false);
   const [featureModalVisible, setFeatureModalVisible] = useState(false);
   const [faqModalVisible, setFaqModalVisible] = useState(false);
+  const [teacherCodeModalVisible, setTeacherCodeModalVisible] = useState(false);
   
   const { refetch, refetchLearning, refetchBooks } = useData();
   const [syncingData, setSyncingData] = useState(false);
@@ -510,6 +512,26 @@ export default function SettingsScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
+        {/* Faculty Access Banner */}
+        <TouchableOpacity
+          style={styles.facultyBanner}
+          onPress={() => setTeacherCodeModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.facultyBannerLeft}>
+            <View style={styles.facultyIconCircle}>
+              <Ionicons name="key" size={20} color="#D97706" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.facultyBannerTitle}>Enter Teacher Code / استاد کوڈ</Text>
+              <Text style={styles.facultyBannerSub}>
+                Activate your Ustaadha account & access your assigned courses.
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#D97706" />
+        </TouchableOpacity>
+
         {/* Section 1: Notifications */}
         <SettingsSection title="Notifications" icon="notifications-outline">
           <View style={styles.row}>
@@ -1331,6 +1353,10 @@ export default function SettingsScreen() {
       <FeatureSuggestModal visible={featureModalVisible} onClose={() => setFeatureModalVisible(false)} />
       <FaqModal visible={faqModalVisible} onClose={() => setFaqModalVisible(false)} />
       <LanguageSwitcherSheet visible={langModalVisible} onClose={() => setLangModalVisible(false)} />
+      <TeacherAccessCodeModal
+        visible={teacherCodeModalVisible}
+        onClose={() => setTeacherCodeModalVisible(false)}
+      />
     </View>
   );
 }
@@ -1354,6 +1380,44 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, fontWeight: '800', color: '#0F172A', letterSpacing: -0.5 },
   scrollContent: { paddingBottom: SPACING.xxl + 40, paddingTop: SPACING.md },
+  facultyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    ...SHADOWS.card,
+  },
+  facultyBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  facultyIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  facultyBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  facultyBannerSub: {
+    fontSize: 12,
+    color: '#78350F',
+    lineHeight: 16,
+  },
   
   section: {
     marginHorizontal: SPACING.lg,
