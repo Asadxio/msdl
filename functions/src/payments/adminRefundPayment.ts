@@ -125,10 +125,13 @@ export const adminRefundPayment = onCall(
     }
 
     const refundId = rzpRefund.id ?? `rfnd_${Date.now()}`;
+    const paymentDomain: 'academic_fee' | 'donation' = paymentData.payment_domain || 
+      (['sadqa', 'sadqah', 'zakat', 'fitra', 'fitrah', 'langar', 'donation_other'].includes(paymentData.payment_type || paymentData.type) ? 'donation' : 'academic_fee');
+    const isAcademic = paymentDomain === 'academic_fee';
     const now = FieldValue.serverTimestamp();
     const nowMs = Date.now();
     const userId = paymentData.user_id;
-    const courseId = paymentData.course_id;
+    const courseId = isAcademic ? paymentData.course_id : null;
 
     // 7. Atomic batch update in Firestore
     const batch = db.batch();
@@ -147,8 +150,9 @@ export const adminRefundPayment = onCall(
       updated_at_ms: nowMs,
     });
 
-    // 7b. Revoke course enrollment if applicable
-    if (userId && courseId) {
+    // 7b. Revoke course enrollment ONLY IF academic fee and courseId present
+    // CRITICAL: A donation refund MUST NOT accidentally revoke a student's academic enrollment!
+    if (isAcademic && userId && courseId) {
       const enrollmentRef = collections.enrollments().doc(`${userId}:${courseId}`);
       batch.set(enrollmentRef, {
         status: 'refunded',
@@ -157,10 +161,8 @@ export const adminRefundPayment = onCall(
         revoked_by: admin.uid,
         refund_id: refundId,
       }, { merge: true });
-    }
 
-    // 7c. Update subscription status if applicable
-    if (userId) {
+      // 7c. Update subscription status only for academic refunds
       const subscriptionRef = collections.subscriptions().doc(userId);
       batch.set(subscriptionRef, {
         status: 'refunded',
@@ -174,7 +176,9 @@ export const adminRefundPayment = onCall(
     // 7d. Immutable audit log entry
     const auditRef = db.collection('payment_processor_audit_logs').doc();
     batch.set(auditRef, {
-      event: 'payment_refunded',
+      event: isAcademic ? 'academic_payment_refunded' : 'donation_refunded',
+      payment_domain: paymentDomain,
+      payment_type: paymentData.payment_type || paymentData.type,
       payment_doc_id: paymentId,
       provider_payment_id: providerPaymentId,
       refund_id: refundId,

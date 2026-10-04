@@ -1,4 +1,5 @@
 import { collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '@/lib/firebase';
 
 export type LegalDocKey = 'terms' | 'privacy' | 'community';
@@ -83,6 +84,7 @@ export async function getConsentStatus(userId: string): Promise<ConsentStatus> {
 
 export async function acceptLegalDocs(userId: string, keys: LegalDocKey[]): Promise<void> {
   invalidateConsentCache(userId);
+  await AsyncStorage.setItem(`@mslb_legal_accepted_${userId}`, '1').catch(() => {});
   const accepted = keys.reduce<Partial<Record<LegalDocKey, { version: string; acceptedAt: unknown }>>>((acc, key) => {
     acc[key] = { version: LEGAL_DOCS[key].version, acceptedAt: serverTimestamp() };
     return acc;

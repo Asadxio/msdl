@@ -1,0 +1,30 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1:8081",
+      "localStorage": [
+        {
+          "name": "@madrasatussalikat/onboarding_entry_completed_version",
+          "value": "1.0.12"
+        },
+        {
+          "name": "MSLB_INSTALLED_v3",
+          "value": "1"
+        },
+        {
+          "name": "@mslb_legal_accepted_student_zainab_101",
+          "value": "1"
+        },
+        {
+          "name": "@mslb_legal_accepted_teacher_maryam_01",
+          "value": "1"
+        },
+        {
+          "name": "@mslb_legal_accepted_mock_admin_uid",
+          "value": "1"
+        }
+      ]
+    }
+  ]
+}

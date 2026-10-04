@@ -229,8 +229,14 @@ export function getTeacherAcademicScope(
   for (const course of courses) {
     if (isTeacherAssignedToCourse(course, teacher, userUid)) {
       assignedCourses.push(course);
-      if (course.id) assignedCourseIds.add(course.id.toLowerCase());
-      if (course.name) assignedCourseNames.add(course.name.toLowerCase());
+      if (course.id) {
+        assignedCourseIds.add(course.id);
+        assignedCourseIds.add(course.id.toLowerCase());
+      }
+      if (course.name) {
+        assignedCourseNames.add(course.name);
+        assignedCourseNames.add(course.name.toLowerCase());
+      }
 
       const assignedSubs = getTeacherAssignedSubjects(course, teacher, userUid);
       subjectsByCourseId.set(course.id, assignedSubs);

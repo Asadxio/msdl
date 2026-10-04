@@ -517,9 +517,9 @@ export default function ManageAcademicsScreen() {
     const newSubject: CourseSubject = {
       id: `sub_${Date.now()}`,
       name: subjectDraftName.trim(),
-      teacher_id: subjectDraftTeacherId || undefined,
-      teacher_name: assignedTeacher?.name || undefined,
-      schedule: subjectDraftSchedule.trim() || undefined,
+      ...(subjectDraftTeacherId ? { teacher_id: subjectDraftTeacherId } : {}),
+      ...(assignedTeacher?.name ? { teacher_name: assignedTeacher.name } : {}),
+      ...(subjectDraftSchedule.trim() ? { schedule: subjectDraftSchedule.trim() } : {}),
     };
     setCourseForm((prev) => ({
       ...prev,
@@ -677,7 +677,7 @@ export default function ManageAcademicsScreen() {
                 title: starterLessonTitle.trim(),
                 order: 1,
                 description: `Awwaleen Sabaq for ${payload.name}`,
-                content_url: starterLessonUrl.trim() || undefined,
+                ...(starterLessonUrl.trim() ? { content_url: starterLessonUrl.trim() } : {}),
                 duration_minutes: 30,
                 created_at: serverTimestamp(),
                 updated_at: serverTimestamp(),

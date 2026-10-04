@@ -36,6 +36,8 @@ export interface VerifyRazorpayPaymentResponse {
   alreadyCompleted?: boolean;
   paymentDocId: string;
   enrollmentId?: string;
+  paymentDomain?: 'academic_fee' | 'donation';
+  paymentType?: string;
 }
 
 /**
@@ -133,11 +135,15 @@ export const verifyRazorpayPayment = onCall(
       throw invalidArgumentError('Order ID does not match the payment record.');
     }
 
+    const paymentDomain: 'academic_fee' | 'donation' = paymentData.payment_domain || 
+      (['sadqa', 'sadqah', 'zakat', 'fitra', 'fitrah', 'langar', 'donation_other'].includes(paymentData.payment_type || paymentData.type) ? 'donation' : 'academic_fee');
+    const isAcademic = paymentDomain === 'academic_fee';
+
     // 8. Idempotency: If payment is already succeeded, return immediately
     const currentState = paymentData.state ?? paymentData.status;
     if (currentState === 'succeeded') {
       logger.info(`[verifyRazorpayPayment] Payment already marked succeeded docId=${paymentDocId}`);
-      const courseId = paymentData.course_id;
+      const courseId = isAcademic ? paymentData.course_id : null;
       const enrollmentId = courseId ? `${user.uid}:${courseId}` : undefined;
       return {
         success: true,
@@ -145,6 +151,8 @@ export const verifyRazorpayPayment = onCall(
         alreadyCompleted: true,
         paymentDocId,
         enrollmentId,
+        paymentDomain,
+        paymentType: paymentData.payment_type || paymentData.type,
       };
     }
 
@@ -152,7 +160,7 @@ export const verifyRazorpayPayment = onCall(
     const batch = db.batch();
     const now = FieldValue.serverTimestamp();
     const nowMs = Date.now();
-    const courseId: string | null = paymentData.course_id ?? null;
+    const courseId: string | null = isAcademic ? (paymentData.course_id ?? null) : null;
     const orgId: string = paymentData.organization_id || 'mslb-main';
     const amount: number = paymentData.amount || 0;
     const currency: string = paymentData.currency || 'INR';
@@ -165,15 +173,17 @@ export const verifyRazorpayPayment = onCall(
       provider_signature: signature,
       paid_amount: amount,
       paid_currency: currency,
+      payment_domain: paymentDomain,
       organization_id: orgId,
       finalized_at: now,
       finalized_at_ms: nowMs,
       finalized_by: 'verify_razorpay_callable_v1',
     });
 
-    // 9b. Enroll user in course if applicable
+    // 9b. Enroll user in course ONLY IF academic fee and courseId present
+    // A donation MUST NEVER grant an enrollment or activate a course subscription!
     let enrollmentId: string | undefined = undefined;
-    if (courseId) {
+    if (isAcademic && courseId) {
       enrollmentId = `${user.uid}:${courseId}`;
       const enrollmentRef = collections.enrollments().doc(enrollmentId);
       batch.set(enrollmentRef, {
@@ -189,26 +199,28 @@ export const verifyRazorpayPayment = onCall(
         status: 'active',
         source: 'payment',
       }, { merge: true });
-    }
 
-    // 9c. Update subscription
-    const subscriptionRef = collections.subscriptions().doc(user.uid);
-    batch.set(subscriptionRef, {
-      user_id: user.uid,
-      organization_id: orgId,
-      status: 'active',
-      last_payment_id: paymentDocId,
-      provider_order_id: orderId,
-      provider_payment_id: paymentId,
-      updated_at: now,
-      activated_at_ms: nowMs,
-      source: 'verify_razorpay_callable_v1',
-    }, { merge: true });
+      // 9c. Update subscription for academic student
+      const subscriptionRef = collections.subscriptions().doc(user.uid);
+      batch.set(subscriptionRef, {
+        user_id: user.uid,
+        organization_id: orgId,
+        status: 'active',
+        last_payment_id: paymentDocId,
+        provider_order_id: orderId,
+        provider_payment_id: paymentId,
+        updated_at: now,
+        activated_at_ms: nowMs,
+        source: 'verify_razorpay_callable_v1',
+      }, { merge: true });
+    }
 
     // 9d. Audit log
     const auditRef = db.collection('payment_processor_audit_logs').doc();
     batch.set(auditRef, {
-      event: 'payment_verified_callable',
+      event: isAcademic ? 'academic_payment_verified_callable' : 'donation_verified_callable',
+      payment_domain: paymentDomain,
+      payment_type: paymentData.payment_type || paymentData.type,
       payment_doc_id: paymentDocId,
       user_id: user.uid,
       course_id: courseId,
@@ -223,7 +235,7 @@ export const verifyRazorpayPayment = onCall(
 
     await batch.commit();
 
-    logger.info(`[verifyRazorpayPayment] Payment successfully verified and finalized uid=${user.uid} docId=${paymentDocId}`);
+    logger.info(`[verifyRazorpayPayment] Payment successfully verified and finalized uid=${user.uid} docId=${paymentDocId} domain=${paymentDomain}`);
 
     return {
       success: true,
@@ -231,6 +243,8 @@ export const verifyRazorpayPayment = onCall(
       alreadyCompleted: false,
       paymentDocId,
       enrollmentId,
+      paymentDomain,
+      paymentType: paymentData.payment_type || paymentData.type,
     };
   }
 );

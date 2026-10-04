@@ -22,6 +22,8 @@ import {
   StatusBar,
   RefreshControl,
   Linking,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -140,7 +142,13 @@ export default function TeacherAssignmentsScreen() {
 
     setLoading(true);
     try {
-      const courseIdList = Array.from(scope.assignedCourseIds);
+      const courseIdList = Array.from(
+        new Set([
+          ...scope.assignedCourses.map((c) => c.id).filter(Boolean),
+          ...scope.assignedCourses.map((c) => c.name).filter(Boolean),
+          ...Array.from(scope.assignedCourseIds),
+        ])
+      );
       const queryChunks: string[][] = [];
       for (let i = 0; i < courseIdList.length; i += 25) {
         queryChunks.push(courseIdList.slice(i, i + 25));
@@ -189,11 +197,19 @@ export default function TeacherAssignmentsScreen() {
       subSnap.forEach((d) => {
         const data = d.data();
         const matchedAssignment = assignmentIdMap.get(data.assignment_id);
-        const isAssignedCourse = data.course_id && scope.assignedCourseIds.has(String(data.course_id).toLowerCase());
+        const isAssignedCourse = data.course_id && (
+          scope.assignedCourseIds.has(String(data.course_id)) ||
+          scope.assignedCourseIds.has(String(data.course_id).toLowerCase())
+        );
 
         if (matchedAssignment || isAssignedCourse) {
           const cId = data.course_id || matchedAssignment?.course_id || '';
-          const targetCourse = scope.assignedCourses.find((c) => c.id.toLowerCase() === cId.toLowerCase());
+          const targetCourse = scope.assignedCourses.find((c) =>
+            c.id === cId ||
+            c.id.toLowerCase() === cId.toLowerCase() ||
+            c.name === cId ||
+            c.name.toLowerCase() === cId.toLowerCase()
+          );
           const sUid = data.user_id || '';
           if (sUid) studentUidsToFetch.add(sUid);
 
@@ -676,7 +692,10 @@ export default function TeacherAssignmentsScreen() {
         animationType="slide"
         onRequestClose={() => setCreateModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 20 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create New Assignment</Text>
@@ -685,7 +704,12 @@ export default function TeacherAssignmentsScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 460 }}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              style={{ maxHeight: 460 }}
+            >
               <View style={styles.formBox}>
                 {/* Course Selection */}
                 <View style={styles.formGroup}>
@@ -813,7 +837,7 @@ export default function TeacherAssignmentsScreen() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* EVALUATION & GRADING MODAL */}
@@ -823,7 +847,10 @@ export default function TeacherAssignmentsScreen() {
         animationType="slide"
         onRequestClose={() => setSelectedSubmission(null)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 20 }]}>
             <View style={styles.modalHeader}>
               <View>
@@ -838,7 +865,12 @@ export default function TeacherAssignmentsScreen() {
             </View>
 
             {selectedSubmission && (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 440 }}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                style={{ maxHeight: 440 }}
+              >
                 <View style={styles.formBox}>
                   {/* Submission detail */}
                   {selectedSubmission.text_answer ? (
@@ -904,7 +936,7 @@ export default function TeacherAssignmentsScreen() {
               </ScrollView>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

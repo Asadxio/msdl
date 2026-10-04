@@ -26,15 +26,24 @@ try {
   startupLog('Firestore initialized', { mode: 'initializeFirestore' });
 }
 
+import { Platform } from 'react-native';
+
 let auth: Auth;
 try {
-  const getReactNativePersistence = (FirebaseAuth as any).getReactNativePersistence as
-    | ((storage: typeof AsyncStorage) => Persistence)
-    | undefined;
-  auth = FirebaseAuth.initializeAuth(app, getReactNativePersistence ? {
-    persistence: getReactNativePersistence(AsyncStorage),
-  } : undefined);
-  startupLog('Firebase Auth initialized', { persistence: getReactNativePersistence ? 'asyncStorage' : 'default' });
+  if (Platform.OS === 'web') {
+    auth = FirebaseAuth.initializeAuth(app, {
+      persistence: [FirebaseAuth.browserLocalPersistence, FirebaseAuth.indexedDBLocalPersistence],
+    });
+    startupLog('Firebase Auth initialized', { persistence: 'browserLocalPersistence' });
+  } else {
+    const getReactNativePersistence = (FirebaseAuth as any).getReactNativePersistence as
+      | ((storage: typeof AsyncStorage) => Persistence)
+      | undefined;
+    auth = FirebaseAuth.initializeAuth(app, getReactNativePersistence ? {
+      persistence: getReactNativePersistence(AsyncStorage),
+    } : undefined);
+    startupLog('Firebase Auth initialized', { persistence: getReactNativePersistence ? 'asyncStorage' : 'default' });
+  }
 } catch {
   auth = FirebaseAuth.getAuth(app);
   startupLog('Firebase Auth initialized', { persistence: 'existing' });

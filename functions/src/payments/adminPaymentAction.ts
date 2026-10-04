@@ -43,7 +43,10 @@ export const adminPaymentAction = onCall(
       const currentState = pData.state || pData.status || 'pending';
       const userId = pData.user_id;
       const courseId = pData.course_id ?? null;
-      const paymentType = pData.type || pData.payment_type || 'fees';
+      const rawPaymentType = pData.type || pData.payment_type || 'fees';
+      const paymentDomain: 'academic_fee' | 'donation' = pData.payment_domain || 
+        (['sadqa', 'sadqah', 'zakat', 'fitra', 'fitrah', 'langar', 'donation_other'].includes(rawPaymentType) ? 'donation' : 'academic_fee');
+      const isAcademic = paymentDomain === 'academic_fee';
       const orgId = pData.organization_id || 'mslb-main';
 
       let nextState = '';
@@ -80,6 +83,7 @@ export const adminPaymentAction = onCall(
       const baseUpdate: any = {
         state: nextState,
         status: nextState,
+        payment_domain: paymentDomain,
         reviewed_by: user.uid,
         review_note: note.substring(0, 500),
         review_evidence: evidence,
@@ -96,12 +100,13 @@ export const adminPaymentAction = onCall(
 
       tx.update(pRef, baseUpdate);
 
-      // Handle entitlements on approve/verify
+      // Handle entitlements on approve/verify — ONLY for academic fees!
+      // A donation approval MUST NEVER grant enrollment or subscription!
       if (nextState === 'succeeded') {
         if (!userId) throw internalError('Payment missing user_id');
 
-        const grantsSubscription = paymentType === 'fees';
-        const grantsCourseAccess = grantsSubscription && !!courseId;
+        const grantsSubscription = isAcademic;
+        const grantsCourseAccess = isAcademic && !!courseId;
 
         if (grantsCourseAccess) {
           const enrollmentId = `${userId}:${courseId}`;
@@ -136,6 +141,8 @@ export const adminPaymentAction = onCall(
       const auditRef = db.collection('payment_processor_audit_logs').doc();
       tx.set(auditRef, {
         payment_id: paymentId,
+        payment_domain: paymentDomain,
+        payment_type: rawPaymentType,
         actor_id: user.uid,
         actor_role: user.role, // role attached by requireAdminUser
         action: 'state_change',

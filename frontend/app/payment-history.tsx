@@ -6,39 +6,53 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { goBackOrReplace } from '@/lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, limit, orderBy, query, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
+import { IslamicReceiptModal } from '@/components/IslamicReceiptModal';
+import type { FeeReceiptData } from '@/lib/receiptGenerator';
 
 type PaymentStatus =
   | 'pending' | 'processing' | 'submitted' | 'succeeded'
   | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired'
   | 'approved' | 'verified';
 
-type PaymentType = 'fees' | 'sadqa' | 'zakat' | 'fitra' | 'langar';
+type PaymentDomain = 'academic_fee' | 'donation';
 
 type PaymentRecord = {
   id: string;
   user_id: string;
   user_name?: string;
   amount: number;
-  type: PaymentType;
+  payment_domain?: PaymentDomain;
+  payment_type?: string;
+  type?: string;
   state?: PaymentStatus;
   status?: PaymentStatus;
+  provider_order_id?: string;
+  provider_payment_id?: string;
   transaction_ref?: string;
   course_id?: string;
+  course_name?: string;
   created_at?: { toDate?: () => Date; toMillis?: () => number };
   provider?: string;
-  reconciliation?: { finalized?: boolean };
-  replay_detected?: boolean;
-  operation_id?: string;
+  refund_id?: string;
 };
 
 function resolveState(p: PaymentRecord): PaymentStatus {
   return p.state ?? p.status ?? 'pending';
+}
+
+function resolveDomain(p: PaymentRecord): PaymentDomain {
+  if (p.payment_domain === 'donation' || p.payment_domain === 'academic_fee') {
+    return p.payment_domain;
+  }
+  const typeStr = String(p.payment_type || p.type || '').toLowerCase();
+  const donationTypes = ['sadqa', 'sadqah', 'zakat', 'fitra', 'fitrah', 'langar', 'donation_other'];
+  return donationTypes.includes(typeStr) ? 'donation' : 'academic_fee';
 }
 
 function formatDate(item: PaymentRecord): string {
@@ -62,11 +76,18 @@ function formatTime(item: PaymentRecord): string {
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  fees: 'Course Fee',
-  sadqa: 'Sadaqah',
-  zakat: 'Zakat',
-  fitra: 'Fitra',
-  langar: 'Langar',
+  fees: 'Course Tuition Fee',
+  course_fee: 'Course Tuition Fee',
+  admission: 'Madrasa Admission Fee',
+  admission_fee: 'Madrasa Admission Fee',
+  academic_other: 'Other Academic Fee',
+  sadqa: 'Sadqah-e-Jariyah',
+  sadqah: 'Sadqah-e-Jariyah',
+  zakat: 'Zakat Fund',
+  fitra: 'Sadaqat-ul-Fitr',
+  fitrah: 'Sadaqat-ul-Fitr',
+  langar: 'Talibat Langar & Food',
+  donation_other: 'General Donation',
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -85,86 +106,115 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }>
 };
 
 const STATUS_FILTER_OPTIONS: ('all' | PaymentStatus)[] = [
-  'all', 'pending', 'submitted', 'succeeded', 'failed', 'rejected', 'refunded',
+  'all', 'succeeded', 'pending', 'submitted', 'refunded', 'failed',
 ];
 
-const TYPE_FILTER_OPTIONS: ('all' | PaymentType)[] = [
-  'all', 'fees', 'sadqa', 'zakat', 'fitra', 'langar',
-];
-
-// ─── Student Payment Card ────────────────────────────────────────────────────
-function PaymentCard({ item }: { item: PaymentRecord }) {
+// ─── Payment Record Card ─────────────────────────────────────────────────────
+function PaymentCard({ item, onOpenReceipt }: { item: PaymentRecord; onOpenReceipt: (item: PaymentRecord) => void }) {
   const st = resolveState(item);
   const sc = STATUS_COLORS[st] || STATUS_COLORS.pending;
-  const typeLabel = TYPE_LABELS[item.type] || item.type;
+  const domain = resolveDomain(item);
+  const isDonation = domain === 'donation';
+  const typeKey = String(item.payment_type || item.type || '').toLowerCase();
+  const typeLabel = TYPE_LABELS[typeKey] || (isDonation ? 'Donation' : 'Course Fee');
   const dateStr = formatDate(item);
   const timeStr = formatTime(item);
+  const displayAmt = item.amount ? (item.amount > 10000 ? item.amount / 100 : item.amount) : 0;
 
   return (
     <View style={styles.card} testID={`payment-history-${item.id}`}>
+      {/* Top classification tag */}
+      <View style={styles.cardDomainRow}>
+        <View style={[styles.domainBadge, isDonation ? styles.domainBadgeDonation : styles.domainBadgeAcademic]}>
+          <Ionicons
+            name={isDonation ? 'heart' : 'school'}
+            size={12}
+            color={isDonation ? '#B45309' : '#047857'}
+          />
+          <Text style={[styles.domainBadgeText, isDonation ? styles.domainBadgeTextDonation : styles.domainBadgeTextAcademic]}>
+            {isDonation ? 'ISLAMIC FUND / DONATION' : 'ACADEMIC FEE'}
+          </Text>
+        </View>
+
+        <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+          <Text style={[styles.statusText, { color: sc.text }]}>{sc.label}</Text>
+        </View>
+      </View>
+
       <View style={styles.cardTop}>
         <View style={{ flex: 1 }}>
           <Text style={styles.cardType}>{typeLabel}</Text>
+          {item.course_name ? (
+            <Text style={styles.cardCourse}>Course: {item.course_name}</Text>
+          ) : null}
           <Text style={styles.cardDate}>{dateStr}{timeStr ? ` · ${timeStr}` : ''}</Text>
         </View>
-        <View>
-          <Text style={styles.cardAmount}>₹{Number(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
-            <Text style={[styles.statusText, { color: sc.text }]}>{sc.label}</Text>
-          </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={styles.cardAmount}>₹{Number(displayAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
         </View>
       </View>
-      {item.transaction_ref ? (
-        <Text style={styles.txRef} numberOfLines={1}>Ref: {item.transaction_ref}</Text>
-      ) : null}
-      {item.id ? (
-        <Text style={styles.txId} numberOfLines={1}>ID: {item.id}</Text>
-      ) : null}
+
+      <View style={styles.cardFooter}>
+        <View style={{ flex: 1 }}>
+          {item.provider_payment_id ? (
+            <Text style={styles.txRef} numberOfLines={1}>Pay ID: {item.provider_payment_id}</Text>
+          ) : item.transaction_ref ? (
+            <Text style={styles.txRef} numberOfLines={1}>Ref: {item.transaction_ref}</Text>
+          ) : (
+            <Text style={styles.txId} numberOfLines={1}>ID: {item.id}</Text>
+          )}
+        </View>
+
+        {st === 'succeeded' || st === 'approved' || st === 'verified' ? (
+          <TouchableOpacity
+            style={styles.viewReceiptBtn}
+            onPress={() => onOpenReceipt(item)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="document-text-outline" size={14} color={COLORS.primary} />
+            <Text style={styles.viewReceiptBtnText}>View Receipt</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
   );
 }
 
-// ─── Admin Summary Bar ───────────────────────────────────────────────────────
-function AdminSummary({ payments }: { payments: PaymentRecord[] }) {
+// ─── Financial Summary Bar ───────────────────────────────────────────────────
+function FinancialSummaryBar({ payments }: { payments: PaymentRecord[] }) {
   const stats = useMemo(() => {
     let totalRev = 0;
     let totalDonations = 0;
     let totalFees = 0;
-    let failed = 0;
-    const donationTypes = new Set(['sadqa', 'zakat', 'fitra', 'langar']);
     payments.forEach((p) => {
       const st = resolveState(p);
-      const amt = Number(p.amount || 0);
+      const rawAmt = Number(p.amount || 0);
+      const amt = rawAmt > 10000 ? rawAmt / 100 : rawAmt;
+      const domain = resolveDomain(p);
       if (['succeeded', 'approved', 'verified'].includes(st)) {
         totalRev += amt;
-        if (donationTypes.has(p.type)) totalDonations += amt;
-        else if (p.type === 'fees') totalFees += amt;
+        if (domain === 'donation') totalDonations += amt;
+        else totalFees += amt;
       }
-      if (['failed', 'rejected', 'cancelled', 'expired'].includes(st)) failed++;
     });
-    return { totalRev, totalDonations, totalFees, failed };
+    return { totalRev, totalDonations, totalFees };
   }, [payments]);
 
   return (
     <View style={styles.summaryBar}>
       <View style={styles.summaryItem}>
-        <Text style={styles.summaryLabel}>Total Collected</Text>
-        <Text style={styles.summaryValue}>₹{stats.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</Text>
+        <Text style={styles.summaryLabel}>Total Paid</Text>
+        <Text style={styles.summaryValue}>₹{stats.totalRev.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</Text>
       </View>
       <View style={styles.summaryDivider} />
       <View style={styles.summaryItem}>
-        <Text style={styles.summaryLabel}>Fees</Text>
-        <Text style={[styles.summaryValue, { color: '#1565C0' }]}>₹{stats.totalFees.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</Text>
+        <Text style={styles.summaryLabel}>Academic Fees</Text>
+        <Text style={[styles.summaryValue, { color: '#047857' }]}>₹{stats.totalFees.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</Text>
       </View>
       <View style={styles.summaryDivider} />
       <View style={styles.summaryItem}>
-        <Text style={styles.summaryLabel}>Donations</Text>
-        <Text style={[styles.summaryValue, { color: '#AD1457' }]}>₹{stats.totalDonations.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</Text>
-      </View>
-      <View style={styles.summaryDivider} />
-      <View style={styles.summaryItem}>
-        <Text style={styles.summaryLabel}>Failed</Text>
-        <Text style={[styles.summaryValue, { color: COLORS.error }]}>{stats.failed}</Text>
+        <Text style={styles.summaryLabel}>Donations / Zakat</Text>
+        <Text style={[styles.summaryValue, { color: '#B45309' }]}>₹{stats.totalDonations.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</Text>
       </View>
     </View>
   );
@@ -180,8 +230,12 @@ export default function PaymentHistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [error, setError] = useState('');
+  const [domainFilter, setDomainFilter] = useState<'all' | 'academic_fee' | 'donation'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | PaymentStatus>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | PaymentType>('all');
+
+  // Receipt Modal
+  const [selectedReceipt, setSelectedReceipt] = useState<FeeReceiptData | null>(null);
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
 
   const fetchPayments = useCallback(async () => {
     if (!user?.uid) return;
@@ -190,10 +244,8 @@ export default function PaymentHistoryScreen() {
     try {
       let q;
       if (isAdmin) {
-        // Admin: fetch all payments
         q = query(collection(db, 'payments'), orderBy('created_at', 'desc'), limit(500));
       } else {
-        // Student: fetch own payments only
         q = query(
           collection(db, 'payments'),
           where('user_id', '==', user.uid),
@@ -228,10 +280,34 @@ export default function PaymentHistoryScreen() {
 
   const filtered = useMemo(() => payments.filter((p) => {
     const st = resolveState(p);
+    const domain = resolveDomain(p);
     const matchStatus = statusFilter === 'all' || st === statusFilter;
-    const matchType = typeFilter === 'all' || p.type === typeFilter;
-    return matchStatus && matchType;
-  }), [payments, statusFilter, typeFilter]);
+    const matchDomain = domainFilter === 'all' || domain === domainFilter;
+    return matchStatus && matchDomain;
+  }), [payments, statusFilter, domainFilter]);
+
+  const handleOpenReceipt = (item: PaymentRecord) => {
+    const isDonation = resolveDomain(item) === 'donation';
+    const dateStr = item.created_at?.toDate ? item.created_at.toDate().toLocaleDateString('en-IN') : 'Today';
+    const rawAmt = Number(item.amount || 0);
+    const displayAmt = rawAmt > 10000 ? rawAmt / 100 : rawAmt;
+
+    const rData: FeeReceiptData = {
+      receiptId: item.id,
+      studentName: item.user_name || profile?.name || user?.displayName || 'Student / Donor',
+      studentEmail: profile?.email || user?.email || undefined,
+      courseName: item.course_name,
+      amount: displayAmt,
+      category: item.payment_type || item.type || (isDonation ? 'sadqah' : 'course_fee'),
+      paymentDomain: isDonation ? 'donation' : 'academic_fee',
+      paymentMethod: item.provider ? 'Razorpay Online' : 'Standard Payment',
+      transactionId: item.provider_payment_id || item.provider_order_id || item.transaction_ref,
+      issueDateGregorian: dateStr,
+      status: (item.state || item.status || 'succeeded').toUpperCase(),
+    };
+    setSelectedReceipt(rData);
+    setReceiptModalVisible(true);
+  };
 
   return (
     <View style={styles.container}>
@@ -241,7 +317,7 @@ export default function PaymentHistoryScreen() {
           <Ionicons name="arrow-back" size={20} color={COLORS.textMain} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.topBarTitle}>{isAdmin ? 'All Payments' : 'My Payment History'}</Text>
+          <Text style={styles.topBarTitle}>{isAdmin ? 'All Payments & Funds' : 'My Payment History'}</Text>
           {!loading && (
             <Text style={styles.topBarSub}>{filtered.length} records</Text>
           )}
@@ -253,11 +329,31 @@ export default function PaymentHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Admin summary bar */}
-      {isAdmin && !loading && payments.length > 0 && <AdminSummary payments={payments} />}
+      {/* Summary Bar */}
+      {!loading && payments.length > 0 && <FinancialSummaryBar payments={payments} />}
 
-      {/* Filters */}
+      {/* Domain Tabs & Status Filters */}
       <View style={styles.filterContainer}>
+        {/* Domain Selection Tabs */}
+        <View style={styles.domainTabsRow}>
+          {[
+            { key: 'all', label: 'All Payments' },
+            { key: 'academic_fee', label: 'Academic Fees' },
+            { key: 'donation', label: 'Donations & Zakat' },
+          ].map((d) => (
+            <TouchableOpacity
+              key={d.key}
+              style={[styles.domainTabChip, domainFilter === d.key && styles.domainTabChipActive]}
+              onPress={() => setDomainFilter(d.key as any)}
+            >
+              <Text style={[styles.domainTabChipText, domainFilter === d.key && styles.domainTabChipTextActive]}>
+                {d.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Status Scroll Filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           <Text style={styles.filterLabel}>Status:</Text>
           {STATUS_FILTER_OPTIONS.map((opt) => (
@@ -268,20 +364,6 @@ export default function PaymentHistoryScreen() {
             >
               <Text style={[styles.filterChipText, statusFilter === opt && styles.filterChipTextActive]}>
                 {opt === 'all' ? 'All' : STATUS_COLORS[opt]?.label || opt}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          <Text style={styles.filterLabel}>Type:</Text>
-          {TYPE_FILTER_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt}
-              style={[styles.filterChip, typeFilter === opt && styles.filterChipActive]}
-              onPress={() => setTypeFilter(opt)}
-            >
-              <Text style={[styles.filterChipText, typeFilter === opt && styles.filterChipTextActive]}>
-                {opt === 'all' ? 'All' : TYPE_LABELS[opt] || opt}
               </Text>
             </TouchableOpacity>
           ))}
@@ -304,25 +386,39 @@ export default function PaymentHistoryScreen() {
           <Text style={styles.loadingText}>Loading history...</Text>
         </View>
       ) : (
-        <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
+        <FlatList
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           data={filtered}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => <PaymentCard item={item} />}
+          renderItem={({ item }) => <PaymentCard item={item} onOpenReceipt={handleOpenReceipt} />}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={(
             <View style={styles.center}>
               <Ionicons name="card-outline" size={48} color={COLORS.border} />
-              <Text style={styles.emptyTitle}>No payments found</Text>
+              <Text style={styles.emptyTitle}>No payment records found</Text>
               <Text style={styles.emptyText}>
-                {statusFilter !== 'all' || typeFilter !== 'all'
-                  ? 'Try changing filters above'
+                {domainFilter !== 'all' || statusFilter !== 'all'
+                  ? 'Try changing the filters above'
                   : 'Your payment history will appear here after your first transaction.'}
               </Text>
             </View>
           )}
         />
       )}
+
+      {/* Islamic Receipt Modal */}
+      <IslamicReceiptModal
+        visible={receiptModalVisible}
+        receipt={selectedReceipt}
+        onClose={() => {
+          setReceiptModalVisible(false);
+          setSelectedReceipt(null);
+        }}
+      />
     </View>
   );
 }
@@ -347,16 +443,24 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 10, color: COLORS.textMuted, fontWeight: '600' },
   summaryValue: { fontSize: 14, fontWeight: '800', color: COLORS.primary, marginTop: 2 },
   summaryDivider: { width: 1, backgroundColor: COLORS.border, marginHorizontal: 4 },
-  filterContainer: { backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  filterRow: { paddingHorizontal: SPACING.md, paddingVertical: 6, gap: 6, alignItems: 'center' },
+  filterContainer: { backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingVertical: 6 },
+  domainTabsRow: { flexDirection: 'row', paddingHorizontal: SPACING.md, gap: 6, marginBottom: 6 },
+  domainTabChip: {
+    flex: 1, paddingVertical: 7, borderRadius: RADIUS.md, alignItems: 'center',
+    backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border,
+  },
+  domainTabChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  domainTabChipText: { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
+  domainTabChipTextActive: { color: '#FFFFFF', fontWeight: '700' },
+  filterRow: { paddingHorizontal: SPACING.md, paddingVertical: 4, gap: 6, alignItems: 'center' },
   filterLabel: { fontSize: 11, color: COLORS.textMuted, fontWeight: '700', marginRight: 2 },
   filterChip: {
     borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background,
-    borderRadius: RADIUS.full, paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: RADIUS.full, paddingHorizontal: 10, paddingVertical: 4,
   },
   filterChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceAlt },
-  filterChipText: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
-  filterChipTextActive: { color: COLORS.primary },
+  filterChipText: { fontSize: 11, color: COLORS.textMuted, fontWeight: '600' },
+  filterChipTextActive: { color: COLORS.primary, fontWeight: '700' },
   errorBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#FEF2F2', paddingHorizontal: SPACING.md, paddingVertical: 8,
@@ -367,28 +471,47 @@ const styles = StyleSheet.create({
   loadingText: { color: COLORS.textMuted, fontSize: 14 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
   emptyText: {
-    fontSize: 16,
+    fontSize: 14,
     color: COLORS.textMuted,
     textAlign: 'center',
-    marginTop: SPACING.md,
+    marginTop: SPACING.sm,
   },
   list: { padding: SPACING.md, gap: 10, paddingBottom: 24 },
   card: {
-    backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl,
-    padding: SPACING.md, ...SHADOWS.card, gap: 6,
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
+    padding: SPACING.md, ...SHADOWS.card, gap: 8,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  cardType: { fontSize: 15, fontWeight: '700', color: COLORS.textMain },
-  cardDate: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
-  cardAmount: { fontSize: 16, fontWeight: '800', color: COLORS.primary, textAlign: 'right' },
+  cardDomainRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  domainBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.full },
+  domainBadgeAcademic: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
+  domainBadgeDonation: { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A' },
+  domainBadgeText: { fontSize: 10, fontWeight: '800' },
+  domainBadgeTextAcademic: { color: '#047857' },
+  domainBadgeTextDonation: { color: '#B45309' },
   statusBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: RADIUS.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statusText: { fontSize: 11, fontWeight: '700' },
-  txRef: { fontSize: 12, color: COLORS.textMuted, fontFamily: 'monospace' },
+  statusText: { fontSize: 10, fontWeight: '700' },
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  cardType: { fontSize: 15, fontWeight: '700', color: COLORS.textMain },
+  cardCourse: { fontSize: 12, color: COLORS.primary, fontWeight: '600', marginTop: 2 },
+  cardDate: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  cardAmount: { fontSize: 17, fontWeight: '800', color: COLORS.primary },
+  cardFooter: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 6,
+  },
+  txRef: { fontSize: 11, color: COLORS.textMuted, fontFamily: 'monospace' },
   txId: { fontSize: 10, color: COLORS.border, fontFamily: 'monospace' },
+  viewReceiptBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: COLORS.surfaceAlt, paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
+  },
+  viewReceiptBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
 });

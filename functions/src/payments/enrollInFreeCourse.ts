@@ -18,6 +18,7 @@ import { db } from '../config/admin';
 import { requireAuthenticatedUser } from '../auth/verifyAuth';
 import { invalidArgumentError, permissionDeniedError } from '../shared/errors';
 import { collections } from '../shared/firestore';
+import { deliverPushNotificationInternal } from '../notifications/sendNotification';
 
 interface EnrollInFreeCourseRequest {
   courseId: string;
@@ -124,6 +125,50 @@ export const enrollInFreeCourse = onCall(
 
     await batch.commit();
     logger.info(`[enrollInFreeCourse] Successfully enrolled uid=${user.uid} in free course=${courseId}`);
+
+    // Send automated confirmation notification (Native FCM Push + In-App Record)
+    try {
+      const courseName = String(courseData.name || 'Free Course').trim();
+      const notifTitle = "🎓 Free Course Enrollment Activated";
+      const notifBody = `Mubarak! You are now successfully enrolled in "${courseName}". Start learning your lessons now!`;
+      const notifRoute = `/course/${courseId}`;
+      const dedupeId = `free_enroll_${user.uid}_${courseId}`;
+
+      await deliverPushNotificationInternal({
+        recipientUids: [user.uid],
+        title: notifTitle,
+        body: notifBody,
+        channelId: "academic",
+        organizationId: orgId,
+        sentByUid: "system",
+        dedupeId,
+        data: {
+          type: "enrollment_success",
+          course_id: courseId,
+          route: notifRoute,
+        },
+      }).catch((pushErr) => logger.warn("[enrollInFreeCourse] Push dispatch non-fatal error:", pushErr));
+
+      await collections.notifications().add({
+        user_id: user.uid,
+        recipient_id: user.uid,
+        actor_id: "system",
+        channel: "announcements",
+        event: "enrollment_success",
+        title: notifTitle,
+        body: notifBody,
+        message: notifBody,
+        route: notifRoute,
+        read: { [user.uid]: false },
+        data: { course_id: courseId, route: notifRoute },
+        created_at: FieldValue.serverTimestamp(),
+        created_at_ms: Date.now(),
+        dedupe_id: dedupeId,
+        organization_id: orgId,
+      }).catch(() => {});
+    } catch (notifErr) {
+      logger.warn("[enrollInFreeCourse] Error creating notification record:", notifErr);
+    }
 
     return {
       success: true,

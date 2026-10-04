@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:playwright": "playwright test"
+  },
   "dependencies": {
     "expo": "^56.0.12",
     "firebase-admin": "^14.1.0",
@@ -6,6 +10,7 @@
     "node-pty": "^1.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/react": "~19.2.14",
     "typescript": "~6.0.3"
   },

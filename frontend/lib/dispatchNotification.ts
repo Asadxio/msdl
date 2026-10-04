@@ -195,6 +195,7 @@ async function sendPushViaCloudFunction(params: {
       title: params.title,
       body: params.body,
       data: stringData,
+      channelId: params.channel || 'default',
       ...(params.organization_id ? { organization_id: params.organization_id } : {}),
       ...(params.sendToAll
         ? { sendToAll: true }

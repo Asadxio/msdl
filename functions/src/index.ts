@@ -55,3 +55,10 @@ export { deleteCourse } from "./courses/deleteCourse";
 // ─── Teacher Claim / Access Code System ───────────────────────────────────────
 export { claimTeacherAccessCode } from "./teachers/claimTeacherAccessCode";
 
+// ─── Phase 78: End-to-End Automated Notification Triggers ───────────────────
+export {
+  onUserApprovalTrigger,
+  onSubmissionWrittenTrigger,
+  onLiveClassWrittenTrigger,
+} from "./notifications/notificationTriggers";
+

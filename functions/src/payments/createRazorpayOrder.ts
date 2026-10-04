@@ -23,8 +23,10 @@ import { invalidArgumentError, internalError, permissionDeniedError } from '../s
 import { collections } from '../shared/firestore';
 
 interface CreateOrderRequest {
-  courseId?: string;          // Optional: specific course
-  paymentType?: string;       // e.g. 'fees', 'course_enrollment', 'sadqa', 'zakat', 'fitra', 'langar'
+  courseId?: string;          // Optional: specific course (academic fees only)
+  paymentDomain?: 'academic_fee' | 'donation';
+  paymentType?: string;       // e.g. 'admission_fee', 'course_fee', 'sadqah', 'zakat', 'fitrah', 'langar'
+  donationAmountInr?: number; // Custom donation amount in INR
   currency?: string;          // Default: 'INR'
 }
 
@@ -34,6 +36,8 @@ interface CreateOrderResponse {
   amount: number;             // Amount in paise (smallest unit)
   currency: string;
   keyId: string;              // Public key only — NEVER keySecret
+  paymentDomain: 'academic_fee' | 'donation';
+  paymentType: string;
 }
 
 export const createRazorpayOrder = onCall(
@@ -47,15 +51,37 @@ export const createRazorpayOrder = onCall(
     const user = await requireAuthenticatedUser(request);
     logger.info(`[createRazorpayOrder] Authenticated user verified: uid=${user.uid} role=${user.role}`);
 
-    const { courseId, paymentType = 'fees', currency = 'INR' } = request.data ?? {};
+    const { courseId, paymentDomain: rawDomain, paymentType: rawType = 'course_fee', donationAmountInr, currency = 'INR' } = request.data ?? {};
 
-    // 2. Validate currency and payment type
+    // 2. Validate currency
     if (typeof currency !== 'string' || currency !== 'INR') {
       throw invalidArgumentError('Only INR currency is supported.');
     }
-    const validPaymentTypes = ['fees', 'course_enrollment', 'admission', 'sadqa', 'zakat', 'fitra', 'langar'];
-    if (!validPaymentTypes.includes(paymentType)) {
-      throw invalidArgumentError(`Invalid payment type: ${paymentType}`);
+
+    // Determine domain and normalized payment type
+    const DONATION_TYPES = ['sadqa', 'sadqah', 'zakat', 'fitra', 'fitrah', 'langar', 'donation_other'];
+
+    let paymentDomain: 'academic_fee' | 'donation';
+    if (rawDomain === 'donation' || rawDomain === 'academic_fee') {
+      paymentDomain = rawDomain;
+    } else {
+      // Auto-infer from paymentType if not provided
+      paymentDomain = DONATION_TYPES.includes(String(rawType).toLowerCase()) ? 'donation' : 'academic_fee';
+    }
+
+    let normalizedPaymentType = String(rawType).toLowerCase();
+    if (paymentDomain === 'donation') {
+      if (normalizedPaymentType === 'sadqa') normalizedPaymentType = 'sadqah';
+      if (normalizedPaymentType === 'fitra') normalizedPaymentType = 'fitrah';
+      if (!['sadqah', 'zakat', 'fitrah', 'langar', 'donation_other'].includes(normalizedPaymentType)) {
+        normalizedPaymentType = 'sadqah';
+      }
+    } else {
+      if (normalizedPaymentType === 'fees' || normalizedPaymentType === 'course_enrollment') normalizedPaymentType = 'course_fee';
+      if (normalizedPaymentType === 'admission') normalizedPaymentType = 'admission_fee';
+      if (!['admission_fee', 'course_fee', 'tuition_fee', 'academic_other'].includes(normalizedPaymentType)) {
+        normalizedPaymentType = 'course_fee';
+      }
     }
 
     const STANDARD_COURSE_FEES: Record<string, number> = {
@@ -85,24 +111,96 @@ export const createRazorpayOrder = onCall(
       'qirat course': 500,
     };
 
-    // 3. If courseId is provided, verify course exists and user is not already enrolled
-    if (courseId) {
-      const courseSnap = await collections.courses().doc(courseId).get();
-      if (!courseSnap.exists) {
-        throw invalidArgumentError(`Course not found: ${courseId}`);
-      }
-      const courseData = courseSnap.data()!;
-      if (courseData.status === 'inactive' || courseData.status === 'archived') {
-        throw invalidArgumentError('This course is currently inactive and not accepting new enrollments.');
-      }
+    let courseName: string | null = null;
+    let effectiveCourseId: string | null = null;
 
-      const enrollmentSnap = await collections.enrollments().doc(`${user.uid}:${courseId}`).get();
-      if (enrollmentSnap.exists) {
-        const enrollmentData = enrollmentSnap.data();
-        if (enrollmentData?.status === 'active') {
-          throw invalidArgumentError('You are already actively enrolled in this course.');
+    // 3. Domain-specific validation & authoritative amount calculation
+    let feesAmountPaise = 0;
+
+    if (paymentDomain === 'donation') {
+      // Donations must NEVER carry course_id
+      effectiveCourseId = null;
+
+      // Validate donation amount
+      const parsedDonation = typeof donationAmountInr === 'number' ? donationAmountInr : Number(donationAmountInr || 0);
+      if (!parsedDonation || isNaN(parsedDonation) || parsedDonation < 10) {
+        throw invalidArgumentError('Minimum donation amount is ₹10.');
+      }
+      if (parsedDonation > 500000) {
+        throw invalidArgumentError('Maximum single online donation amount is ₹5,00,000.');
+      }
+      feesAmountPaise = Math.round(parsedDonation * 100);
+    } else {
+      // Academic Fees: course validation
+      effectiveCourseId = courseId ? String(courseId).trim() : null;
+
+      if (effectiveCourseId) {
+        const courseSnap = await collections.courses().doc(effectiveCourseId).get();
+        if (!courseSnap.exists) {
+          throw invalidArgumentError(`Course not found: ${effectiveCourseId}`);
+        }
+        const courseData = courseSnap.data()!;
+        courseName = courseData.name || null;
+        if (courseData.status === 'inactive' || courseData.status === 'archived') {
+          throw invalidArgumentError('This course is currently inactive and not accepting new enrollments.');
+        }
+
+        const enrollmentSnap = await collections.enrollments().doc(`${user.uid}:${effectiveCourseId}`).get();
+        if (enrollmentSnap.exists) {
+          const enrollmentData = enrollmentSnap.data();
+          if (enrollmentData?.status === 'active') {
+            throw invalidArgumentError('You are already actively enrolled in this course.');
+          }
         }
       }
+
+      // Read authoritative pricing from Firestore (server-side only)
+      const settingsSnap = await db.collection('app_settings').doc('platform').get();
+      const settings = settingsSnap.exists ? settingsSnap.data()! : {};
+
+      if (normalizedPaymentType === 'admission_fee') {
+        let admissionInr = 100;
+        if (effectiveCourseId) {
+          const courseSnap = await collections.courses().doc(effectiveCourseId).get();
+          if (courseSnap.exists) {
+            const cData = courseSnap.data()!;
+            if (typeof cData.admission_fee === 'number' && cData.admission_fee > 0) {
+              admissionInr = cData.admission_fee;
+            }
+          }
+        }
+        feesAmountPaise = Math.round(admissionInr * 100);
+      } else {
+        // course_fee / tuition_fee
+        let courseFeeInr = 500;
+        if (effectiveCourseId) {
+          const courseSnap = await collections.courses().doc(effectiveCourseId).get();
+          if (courseSnap.exists) {
+            const cData = courseSnap.data()!;
+            const courseNameKey = String(cData.name || '').trim().toLowerCase();
+            if (typeof cData.course_fee === 'number') {
+              courseFeeInr = cData.course_fee;
+            } else if (typeof cData.fee === 'number') {
+              courseFeeInr = cData.fee;
+            } else if (STANDARD_COURSE_FEES[courseNameKey] !== undefined) {
+              courseFeeInr = STANDARD_COURSE_FEES[courseNameKey];
+            } else {
+              courseFeeInr = Number(settings.fees_amount ?? 500);
+            }
+          }
+        } else {
+          courseFeeInr = Number(settings.fees_amount ?? 500);
+        }
+
+        if (courseFeeInr === 0) {
+          throw invalidArgumentError('This course is free. Please use free enrollment instead.');
+        }
+        feesAmountPaise = Math.round(courseFeeInr * 100);
+      }
+    }
+
+    if (!feesAmountPaise || feesAmountPaise <= 0) {
+      throw internalError('Invalid fees configuration on server.');
     }
 
     // 4. Verify user eligibility
@@ -115,67 +213,14 @@ export const createRazorpayOrder = onCall(
       throw permissionDeniedError('Account is not eligible for payments.');
     }
 
-    // 5. Read authoritative pricing from Firestore (server-side only)
-    const settingsSnap = await db.collection('app_settings').doc('platform').get();
-    const settings = settingsSnap.exists ? settingsSnap.data()! : {};
-    
-    // Server-side authoritative amount in paise
-    let feesAmountPaise = 0;
-    if (paymentType === 'admission') {
-      // Admission Fee: ₹100 for every course
-      let admissionInr = 100;
-      if (courseId) {
-        const courseSnap = await collections.courses().doc(courseId).get();
-        if (courseSnap.exists) {
-          const cData = courseSnap.data()!;
-          if (typeof cData.admission_fee === 'number' && cData.admission_fee > 0) {
-            admissionInr = cData.admission_fee;
-          }
-        }
-      }
-      feesAmountPaise = admissionInr * 100;
-    } else if (paymentType === 'fees' || paymentType === 'course_enrollment') {
-      let courseFeeInr = 500;
-      if (courseId) {
-        const courseSnap = await collections.courses().doc(courseId).get();
-        if (courseSnap.exists) {
-          const cData = courseSnap.data()!;
-          const courseNameKey = String(cData.name || '').trim().toLowerCase();
-          if (typeof cData.course_fee === 'number') {
-            courseFeeInr = cData.course_fee;
-          } else if (typeof cData.fee === 'number') {
-            courseFeeInr = cData.fee;
-          } else if (STANDARD_COURSE_FEES[courseNameKey] !== undefined) {
-            courseFeeInr = STANDARD_COURSE_FEES[courseNameKey];
-          } else {
-            courseFeeInr = Number(settings.fees_amount ?? 500);
-          }
-        }
-      } else {
-        courseFeeInr = Number(settings.fees_amount ?? 500);
-      }
-
-      if (courseFeeInr === 0) {
-        throw invalidArgumentError('This course is free. Please use free enrollment instead.');
-      }
-      feesAmountPaise = courseFeeInr * 100;
-    } else {
-      const inrValue = Number(settings.fees_amount ?? 500);
-      feesAmountPaise = inrValue * 100;
-    }
-
-    if (!feesAmountPaise || feesAmountPaise <= 0) {
-      throw internalError('Invalid fees configuration on server.');
-    }
-
-    // 6. Duplicate pending order protection (reuse if created within last 10 minutes)
+    // 5. Duplicate pending order protection (reuse if created within last 10 minutes)
     const tenMinutesAgoMs = Date.now() - (10 * 60 * 1000);
     const existingPendingSnap = await collections.payments()
       .where('user_id', '==', user.uid)
-      .where('course_id', '==', courseId ?? null)
-      .where('payment_type', '==', paymentType)
+      .where('payment_domain', '==', paymentDomain)
+      .where('payment_type', '==', normalizedPaymentType)
       .where('state', '==', 'pending')
-      .limit(1)
+      .limit(5)
       .get();
 
     const keyId = RAZORPAY_KEY_ID.value();
@@ -184,12 +229,12 @@ export const createRazorpayOrder = onCall(
       throw internalError('Payment provider not configured.');
     }
 
-    if (!existingPendingSnap.empty) {
-      const existingDoc = existingPendingSnap.docs[0];
+    for (const existingDoc of existingPendingSnap.docs) {
       const existingData = existingDoc.data();
       const createdAtMs = existingData.created_at_ms ?? (existingData.created_at?.toMillis?.() || 0);
+      const matchesCourse = paymentDomain === 'donation' || existingData.course_id === effectiveCourseId;
       
-      if (createdAtMs > tenMinutesAgoMs && existingData.provider_order_id && existingData.amount === feesAmountPaise) {
+      if (matchesCourse && createdAtMs > tenMinutesAgoMs && existingData.provider_order_id && existingData.amount === feesAmountPaise) {
         logger.info(`[createRazorpayOrder] Reusing unexpired pending order id=${existingData.provider_order_id}`);
         return {
           orderId: existingData.provider_order_id,
@@ -197,15 +242,18 @@ export const createRazorpayOrder = onCall(
           amount: feesAmountPaise,
           currency,
           keyId,
+          paymentDomain,
+          paymentType: normalizedPaymentType,
         };
       }
     }
 
-    // 7. Initialize Razorpay client using Secret Manager secrets
+    // 6. Initialize Razorpay client using Secret Manager secrets
     const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
 
-    // 8. Create Razorpay order
-    const receiptId = `mslb_${user.uid.slice(0, 8)}_${Date.now()}`;
+    // 7. Create Razorpay order
+    const prefix = paymentDomain === 'donation' ? 'mslb_don' : 'mslb_fee';
+    const receiptId = `${prefix}_${user.uid.slice(0, 8)}_${Date.now()}`;
     let razorpayOrder: any;
     try {
       razorpayOrder = await razorpay.orders.create({
@@ -214,8 +262,10 @@ export const createRazorpayOrder = onCall(
         receipt: receiptId,
         notes: {
           user_id: user.uid,
-          payment_type: paymentType,
-          course_id: courseId ?? '',
+          payment_domain: paymentDomain,
+          payment_type: normalizedPaymentType,
+          course_id: effectiveCourseId ?? '',
+          course_name: courseName ?? '',
         },
       });
     } catch (err: any) {
@@ -223,14 +273,16 @@ export const createRazorpayOrder = onCall(
       throw internalError('Failed to create payment order.');
     }
 
-    // 9. Write pending payment document to Firestore
+    // 8. Write pending payment document to Firestore
     const paymentDoc = {
       user_id: user.uid,
       provider: 'razorpay',
       provider_order_id: razorpayOrder.id,
-      course_id: courseId ?? null,
-      payment_type: paymentType,
-      type: paymentType,
+      course_id: effectiveCourseId,
+      course_name: courseName,
+      payment_domain: paymentDomain,
+      payment_type: normalizedPaymentType,
+      type: normalizedPaymentType, // backward compatibility
       amount: feesAmountPaise,
       currency,
       state: 'pending',
@@ -242,15 +294,17 @@ export const createRazorpayOrder = onCall(
     };
 
     const paymentRef = await collections.payments().add(paymentDoc);
-    logger.info(`[createRazorpayOrder] Payment doc created id=${paymentRef.id} orderId=${razorpayOrder.id}`);
+    logger.info(`[createRazorpayOrder] Payment doc created id=${paymentRef.id} domain=${paymentDomain} type=${normalizedPaymentType} orderId=${razorpayOrder.id}`);
 
-    // 10. Return ONLY safe data — keySecret is NEVER returned
+    // 9. Return ONLY safe data — keySecret is NEVER returned
     return {
       orderId: razorpayOrder.id,
       paymentDocId: paymentRef.id,
       amount: feesAmountPaise,
       currency,
-      keyId, 
+      keyId,
+      paymentDomain,
+      paymentType: normalizedPaymentType,
     };
   }
 );

@@ -33,6 +33,9 @@ export const collections = {
   paymentVerificationQueue: () => db.collection("payment_verification_queue"),
   onboardingCommunications: () => db.collection("onboarding_communications"),
   teachers: () => db.collection("teachers"),
+  assignments: () => db.collection("assignments"),
+  submissions: () => db.collection("submissions"),
+  liveClasses: () => db.collection("live_classes"),
 };
 
 /**

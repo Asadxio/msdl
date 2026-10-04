@@ -538,7 +538,7 @@ service cloud.firestore {
     function isValidPaymentCreate() {
       // Accepts both:
       //   - Legacy manual-payment client schema (user_name, payment_ref, type, review_mode)
-      //   - Cloud Function v2 Admin SDK schema (provider_order_id, course_id, receipt_id, source, created_at_ms, payment_type)
+      //   - Cloud Function v2 Admin SDK schema (provider_order_id, course_id, course_name, receipt_id, source, created_at_ms, payment_domain, payment_type)
       // Admin SDK bypasses these rules, but the rule set must not reject the unified schema.
       // INVARIANTS that MUST always hold regardless of schema version:
       //   user_id == auth.uid, state=pending, status=pending, provider=razorpay, amount>0
@@ -551,7 +551,8 @@ service cloud.firestore {
             // Legacy manual-payment fields
             'user_name', 'payment_ref', 'type', 'transaction_ref', 'review_mode', 'submitted_at',
             // Cloud Function v2 fields
-            'provider_order_id', 'course_id', 'payment_type', 'receipt_id', 'created_at_ms', 'source'
+            'provider_order_id', 'course_id', 'course_name', 'payment_domain', 'payment_type', 'receipt_id', 'created_at_ms', 'source',
+            'admission_fee', 'course_fee'
           ]
         )
         && request.resource.data.user_id == request.auth.uid
@@ -565,15 +566,24 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && request.resource.data.provider == 'razorpay'
         && request.resource.data.currency == 'INR'
-        // Payment types: fees, sadqa, zakat, fitra, langar, admission, course_enrollment
-        && (!('type' in request.resource.data) || request.resource.data.type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar', 'admission', 'course_enrollment'])
-        && (!('payment_type' in request.resource.data) || request.resource.data.payment_type in ['fees', 'sadqa', 'zakat', 'fitra', 'langar', 'admission', 'course_enrollment'])
+        // Domain: academic_fee | donation
+        && (!('payment_domain' in request.resource.data) || request.resource.data.payment_domain in ['academic_fee', 'donation'])
+        // Payment types: fees, sadqa, zakat, fitra, langar, admission, course_enrollment, admission_fee, course_fee, tuition_fee, etc.
+        && (!('type' in request.resource.data) || request.resource.data.type in [
+          'fees', 'sadqa', 'sadqah', 'zakat', 'fitra', 'fitrah', 'langar', 'admission', 'course_enrollment',
+          'admission_fee', 'course_fee', 'tuition_fee', 'academic_other', 'donation_other'
+        ])
+        && (!('payment_type' in request.resource.data) || request.resource.data.payment_type in [
+          'fees', 'sadqa', 'sadqah', 'zakat', 'fitra', 'fitrah', 'langar', 'admission', 'course_enrollment',
+          'admission_fee', 'course_fee', 'tuition_fee', 'academic_other', 'donation_other'
+        ])
         && (!('transaction_ref' in request.resource.data) || (request.resource.data.transaction_ref is string && request.resource.data.transaction_ref.size() >= 4 && request.resource.data.transaction_ref.size() <= 80 && request.resource.data.transaction_ref.matches('^[a-zA-Z0-9_./# -]+$')))
         && (!('review_mode' in request.resource.data) || request.resource.data.review_mode == 'manual')
         && (!('submitted_at' in request.resource.data) || request.resource.data.submitted_at is timestamp)
         && (!('created_at' in request.resource.data) || request.resource.data.created_at is timestamp)
         // CF v2 optional fields — validation where applicable
         && (!('source' in request.resource.data) || request.resource.data.source is string)
+        && (!('course_name' in request.resource.data) || request.resource.data.course_name == null || request.resource.data.course_name is string)
         && (!('provider_order_id' in request.resource.data) || request.resource.data.provider_order_id is string)
         && (!('receipt_id' in request.resource.data) || request.resource.data.receipt_id is string);
     }

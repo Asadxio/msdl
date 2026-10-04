@@ -14,14 +14,21 @@ import { useData } from "@/context/DataContext";
 import { db, auth } from "@/lib/firebase";
 import { normalizeFirebaseError } from "@/lib/errors";
 import { logFirestoreFailure } from "@/lib/firestoreDebug";
-import { createRazorpayOrder, verifyRazorpayPayment } from "@/lib/razorpayFunctions";
+import { createRazorpayOrder, verifyRazorpayPayment, enrollInFreeCourse } from "@/lib/razorpayFunctions";
+import { IslamicReceiptModal } from "@/components/IslamicReceiptModal";
+import type { FeeReceiptData } from "@/lib/receiptGenerator";
 
-type PaymentType = "fees" | "admission" | "sadqa" | "zakat" | "fitra" | "langar";
+type PaymentDomain = "academic_fee" | "donation";
+type AcademicFeeType = "course_fee" | "admission_fee";
+type DonationType = "sadqah" | "zakat" | "fitrah" | "langar" | "donation_other";
 
 interface PaymentHistoryItem {
   id: string;
+  payment_domain?: PaymentDomain;
+  payment_type?: string;
   type?: string;
   course_id?: string;
+  course_name?: string;
   amount: number;
   state?: string;
   status?: string;
@@ -33,21 +40,41 @@ interface PaymentHistoryItem {
 export default function PaymentFlowScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ courseId?: string }>();
+  const params = useLocalSearchParams<{ courseId?: string; domain?: string }>();
   const { user, profile } = useAuth();
   const { courses } = useData();
 
+  // Domain Switcher
+  const [activeDomain, setActiveDomain] = useState<PaymentDomain>(
+    params.domain === "donation" ? "donation" : "academic_fee"
+  );
+
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [currentPaymentId, setCurrentPaymentId] = useState("");
-  const [paymentType, setPaymentType] = useState<PaymentType>("fees");
+
+  // Academic Fee state
+  const [academicType, setAcademicType] = useState<AcademicFeeType>("course_fee");
   const [selectedCourseId, setSelectedCourseId] = useState(String(params.courseId || "").trim());
+  const [freeEnrolling, setFreeEnrolling] = useState(false);
+
+  // Donation state
+  const [donationType, setDonationType] = useState<DonationType>("sadqah");
+  const [donationAmount, setDonationAmount] = useState("1000");
+  const [donorNote, setDonorNote] = useState("");
+
   const [feesAmount, setFeesAmount] = useState(500);
-  const [amount, setAmount] = useState("500");
   const [error, setError] = useState("");
   const [openingPayment, setOpeningPayment] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryItem[]>([]);
+  const [historyTab, setHistoryTab] = useState<"all" | "academic_fee" | "donation">("all");
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [waitingTimeout, setWaitingTimeout] = useState(false);
+
+  // Receipt Modal
+  const [selectedReceipt, setSelectedReceipt] = useState<FeeReceiptData | null>(null);
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+
+  // Razorpay Checkout Modal
   const [checkoutModalVisible, setCheckoutModalVisible] = useState(false);
   const [checkoutData, setCheckoutData] = useState<{
     orderId: string;
@@ -55,6 +82,8 @@ export default function PaymentFlowScreen() {
     amount: number;
     currency: string;
     keyId: string;
+    paymentDomain?: PaymentDomain;
+    paymentType?: string;
   } | null>(null);
 
   const getPaymentSettings = async () => {
@@ -64,7 +93,7 @@ export default function PaymentFlowScreen() {
       ...(platformSnap.exists() ? (platformSnap.data() as Record<string, unknown>) : {}),
       ...(globalSnap.exists() ? (globalSnap.data() as Record<string, unknown>) : {}),
     };
-    const fee = Number(merged.fees_amount || 0);
+    const fee = Number(merged.fees_amount || 500);
     return { fee };
   };
 
@@ -85,7 +114,10 @@ export default function PaymentFlowScreen() {
       }));
       setPaymentHistory(items);
     } catch (err) {
-      logFirestoreFailure({ collection: "payments", operation: "get", query: `user_id == ${user?.uid}`, role: profile?.role, status: profile?.status }, err);
+      logFirestoreFailure(
+        { collection: "payments", operation: "get", query: `user_id == ${user?.uid}`, role: profile?.role, status: profile?.status },
+        err
+      );
     } finally {
       setLoadingHistory(false);
     }
@@ -96,28 +128,21 @@ export default function PaymentFlowScreen() {
       try {
         const { fee } = await getPaymentSettings();
         setFeesAmount(fee);
-        setAmount(String(fee || ""));
         await loadHistory();
       } catch (err) {
-        logFirestoreFailure({ collection: "app_settings/platform", operation: "get", query: "load payment settings", role: profile?.role, status: profile?.status }, err);
-        setError(normalizeFirebaseError(err, "Could not load payment settings."));
+        logFirestoreFailure(
+          { collection: "app_settings/platform", operation: "get", query: "load payment settings", role: profile?.role, status: profile?.status },
+          err
+        );
       }
     };
     load().catch(() => {});
   }, [user?.uid]);
 
-  const selectedCourse = useMemo(() => courses.find((course) => course.id === selectedCourseId) || null, [courses, selectedCourseId]);
-
-  useEffect(() => {
-    if (paymentType === "admission") {
-      setAmount(String(selectedCourse?.admission_fee ?? 100));
-    } else if (paymentType === "fees") {
-      const fee = selectedCourse?.course_fee !== undefined ? selectedCourse.course_fee : (feesAmount || 500);
-      setAmount(String(fee));
-    }
-  }, [feesAmount, paymentType, selectedCourse]);
-
-  const parsedAmount = useMemo(() => Number(amount || 0), [amount]);
+  const selectedCourse = useMemo(
+    () => courses.find((course) => course.id === selectedCourseId) || null,
+    [courses, selectedCourseId]
+  );
 
   useEffect(() => {
     if (params.courseId) {
@@ -127,6 +152,25 @@ export default function PaymentFlowScreen() {
     }
   }, [courses, params.courseId, selectedCourseId]);
 
+  // Compute calculated amounts
+  const courseFeeVal = selectedCourse?.course_fee !== undefined ? selectedCourse.course_fee : (feesAmount || 500);
+  const admissionFeeVal = selectedCourse?.admission_fee ?? 100;
+  const isFreeCourse = selectedCourse?.course_fee === 0;
+
+  const payableAcademicAmount = useMemo(() => {
+    if (isFreeCourse) return 0;
+    if (academicType === "admission_fee") return admissionFeeVal;
+    return courseFeeVal;
+  }, [isFreeCourse, academicType, admissionFeeVal, courseFeeVal]);
+
+  const payableDonationAmount = useMemo(() => {
+    const val = Number(donationAmount || 0);
+    return isNaN(val) ? 0 : val;
+  }, [donationAmount]);
+
+  const currentTotalAmount = activeDomain === "academic_fee" ? payableAcademicAmount : payableDonationAmount;
+
+  // Realtime payment status reconciliation
   useEffect(() => {
     if (!currentPaymentId || step !== 3) return;
 
@@ -141,7 +185,7 @@ export default function PaymentFlowScreen() {
         if (!snap.exists()) return;
         const data = snap.data() as any;
         const st = String(data.state ?? data.status ?? "pending");
-        
+
         if (st === "succeeded") {
           clearTimeout(timeoutTimer);
           setStep(4);
@@ -153,7 +197,10 @@ export default function PaymentFlowScreen() {
         }
       },
       (err) => {
-        logFirestoreFailure({ collection: "payments", operation: "get", path: `payments/${currentPaymentId}`, query: "onSnapshot payment reconciliation", role: profile?.role, status: profile?.status }, err);
+        logFirestoreFailure(
+          { collection: "payments", operation: "get", path: `payments/${currentPaymentId}`, query: "onSnapshot payment reconciliation", role: profile?.role, status: profile?.status },
+          err
+        );
       }
     );
 
@@ -164,41 +211,61 @@ export default function PaymentFlowScreen() {
   }, [currentPaymentId, step]);
 
   const onContinueToReview = () => {
-    const rawAmt = paymentType === "admission" 
-      ? (selectedCourse?.admission_fee ?? 100)
-      : paymentType === "fees" 
-      ? (selectedCourse?.course_fee ?? feesAmount ?? 500) 
-      : Number(amount || 0);
-
-    if (paymentType === "fees" && selectedCourse?.course_fee === 0) {
-      setError("This course is free. Please enroll directly from the course page without payment.");
-      return;
-    }
-    if (!Number.isFinite(rawAmt) || rawAmt <= 0) {
-      setError("Please enter a valid amount greater than 0.");
-      return;
-    }
-    const effCourseId = selectedCourseId || (courses.length > 0 ? courses[0].id : "");
-    if (effCourseId && !selectedCourseId) {
-      setSelectedCourseId(effCourseId);
-    }
-    if (paymentType === "fees" && !effCourseId) {
-      setError("Please select the course this fee payment is for.");
-      return;
-    }
-    if (paymentType === "admission" && !effCourseId) {
-      setError("Please select the course this admission payment is for.");
-      return;
-    }
     setError("");
+    if (activeDomain === "academic_fee") {
+      if (!selectedCourseId) {
+        setError("Please select the course this fee payment is for.");
+        return;
+      }
+      if (isFreeCourse) {
+        handleFreeCourseEnrollment();
+        return;
+      }
+      if (payableAcademicAmount <= 0) {
+        setError("Invalid course fee amount.");
+        return;
+      }
+    } else {
+      if (payableDonationAmount < 10) {
+        setError("Minimum donation amount is ₹10.");
+        return;
+      }
+      if (payableDonationAmount > 500000) {
+        setError("Maximum single online donation amount is ₹5,00,000.");
+        return;
+      }
+    }
     setStep(2);
+  };
+
+  const handleFreeCourseEnrollment = async () => {
+    if (!selectedCourseId) return;
+    setFreeEnrolling(true);
+    setError("");
+    try {
+      const res = await enrollInFreeCourse({ courseId: selectedCourseId });
+      if (res?.success) {
+        Alert.alert(
+          "Enrollment Successful!",
+          `Mubarak! You have been successfully enrolled in ${selectedCourse?.name || "this free course"}.`,
+          [{ text: "Go to Courses", onPress: () => router.replace("/courses") }]
+        );
+      }
+    } catch (err: any) {
+      setError(normalizeFirebaseError(err, "Failed to complete free enrollment."));
+    } finally {
+      setFreeEnrolling(false);
+    }
   };
 
   const checkoutHtml = useMemo(() => {
     if (!checkoutData) return "";
     const { keyId, orderId, amount: orderAmt, currency } = checkoutData;
-    const courseTitle = selectedCourse?.name || (paymentType === "fees" ? "Madrasa Course Fee" : paymentType === "admission" ? "Admission Fee" : paymentType.toUpperCase());
-    const studentName = profile?.name || user?.displayName || "Student";
+    const isDonation = activeDomain === "donation";
+    const title = isDonation
+      ? `Madrasa Donation: ${donationType.toUpperCase()}`
+      : `Academic Fee: ${selectedCourse?.name || "Course Fee"}`;
+    const studentName = profile?.name || user?.displayName || "Student / Donor";
     const studentEmail = profile?.email || user?.email || "";
 
     return `<!DOCTYPE html>
@@ -208,7 +275,7 @@ export default function PaymentFlowScreen() {
     <style>
       body, html { margin: 0; padding: 0; height: 100%; width: 100%; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; }
       .loader { text-align: center; color: #475569; }
-      .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top: 3px solid #006A60; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
+      .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top: 3px solid #005F46; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
@@ -225,14 +292,14 @@ export default function PaymentFlowScreen() {
           "amount": ${orderAmt},
           "currency": "${currency}",
           "name": "Madrasatu-s-Salikat Lil Banat",
-          "description": "Fee Payment: ${courseTitle.replace(/"/g, "")}",
+          "description": "${title.replace(/"/g, "")}",
           "order_id": "${orderId}",
           "prefill": {
             "name": "${studentName.replace(/"/g, "")}",
             "email": "${studentEmail.replace(/"/g, "")}"
           },
           "theme": {
-            "color": "#006A60"
+            "color": "#005F46"
           },
           "handler": function (response) {
             if (window.ReactNativeWebView) {
@@ -267,7 +334,7 @@ export default function PaymentFlowScreen() {
     </script>
   </body>
 </html>`;
-  }, [checkoutData, selectedCourse, profile, user, paymentType]);
+  }, [checkoutData, activeDomain, donationType, selectedCourse, profile, user]);
 
   const onInitiateCheckout = async () => {
     const currentUser = auth.currentUser;
@@ -275,24 +342,17 @@ export default function PaymentFlowScreen() {
       Alert.alert("Sign In Required", "Please sign in to proceed with payment.");
       return;
     }
-    const effCourseId = selectedCourseId || (courses.length > 0 ? courses[0].id : "");
-    if (paymentType === "fees" && !effCourseId) {
-      setError("Please select the course this fee payment is for.");
-      return;
-    }
-    if (paymentType === "admission" && !effCourseId) {
-      setError("Please select the course this admission payment is for.");
-      return;
-    }
 
     setError("");
     setOpeningPayment(true);
 
     try {
-      // ...(paymentType === 'fees' ? { course_id: selectedCourseId } : {})
       const orderData = await createRazorpayOrder({
-        courseId: (paymentType === "fees" || paymentType === "admission") ? effCourseId : undefined,
-        paymentType,
+        paymentDomain: activeDomain,
+        // ...(paymentType === 'fees' ? { course_id: selectedCourseId } : {})
+        courseId: activeDomain === "academic_fee" ? selectedCourseId : undefined,
+        paymentType: activeDomain === "academic_fee" ? academicType : donationType,
+        donationAmountInr: activeDomain === "donation" ? payableDonationAmount : undefined,
       });
 
       setCurrentPaymentId(orderData.paymentDocId);
@@ -300,7 +360,10 @@ export default function PaymentFlowScreen() {
       setCheckoutModalVisible(true);
       setStep(3);
     } catch (err: any) {
-      logFirestoreFailure({ collection: "payments", operation: "add", query: "createRazorpayOrder", role: profile?.role, status: profile?.status }, err);
+      logFirestoreFailure(
+        { collection: "payments", operation: "add", query: "createRazorpayOrder", role: profile?.role, status: profile?.status },
+        err
+      );
       setError(normalizeFirebaseError(err, "Failed to initialize payment checkout."));
     } finally {
       setOpeningPayment(false);
@@ -321,130 +384,336 @@ export default function PaymentFlowScreen() {
           Alert.alert("Status Update", `Current payment status: ${st.toUpperCase()}. Confirming with bank...`);
         }
       }
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Unable to check status. Please check your connection.");
     }
   };
 
+  // Open receipt modal from history item
+  const openReceiptModal = (item: PaymentHistoryItem) => {
+    const isDonation = item.payment_domain === "donation" || ["sadqa", "sadqah", "zakat", "fitra", "fitrah", "langar", "donation_other"].includes(String(item.type || item.payment_type).toLowerCase());
+    const cDoc = courses.find((c) => c.id === item.course_id);
+    const dateStr = item.created_at?.toDate ? item.created_at.toDate().toLocaleDateString("en-IN") : "Today";
+
+    const rData: FeeReceiptData = {
+      receiptId: item.id,
+      studentName: profile?.name || user?.displayName || "Student / Donor",
+      studentEmail: profile?.email || user?.email || undefined,
+      courseName: item.course_name || cDoc?.name,
+      amount: Number(item.amount ? (item.amount > 10000 ? item.amount / 100 : item.amount) : 0),
+      category: item.payment_type || item.type || (isDonation ? "sadqah" : "fees"),
+      paymentDomain: isDonation ? "donation" : "academic_fee",
+      paymentMethod: "Razorpay Online",
+      transactionId: item.provider_payment_id || item.provider_order_id,
+      issueDateGregorian: dateStr,
+      status: (item.state || item.status || "succeeded").toUpperCase(),
+    };
+    setSelectedReceipt(rData);
+    setReceiptModalVisible(true);
+  };
+
+  // Filtered payment history
+  const filteredHistory = useMemo(() => {
+    if (historyTab === "all") return paymentHistory;
+    return paymentHistory.filter((item) => {
+      const isDonation = item.payment_domain === "donation" || ["sadqa", "sadqah", "zakat", "fitra", "fitrah", "langar", "donation_other"].includes(String(item.type || item.payment_type).toLowerCase());
+      return historyTab === "donation" ? isDonation : !isDonation;
+    });
+  }, [paymentHistory, historyTab]);
+
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}> 
+      <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, "/more")}>
           <Ionicons name="arrow-back" size={18} color={COLORS.text} />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Payment Flow</Text>
-        <Text style={styles.subtitle}>Select → Review → Pay Online → Unlocked</Text>
+        <Text style={styles.title}>Payment & Donations</Text>
+        <Text style={styles.subtitle}>Clean, Separate & Authoritative Payments</Text>
+
+        {/* Domain Segmented Switcher */}
+        <View style={styles.domainSwitcher}>
+          <TouchableOpacity
+            style={[styles.domainTab, activeDomain === "academic_fee" && styles.domainTabActive]}
+            onPress={() => {
+              setActiveDomain("academic_fee");
+              setStep(1);
+              setError("");
+            }}
+          >
+            <Ionicons
+              name="school-outline"
+              size={16}
+              color={activeDomain === "academic_fee" ? "#FFFFFF" : COLORS.textMuted}
+            />
+            <Text style={[styles.domainTabText, activeDomain === "academic_fee" && styles.domainTabTextActive]}>
+              Academic Fees
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.domainTab, activeDomain === "donation" && styles.domainTabActive]}
+            onPress={() => {
+              setActiveDomain("donation");
+              setStep(1);
+              setError("");
+            }}
+          >
+            <Ionicons
+              name="heart-outline"
+              size={16}
+              color={activeDomain === "donation" ? "#FFFFFF" : COLORS.textMuted}
+            />
+            <Text style={[styles.domainTabText, activeDomain === "donation" && styles.domainTabTextActive]}>
+              Donations & Zakat
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          {/* Step Dots */}
           <View style={styles.stepRow}>
             {[1, 2, 3, 4].map((item) => (
               <View key={item} style={[styles.stepDot, step >= (item as 1 | 2 | 3 | 4) && styles.stepDotActive]} />
             ))}
           </View>
 
+          {/* STEP 1: CONFIGURE PAYMENT */}
           {step === 1 ? (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>1) Select Payment Type</Text>
-              
-              <View style={styles.paymentCategory}>
-                <View style={styles.paymentCategoryHeader}>
-                  <Ionicons name="school-outline" size={18} color={COLORS.primary} />
-                  <Text style={styles.paymentCategoryTitle}>Academic Fees & Admission</Text>
-                </View>
-                <View style={styles.choiceRow}>
-                  <TouchableOpacity style={[styles.choiceChip, paymentType === "fees" && styles.choiceChipActive]} onPress={() => setPaymentType("fees")}>
-                    <Text style={[styles.choiceText, paymentType === "fees" && styles.choiceTextActive]}>COURSE FEES</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.choiceChip, paymentType === "admission" && styles.choiceChipActive]} onPress={() => setPaymentType("admission")}>
-                    <Text style={[styles.choiceText, paymentType === "admission" && styles.choiceTextActive]}>ADMISSION (₹100)</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {(paymentType === "fees" || paymentType === "admission") ? (
-                <View style={styles.paymentCategory}>
-                  <View style={styles.paymentCategoryHeader}>
-                    <Ionicons name="book-outline" size={18} color={COLORS.primary} />
-                    <Text style={styles.paymentCategoryTitle}>Select Course</Text>
+              {activeDomain === "academic_fee" ? (
+                <>
+                  <View style={styles.sectionHeaderRow}>
+                    <Ionicons name="school" size={20} color={COLORS.primary} />
+                    <Text style={styles.cardTitle}>Academic Course & Fee Selection</Text>
                   </View>
-                  <View style={styles.choiceRow}>
-                    {courses.map((course) => (
+
+                  <Text style={styles.label}>1. Select Your Course (کورس منتخب کریں)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courseChipsScroll}>
+                    {courses.map((course) => {
+                      const isSelected = selectedCourseId === course.id;
+                      const fee = course.course_fee ?? 500;
+                      return (
+                        <TouchableOpacity
+                          key={course.id}
+                          style={[styles.courseCardChip, isSelected && styles.courseCardChipActive]}
+                          onPress={() => setSelectedCourseId(course.id)}
+                        >
+                          <Text style={[styles.courseCardName, isSelected && styles.courseCardNameActive]}>
+                            {course.name}
+                          </Text>
+                          <View style={[styles.courseFeeBadge, isSelected && styles.courseFeeBadgeActive]}>
+                            <Text style={[styles.courseFeeText, isSelected && styles.courseFeeTextActive]}>
+                              {fee === 0 ? "FREE" : `₹${fee}`}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* Free Course Special Treatment */}
+                  {isFreeCourse ? (
+                    <View style={styles.freeCourseBox}>
+                      <Ionicons name="sparkles" size={24} color="#059669" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.freeCourseTitle}>100% Free Short Course!</Text>
+                        <Text style={styles.freeCourseSubtitle}>
+                          No payment or gateway fee required. Click below to enroll immediately.
+                        </Text>
+                      </View>
                       <TouchableOpacity
-                        key={course.id}
-                        style={[styles.choiceChip, selectedCourseId === course.id && styles.choiceChipActive]}
-                        onPress={() => setSelectedCourseId(course.id)}
+                        style={styles.freeEnrollBtn}
+                        onPress={handleFreeCourseEnrollment}
+                        disabled={freeEnrolling}
                       >
-                        <Text style={[styles.choiceText, selectedCourseId === course.id && styles.choiceTextActive]}>{course.name}</Text>
+                        {freeEnrolling ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Text style={styles.freeEnrollBtnText}>Enroll Free</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.label}>2. Fee Component (فیس کی مد)</Text>
+                      <View style={styles.choiceRow}>
+                        <TouchableOpacity
+                          style={[styles.choiceChip, academicType === "course_fee" && styles.choiceChipActive]}
+                          onPress={() => setAcademicType("course_fee")}
+                        >
+                          <Text style={[styles.choiceText, academicType === "course_fee" && styles.choiceTextActive]}>
+                            Course Fee (₹{courseFeeVal})
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.choiceChip, academicType === "admission_fee" && styles.choiceChipActive]}
+                          onPress={() => setAcademicType("admission_fee")}
+                        >
+                          <Text style={[styles.choiceText, academicType === "admission_fee" && styles.choiceTextActive]}>
+                            Admission Fee (₹{admissionFeeVal})
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Authoritative Breakdown Box */}
+                      <View style={styles.breakdownBox}>
+                        <Text style={styles.breakdownTitle}>Official Fee Breakdown</Text>
+                        <View style={styles.breakdownRow}>
+                          <Text style={styles.breakdownLabel}>Selected Course:</Text>
+                          <Text style={styles.breakdownValue}>{selectedCourse?.name || "Course"}</Text>
+                        </View>
+                        <View style={styles.breakdownRow}>
+                          <Text style={styles.breakdownLabel}>
+                            {academicType === "admission_fee" ? "Admission Fee:" : "Tuition / Course Fee:"}
+                          </Text>
+                          <Text style={styles.breakdownValue}>₹{payableAcademicAmount}</Text>
+                        </View>
+                        <View style={[styles.breakdownRow, styles.breakdownTotalRow]}>
+                          <Text style={styles.breakdownTotalLabel}>Total Payable (کل رقم):</Text>
+                          <Text style={styles.breakdownTotalValue}>₹{payableAcademicAmount}</Text>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity style={styles.primaryBtn} onPress={onContinueToReview}>
+                        <Text style={styles.primaryBtnText}>Continue to Review (₹{payableAcademicAmount})</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </>
+              ) : (
+                /* DOMAIN B: DONATIONS & ISLAMIC FUNDS */
+                <>
+                  <View style={styles.sectionHeaderRow}>
+                    <Ionicons name="heart-circle" size={22} color={COLORS.primary} />
+                    <Text style={styles.cardTitle}>Islamic Welfare Funds & Donations</Text>
+                  </View>
+                  <Text style={styles.islamicBismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
+
+                  <Text style={styles.label}>1. Choose Fund / Category (شعبہ منتخب کریں)</Text>
+                  <View style={styles.choiceRow}>
+                    {[
+                      { key: "sadqah", label: "Sadqah Jariyah (صدقہ جاریہ)" },
+                      { key: "zakat", label: "Zakat Fund (زکوٰۃ فنڈ)" },
+                      { key: "fitrah", label: "Sadaqat-ul-Fitr (فطرہ)" },
+                      { key: "langar", label: "Student Food / Langar (طعام)" },
+                      { key: "donation_other", label: "General Madrasa Support (عام عطیہ)" },
+                    ].map((f) => (
+                      <TouchableOpacity
+                        key={f.key}
+                        style={[styles.choiceChip, donationType === f.key && styles.choiceChipActive]}
+                        onPress={() => setDonationType(f.key as DonationType)}
+                      >
+                        <Text style={[styles.choiceText, donationType === f.key && styles.choiceTextActive]}>
+                          {f.label}
+                        </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-                </View>
-              ) : null}
 
-              {paymentType === "fees" && selectedCourse?.course_fee === 0 ? (
-                <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: 12, borderRadius: RADIUS.md, marginBottom: SPACING.md }}>
-                  <Text style={{ color: '#059669', fontSize: 13, fontWeight: '600' }}>
-                    ✨ This is a FREE course! You can enroll directly from the course page without making a payment.
-                  </Text>
-                </View>
-              ) : null}
+                  <Text style={styles.label}>2. Donation Amount (عطیہ کی رقم - INR)</Text>
+                  <View style={styles.presetsRow}>
+                    {["500", "1000", "2500", "5000"].map((preset) => (
+                      <TouchableOpacity
+                        key={preset}
+                        style={[styles.presetBtn, donationAmount === preset && styles.presetBtnActive]}
+                        onPress={() => setDonationAmount(preset)}
+                      >
+                        <Text style={[styles.presetBtnText, donationAmount === preset && styles.presetBtnTextActive]}>
+                          ₹{Number(preset).toLocaleString()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-              <View style={styles.paymentCategory}>
-                <View style={styles.paymentCategoryHeader}>
-                  <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
-                  <Text style={styles.paymentCategoryTitle}>Donations & Support</Text>
-                </View>
-                <View style={styles.choiceRow}>
-                  {(["sadqa", "zakat", "fitra", "langar"] as PaymentType[]).map((type) => (
-                    <TouchableOpacity key={type} style={[styles.choiceChip, paymentType === type && styles.choiceChipActive]} onPress={() => setPaymentType(type)}>
-                      <Text style={[styles.choiceText, paymentType === type && styles.choiceTextActive]}>{type.toUpperCase()}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    value={donationAmount}
+                    onChangeText={setDonationAmount}
+                    placeholder="Enter custom amount (min ₹10)"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
 
-              <Text style={styles.label}>Amount (INR)</Text>
-              <TextInput
-                style={[styles.input, (paymentType === "fees" || paymentType === "admission") && styles.inputDisabled]}
-                keyboardType="numeric"
-                value={amount}
-                editable={paymentType !== "fees" && paymentType !== "admission"}
-                onChangeText={setAmount}
-                placeholder="Enter amount"
-                placeholderTextColor={COLORS.textMuted}
-              />
+                  <Text style={styles.label}>3. Donor Note / Intention (اختیاری نیت یا دعا)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={donorNote}
+                    onChangeText={setDonorNote}
+                    placeholder="e.g. Sadqah on behalf of parents"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
 
-              <TouchableOpacity style={styles.primaryBtn} onPress={onContinueToReview}>
-                <Text style={styles.primaryBtnText}>Continue to Review</Text>
-              </TouchableOpacity>
+                  <View style={styles.donationNoticeBox}>
+                    <Ionicons name="information-circle-outline" size={18} color="#005F46" />
+                    <Text style={styles.donationNoticeText}>
+                      Notice: Donations are strictly allocated to Islamic charitable & student welfare funds. They do not constitute academic course fees or enrollments.
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity style={styles.primaryBtn} onPress={onContinueToReview}>
+                    <Text style={styles.primaryBtnText}>
+                      Continue to Donate (₹{payableDonationAmount.toLocaleString()})
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           ) : null}
 
+          {/* STEP 2: REVIEW SUMMARY */}
           {step === 2 ? (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>2) Review & Pay Online</Text>
-              
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="checkmark-done-circle-outline" size={22} color={COLORS.primary} />
+                <Text style={styles.cardTitle}>Review & Pay Securely</Text>
+              </View>
+
               <View style={styles.reviewBox}>
                 <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Category:</Text>
-                  <Text style={styles.reviewValue}>{paymentType.toUpperCase()}</Text>
+                  <Text style={styles.reviewLabel}>Domain:</Text>
+                  <Text style={styles.reviewValue}>
+                    {activeDomain === "academic_fee" ? "Academic Tuition Fee" : "Islamic Charitable Donation"}
+                  </Text>
                 </View>
-                {paymentType === "fees" ? (
-                  <View style={styles.reviewRow}>
-                    <Text style={styles.reviewLabel}>Course:</Text>
-                    <Text style={styles.reviewValue}>{selectedCourse?.name || selectedCourseId}</Text>
-                  </View>
-                ) : null}
+
+                {activeDomain === "academic_fee" ? (
+                  <>
+                    <View style={styles.reviewRow}>
+                      <Text style={styles.reviewLabel}>Course:</Text>
+                      <Text style={styles.reviewValue}>{selectedCourse?.name || selectedCourseId}</Text>
+                    </View>
+                    <View style={styles.reviewRow}>
+                      <Text style={styles.reviewLabel}>Fee Type:</Text>
+                      <Text style={styles.reviewValue}>
+                        {academicType === "admission_fee" ? "Admission Fee" : "Tuition Fee"}
+                      </Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.reviewRow}>
+                      <Text style={styles.reviewLabel}>Fund Category:</Text>
+                      <Text style={styles.reviewValue}>{donationType.toUpperCase()}</Text>
+                    </View>
+                    {donorNote ? (
+                      <View style={styles.reviewRow}>
+                        <Text style={styles.reviewLabel}>Note:</Text>
+                        <Text style={styles.reviewValue}>{donorNote}</Text>
+                      </View>
+                    ) : null}
+                  </>
+                )}
+
                 <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Authoritative Fee:</Text>
-                  <Text style={styles.reviewAmount}>₹{parsedAmount.toFixed(2)}</Text>
+                  <Text style={styles.reviewLabel}>Authoritative Total:</Text>
+                  <Text style={styles.reviewAmount}>₹{currentTotalAmount.toLocaleString()}</Text>
                 </View>
                 <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Payment Method:</Text>
-                  <Text style={styles.reviewValue}>UPI / Card / Netbanking (Razorpay)</Text>
+                  <Text style={styles.reviewLabel}>Gateway:</Text>
+                  <Text style={styles.reviewValue}>Razorpay UPI / Cards / Netbanking</Text>
                 </View>
               </View>
 
@@ -457,31 +726,36 @@ export default function PaymentFlowScreen() {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <View style={styles.btnRow}>
-                    <Ionicons name="card-outline" size={20} color="#FFFFFF" />
-                    <Text style={styles.primaryBtnText}>Pay with Razorpay</Text>
+                    <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
+                    <Text style={styles.primaryBtnText}>
+                      Pay ₹{currentTotalAmount.toLocaleString()} with Razorpay
+                    </Text>
                   </View>
                 )}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep(1)}>
-                <Text style={styles.secondaryBtnText}>Change Course / Type</Text>
+                <Text style={styles.secondaryBtnText}>Modify Selection</Text>
               </TouchableOpacity>
             </View>
           ) : null}
 
+          {/* STEP 3: PROCESSING & WAITING */}
           {step === 3 ? (
             <View style={styles.card}>
               <View style={styles.statusCenter}>
                 <ActivityIndicator size="large" color={COLORS.primary} style={{ marginBottom: SPACING.md }} />
-                <Text style={styles.statusTitle}>Confirming Payment...</Text>
+                <Text style={styles.statusTitle}>Confirming Transaction...</Text>
                 <Text style={styles.statusDescription}>
-                  Please complete the transaction in Razorpay. Once your bank confirms the payment, your course access will be unlocked automatically.
+                  {activeDomain === "academic_fee"
+                    ? "Completing your fee payment via Razorpay. Your course will be automatically unlocked upon bank confirmation."
+                    : "Finalizing your donation through Razorpay. Your official Islamic voucher will be ready instantly upon bank confirmation."}
                 </Text>
 
                 {waitingTimeout ? (
                   <View style={styles.timeoutNotice}>
                     <Text style={styles.timeoutText}>
-                      Confirmation is taking a moment. If you completed your payment, you can refresh status or check back shortly.
+                      Reconciliation is taking a moment. If you completed payment, click below to check status.
                     </Text>
                     <TouchableOpacity style={styles.refreshBtn} onPress={checkStatusManual}>
                       <Ionicons name="refresh" size={16} color={COLORS.primary} />
@@ -494,7 +768,7 @@ export default function PaymentFlowScreen() {
                   style={[styles.primaryBtn, { width: "100%", marginTop: SPACING.md }]}
                   onPress={() => setCheckoutModalVisible(true)}
                 >
-                  <Text style={styles.primaryBtnText}>Open Razorpay Modal</Text>
+                  <Text style={styles.primaryBtnText}>Open Razorpay Window</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.cancelLink} onPress={() => setStep(2)}>
@@ -504,25 +778,44 @@ export default function PaymentFlowScreen() {
             </View>
           ) : null}
 
+          {/* STEP 4: SUCCESS CONFIRMATION */}
           {step === 4 ? (
             <View style={styles.card}>
               <View style={styles.statusCenter}>
                 <View style={styles.successBadge}>
-                  <Ionicons name="checkmark-circle" size={54} color="#10B981" />
+                  <Ionicons name="checkmark-circle" size={60} color="#10B981" />
                 </View>
-                <Text style={styles.successTitle}>Payment Successful!</Text>
-                <Text style={styles.successSubtitle}>
-                  Your course enrollment is now active. You have full access to lessons and quizzes.
-                </Text>
+
+                {activeDomain === "academic_fee" ? (
+                  <>
+                    <Text style={styles.successTitle}>Academic Fee Paid Successfully!</Text>
+                    <Text style={styles.successSubtitle}>
+                      Mubarak! Your enrollment in {selectedCourse?.name || "your course"} is now active. Lessons and quizzes are unlocked.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.primaryBtn}
+                      onPress={() => router.replace("/courses")}
+                    >
+                      <Text style={styles.primaryBtnText}>Go to My Courses</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.successTitle}>Jazakumullahu Khairan!</Text>
+                    <Text style={styles.islamicDuaText}>جَزَاكُمُ اللَّهُ خَيْرًا وَأَحْسَنَ الْجَزَاء</Text>
+                    <Text style={styles.successSubtitle}>
+                      Your donation of ₹{payableDonationAmount.toLocaleString()} has been received and dedicated to the {donationType.toUpperCase()} fund.
+                    </Text>
+                  </>
+                )}
 
                 <TouchableOpacity
-                  style={styles.primaryBtn}
-                  onPress={() => router.replace("/courses")}
+                  style={styles.secondaryBtn}
+                  onPress={() => {
+                    setStep(1);
+                    loadHistory().catch(() => {});
+                  }}
                 >
-                  <Text style={styles.primaryBtnText}>Go to My Courses</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep(1)}>
                   <Text style={styles.secondaryBtnText}>Make Another Payment</Text>
                 </TouchableOpacity>
               </View>
@@ -531,31 +824,78 @@ export default function PaymentFlowScreen() {
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
+          {/* PAYMENT HISTORY SECTION */}
           <View style={styles.historyContainer}>
-            <Text style={styles.historyTitle}>Payment History</Text>
+            <View style={styles.historyHeader}>
+              <Text style={styles.historyTitle}>Payment & Donation History</Text>
+              <View style={styles.historyFilterRow}>
+                {(["all", "academic_fee", "donation"] as const).map((tab) => (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[styles.historyFilterChip, historyTab === tab && styles.historyFilterChipActive]}
+                    onPress={() => setHistoryTab(tab)}
+                  >
+                    <Text style={[styles.historyFilterText, historyTab === tab && styles.historyFilterTextActive]}>
+                      {tab === "all" ? "All" : tab === "academic_fee" ? "Fees" : "Donations"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             {loadingHistory ? (
               <ActivityIndicator size="small" color={COLORS.primary} />
-            ) : paymentHistory.length === 0 ? (
+            ) : filteredHistory.length === 0 ? (
               <Text style={styles.historyEmpty}>No payment records found.</Text>
             ) : (
-              paymentHistory.map((item) => {
+              filteredHistory.map((item) => {
                 const itemState = item.state ?? item.status ?? "pending";
                 const isSuccess = itemState === "succeeded";
+                const isDonation = item.payment_domain === "donation" || ["sadqa", "sadqah", "zakat", "fitra", "fitrah", "langar", "donation_other"].includes(String(item.type || item.payment_type).toLowerCase());
+                const displayAmt = item.amount ? (item.amount > 10000 ? item.amount / 100 : item.amount) : 0;
+
                 return (
-                  <View key={item.id} style={styles.historyCard}>
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.historyCard}
+                    onPress={() => openReceiptModal(item)}
+                    activeOpacity={0.8}
+                  >
                     <View style={styles.historyHeaderRow}>
-                      <Text style={styles.historyType}>{(item.type || "fees").toUpperCase()}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Ionicons
+                          name={isDonation ? "heart" : "school"}
+                          size={16}
+                          color={isDonation ? "#C8A84E" : COLORS.primary}
+                        />
+                        <Text style={styles.historyType}>
+                          {isDonation
+                            ? `Donation: ${(item.payment_type || item.type || "sadqah").toUpperCase()}`
+                            : `Fee: ${(item.payment_type || item.type || "course_fee").toUpperCase()}`}
+                        </Text>
+                      </View>
                       <View style={[styles.historyBadge, isSuccess ? styles.badgeSuccess : styles.badgePending]}>
                         <Text style={[styles.badgeText, isSuccess ? styles.badgeTextSuccess : styles.badgeTextPending]}>
                           {itemState.toUpperCase()}
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.historyAmount}>₹{Number(item.amount || 0).toFixed(2)}</Text>
+
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                      <Text style={styles.historyAmount}>₹{Number(displayAmt).toFixed(2)}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Ionicons name="document-text-outline" size={14} color={COLORS.primary} />
+                        <Text style={{ fontSize: 12, color: COLORS.primary, fontWeight: "600" }}>View Receipt</Text>
+                      </View>
+                    </View>
+
+                    {item.course_name ? (
+                      <Text style={styles.historyCourse}>Course: {item.course_name}</Text>
+                    ) : null}
                     {item.provider_payment_id ? (
                       <Text style={styles.historyRef}>Ref: {item.provider_payment_id}</Text>
                     ) : null}
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             )}
@@ -563,6 +903,7 @@ export default function PaymentFlowScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* RAZORPAY WEBVIEW MODAL */}
       <Modal
         visible={checkoutModalVisible}
         animationType="slide"
@@ -574,10 +915,7 @@ export default function PaymentFlowScreen() {
               <Ionicons name="shield-checkmark" size={20} color={COLORS.primary} />
               <Text style={styles.title}>Secure Razorpay Checkout</Text>
             </View>
-            <TouchableOpacity
-              style={{ padding: 8 }}
-              onPress={() => setCheckoutModalVisible(false)}
-            >
+            <TouchableOpacity style={{ padding: 8 }} onPress={() => setCheckoutModalVisible(false)}>
               <Ionicons name="close" size={24} color={COLORS.text} />
             </TouchableOpacity>
           </View>
@@ -599,16 +937,19 @@ export default function PaymentFlowScreen() {
                         orderId,
                         paymentId,
                         signature,
-                      }).then((res) => {
-                        if (res?.success) {
-                          setStep(4);
-                          loadHistory().catch(() => {});
-                        }
-                      }).catch((err) => {
-                        // If verification callable has transient network latency,
-                        // onSnapshot listener and Razorpay Webhook will reconcile automatically
-                        logFirestoreFailure({ collection: "payments", operation: "update", query: "verifyRazorpayPayment callable fallback to webhook", role: profile?.role, status: profile?.status }, err);
-                      });
+                      })
+                        .then((res) => {
+                          if (res?.success) {
+                            setStep(4);
+                            loadHistory().catch(() => {});
+                          }
+                        })
+                        .catch((err) => {
+                          logFirestoreFailure(
+                            { collection: "payments", operation: "update", query: "verifyRazorpayPayment callable fallback to webhook", role: profile?.role, status: profile?.status },
+                            err
+                          );
+                        });
                     }
                   } else if (data.event === "MODAL_CLOSED") {
                     setCheckoutModalVisible(false);
@@ -642,70 +983,212 @@ export default function PaymentFlowScreen() {
           ) : null}
         </View>
       </Modal>
+
+      {/* ISLAMIC RECEIPT MODAL */}
+      <IslamicReceiptModal
+        visible={receiptModalVisible}
+        receipt={selectedReceipt}
+        onClose={() => {
+          setReceiptModalVisible(false);
+          setSelectedReceipt(null);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md },
+  header: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm },
   backBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: SPACING.xs },
   backText: { ...TYPOGRAPHY.label, color: COLORS.textMuted },
-  title: { ...TYPOGRAPHY.title, color: COLORS.text },
-  subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  title: { ...TYPOGRAPHY.title, color: COLORS.text, fontSize: 22 },
+  subtitle: { ...TYPOGRAPHY.body, color: COLORS.textMuted, fontSize: 13, marginBottom: SPACING.sm },
+  domainSwitcher: {
+    flexDirection: "row",
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.lg,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: 4,
+  },
+  domainTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+  },
+  domainTabActive: {
+    backgroundColor: COLORS.primary,
+    ...SHADOWS.card,
+  },
+  domainTabText: {
+    ...TYPOGRAPHY.label,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: "600",
+  },
+  domainTabTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
   body: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl, gap: SPACING.md },
-  stepRow: { flexDirection: "row", gap: SPACING.xs, marginBottom: SPACING.xs },
+  stepRow: { flexDirection: "row", gap: SPACING.xs, marginVertical: SPACING.xs },
   stepDot: { height: 6, flex: 1, backgroundColor: COLORS.border, borderRadius: 3 },
   stepDotActive: { backgroundColor: COLORS.primary },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, ...SHADOWS.card, gap: SPACING.md },
-  cardTitle: { ...TYPOGRAPHY.heading, fontSize: 18, color: COLORS.text },
-  paymentCategory: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: SPACING.sm, gap: SPACING.xs, backgroundColor: COLORS.surfaceAlt },
-  paymentCategoryHeader: { flexDirection: "row", alignItems: "center", gap: SPACING.xs },
-  paymentCategoryTitle: { ...TYPOGRAPHY.label, color: COLORS.text, fontWeight: "700" },
-  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, padding: SPACING.lg, ...SHADOWS.card, gap: SPACING.sm },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  cardTitle: { ...TYPOGRAPHY.heading, fontSize: 17, color: COLORS.text },
+  islamicBismillah: { textAlign: "center", color: "#C8A84E", fontSize: 16, fontWeight: "700", marginVertical: 4 },
+  label: { ...TYPOGRAPHY.label, color: COLORS.text, marginTop: SPACING.xs, fontWeight: "700" },
+  courseChipsScroll: { flexDirection: "row", gap: SPACING.sm, paddingVertical: 4 },
+  courseCardChip: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    backgroundColor: COLORS.surface,
+    minWidth: 120,
+    gap: 6,
+  },
+  courseCardChipActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: "#F0FDF4",
+    borderWidth: 2,
+  },
+  courseCardName: { ...TYPOGRAPHY.body, fontSize: 13, fontWeight: "600", color: COLORS.text },
+  courseCardNameActive: { color: COLORS.primary, fontWeight: "700" },
+  courseFeeBadge: {
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    alignSelf: "flex-start",
+  },
+  courseFeeBadgeActive: {
+    backgroundColor: "#DCFCE7",
+  },
+  courseFeeText: { fontSize: 11, fontWeight: "700", color: COLORS.textMuted },
+  courseFeeTextActive: { color: "#166534" },
+  freeCourseBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#10B981",
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    gap: 12,
+    marginTop: SPACING.xs,
+  },
+  freeCourseTitle: { ...TYPOGRAPHY.heading, fontSize: 15, color: "#065F46" },
+  freeCourseSubtitle: { ...TYPOGRAPHY.body, fontSize: 12, color: "#047857", marginTop: 2 },
+  freeEnrollBtn: {
+    backgroundColor: "#10B981",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+  },
+  freeEnrollBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
+  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: 4 },
   choiceChip: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: 8, backgroundColor: COLORS.surface },
   choiceChipActive: { borderColor: COLORS.primary, backgroundColor: "#E8F5E9" },
-  choiceText: { ...TYPOGRAPHY.body, fontSize: 13, color: COLORS.textMuted },
+  choiceText: { ...TYPOGRAPHY.body, fontSize: 12, color: COLORS.textMuted },
   choiceTextActive: { color: COLORS.primary, fontWeight: "700" },
-  label: { ...TYPOGRAPHY.label, color: COLORS.text, marginTop: SPACING.xs },
-  input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 10, fontSize: 16, color: COLORS.text, backgroundColor: COLORS.surface },
-  inputDisabled: { backgroundColor: "#F3F4F6", color: COLORS.textMuted },
+  presetsRow: { flexDirection: "row", gap: SPACING.xs, marginTop: 4 },
+  presetBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 8,
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+  },
+  presetBtnActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: "#E8F5E9",
+  },
+  presetBtnText: { ...TYPOGRAPHY.label, fontSize: 12, color: COLORS.textMuted },
+  presetBtnTextActive: { color: COLORS.primary, fontWeight: "700" },
+  breakdownBox: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: SPACING.xs,
+  },
+  breakdownTitle: { ...TYPOGRAPHY.label, fontSize: 12, fontWeight: "700", color: COLORS.textMuted, textTransform: "uppercase" },
+  breakdownRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  breakdownLabel: { ...TYPOGRAPHY.body, fontSize: 13, color: COLORS.textMuted },
+  breakdownValue: { ...TYPOGRAPHY.body, fontSize: 13, fontWeight: "600", color: COLORS.text },
+  breakdownTotalRow: { borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 6, marginTop: 4 },
+  breakdownTotalLabel: { ...TYPOGRAPHY.heading, fontSize: 14, color: COLORS.primary },
+  breakdownTotalValue: { ...TYPOGRAPHY.heading, fontSize: 18, color: COLORS.primary },
+  input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 10, fontSize: 15, color: COLORS.text, backgroundColor: COLORS.surface, marginTop: 4 },
+  donationNoticeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    borderRadius: RADIUS.md,
+    padding: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+  donationNoticeText: { ...TYPOGRAPHY.body, fontSize: 11, color: "#166534", flex: 1, lineHeight: 15 },
   primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 14, alignItems: "center", justifyContent: "center", marginTop: SPACING.xs },
   primaryBtnDisabled: { opacity: 0.7 },
-  primaryBtnText: { ...TYPOGRAPHY.heading, color: "#FFFFFF", fontSize: 16 },
-  secondaryBtn: { borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.border },
-  secondaryBtnText: { ...TYPOGRAPHY.body, color: COLORS.textMuted, fontSize: 14 },
+  primaryBtnText: { ...TYPOGRAPHY.heading, color: "#FFFFFF", fontSize: 15 },
+  secondaryBtn: { borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.border, marginTop: 6 },
+  secondaryBtnText: { ...TYPOGRAPHY.body, color: COLORS.textMuted, fontSize: 13 },
   btnRow: { flexDirection: "row", alignItems: "center", gap: SPACING.xs },
   reviewBox: { backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.lg, padding: SPACING.md, gap: SPACING.xs, borderWidth: 1, borderColor: COLORS.border },
-  reviewRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  reviewLabel: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
-  reviewValue: { ...TYPOGRAPHY.body, color: COLORS.text, fontWeight: "600" },
+  reviewRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 2 },
+  reviewLabel: { ...TYPOGRAPHY.body, fontSize: 13, color: COLORS.textMuted },
+  reviewValue: { ...TYPOGRAPHY.body, fontSize: 13, color: COLORS.text, fontWeight: "600" },
   reviewAmount: { ...TYPOGRAPHY.heading, color: COLORS.primary, fontSize: 18 },
   statusCenter: { alignItems: "center", paddingVertical: SPACING.lg, gap: SPACING.sm },
-  statusTitle: { ...TYPOGRAPHY.heading, fontSize: 20, color: COLORS.text },
-  statusDescription: { ...TYPOGRAPHY.body, textAlign: "center", color: COLORS.textMuted, paddingHorizontal: SPACING.md },
-  successBadge: { marginBottom: SPACING.sm },
-  successTitle: { ...TYPOGRAPHY.title, color: "#10B981", fontSize: 22 },
-  successSubtitle: { ...TYPOGRAPHY.body, textAlign: "center", color: COLORS.textMuted, paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
+  statusTitle: { ...TYPOGRAPHY.heading, fontSize: 19, color: COLORS.text },
+  statusDescription: { ...TYPOGRAPHY.body, textAlign: "center", color: COLORS.textMuted, paddingHorizontal: SPACING.md, fontSize: 13 },
+  successBadge: { marginBottom: SPACING.xs },
+  successTitle: { ...TYPOGRAPHY.title, color: "#10B981", fontSize: 20, textAlign: "center" },
+  islamicDuaText: { color: "#C8A84E", fontSize: 17, fontWeight: "700", textAlign: "center" },
+  successSubtitle: { ...TYPOGRAPHY.body, textAlign: "center", color: COLORS.textMuted, paddingHorizontal: SPACING.md, marginBottom: SPACING.md, fontSize: 13 },
   timeoutNotice: { backgroundColor: "#FEF3C7", borderRadius: RADIUS.md, padding: SPACING.md, gap: SPACING.xs, marginTop: SPACING.md, width: "100%", alignItems: "center" },
-  timeoutText: { ...TYPOGRAPHY.body, fontSize: 13, color: "#92400E", textAlign: "center" },
+  timeoutText: { ...TYPOGRAPHY.body, fontSize: 12, color: "#92400E", textAlign: "center" },
   refreshBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6 },
   refreshBtnText: { ...TYPOGRAPHY.label, color: COLORS.primary, fontWeight: "700" },
   cancelLink: { marginTop: SPACING.md, padding: 8 },
   cancelLinkText: { ...TYPOGRAPHY.label, color: COLORS.textMuted },
   error: { color: "#EF4444", textAlign: "center", marginTop: SPACING.xs },
   historyContainer: { marginTop: SPACING.lg, gap: SPACING.sm },
-  historyTitle: { ...TYPOGRAPHY.heading, fontSize: 16, color: COLORS.text },
-  historyEmpty: { ...TYPOGRAPHY.body, color: COLORS.textMuted, fontStyle: "italic" },
+  historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  historyTitle: { ...TYPOGRAPHY.heading, fontSize: 15, color: COLORS.text },
+  historyFilterRow: { flexDirection: "row", gap: 4 },
+  historyFilterChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceAlt },
+  historyFilterChipActive: { backgroundColor: COLORS.primary },
+  historyFilterText: { fontSize: 11, color: COLORS.textMuted, fontWeight: "600" },
+  historyFilterTextActive: { color: "#FFFFFF", fontWeight: "700" },
+  historyEmpty: { ...TYPOGRAPHY.body, color: COLORS.textMuted, fontStyle: "italic", fontSize: 13 },
   historyCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, gap: 4 },
   historyHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  historyType: { ...TYPOGRAPHY.label, fontWeight: "700", color: COLORS.text },
+  historyType: { ...TYPOGRAPHY.label, fontWeight: "700", color: COLORS.text, fontSize: 12 },
   historyBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: RADIUS.full },
   badgeSuccess: { backgroundColor: "#D1FAE5" },
   badgePending: { backgroundColor: "#FEF3C7" },
-  badgeText: { fontSize: 11, fontWeight: "700" },
+  badgeText: { fontSize: 10, fontWeight: "700" },
   badgeTextSuccess: { color: "#065F46" },
   badgeTextPending: { color: "#92400E" },
   historyAmount: { ...TYPOGRAPHY.heading, fontSize: 16, color: COLORS.primary },
+  historyCourse: { fontSize: 12, color: COLORS.textMuted },
   historyRef: { ...TYPOGRAPHY.label, fontSize: 11, color: COLORS.textMuted },
 });

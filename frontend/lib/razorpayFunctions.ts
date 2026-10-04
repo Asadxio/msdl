@@ -18,7 +18,9 @@ import { withTimeout } from '@/lib/errors';
 
 export interface CreateOrderRequest {
   courseId?: string;
+  paymentDomain?: 'academic_fee' | 'donation';
   paymentType?: string;
+  donationAmountInr?: number;
   currency?: string;
 }
 
@@ -28,11 +30,14 @@ export interface CreateOrderResponse {
   amount: number;
   currency: string;
   keyId: string;   // Public key — safe for checkout; NEVER the secret
+  paymentDomain?: 'academic_fee' | 'donation';
+  paymentType?: string;
 }
 
 /**
  * Create a Razorpay order via Cloud Function.
- * The Cloud Function reads pricing from Firestore — client-supplied amount is ignored.
+ * The Cloud Function reads pricing from Firestore — client-supplied amount is ignored for academic fees.
+ * For donations, donationAmountInr is validated server-side.
  * Returns checkout data: orderId, amount (paise), currency, keyId.
  */
 export async function createRazorpayOrder(
@@ -75,6 +80,8 @@ export interface VerifyRazorpayPaymentResponse {
   alreadyCompleted?: boolean;
   paymentDocId: string;
   enrollmentId?: string;
+  paymentDomain?: 'academic_fee' | 'donation';
+  paymentType?: string;
 }
 
 /**

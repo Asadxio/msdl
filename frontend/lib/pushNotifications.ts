@@ -8,12 +8,7 @@ import {
 import { auth, db } from '@/lib/firebase';
 import { isExpoGo } from '@/lib/runtime';
 import { withTimeout } from '@/lib/errors';
-
-const PUSH_API_URL = (
-  process.env.EXPO_PUBLIC_PUSH_API_URL
-  || process.env.EXPO_PUBLIC_LIVE_API_URL
-  || String(process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '')
-);
+import { dispatchNotification } from '@/lib/dispatchNotification';
 
 export type NotificationPermissionResult = {
   granted: boolean;
@@ -64,7 +59,15 @@ export async function initPushNotifications(): Promise<void> {
         vibrationPattern: [0, 250, 250, 250],
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
-      console.log('[Notifications] Android notification channel configured');
+      await Notifications.setNotificationChannelAsync('academic', {
+        name: 'academic',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#0FA958',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      console.log('[Notifications] Android notification channels configured');
     }
   } catch (error) {
     console.log('[Notifications] initPushNotifications ERROR', error);
@@ -254,51 +257,29 @@ type PushPayload = {
   data?: Record<string, any>;
 };
 
-async function requestBackendPush(payload: {
-  title: string;
-  body: string;
-  data?: Record<string, any>;
-  user_ids?: string[];
-  send_to_all?: boolean;
-}): Promise<void> {
-  try {
-    if (!PUSH_API_URL || !auth.currentUser) {
-      return;
-    }
-    const idToken = await auth.currentUser.getIdToken();
-    const response = await withTimeout(fetch(`${PUSH_API_URL.replace(/\/$/, '')}/api/push/send`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    }), 5000);
-    if (!response.ok) {
-      throw new Error(`Push request failed with status ${response.status}`);
-    }
-  } catch (error) {
-    console.log('[Notifications] requestBackendPush failed', error);
-  }
-}
-
 export async function sendPushToUserIds(userIds: string[], payload: PushPayload): Promise<void> {
-  if (__DEV__) console.warn('Deprecated notification path. Use dispatchNotification.');
   if (userIds.length === 0) return;
-  await requestBackendPush({
-    user_ids: Array.from(new Set(userIds)),
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  await dispatchNotification({
+    channel: (payload.data?.channelId as any) || 'announcements',
+    event: 'system_alert',
     title: payload.title,
     body: payload.body,
-    data: payload.data || {},
-  });
+    recipientIds: uniqueIds,
+    data: payload.data,
+    dedupeId: `push_ids_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+  }).catch((err) => console.log('[Notifications] sendPushToUserIds error:', err));
 }
 
 export async function sendPushToAllUsers(payload: PushPayload): Promise<void> {
-  if (__DEV__) console.warn('Deprecated notification path. Use dispatchNotification.');
-  await requestBackendPush({
-    send_to_all: true,
+  await dispatchNotification({
+    channel: (payload.data?.channelId as any) || 'announcements',
+    event: 'system_alert',
     title: payload.title,
     body: payload.body,
-    data: payload.data || {},
-  });
+    recipientIds: [],
+    sendToAll: true,
+    data: payload.data,
+    dedupeId: `push_all_${Date.now()}`,
+  }).catch((err) => console.log('[Notifications] sendPushToAllUsers error:', err));
 }

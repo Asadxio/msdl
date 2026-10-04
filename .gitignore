@@ -113,3 +113,8 @@ serviceAccountKey.json
 qa/artifacts/**/*.apk
 qa/artifacts_final/**/*.apk
 
+# Testing dumps and artifacts
+ui_*.xml
+current_ui*.xml
+playwright-report/
+test-results/

@@ -29,6 +29,7 @@ export function evaluateRouteAuthorization(
     cleanPath.startsWith('/auth') ||
     cleanPath === '/onboarding-entry' ||
     cleanPath.startsWith('/onboarding-first-time') ||
+    cleanPath === '/verify-sanad' ||
     cleanPath === '/terms' ||
     cleanPath === '/privacy' ||
     cleanPath === '/community-guidelines' ||

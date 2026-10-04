@@ -23,6 +23,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../config/admin';
 import { RAZORPAY_KEY_SECRET } from '../config/secrets';
 import { collections } from '../shared/firestore';
+import { deliverPushNotificationInternal } from '../notifications/sendNotification';
 
 // Supported Razorpay webhook events
 const SUPPORTED_EVENTS = [
@@ -236,11 +237,14 @@ async function finalizePayment(payload: any, eventType: string, eventId: string)
   }
 
   const userId: string = paymentData.user_id;
-  const courseId: string | null = paymentData.course_id ?? null;
+  const paymentDomain: 'academic_fee' | 'donation' = paymentData.payment_domain || 
+    (['sadqa', 'sadqah', 'zakat', 'fitra', 'fitrah', 'langar', 'donation_other'].includes(paymentData.payment_type || paymentData.type) ? 'donation' : 'academic_fee');
+  const isAcademic = paymentDomain === 'academic_fee';
+  const courseId: string | null = isAcademic ? (paymentData.course_id ?? null) : null;
   const orgId: string = paymentData.organization_id || 'mslb-main';
 
   if (!userId) {
-    logger.error(`[finalizePayment] Payment has no user_id — cannot grant entitlement id=${paymentDocId}`);
+    logger.error(`[finalizePayment] Payment has no user_id — cannot finalize id=${paymentDocId}`);
     return;
   }
 
@@ -278,48 +282,53 @@ async function finalizePayment(payload: any, eventType: string, eventId: string)
     provider_payment_id: razorpayPaymentId,
     paid_amount: paidAmount,
     paid_currency: currency,
+    payment_domain: paymentDomain,
     organization_id: orgId,
     finalized_at: now,
     finalized_at_ms: nowMs,
     finalized_by: 'razorpay_webhook_v2',
   });
 
-  // 3b. Create enrollment (porting payment_finalizer.py semantics)
-  const enrollmentId = `${userId}:${courseId}`;
-  const enrollmentRef = collections.enrollments().doc(enrollmentId);
-  batch.set(enrollmentRef, {
-    user_id: userId,
-    course_id: courseId,
-    organization_id: orgId,
-    payment_id: paymentDocId,
-    provider_order_id: razorpayOrderId,
-    provider_payment_id: razorpayPaymentId,
-    created_at: now,
-    updated_at: now,
-    enrolled_at_ms: nowMs,
-    status: 'active',
-    source: 'payment',
-  }, { merge: true });
+  // 3b. Create enrollment ONLY IF academic fee and courseId present
+  // A donation MUST NEVER grant an enrollment or activate a course subscription!
+  if (isAcademic && courseId) {
+    const enrollmentId = `${userId}:${courseId}`;
+    const enrollmentRef = collections.enrollments().doc(enrollmentId);
+    batch.set(enrollmentRef, {
+      user_id: userId,
+      course_id: courseId,
+      organization_id: orgId,
+      payment_id: paymentDocId,
+      provider_order_id: razorpayOrderId,
+      provider_payment_id: razorpayPaymentId,
+      created_at: now,
+      updated_at: now,
+      enrolled_at_ms: nowMs,
+      status: 'active',
+      source: 'payment',
+    }, { merge: true });
 
-  // 3c. Create/update subscription (porting payment_finalizer.py semantics)
-  // Subscription keyed by userId for lookup efficiency
-  const subscriptionRef = collections.subscriptions().doc(userId);
-  batch.set(subscriptionRef, {
-    user_id: userId,
-    organization_id: orgId,
-    status: 'active',
-    last_payment_id: paymentDocId,
-    provider_order_id: razorpayOrderId,
-    provider_payment_id: razorpayPaymentId,
-    updated_at: now,
-    activated_at_ms: nowMs,
-    source: 'razorpay_webhook_v2',
-  }, { merge: true });
+    // 3c. Create/update subscription for academic student
+    const subscriptionRef = collections.subscriptions().doc(userId);
+    batch.set(subscriptionRef, {
+      user_id: userId,
+      organization_id: orgId,
+      status: 'active',
+      last_payment_id: paymentDocId,
+      provider_order_id: razorpayOrderId,
+      provider_payment_id: razorpayPaymentId,
+      updated_at: now,
+      activated_at_ms: nowMs,
+      source: 'razorpay_webhook_v2',
+    }, { merge: true });
+  }
 
   // 3d. Write audit log
   const auditRef = db.collection('payment_processor_audit_logs').doc();
   batch.set(auditRef, {
-    event: 'payment_finalized',
+    event: isAcademic ? 'academic_payment_finalized' : 'donation_finalized',
+    payment_domain: paymentDomain,
+    payment_type: paymentData.payment_type || paymentData.type,
     payment_doc_id: paymentDocId,
     user_id: userId,
     course_id: courseId,
@@ -336,5 +345,60 @@ async function finalizePayment(payload: any, eventType: string, eventId: string)
   // 4. Commit atomically
   await batch.commit();
 
-  logger.info(`[finalizePayment] SUCCESS userId=${userId} paymentId=${paymentDocId} orderId=${razorpayOrderId}`);
+  logger.info(`[finalizePayment] SUCCESS userId=${userId} paymentId=${paymentDocId} orderId=${razorpayOrderId} domain=${paymentDomain}`);
+
+  // 5. Send automated confirmation notification (Native FCM Push + In-App Record)
+  try {
+    const notifTitle = isAcademic
+      ? "🎓 Fee Payment Successful — Enrollment Activated"
+      : "🤲 JazakAllah Khair for Your Donation";
+    const amountRupees = Math.round(paidAmount / 100);
+    const notifBody = isAcademic
+      ? `Mubarak! Your payment of ₹${amountRupees} has been received and your course admission is active.`
+      : `Your contribution of ₹${amountRupees} (${paymentData.payment_type || 'Donation'}) has been received. May Allah reward you.`;
+    const notifRoute = isAcademic && courseId ? `/course/${courseId}` : `/payment-history`;
+    const dedupeId = `payment_notif_${paymentDocId}_${userId}`;
+
+    await deliverPushNotificationInternal({
+      recipientUids: [userId],
+      title: notifTitle,
+      body: notifBody,
+      channelId: "announcements",
+      organizationId: orgId,
+      sentByUid: "system",
+      dedupeId,
+      data: {
+        type: "payment_success",
+        payment_id: paymentDocId,
+        payment_domain: paymentDomain,
+        route: notifRoute,
+        ...(courseId ? { course_id: courseId } : {}),
+      },
+    }).catch((pushErr) => logger.warn("[finalizePayment] Push dispatch non-fatal error:", pushErr));
+
+    await collections.notifications().add({
+      user_id: userId,
+      recipient_id: userId,
+      actor_id: "system",
+      channel: "announcements",
+      event: isAcademic ? "payment_success" : "donation_success",
+      title: notifTitle,
+      body: notifBody,
+      message: notifBody,
+      route: notifRoute,
+      read: { [userId]: false },
+      data: {
+        payment_id: paymentDocId,
+        payment_domain: paymentDomain,
+        route: notifRoute,
+        ...(courseId ? { course_id: courseId } : {}),
+      },
+      created_at: FieldValue.serverTimestamp(),
+      created_at_ms: Date.now(),
+      dedupe_id: dedupeId,
+      organization_id: orgId,
+    }).catch(() => {});
+  } catch (notifErr) {
+    logger.warn("[finalizePayment] Error writing notification record:", notifErr);
+  }
 }

@@ -1,7 +1,8 @@
 import { Stack, useRouter, useSegments, useRootNavigationState, usePathname } from 'expo-router';
 import type { Href } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, I18nManager, Platform, StyleSheet, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '@/constants/theme';
 import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { ForceUpdateModal } from '@/components/ForceUpdateModal';
@@ -263,9 +264,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
     setLegalCheckSettled(false);
+
+    let isSubscribed = true;
+    AsyncStorage.getItem(`@mslb_legal_accepted_${user.uid}`).then((cached) => {
+      if (isSubscribed && cached === '1') {
+        setNeedsLegalAcceptance(false);
+        setLegalCheckSettled(true);
+      }
+    }).catch(() => {});
+
     const unsub = onSnapshot(
       doc(db, 'users', user.uid, 'compliance', 'legal_acceptance'),
       (snap) => {
+        if (!snap.exists() && snap.metadata.fromCache) {
+          // In offline cache without local record, do not trigger false lockout
+          return;
+        }
         const accepted = (snap.exists() ? (snap.data().accepted || {}) : {}) as Record<string, { version: string }>;
         const requiredDocs = Object.values(LEGAL_DOCS).filter((d) => d.required);
         const missing = requiredDocs.filter((d) => !accepted[d.key]?.version);
@@ -273,13 +287,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         const needs = missing.length > 0 || outdated.length > 0;
         setNeedsLegalAcceptance(needs);
         setLegalCheckSettled(true);
+        if (!needs) {
+          AsyncStorage.setItem(`@mslb_legal_accepted_${user.uid}`, '1').catch(() => {});
+        }
       },
       () => {
         setNeedsLegalAcceptance(false);
         setLegalCheckSettled(true);
       }
     );
-    return () => unsub();
+    return () => {
+      isSubscribed = false;
+      unsub();
+    };
   }, [user?.uid, profileStatus]);
 
   useEffect(() => {
@@ -324,11 +344,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       startupLog('Navigation complete', { action: 'replace', route, reason: 'onboarding-complete' });
       performReplace(route);
     } else if (!user) {
-      if (!inAuth) {
+      if (!inAuth && !authDecision.allowed) {
         startupLog('Navigation complete', { action: 'replace', route: '/auth/login', reason: 'no-user' });
         performReplace('/auth/login');
       } else {
-        startupLog('Navigation complete', { route: segmentKey || 'auth', reason: 'no-user-auth-route' });
+        startupLog('Navigation complete', { route: segmentKey || 'auth', reason: 'no-user-allowed-route' });
       }
     } else if (holdingSignupVerificationPrompt) {
       startupLog('Navigation complete', { route: segmentKey, reason: 'signup-verification-prompt' });
@@ -477,14 +497,18 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   //   3. user_id == 'role_targeted' (role or user_id list targeting)
   // Fires a local banner for any NEW notification that arrives while app is open.
   // Deduped by document ID to prevent duplicate banners.
+  const activeNotificationDedupeSet = useMemo(() => new Set<string>(), []);
+
   useEffect(() => {
     if (!user?.uid) return () => {};
     const sessionStart = Date.now();
     const seenNotifIds = new Set<string>();
 
     function fireLocalBanner(docData: Record<string, unknown>, docId: string): void {
-      if (seenNotifIds.has(docId)) return;
-      seenNotifIds.add(docId);
+      const dedupeKey = String(docData.dedupe_id || docId).trim();
+      if (seenNotifIds.has(dedupeKey) || activeNotificationDedupeSet.has(dedupeKey)) return;
+      seenNotifIds.add(dedupeKey);
+      activeNotificationDedupeSet.add(dedupeKey);
       const createdAt = (docData.created_at_ms as number) ||
         ((docData.created_at as any)?.toMillis ? (docData.created_at as any).toMillis() : 0);
       // Only banner for notifications that arrived in this session (±3s clock skew)
@@ -576,9 +600,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       const markDeliveredFromNotification = (notification: Notifications.Notification | null) => {
         if (!notification || !user?.uid) return;
         const data = (notification.request.content.data || {}) as any;
-        const dedupe = String(data?.push_dedupe_id || notification.request.identifier || '').trim();
-        if (!dedupe || deliveredDedup.has(dedupe)) return;
+        const dedupe = String(data?.push_dedupe_id || data?.dedupe_id || notification.request.identifier || '').trim();
+        if (!dedupe || deliveredDedup.has(dedupe) || activeNotificationDedupeSet.has(dedupe)) return;
         deliveredDedup.add(dedupe);
+        activeNotificationDedupeSet.add(dedupe);
         void markNotificationDelivered(dedupe, user.uid).catch(() => {});
       };
       const openFromResponse = (response: Notifications.NotificationResponse | null) => {

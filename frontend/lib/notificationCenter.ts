@@ -70,19 +70,47 @@ export function dedupeNotificationEvent(key: string): boolean {
 }
 
 export function resolveRouteFromNotificationData(data: Record<string, unknown>): string | null {
-  const directUrl = String(data.url || data.route || '').trim();
+  if (!data) return '/(tabs)/notifications';
+
+  // Handle case where route is passed as object { pathname: '...' }
+  if (typeof data.route === 'object' && data.route !== null) {
+    const objRoute = (data.route as any).pathname || (data.route as any).url;
+    if (typeof objRoute === 'string' && objRoute.startsWith('/')) return objRoute;
+  }
+
+  const directUrl = String(data.url || data.route || data.screen || '').trim();
   if (directUrl && directUrl.startsWith('/')) return directUrl;
-  if (data.type === 'prayer_alarm') return '/prayer-times';
+
+  const notifType = String(data.type || data.event || '').toLowerCase();
+  if (notifType === 'prayer_alarm') return '/prayer-times';
+  if (notifType === 'approval' || notifType === 'account_approved' || notifType === 'welcome') return '/(tabs)/courses';
+
   const callId = String(data.call_id || '').trim();
   if (callId) return `/call/${callId}`;
+
   const chatId = String(data.chat_id || '').trim();
   if (chatId) return `/chat/${chatId}`;
+
   const classId = String(data.live_class_id || '').trim();
   if (classId) return `/live-class/${classId}`;
+
   const courseId = String(data.course_id || '').trim();
   if (courseId) return `/course/${courseId}`;
+
+  const paymentId = String(data.payment_id || '').trim();
+  if (paymentId || notifType === 'payment_success' || notifType === 'donation_success') {
+    return courseId ? `/course/${courseId}` : '/payment-history';
+  }
+
+  const submissionId = String(data.submission_id || '').trim();
+  const assignmentId = String(data.assignment_id || '').trim();
+  if (submissionId || assignmentId) {
+    return courseId ? `/course/${courseId}` : '/(tabs)/courses';
+  }
+
   const statusId = String(data.status_id || '').trim();
   if (statusId) return '/status';
+
   return '/(tabs)/notifications';
 }
 
