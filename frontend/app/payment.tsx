@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { goBackOrReplace } from "@/lib/navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, where, addDoc, serverTimestamp } from "firebase/firestore";
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useData } from "@/context/DataContext";
@@ -86,6 +86,8 @@ export default function PaymentFlowScreen() {
     paymentType?: string;
   } | null>(null);
 
+  const [concessionLoading, setConcessionLoading] = useState(false);
+
   const getPaymentSettings = async () => {
     const globalSnap = await getDoc(doc(db, "app_settings", "global"));
     const platformSnap = await getDoc(doc(db, "app_settings", "platform"));
@@ -94,7 +96,57 @@ export default function PaymentFlowScreen() {
       ...(globalSnap.exists() ? (globalSnap.data() as Record<string, unknown>) : {}),
     };
     const fee = Number(merged.fees_amount || 500);
-    return { fee };
+    const donationUrl = String(merged.donation_url || merged.razorpay_link || "https://pages.razorpay.com/mslb-donation");
+    return { fee, donationUrl };
+  };
+
+  const handleScholarshipConcessionRequest = async () => {
+    if (!user?.uid || !selectedCourseId) return;
+    setConcessionLoading(true);
+    try {
+      await addDoc(collection(db, "admission_inquiries"), {
+        student_name: profile?.name || user.displayName || "Student",
+        whatsapp_number: profile?.phone && profile.phone.length >= 7 ? profile.phone : "9999999999",
+        course_id: selectedCourseId,
+        course_name: selectedCourse?.name || "Selected Course",
+        notes: `Institutional Fee Concession & Scholarship Request. Academic Fee: ₹${payableAcademicAmount}. Student email: ${user.email || ""}`,
+        created_at: serverTimestamp(),
+      });
+      Alert.alert(
+        "Application Received",
+        "Mubarak! Your fee concession and admission inquiry has been submitted to the Madrasa Academic Board. Our administration will contact you shortly.",
+        [{ text: "Back to Courses", onPress: () => router.replace("/courses") }]
+      );
+    } catch (err: any) {
+      logFirestoreFailure(
+        { collection: "admission_inquiries", operation: "add", query: "concession application", role: profile?.role, status: profile?.status },
+        err
+      );
+      Alert.alert("Submission Notice", "Please contact the Admissions Desk directly via admissions@madrasatussalikat.com.");
+    } finally {
+      setConcessionLoading(false);
+    }
+  };
+
+  const handleContactAdmissions = () => {
+    const email = "admissions@madrasatussalikat.com";
+    const subject = encodeURIComponent(`Admission & Course Fee Inquiry: ${selectedCourse?.name || "Academic Course"}`);
+    const body = encodeURIComponent(
+      `Assalamu Alaikum,\n\nI am inquiring regarding admission and tuition for ${selectedCourse?.name || "the course"}.\n\nStudent Name: ${profile?.name || user?.displayName || ""}\nStudent Email: ${user?.email || ""}`
+    );
+    Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`).catch(() => {
+      Alert.alert("Admissions Desk", "Please email admissions@madrasatussalikat.com for admission guidance.");
+    });
+  };
+
+  const onProceedToDonationWeb = async () => {
+    const { donationUrl } = await getPaymentSettings();
+    const targetUrl = donationUrl || "https://pages.razorpay.com/mslb-donation";
+    try {
+      await Linking.openURL(targetUrl);
+    } catch {
+      Alert.alert("Donation Portal", `Please visit our donation page in your browser: ${targetUrl}`);
+    }
   };
 
   const loadHistory = async () => {
@@ -668,7 +720,9 @@ export default function PaymentFlowScreen() {
             <View style={styles.card}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="checkmark-done-circle-outline" size={22} color={COLORS.primary} />
-                <Text style={styles.cardTitle}>Review & Pay Securely</Text>
+                <Text style={styles.cardTitle}>
+                  {activeDomain === "academic_fee" ? "Course Admission Review" : "Charitable Contribution Review"}
+                </Text>
               </View>
 
               <View style={styles.reviewBox}>
@@ -691,6 +745,10 @@ export default function PaymentFlowScreen() {
                         {academicType === "admission_fee" ? "Admission Fee" : "Tuition Fee"}
                       </Text>
                     </View>
+                    <View style={styles.reviewRow}>
+                      <Text style={styles.reviewLabel}>Standard Course Fee:</Text>
+                      <Text style={styles.reviewAmount}>₹{currentTotalAmount.toLocaleString()}</Text>
+                    </View>
                   </>
                 ) : (
                   <>
@@ -704,35 +762,74 @@ export default function PaymentFlowScreen() {
                         <Text style={styles.reviewValue}>{donorNote}</Text>
                       </View>
                     ) : null}
+                    <View style={styles.reviewRow}>
+                      <Text style={styles.reviewLabel}>Donation Total:</Text>
+                      <Text style={styles.reviewAmount}>₹{currentTotalAmount.toLocaleString()}</Text>
+                    </View>
+                    <View style={styles.reviewRow}>
+                      <Text style={styles.reviewLabel}>Channel:</Text>
+                      <Text style={styles.reviewValue}>External Web Browser (Play Store Policy)</Text>
+                    </View>
                   </>
                 )}
-
-                <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Authoritative Total:</Text>
-                  <Text style={styles.reviewAmount}>₹{currentTotalAmount.toLocaleString()}</Text>
-                </View>
-                <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Gateway:</Text>
-                  <Text style={styles.reviewValue}>Razorpay UPI / Cards / Netbanking</Text>
-                </View>
               </View>
 
-              <TouchableOpacity
-                style={[styles.primaryBtn, openingPayment && styles.primaryBtnDisabled]}
-                onPress={onInitiateCheckout}
-                disabled={openingPayment}
-              >
-                {openingPayment ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <View style={styles.btnRow}>
-                    <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
-                    <Text style={styles.primaryBtnText}>
-                      Pay ₹{currentTotalAmount.toLocaleString()} with Razorpay
+              {activeDomain === "academic_fee" ? (
+                <>
+                  <View style={styles.policyNoticeBox}>
+                    <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} />
+                    <Text style={styles.policyNoticeTitle}>Institutional Admission & Concession Policy</Text>
+                    <Text style={styles.policyNoticeText}>
+                      In compliance with Google Play Store Policies, digital course purchases via external gateways are restricted on Android. Deserving students can request fee concession / institutional sponsorship, or connect with the Madrasa Admissions Desk.
                     </Text>
                   </View>
-                )}
-              </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, concessionLoading && styles.primaryBtnDisabled]}
+                    onPress={handleScholarshipConcessionRequest}
+                    disabled={concessionLoading}
+                  >
+                    {concessionLoading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <View style={styles.btnRow}>
+                        <Ionicons name="school-outline" size={18} color="#FFFFFF" />
+                        <Text style={styles.primaryBtnText}>
+                          Apply for Fee Concession / Scholarship
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={handleContactAdmissions}>
+                    <View style={styles.btnRow}>
+                      <Ionicons name="mail-outline" size={18} color={COLORS.primary} />
+                      <Text style={styles.secondaryBtnText}>Contact Admissions Desk</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <View style={styles.donationNoticeBox}>
+                    <Ionicons name="information-circle-outline" size={18} color="#005F46" />
+                    <Text style={styles.donationNoticeText}>
+                      Google Play Policy Disclosure: To comply with Google Play's Charitable Donations Policy, all voluntary religious contributions (Zakat, Sadqah, Fitrah) are processed securely using your device's web browser outside the app.
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.primaryBtn}
+                    onPress={onProceedToDonationWeb}
+                  >
+                    <View style={styles.btnRow}>
+                      <Ionicons name="open-outline" size={18} color="#FFFFFF" />
+                      <Text style={styles.primaryBtnText}>
+                        Donate ₹{currentTotalAmount.toLocaleString()} via External Web Browser
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
+              )}
 
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep(1)}>
                 <Text style={styles.secondaryBtnText}>Modify Selection</Text>
@@ -1145,6 +1242,18 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   donationNoticeText: { ...TYPOGRAPHY.body, fontSize: 11, color: "#166534", flex: 1, lineHeight: 15 },
+  policyNoticeBox: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    gap: 4,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  policyNoticeTitle: { ...TYPOGRAPHY.label, fontSize: 13, fontWeight: "700", color: "#166534" },
+  policyNoticeText: { ...TYPOGRAPHY.body, fontSize: 12, color: "#166534", lineHeight: 16 },
   primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 14, alignItems: "center", justifyContent: "center", marginTop: SPACING.xs },
   primaryBtnDisabled: { opacity: 0.7 },
   primaryBtnText: { ...TYPOGRAPHY.heading, color: "#FFFFFF", fontSize: 15 },
