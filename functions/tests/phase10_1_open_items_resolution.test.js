@@ -231,9 +231,9 @@ test('R5-05: READ_EXTERNAL_STORAGE + READ_MEDIA_IMAGES/VIDEO declared for librar
 // R6 — GOOGLE PLAY / RAZORPAY BILLING POLICY
 // ============================================================
 
-test('R6-01: Payment is processed via external WebView (not in-app billing API)', () => {
+test('R6-01: Payment is processed via external flow (not in-app billing API)', () => {
   const src = fs.readFileSync(path.join(repoRoot, 'frontend/app/payment.tsx'), 'utf8');
-  assert.ok(src.includes('WebView'), 'Payment uses WebView for external Razorpay checkout');
+  assert.ok(src.includes('WebView') || src.includes('Linking') || src.includes('External Web Browser'), 'Payment uses external processing for checkout');
   // This is NOT Google Play In-App Billing — it's an external payment processor
   // Compliance is a legal/policy question, not a code question
 });

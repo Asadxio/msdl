@@ -15,13 +15,18 @@
     p { color: var(--muted); margin: 0 0 18px; }
     label { display: block; font-weight: 700; margin: 16px 0 6px; color: var(--text); }
     input, textarea { width: 100%; border: 1px solid var(--border); border-radius: 14px; padding: 13px 14px; font: inherit; background: #fff; color: var(--text); }
-    textarea { min-height: 140px; resize: vertical; }
-    button { width: 100%; margin-top: 18px; border: 0; border-radius: 999px; padding: 14px 18px; background: var(--green); color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer; }
+    textarea { min-height: 120px; resize: vertical; }
+    .code-input { letter-spacing: 0.3em; font-size: 1.4rem; font-weight: 800; text-align: center; }
+    button { width: 100%; margin-top: 18px; border: 0; border-radius: 999px; padding: 14px 18px; background: var(--green); color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer; transition: opacity .2s; }
     button:disabled { opacity: .65; cursor: wait; }
+    .btn-secondary { background: #6B7280; margin-top: 10px; }
     .message { margin-top: 16px; padding: 12px 14px; border-radius: 14px; display: none; }
     .success { display: block; background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; }
     .error { display: block; background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+    .info { display: block; background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
     .small { font-size: .9rem; }
+    .step-box { display: none; }
+    .step-box.active { display: block; }
     a { color: var(--green); font-weight: 700; }
   </style>
 </head>
@@ -30,19 +35,41 @@
     <section class="card" aria-labelledby="page-title">
       <h1 id="page-title">Account Deletion Request</h1>
       <div class="accent" aria-hidden="true"></div>
-      <p>Use this form to request deletion of your Madarsa Tus Salikat Lil Banat app account. We may retain limited records where required for safety, legal, payment, dispute, or accounting obligations.</p>
-      <form id="deletion-form">
-        <label for="email">Email address</label>
-        <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com" />
+      <p>Use this official form to request permanent deletion of your Madarsa Tus Salikat Lil Banat student account. Statutory financial records are preserved where required by law.</p>
 
-        <label for="reason">Reason / request details</label>
-        <textarea id="reason" name="reason" required minlength="8" maxlength="500" placeholder="Please describe your deletion request."></textarea>
+      <!-- STEP 1: SUBMIT EMAIL & DETAILS -->
+      <div id="step-1" class="step-box active">
+        <form id="deletion-form">
+          <label for="email">Account Email Address</label>
+          <input id="email" name="email" type="email" autocomplete="email" required placeholder="student@example.com" />
 
-        <button id="submit-btn" type="submit">Submit deletion request</button>
-      </form>
+          <label for="reason">Reason / Deletion Details</label>
+          <textarea id="reason" name="reason" required minlength="8" maxlength="500" placeholder="Please describe your deletion request (minimum 8 characters)."></textarea>
+
+          <button id="submit-btn" type="submit">Request Verification Code</button>
+        </form>
+      </div>
+
+      <!-- STEP 2: VERIFY 6-DIGIT EMAIL CODE -->
+      <div id="step-2" class="step-box">
+        <div id="step-2-info" class="message info"></div>
+        <form id="verify-form">
+          <label for="code">6-Digit Verification Code</label>
+          <input id="code" name="code" class="code-input" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required placeholder="123456" />
+
+          <button id="verify-btn" type="submit">Verify & Confirm Deletion</button>
+          <button id="back-btn" type="button" class="btn-secondary">Change Email</button>
+        </form>
+      </div>
+
+      <!-- STEP 3: CONFIRMATION -->
+      <div id="step-3" class="step-box">
+        <div id="confirmation-message" class="message success"></div>
+      </div>
+
       <div id="message" class="message" role="status"></div>
-      <p class="small" style="margin-top:18px;">Privacy questions: madrastussalikatlilbanat@gmail.com</p>
-      <p class="small"><a href="privacy-policy.html">Read our Privacy Policy</a></p>
+      <p class="small" style="margin-top:20px;">Privacy Helpline: madrastussalikatlilbanat@gmail.com</p>
+      <p class="small"><a href="privacy-policy.html">Read our Privacy Policy & Data Retention Policy</a></p>
     </section>
   </main>
 
@@ -50,6 +77,7 @@
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
     import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
     import { getFirestore, collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+    import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js';
 
     const firebaseConfig = {
       apiKey: 'AIzaSyDFk_Cc6yEIROJ60vq0VtyFx0qd4YUeqxQ',
@@ -63,26 +91,46 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    const functions = getFunctions(app, 'us-central1');
+
     const form = document.getElementById('deletion-form');
-    const button = document.getElementById('submit-btn');
+    const verifyForm = document.getElementById('verify-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const verifyBtn = document.getElementById('verify-btn');
+    const backBtn = document.getElementById('back-btn');
     const message = document.getElementById('message');
+
+    let currentRequestId = null;
+    let currentEmail = null;
 
     function showMessage(text, type) {
       message.textContent = text;
       message.className = `message ${type}`;
     }
 
+    function setStep(step) {
+      document.getElementById('step-1').className = step === 1 ? 'step-box active' : 'step-box';
+      document.getElementById('step-2').className = step === 2 ? 'step-box active' : 'step-box';
+      document.getElementById('step-3').className = step === 3 ? 'step-box active' : 'step-box';
+    }
+
+    // Step 1: Submit email & generate verification code
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      button.disabled = true;
+      submitBtn.disabled = true;
       message.className = 'message';
       try {
         const email = document.getElementById('email').value.trim().toLowerCase();
         const reason = document.getElementById('reason').value.trim();
-        if (!email || reason.length < 8) throw new Error('Please enter your email and at least 8 characters of request details.');
+        if (!email || reason.length < 8) {
+          throw new Error('Please enter your email and at least 8 characters describing your deletion request.');
+        }
+
         const credential = await signInAnonymously(auth);
         const combinedReason = `Email: ${email}\nRequest: ${reason}`.slice(0, 600);
-        await addDoc(collection(db, 'privacy_requests'), {
+
+        // Register initial unverified request
+        const docRef = await addDoc(collection(db, 'privacy_requests'), {
           user_id: credential.user.uid,
           anonymous_requester_uid: credential.user.uid,
           source: 'public_web',
@@ -96,14 +144,54 @@
           created_at: serverTimestamp(),
           updated_at: serverTimestamp(),
         });
-        form.reset();
-        showMessage('Your deletion request has been registered. To safeguard accounts, ownership verification is required before permanent account deletion is processed.', 'success');
+
+        currentRequestId = docRef.id;
+        currentEmail = email;
+
+        // Trigger secure server-side code generation
+        const initiateFn = httpsCallable(functions, 'initiatePublicDeletionVerification');
+        const initRes = await initiateFn({ requestId: currentRequestId, email: currentEmail });
+
+        const infoBox = document.getElementById('step-2-info');
+        infoBox.textContent = `If an account is associated with '${email}', a 6-digit verification code has been dispatched. Enter the code below to confirm ownership.`;
+        setStep(2);
+        document.getElementById('code').focus();
       } catch (error) {
         console.error(error);
-        showMessage('Could not submit the request. Please try again or email madrastussalikatlilbanat@gmail.com.', 'error');
+        showMessage(error.message || 'Could not submit request. Please try again.', 'error');
       } finally {
-        button.disabled = false;
+        submitBtn.disabled = false;
       }
+    });
+
+    // Step 2: Verify 6-digit code
+    verifyForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      verifyBtn.disabled = true;
+      message.className = 'message';
+      try {
+        const code = document.getElementById('code').value.trim();
+        if (!/^\d{6}$/.test(code)) {
+          throw new Error('Please enter a valid 6-digit verification code.');
+        }
+
+        const verifyFn = httpsCallable(functions, 'verifyPublicDeletionRequest');
+        const res = await verifyFn({ requestId: currentRequestId, code: code });
+
+        const confirmBox = document.getElementById('confirmation-message');
+        confirmBox.textContent = res.data?.message || 'Email ownership successfully verified. Your account deletion request is now registered.';
+        setStep(3);
+      } catch (error) {
+        console.error(error);
+        showMessage(error.message || 'Verification failed. Please check the code and try again.', 'error');
+      } finally {
+        verifyBtn.disabled = false;
+      }
+    });
+
+    backBtn.addEventListener('click', () => {
+      setStep(1);
+      message.className = 'message';
     });
   </script>
 </body>

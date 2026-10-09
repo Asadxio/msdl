@@ -64,4 +64,8 @@ export {
 
 // ─── Phase 79: User Data & Play Store Account Deletion Compliance ─────────────
 export { processAccountDeletion } from "./privacy/processAccountDeletion";
+export {
+  initiatePublicDeletionVerification,
+  verifyPublicDeletionRequest,
+} from "./privacy/publicVerification";
 
