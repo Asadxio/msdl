@@ -7,7 +7,8 @@ import { goBackOrReplace } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, orderBy, query, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { withTimeout } from '@/lib/errors';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -19,6 +20,7 @@ type PrivacyRequestState = 'requested' | 'reviewing' | 'processing' | 'completed
 type PrivacyRequest = {
   id: string;
   user_id: string;
+  email?: string;
   type: 'deletion' | 'export';
   reason: string;
   state: PrivacyRequestState;
@@ -63,6 +65,7 @@ export default function AdminPrivacyRequestsScreen() {
         return {
           id: item.id,
           user_id: String(data.user_id || ''),
+          email: data.email ? String(data.email) : undefined,
           type: data.type === 'deletion' ? 'deletion' : 'export',
           reason: String(data.reason || ''),
           state: STATUS_FLOW.includes(data.state) ? data.state : 'requested',
@@ -90,18 +93,37 @@ export default function AdminPrivacyRequestsScreen() {
     if (request.state === state || updatingId || !NEXT_STATUS[request.state].includes(state)) return;
     setUpdatingId(request.id);
     try {
-      await withTimeout(
-        updateDoc(doc(db, 'privacy_requests', request.id), {
-          state,
-          updated_at: serverTimestamp(),
-        }),
-        10000,
-        'Updating privacy request timed out'
-      );
+      if (state === 'completed' && request.type === 'deletion') {
+        const processFn = httpsCallable<
+          { targetUid?: string; targetEmail?: string; requestId?: string; reason?: string },
+          { success: boolean; message?: string }
+        >(functions, 'processAccountDeletion');
+        await withTimeout(
+          processFn({
+            targetUid: request.user_id || undefined,
+            targetEmail: request.email || undefined,
+            requestId: request.id,
+            reason: request.reason || 'Admin processed account deletion request',
+          }),
+          20000,
+          'Processing account deletion timed out'
+        );
+        Alert.alert('Deletion Processed', 'The account has been deleted and user data anonymized successfully.');
+      } else {
+        await withTimeout(
+          updateDoc(doc(db, 'privacy_requests', request.id), {
+            state,
+            updated_at: serverTimestamp(),
+          }),
+          10000,
+          'Updating privacy request timed out'
+        );
+      }
       setRequests((prev) => prev.map((item) => (item.id === request.id ? { ...item, state } : item)));
     } catch (error: unknown) {
       logFirestoreFailure({ collection: 'privacy_requests', operation: 'update', path: `privacy_requests/${request.id}`, query: `set state ${state}`, role: profile?.role, status: profile?.status }, error);
-      Alert.alert('Update Failed', 'Could not update privacy request status. Please try again.');
+      const msg = error instanceof Error ? error.message : 'Could not update privacy request status. Please try again.';
+      Alert.alert('Operation Failed', msg);
     } finally {
       setUpdatingId(null);
     }
@@ -148,6 +170,7 @@ export default function AdminPrivacyRequestsScreen() {
                 <Text style={styles.typeText}>{item.type === 'deletion' ? 'Account Deletion' : 'Data Export'}</Text>
                 <Text style={styles.statusPill}>{item.state}</Text>
               </View>
+              {item.email ? <Text style={styles.metaText}>Email: {item.email}</Text> : null}
               <Text style={styles.metaText}>User ID: {item.user_id || 'Unknown'}</Text>
               <Text style={styles.metaText}>Created: {formatDate(item.created_at)}</Text>
               <Text style={styles.reasonText}>{item.reason}</Text>

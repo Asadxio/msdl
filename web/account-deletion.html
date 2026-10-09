@@ -84,6 +84,7 @@
         const combinedReason = `Email: ${email}\nRequest: ${reason}`.slice(0, 600);
         await addDoc(collection(db, 'privacy_requests'), {
           user_id: credential.user.uid,
+          email: email,
           type: 'deletion',
           reason: combinedReason,
           state: 'requested',

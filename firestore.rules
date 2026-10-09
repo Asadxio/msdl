@@ -1241,6 +1241,22 @@ service cloud.firestore {
         && request.resource.data.updated_at is timestamp;
     }
 
+    function isValidPublicPrivacyRequestCreate() {
+      return isSignedIn()
+        && hasOnlyAllowedKeys(request.resource.data, ['user_id', 'type', 'reason', 'email', 'state', 'lifecycle', 'created_at', 'updated_at'])
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.type == 'deletion'
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() >= 8
+        && request.resource.data.reason.size() <= 600
+        && ('email' in request.resource.data && request.resource.data.email is string && request.resource.data.email.size() >= 5 && request.resource.data.email.size() <= 120)
+        && request.resource.data.state == 'requested'
+        && request.resource.data.lifecycle is list
+        && request.resource.data.lifecycle.size() <= 10
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.updated_at is timestamp;
+    }
+
     function isValidNotificationSettings(uid) {
       return isSelf(uid)
         && hasOnlyAllowedKeys(request.resource.data, ['channels', 'muted_chat_ids', 'quiet_hours', 'sound_enabled', 'vibration_enabled', 'updated_at_ms', 'updated_at'])
@@ -1873,7 +1889,7 @@ service cloud.firestore {
 
     match /privacy_requests/{requestId} {
       allow read: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
-      allow create: if isValidPrivacyRequestCreate();
+      allow create: if isValidPrivacyRequestCreate() || isValidPublicPrivacyRequestCreate();
       allow update: if isAdmin()
         && request.resource.data.user_id == resource.data.user_id
         && request.resource.data.type == resource.data.type

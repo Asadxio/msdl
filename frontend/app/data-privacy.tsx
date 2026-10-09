@@ -14,6 +14,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { deleteUser } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getApp } from 'firebase/app';
 import { UIButton, InlineError } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { createPrivacyRequest } from '@/lib/legal';
@@ -63,17 +65,35 @@ export default function DataPrivacyScreen() {
     try {
       const uid = user.uid;
 
-      // 1. Record immediate deletion request in compliance audit trail
+      // 1. Process server-side personal data deletion & anonymization (Firestore, tokens, presence, storage)
+      try {
+        const functions = getFunctions(getApp(), 'us-central1');
+        const processFn = httpsCallable<{ targetUid: string; reason?: string }, { success: boolean }>(
+          functions,
+          'processAccountDeletion'
+        );
+        await processFn({ targetUid: uid, reason: 'Immediate user self-service account deletion' });
+      } catch (e) {
+        console.warn('Server processAccountDeletion notice:', e);
+      }
+
+      // 2. Record immediate deletion request in compliance audit trail
       try {
         await createPrivacyRequest(uid, 'deletion', 'Immediate user self-service account deletion');
       } catch (e) {
         console.warn('Could not create privacy deletion request audit:', e);
       }
 
-      // 2. Delete user from Firebase Auth
-      await deleteUser(auth.currentUser);
+      // 3. Delete user from Firebase Auth
+      if (auth.currentUser) {
+        try {
+          await deleteUser(auth.currentUser);
+        } catch (e: any) {
+          if (e?.code !== 'auth/user-not-found') throw e;
+        }
+      }
 
-      // 3. Clear auth and redirect
+      // 4. Clear auth and redirect
       setDeleteModalVisible(false);
       await signOut();
       Alert.alert('Account Deleted', 'Your account has been permanently deleted from Madrasatu-s-Salikat Lil Banat.');
