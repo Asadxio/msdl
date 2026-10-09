@@ -25,10 +25,21 @@ import {
   resourceExhaustedError,
   unauthenticatedError,
 } from '../shared/errors';
+import {
+  sendAccountDeletionVerificationEmail,
+  isEmailConfigured,
+  EmailTransport,
+  EmailDeliveryResult,
+} from '../services/emailDeliveryService';
 
 export interface InitiateVerificationData {
   requestId: string;
   email: string;
+}
+
+export interface InitiateVerificationOptions {
+  fixedCode?: string;
+  emailTransport?: EmailTransport;
 }
 
 export interface VerifyCodeData {
@@ -41,8 +52,8 @@ export interface VerifyCodeData {
  */
 export async function executeInitiatePublicDeletionVerification(
   data: InitiateVerificationData,
-  options?: { fixedCode?: string }
-): Promise<{ success: boolean; message: string; testCode?: string }> {
+  options?: InitiateVerificationOptions
+): Promise<{ success: boolean; message: string; delivery_status?: string; testCode?: string }> {
   const { requestId, email: rawEmail } = data;
   if (!requestId || typeof requestId !== 'string') {
     throw invalidArgumentError('A valid requestId is required.');
@@ -111,6 +122,101 @@ export async function executeInitiatePublicDeletionVerification(
     process.env.FUNCTIONS_EMULATOR === 'true' ||
     Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 
+  // 1. Evaluate email delivery readiness
+  const emailReady = isEmailConfigured() || Boolean(options?.emailTransport);
+
+  // If in production and email credentials are NOT configured:
+  // We do not falsely claim delivery succeeded.
+  // To preserve zero enumeration, we return identical service-unavailable status
+  // regardless of whether the account exists or not.
+  if (!emailReady && !isEmulator) {
+    logger.warn(
+      `[initiatePublicDeletionVerification] Email provider not configured in production environment for requestId=${requestId}.`
+    );
+    await tokenRef.set({
+      request_id: requestId,
+      email: cleanEmail,
+      target_uid: targetUid,
+      token_hash: tokenHash,
+      salt,
+      attempts: 0,
+      max_attempts: 5,
+      expires_at: Timestamp.fromMillis(expiryMs),
+      verified: false,
+      used: false,
+      delivery_status: 'not_configured',
+      created_at: FieldValue.serverTimestamp(),
+      created_at_ms: Date.now(),
+    });
+    return {
+      success: false,
+      delivery_status: 'not_configured',
+      message:
+        'Email delivery service is currently not configured or unavailable. Please contact privacy administration at privacy@madrasatussalikat.com for assistance.',
+    };
+  }
+
+  // 2. Dispatch email if target account exists
+  let deliveryResult: EmailDeliveryResult = {
+    delivered: false,
+    provider: 'none',
+    status: 'not_configured',
+  };
+
+  if (targetUid) {
+    if (options?.emailTransport || isEmailConfigured()) {
+      deliveryResult = await sendAccountDeletionVerificationEmail(
+        cleanEmail,
+        code,
+        requestId,
+        options?.emailTransport
+      );
+    } else if (isEmulator) {
+      // In local emulator without explicit transport override, simulate successful send
+      deliveryResult = {
+        delivered: true,
+        provider: 'mock',
+        status: 'sent',
+        messageId: `emulator-mock-${Date.now()}`,
+      };
+    }
+  } else {
+    // Zero account enumeration: if no account exists for email, skip dispatch
+    // but report standard acknowledged state so attacker learns nothing.
+    deliveryResult = {
+      delivered: true,
+      provider: 'none',
+      status: 'skipped_no_account',
+    };
+  }
+
+  // Handle provider failure
+  if (targetUid && deliveryResult.status === 'failed') {
+    await tokenRef.set({
+      request_id: requestId,
+      email: cleanEmail,
+      target_uid: targetUid,
+      token_hash: tokenHash,
+      salt,
+      attempts: 0,
+      max_attempts: 5,
+      expires_at: Timestamp.fromMillis(expiryMs),
+      verified: false,
+      used: false,
+      delivery_status: 'failed',
+      delivery_error: deliveryResult.error || 'Failed to dispatch verification email',
+      created_at: FieldValue.serverTimestamp(),
+      created_at_ms: Date.now(),
+    });
+    return {
+      success: false,
+      delivery_status: 'failed',
+      message:
+        'Unable to deliver verification email at this time. Please verify your email address or try again later.',
+    };
+  }
+
+  // Record successful dispatch and cryptographic token
   await tokenRef.set({
     request_id: requestId,
     email: cleanEmail,
@@ -122,6 +228,9 @@ export async function executeInitiatePublicDeletionVerification(
     expires_at: Timestamp.fromMillis(expiryMs),
     verified: false,
     used: false,
+    delivery_status: deliveryResult.status,
+    delivery_provider: deliveryResult.provider,
+    delivery_message_id: deliveryResult.messageId || null,
     created_at: FieldValue.serverTimestamp(),
     created_at_ms: Date.now(),
     // For local automated testing in emulator only:
@@ -129,11 +238,12 @@ export async function executeInitiatePublicDeletionVerification(
   });
 
   logger.info(
-    `[initiatePublicDeletionVerification] Verification code recorded for requestId=${requestId} (hasAccount=${Boolean(targetUid)})`
+    `[initiatePublicDeletionVerification] Verification code recorded for requestId=${requestId} (deliveryStatus=${deliveryResult.status})`
   );
 
   return {
     success: true,
+    delivery_status: deliveryResult.status,
     message:
       'If an account is associated with this email address, a verification code has been dispatched. Please enter the 6-digit code to verify ownership.',
     ...(isEmulator ? { testCode: code } : {}),

@@ -46,7 +46,11 @@ export default function DataPrivacyScreen() {
     setError('');
     setLoading(type);
     try {
-      await createPrivacyRequest(user.uid, type, trimmed);
+      if (type === 'deletion') {
+        await createPrivacyRequest(user.uid, 'deletion', trimmed);
+      } else {
+        await createPrivacyRequest(user.uid, 'export', trimmed);
+      }
       Alert.alert('Request submitted', `Your ${type} request was recorded and queued for review.`);
       setReason('');
     } finally {

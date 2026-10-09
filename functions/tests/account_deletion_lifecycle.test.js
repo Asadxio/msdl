@@ -50,7 +50,10 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 // Import the REAL compiled deletion processor & verification functions
-const { executeAccountDeletion } = require('../lib/privacy/processAccountDeletion');
+const {
+  executeAccountDeletion,
+  processAccountDeletion,
+} = require('../lib/privacy/processAccountDeletion');
 const {
   executeInitiatePublicDeletionVerification,
   executeVerifyPublicDeletionRequest,
@@ -117,7 +120,7 @@ async function runTestSuite() {
   await db.collection('user_tokens').doc(t1Uid).set({ fcm: 'token_123' });
 
   const bucket1 = new MockStorageBucket();
-  const res1 = await executeAccountDeletion({ uid: t1Uid, role: 'student', email: t1Email }, { bucketOverride: bucket1 });
+  const res1 = await executeAccountDeletion({ uid: t1Uid, role: 'student', email: t1Email }, {}, { bucketOverride: bucket1 });
   assert.strictEqual(res1.success, true);
   assert.strictEqual(res1.targetUid, t1Uid);
 
@@ -350,7 +353,7 @@ async function runTestSuite() {
   // --------------------------------------------------------------------------
   // TEST 12: Public request deletion resolving to verified student UID and never deleting anonymous UID
   // --------------------------------------------------------------------------
-  const res12 = await executeAccountDeletion(adminCaller, { requestId: t3ReqId, bucketOverride: new MockStorageBucket() });
+  const res12 = await executeAccountDeletion(adminCaller, { requestId: t3ReqId }, { bucketOverride: new MockStorageBucket() });
   assert.strictEqual(res12.success, true);
   assert.strictEqual(res12.targetUid, t3StudentUid);
 
@@ -374,7 +377,7 @@ async function runTestSuite() {
   await seedAuthUser(t13Uid, 'storage@test.local');
   await db.collection('users').doc(t13Uid).set({ name: 'Storage User', email: 'storage@test.local' });
   const bucket13 = new MockStorageBucket();
-  await executeAccountDeletion(adminCaller, { targetUid: t13Uid, bucketOverride: bucket13 });
+  await executeAccountDeletion(adminCaller, { targetUid: t13Uid }, { bucketOverride: bucket13 });
 
   assert.ok(bucket13.deletedPrefixes.includes(`users/${t13Uid}/`));
   assert.ok(bucket13.deletedPrefixes.includes(`status_updates/${t13Uid}/`));
@@ -400,7 +403,7 @@ async function runTestSuite() {
   const failingBucket = new MockStorageBucket(true);
   let t14Error = null;
   try {
-    await executeAccountDeletion(adminCaller, { requestId: t14ReqId, bucketOverride: failingBucket });
+    await executeAccountDeletion(adminCaller, { requestId: t14ReqId }, { bucketOverride: failingBucket });
   } catch (err) {
     t14Error = err;
   }
@@ -412,7 +415,7 @@ async function runTestSuite() {
 
   // Safe retry with healthy storage
   const healthyBucket = new MockStorageBucket(false);
-  const res14Retry = await executeAccountDeletion(adminCaller, { requestId: t14ReqId, bucketOverride: healthyBucket });
+  const res14Retry = await executeAccountDeletion(adminCaller, { requestId: t14ReqId }, { bucketOverride: healthyBucket });
   assert.strictEqual(res14Retry.success, true);
   const t14DocAfterRetry = (await db.collection('privacy_requests').doc(t14ReqId).get()).data();
   assert.strictEqual(t14DocAfterRetry.state, 'completed');
@@ -433,7 +436,7 @@ async function runTestSuite() {
     created_at: FieldValue.serverTimestamp(),
   });
   // User not created in Auth emulator -> triggers auth/user-not-found
-  const res15 = await executeAccountDeletion(adminCaller, { requestId: t15ReqId, bucketOverride: new MockStorageBucket() });
+  const res15 = await executeAccountDeletion(adminCaller, { requestId: t15ReqId }, { bucketOverride: new MockStorageBucket() });
   assert.strictEqual(res15.success, true);
   console.log('[PASS] Test 15: Auth deletion error handling safely validated');
 
@@ -451,7 +454,7 @@ async function runTestSuite() {
     state: 'requested',
     created_at: FieldValue.serverTimestamp(),
   });
-  const res16 = await executeAccountDeletion(adminCaller, { requestId: t16ReqId, bucketOverride: new MockStorageBucket() });
+  const res16 = await executeAccountDeletion(adminCaller, { requestId: t16ReqId }, { bucketOverride: new MockStorageBucket() });
   assert.strictEqual(res16.success, true);
   console.log('[PASS] Test 16: Already-deleted Auth user (auth/user-not-found) handled seamlessly');
 
@@ -473,11 +476,14 @@ async function runTestSuite() {
 
   let t17Error = null;
   try {
-    await executeAccountDeletion(adminCaller, {
-      requestId: t17ReqId,
-      bucketOverride: new MockStorageBucket(),
-      simulateBatchFailure: true,
-    });
+    await executeAccountDeletion(
+      adminCaller,
+      { requestId: t17ReqId },
+      {
+        bucketOverride: new MockStorageBucket(),
+        simulateBatchFailure: true,
+      }
+    );
   } catch (err) {
     t17Error = err;
   }
@@ -502,10 +508,11 @@ async function runTestSuite() {
   // TEST 18: Safe idempotent recovery & retry after partial deletion
   // --------------------------------------------------------------------------
   // Retry the exact request from Test 17 without simulated failure
-  const res18 = await executeAccountDeletion(adminCaller, {
-    requestId: t17ReqId,
-    bucketOverride: new MockStorageBucket(),
-  });
+  const res18 = await executeAccountDeletion(
+    adminCaller,
+    { requestId: t17ReqId },
+    { bucketOverride: new MockStorageBucket() }
+  );
   assert.strictEqual(res18.success, true);
   const t17DocAfterRecovery = (await db.collection('privacy_requests').doc(t17ReqId).get()).data();
   assert.strictEqual(t17DocAfterRecovery.state, 'completed');
@@ -536,8 +543,8 @@ async function runTestSuite() {
 
   // Launch two concurrent deletion executions
   const [p1, p2] = await Promise.allSettled([
-    executeAccountDeletion(adminCaller, { requestId: t19ReqId, bucketOverride: new MockStorageBucket() }),
-    executeAccountDeletion(adminCaller, { requestId: t19ReqId, bucketOverride: new MockStorageBucket() }),
+    executeAccountDeletion(adminCaller, { requestId: t19ReqId }, { bucketOverride: new MockStorageBucket() }),
+    executeAccountDeletion(adminCaller, { requestId: t19ReqId }, { bucketOverride: new MockStorageBucket() }),
   ]);
 
   const successes = [p1, p2].filter((p) => p.status === 'fulfilled');
@@ -567,7 +574,7 @@ async function runTestSuite() {
     created_at: FieldValue.serverTimestamp(),
   });
 
-  await executeAccountDeletion(adminCaller, { targetUid: t20Uid, bucketOverride: new MockStorageBucket() });
+  await executeAccountDeletion(adminCaller, { targetUid: t20Uid }, { bucketOverride: new MockStorageBucket() });
 
   const paymentDocAfter = (await db.collection('payments').doc(t20PaymentDocId).get()).data();
   assert.strictEqual(paymentDocAfter.user_id, t20Uid);
@@ -575,8 +582,177 @@ async function runTestSuite() {
   assert.strictEqual(paymentDocAfter.receipt_id, 'MSLB_TAX_2026');
   console.log('[PASS] Test 20: Statutory payment record strictly retained unmodified for accounting/tax compliance');
 
+  // --------------------------------------------------------------------------
+  // TEST 21: Real email provider dispatch delivers verification code
+  // --------------------------------------------------------------------------
+  const t21ReqId = `email_deliv_req_${Date.now()}`;
+  const t21Uid = `email_student_${Date.now()}`;
+  const t21Email = `student_${Date.now()}@madrasatussalikat.local`;
+  await seedAuthUser(t21Uid, t21Email);
+  await db.collection('users').doc(t21Uid).set({ name: 'Email Delivery Student', email: t21Email });
+  await db.collection('privacy_requests').doc(t21ReqId).set({
+    user_id: 'anonymous_user_submitting',
+    anonymous_requester_uid: 'anonymous_user_submitting',
+    source: 'public_web',
+    email: t21Email,
+    type: 'deletion',
+    state: 'requested',
+    verification_status: 'unverified',
+    created_at: FieldValue.serverTimestamp(),
+  });
+
+  const mockSentMails = [];
+  const mockEmailTransport = {
+    async sendMail(opts) {
+      mockSentMails.push(opts);
+      return { messageId: `msg_${Date.now()}` };
+    },
+  };
+
+  const initRes21 = await executeInitiatePublicDeletionVerification(
+    { requestId: t21ReqId, email: t21Email },
+    { emailTransport: mockEmailTransport }
+  );
+  assert.strictEqual(initRes21.success, true);
+  assert.strictEqual(initRes21.delivery_status, 'sent');
+  assert.strictEqual(mockSentMails.length, 1);
+  assert.strictEqual(mockSentMails[0].to, t21Email);
+  assert.ok(mockSentMails[0].subject.includes('Verification Code'));
+  const codeMatch = mockSentMails[0].text.match(/\b\d{6}\b/);
+  assert.ok(codeMatch, 'Email text must contain the 6-digit code');
+  const deliveredCode = codeMatch[0];
+
+  const verifyRes21 = await executeVerifyPublicDeletionRequest({
+    requestId: t21ReqId,
+    code: deliveredCode,
+  });
+  assert.strictEqual(verifyRes21.success, true);
+  assert.strictEqual(verifyRes21.hasAccount, true);
+
+  const reqDoc21 = (await db.collection('privacy_requests').doc(t21ReqId).get()).data();
+  assert.strictEqual(reqDoc21.verification_status, 'verified');
+  assert.strictEqual(reqDoc21.target_uid, t21Uid);
+  console.log('[PASS] Test 21: Real email provider dispatch delivers verification code and authorizes verified account');
+
+  // --------------------------------------------------------------------------
+  // TEST 22: Email provider failure handled safely without false success
+  // --------------------------------------------------------------------------
+  const t22ReqId = `email_fail_req_${Date.now()}`;
+  const t22Uid = `email_fail_${Date.now()}`;
+  const t22Email = `fail_${Date.now()}@madrasatussalikat.local`;
+  await seedAuthUser(t22Uid, t22Email);
+  await db.collection('users').doc(t22Uid).set({ name: 'Failing Email Student', email: t22Email });
+  await db.collection('privacy_requests').doc(t22ReqId).set({
+    user_id: 'anon_requester',
+    anonymous_requester_uid: 'anon_requester',
+    source: 'public_web',
+    email: t22Email,
+    type: 'deletion',
+    state: 'requested',
+    verification_status: 'unverified',
+    created_at: FieldValue.serverTimestamp(),
+  });
+
+  const failingEmailTransport = {
+    async sendMail() {
+      throw new Error('Simulated SMTP connection timeout to mail gateway');
+    },
+  };
+
+  const initRes22 = await executeInitiatePublicDeletionVerification(
+    { requestId: t22ReqId, email: t22Email },
+    { emailTransport: failingEmailTransport }
+  );
+  assert.strictEqual(initRes22.success, false);
+  assert.strictEqual(initRes22.delivery_status, 'failed');
+  assert.ok(initRes22.message.includes('Unable to deliver'));
+
+  const tokenDoc22 = (await db.collection('privacy_verification_tokens').doc(t22ReqId).get()).data();
+  assert.strictEqual(tokenDoc22.delivery_status, 'failed');
+  assert.ok(tokenDoc22.delivery_error.includes('timeout'));
+  console.log('[PASS] Test 22: Email provider failure reported accurately without claiming false success');
+
+  // --------------------------------------------------------------------------
+  // TEST 23: Production unconfigured email provider reporting & zero enumeration
+  // --------------------------------------------------------------------------
+  const origEmulator = process.env.FUNCTIONS_EMULATOR;
+  const origHost = process.env.FIRESTORE_EMULATOR_HOST;
+  const origSmtp = process.env.SMTP_HOST;
+  try {
+    delete process.env.FUNCTIONS_EMULATOR;
+    delete process.env.FIRESTORE_EMULATOR_HOST;
+    delete process.env.SMTP_HOST;
+
+    const t23ReqId1 = `unconf_reg_${Date.now()}`;
+    const t23ReqId2 = `unconf_unreg_${Date.now()}`;
+    await db.collection('privacy_requests').doc(t23ReqId1).set({
+      email: t21Email,
+      type: 'deletion',
+      state: 'requested',
+    });
+    await db.collection('privacy_requests').doc(t23ReqId2).set({
+      email: 'nonexistent@nowhere.local',
+      type: 'deletion',
+      state: 'requested',
+    });
+
+    const resUnconf1 = await executeInitiatePublicDeletionVerification({
+      requestId: t23ReqId1,
+      email: t21Email,
+    });
+    const resUnconf2 = await executeInitiatePublicDeletionVerification({
+      requestId: t23ReqId2,
+      email: 'nonexistent@nowhere.local',
+    });
+
+    assert.strictEqual(resUnconf1.success, false);
+    assert.strictEqual(resUnconf1.delivery_status, 'not_configured');
+    assert.strictEqual(resUnconf2.success, false);
+    assert.strictEqual(resUnconf2.delivery_status, 'not_configured');
+    assert.strictEqual(resUnconf1.message, resUnconf2.message);
+    assert.strictEqual(resUnconf1.testCode, undefined, 'Plaintext code must NEVER leak in production');
+    assert.strictEqual(resUnconf2.testCode, undefined, 'Plaintext code must NEVER leak in production');
+    console.log('[PASS] Test 23: Unconfigured provider reports service unavailable with zero account enumeration');
+  } finally {
+    if (origEmulator) process.env.FUNCTIONS_EMULATOR = origEmulator;
+    if (origHost) process.env.FIRESTORE_EMULATOR_HOST = origHost;
+    if (origSmtp) process.env.SMTP_HOST = origSmtp;
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 24: Regression: Client-supplied test fields to public callable cannot trigger failure injection
+  // --------------------------------------------------------------------------
+  const t24Uid = `callable_sec_${Date.now()}`;
+  await seedAuthUser(t24Uid, 'callable_sec@test.local');
+  await db.collection('users').doc(t24Uid).set({
+    name: 'Callable Security Student',
+    email: 'callable_sec@test.local',
+    role: 'student',
+    status: 'approved',
+  });
+
+  const maliciousBucket = new MockStorageBucket(true); // would fail if invoked
+  const callableResult = await processAccountDeletion.run({
+    auth: {
+      uid: t24Uid,
+      token: { email: 'callable_sec@test.local' },
+    },
+    data: {
+      targetUid: t24Uid,
+      reason: 'Self deletion with client test hook injection',
+      simulateBatchFailure: true, // MUST BE STRIPPED
+      bucketOverride: maliciousBucket, // MUST BE STRIPPED
+    },
+  });
+
+  assert.strictEqual(callableResult.success, true);
+  const t24UserDoc = (await db.collection('users').doc(t24Uid).get()).data();
+  assert.strictEqual(t24UserDoc.name, 'Deleted User');
+  assert.strictEqual(t24UserDoc.status, 'deleted');
+  console.log('[PASS] Test 24: Regression verified: Client-supplied failure injection fields to public callable are stripped and ignored');
+
   console.log('========================================================================');
-  console.log('   ALL 20/20 ACCOUNT DELETION INTEGRATION ASSERTIONS PASSED (100%) ');
+  console.log('   ALL 24/24 ACCOUNT DELETION INTEGRATION ASSERTIONS PASSED (100%) ');
   console.log('========================================================================');
 }
 

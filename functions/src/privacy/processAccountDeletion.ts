@@ -34,16 +34,30 @@ import {
 } from '../shared/errors';
 import { collections } from '../shared/firestore';
 
-export interface ProcessDeletionRequest {
+/**
+ * Public payload accepted by the external onCall Cloud Function.
+ * Strictly whitelists legitimate user and admin input fields.
+ */
+export interface PublicProcessDeletionRequest {
   targetUid?: string;
   targetEmail?: string;
   requestId?: string;
   reason?: string;
-  // Storage bucket override (used for testing failure and retry)
+}
+
+/**
+ * Internal-only options for automated integration test harnesses.
+ * STRICTLY forbidden and inaccessible through external callable entrypoints.
+ */
+export interface InternalTestOptions {
+  // Storage bucket override (used for testing failure and retry in test harnesses)
   bucketOverride?: any;
-  // Test hook to simulate final Firestore batch commit failure
+  // Test hook to simulate final Firestore batch commit failure in test harnesses
   simulateBatchFailure?: boolean;
 }
+
+// Backward-compatible alias for existing imports
+export type ProcessDeletionRequest = PublicProcessDeletionRequest & InternalTestOptions;
 
 export interface ProcessDeletionResponse {
   success: boolean;
@@ -67,17 +81,20 @@ export interface CallerContext {
  */
 export async function executeAccountDeletion(
   caller: CallerContext,
-  data: ProcessDeletionRequest = {}
+  data: PublicProcessDeletionRequest = {},
+  internalOptions?: InternalTestOptions
 ): Promise<ProcessDeletionResponse> {
   const isAdmin = caller.role === 'admin' || caller.role === 'super_admin';
   const {
     targetUid: rawUid,
     targetEmail: rawEmail,
     reason = 'Account deletion requested by user',
-    bucketOverride,
-    simulateBatchFailure,
   } = data;
   let { requestId } = data;
+
+  // Internal test options are ONLY available when passed directly via internalOptions parameter
+  const bucketOverride = internalOptions?.bucketOverride;
+  const simulateBatchFailure = internalOptions?.simulateBatchFailure;
 
   let cleanTargetUid = rawUid?.trim() || '';
   const cleanTargetEmail = rawEmail?.trim().toLowerCase() || '';
@@ -439,20 +456,32 @@ export async function executeAccountDeletion(
 
 /**
  * Public Cloud Function entrypoint.
+ * Whitelists only legitimate public request fields.
+ * Client-supplied test hooks (bucketOverride, simulateBatchFailure) are strictly discarded.
  */
 export const processAccountDeletion = onCall(
   {
     region: 'us-central1',
   },
-  async (request: CallableRequest<ProcessDeletionRequest>): Promise<ProcessDeletionResponse> => {
+  async (request: CallableRequest<PublicProcessDeletionRequest>): Promise<ProcessDeletionResponse> => {
     const caller = await requireAuthenticatedUser(request);
+    const rawData = (request.data ?? {}) as Record<string, any>;
+
+    const sanitizedData: PublicProcessDeletionRequest = {
+      targetUid: typeof rawData.targetUid === 'string' ? rawData.targetUid : undefined,
+      targetEmail: typeof rawData.targetEmail === 'string' ? rawData.targetEmail : undefined,
+      requestId: typeof rawData.requestId === 'string' ? rawData.requestId : undefined,
+      reason: typeof rawData.reason === 'string' ? rawData.reason : undefined,
+    };
+
     return executeAccountDeletion(
       {
         uid: caller.uid,
         role: caller.role,
         email: caller.email,
       },
-      request.data ?? {}
+      sanitizedData
+      // No internalOptions are ever passed from the public callable
     );
   }
 );

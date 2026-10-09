@@ -80,3 +80,16 @@ export const SMS_GATEWAY_API_KEY = defineOptionalSecret('SMS_GATEWAY_API_KEY');
  */
 export const SELF_HOSTED_WHATSAPP_URL = defineOptionalSecret('SELF_HOSTED_WHATSAPP_URL');
 export const SELF_HOSTED_WHATSAPP_API_KEY = defineOptionalSecret('SELF_HOSTED_WHATSAPP_API_KEY');
+
+/**
+ * Transactional Email delivery secrets (for Account Deletion Ownership Verification)
+ * Bound ONLY to server-side functions. NEVER exposed to frontend or APK.
+ * Configured in Secret Manager or environment:
+ *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, RESEND_API_KEY
+ */
+export const SMTP_HOST = defineOptionalSecret('SMTP_HOST');
+export const SMTP_PORT = defineOptionalSecret('SMTP_PORT');
+export const SMTP_USER = defineOptionalSecret('SMTP_USER');
+export const SMTP_PASS = defineOptionalSecret('SMTP_PASS');
+export const SMTP_FROM = defineOptionalSecret('SMTP_FROM');
+export const RESEND_API_KEY = defineOptionalSecret('RESEND_API_KEY');

@@ -148,12 +148,16 @@
         currentRequestId = docRef.id;
         currentEmail = email;
 
-        // Trigger secure server-side code generation
+        // Trigger secure server-side code generation and email dispatch
         const initiateFn = httpsCallable(functions, 'initiatePublicDeletionVerification');
         const initRes = await initiateFn({ requestId: currentRequestId, email: currentEmail });
 
+        if (!initRes.data?.success) {
+          throw new Error(initRes.data?.message || 'Verification email delivery failed. Please contact support.');
+        }
+
         const infoBox = document.getElementById('step-2-info');
-        infoBox.textContent = `If an account is associated with '${email}', a 6-digit verification code has been dispatched. Enter the code below to confirm ownership.`;
+        infoBox.textContent = initRes.data?.message || `If an account is associated with '${email}', a 6-digit verification code has been dispatched. Enter the code below to confirm ownership.`;
         setStep(2);
         document.getElementById('code').focus();
       } catch (error) {
