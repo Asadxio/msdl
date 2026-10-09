@@ -15,8 +15,8 @@
 * **Release Working Branch:** `release/play-store-submission-v50`
 * **Starting Baseline HEAD Commit:** `933285e871e3c0294d457cf08d307e3586eee68d`  
   *Message:* `fix(release): v1.0.13 (build 50) - academic scoping, modal keyboard avoidance, payment domain separation, and Cloud Functions hardening`
-* **Finished Release HEAD Commit:** `61cc214`  
-  *Message:* `fix(privacy): resolve public deletion account targeting, enforce ownership verification, and eliminate false success`
+* **Finished Release HEAD Commit:** `a51a4d8`  
+  *Message:* `fix(privacy): implement cryptographic email ownership verification, atomic claim leases, and failure recovery`
 * **Remote Tracking Status:** Release branch pushed to GitHub `origin/release/play-store-submission-v50` (`https://github.com/Asadxio/msdl/tree/release/play-store-submission-v50`).
 * **Local Working Tree Integrity:** Confirmed 100% preserved. All pre-existing modified files from the local working tree were carried into `release/play-store-submission-v50` without reset, discard, or overwrite.
 
@@ -28,18 +28,19 @@
 |---|---|---|
 | `.gitignore` | Modified | Added patterns for `release.keystore`, `*.keystore`, `*.jks`, and `.env.signing` to prevent accidental credential leakage. |
 | `frontend/.gitignore` | Modified | Added `android/app/*.keystore` and `android/app/*.jks` to safeguard local Android project signing files. |
-| `firestore.rules` | Modified | Hardened privacy request authorization; added `isValidPublicPrivacyRequestCreate()` permitting anonymous users to submit public deletion requests with strict email and field validation; secured `admission_inquiries`. |
+| `firestore.rules` | Modified | Hardened privacy request authorization; added `isValidPublicPrivacyRequestCreate()` permitting anonymous users to submit public deletion requests with strict email and field validation; secured `privacy_verification_tokens` (admin only); added `failed` state to privacy requests. |
 | `frontend/app/data-privacy.tsx` | Modified | Upgraded in-app account deletion to call the `processAccountDeletion` Cloud Function before deleting Firebase Auth user, ensuring all user data, tokens, and storage assets are purged. |
-| `frontend/app/admin/privacy-requests.tsx` | Modified | Wired administrative privacy request console to invoke `processAccountDeletion` upon marking deletion requests completed. |
+| `frontend/app/admin/privacy-requests.tsx` | Modified | Wired administrative privacy request console to handle `failed` states, display failure diagnostic steps, and support safe deletion retry; displays verified email badges and target UIDs. |
 | `frontend/app/payment.tsx` | Modified | Resolved Google Play Payments policy blocker: free courses enroll directly via `enrollInFreeCourse`; donations redirect to browser per Google Play Charitable Donations policy; paid courses route to fee concession/scholarship inquiry & admissions desk contact. |
-| `functions/src/index.ts` | Modified | Exported the `processAccountDeletion` Cloud Function. |
-| `functions/src/privacy/processAccountDeletion.ts` | Created | Production Cloud Function implementing complete account deletion lifecycle: self-service and admin deletion, Firestore anonymization, token/presence purging, Storage file deletion, and immutable compliance logging. |
-| `web/account-deletion.html` | Modified | Clarified user expectations: form submission initiates an auditable request requiring email verification, not unverified instant deletion. |
+| `functions/src/index.ts` | Modified | Exported `processAccountDeletion`, `initiatePublicDeletionVerification`, and `verifyPublicDeletionRequest`. |
+| `functions/src/privacy/processAccountDeletion.ts` | Modified | Production Cloud Function implementing complete account deletion lifecycle: atomic concurrency claim lease (60s), self-service and verified admin deletion, Firestore anonymization, token/presence purging, Storage file deletion, batch failure recovery, idempotent retry handling `auth/user-not-found`, and immutable compliance logging. |
+| `functions/src/privacy/publicVerification.ts` | Created | Cryptographic email ownership verification service: salted SHA-256 tokens, 15-minute expiry, rate limiting, constant-time comparison, and replay protection without account enumeration. |
+| `web/account-deletion.html` | Modified | Upgraded to 2-step cryptographic verification flow: initiates verification, prompts for 6-digit code, verifies ownership before admin deletion authorization. |
 | `web/privacy-policy.html` | Modified | Published clear account deletion steps, web request link, data retention disclosures, and child safety commitments. |
 | `docs/play-store-data-safety.md` | Modified | Aligned Data Safety declarations with backend cleanup, token lifecycles, and statutory accounting data retention. |
 | `docs/play-store-reviewer-access.md` | Created | Documented reviewer test credentials, demo roles, and navigation instructions for Google Play review staff. |
-| `functions/tests/account_deletion_lifecycle.test.js` | Created | Automated emulator test verifying complete account deletion lifecycle (Auth, Firestore, Storage, payment retention, and RBAC). |
-| `functions/tests/public_account_deletion_verification.test.js` | Created | Automated emulator test verifying anonymous submission and strict schema validation of public deletion requests. |
+| `functions/tests/account_deletion_lifecycle.test.js` | Modified | Automated emulator test suite expanded to 20 scenarios verifying full deletion lifecycle, cryptographic verification, concurrency lease, batch failure recovery, and idempotent retries. |
+| `functions/tests/public_account_deletion_verification.test.js` | Created | Automated emulator test verifying anonymous submission and strict schema validation of public deletion requests (5/5 PASS). |
 | `scripts/build_play_store_bundle.ps1` | Created | Automated build script handling keystore passwords via environment variables/prompts, mounting virtual drive `X:\` to resolve Windows MAX_PATH limits, and executing `bundleRelease`. |
 | `scripts/setup_release_keystore.ps1` | Created | Secure script to generate production release upload keystore without committing keys or exposing passwords. |
 
@@ -116,18 +117,18 @@ Google Play requires that apps offering account creation must allow users to del
 |---|---|---|---|---|
 | **Frontend TypeScript** | Complete frontend type safety | `cd frontend && npx tsc --noEmit` | Exit code 0 | **100% (0 errors)** |
 | **Functions TypeScript** | Backend Cloud Functions type safety | `cd functions && npm run build` | Exit code 0 | **100% (0 errors)** |
-| **Payment Functions Unit Tests** | Order creation & validation | `node tests/paymentFunctions.test.js` | 6 tests passed | **100% (6/6 PASS)** |
-| **Razorpay Verification Unit Tests** | Signature verification & idempotency | `node tests/verifyRazorpayPayment.test.js` | 6 tests passed | **100% (6/6 PASS)** |
-| **Public Account Deletion** | Anonymous submission & rules validation | `firebase emulators:exec "node tests/public_account_deletion_verification.test.js"` | 3 tests passed | **100% (3/3 PASS)** |
-| **Account Deletion Lifecycle** | End-to-end user deletion, storage, & RBAC | `firebase emulators:exec "node tests/account_deletion_lifecycle.test.js"` | 6 tests passed | **100% (6/6 PASS)** |
+| **Public Account Deletion Rules** | Anonymous submission & rules validation | `firebase emulators:exec "node tests/public_account_deletion_verification.test.js"` | 5 tests passed | **100% (5/5 PASS)** |
+| **Account Deletion Lifecycle** | End-to-end user deletion, storage, token verification, concurrency lease, batch failure recovery & RBAC | `firebase emulators:exec "node tests/account_deletion_lifecycle.test.js"` | 20 tests passed | **100% (20/20 PASS)** |
+| **Payment Separation & Entitlements** | Domain segregation, zero-fee free courses, donation isolation, and refund safety | `node tests/phase77_payment_separation.test.js` | 19 tests passed | **100% (19/19 PASS)** |
+| **Open Items & Regression Suite** | App gating, founder bypass protection, chat IDOR, permissions, and secret scan | `node tests/phase10_1_open_items_resolution.test.js` | 40 tests passed | **100% (40/40 PASS)** |
 
 ---
 
 ## 7. Android App Bundle (AAB) Details
 
 * **AAB Artifact File:** `C:\Users\xioas\.gemini\antigravity\scratch\msdl\app-release.aab`
-* **File Size:** `57,892,118 bytes` (55.21 MB)
-* **SHA-256 Checksum:** `8F2731FDD08F3EFA3A776BE72FEE146B8DD80452E5380AE817DBC80933D47913`
+* **File Size:** `57,892,806 bytes` (55.21 MB)
+* **SHA-256 Checksum:** `E19878EE422CEA95E400B69EED7664B2A5663350EDE53615BE152001F6C0F3BC`
 * **Package Name:** `com.madrasatussalikat.lilbanat`
 * **Version Name:** `1.0.13`
 * **Version Code:** `50`
