@@ -31,6 +31,13 @@ import {
   EmailTransport,
   EmailDeliveryResult,
 } from '../services/emailDeliveryService';
+import {
+  SMTP_HOST,
+  SMTP_PORT,
+  SMTP_USER,
+  SMTP_PASS,
+  SMTP_FROM,
+} from '../config/secrets';
 
 export interface InitiateVerificationData {
   requestId: string;
@@ -360,9 +367,13 @@ export async function executeVerifyPublicDeletionRequest(
 /**
  * Callable endpoint to initiate verification code dispatch.
  * Requires an authenticated or anonymous Firebase session.
+ * Bound secrets: SMTP credentials mounted from Secret Manager.
  */
 export const initiatePublicDeletionVerification = onCall(
-  { region: 'us-central1' },
+  {
+    region: 'us-central1',
+    secrets: [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM],
+  },
   async (request: CallableRequest<InitiateVerificationData>) => {
     if (!request.auth) {
       throw unauthenticatedError();

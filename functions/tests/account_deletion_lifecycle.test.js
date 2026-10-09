@@ -677,11 +677,15 @@ async function runTestSuite() {
   // --------------------------------------------------------------------------
   const origEmulator = process.env.FUNCTIONS_EMULATOR;
   const origHost = process.env.FIRESTORE_EMULATOR_HOST;
-  const origSmtp = process.env.SMTP_HOST;
+  const origSmtpHost = process.env.SMTP_HOST;
+  const origSmtpUser = process.env.SMTP_USER;
+  const origSmtpPass = process.env.SMTP_PASS;
   try {
     delete process.env.FUNCTIONS_EMULATOR;
     delete process.env.FIRESTORE_EMULATOR_HOST;
     delete process.env.SMTP_HOST;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASS;
 
     const t23ReqId1 = `unconf_reg_${Date.now()}`;
     const t23ReqId2 = `unconf_unreg_${Date.now()}`;
@@ -716,7 +720,9 @@ async function runTestSuite() {
   } finally {
     if (origEmulator) process.env.FUNCTIONS_EMULATOR = origEmulator;
     if (origHost) process.env.FIRESTORE_EMULATOR_HOST = origHost;
-    if (origSmtp) process.env.SMTP_HOST = origSmtp;
+    if (origSmtpHost) process.env.SMTP_HOST = origSmtpHost;
+    if (origSmtpUser) process.env.SMTP_USER = origSmtpUser;
+    if (origSmtpPass) process.env.SMTP_PASS = origSmtpPass;
   }
 
   // --------------------------------------------------------------------------

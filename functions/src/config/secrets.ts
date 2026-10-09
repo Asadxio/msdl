@@ -83,13 +83,27 @@ export const SELF_HOSTED_WHATSAPP_API_KEY = defineOptionalSecret('SELF_HOSTED_WH
 
 /**
  * Transactional Email delivery secrets (for Account Deletion Ownership Verification)
- * Bound ONLY to server-side functions. NEVER exposed to frontend or APK.
- * Configured in Secret Manager or environment:
- *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, RESEND_API_KEY
+ * Managed via Google Cloud Secret Manager and bound to Cloud Functions v2 callables.
+ * NEVER exposed to client, APK, or public documents.
+ * 
+ * Configured in Secret Manager via:
+ *   firebase functions:secrets:set SMTP_HOST
+ *   firebase functions:secrets:set SMTP_PORT
+ *   firebase functions:secrets:set SMTP_USER
+ *   firebase functions:secrets:set SMTP_PASS
+ *   firebase functions:secrets:set SMTP_FROM
  */
-export const SMTP_HOST = defineOptionalSecret('SMTP_HOST');
-export const SMTP_PORT = defineOptionalSecret('SMTP_PORT');
-export const SMTP_USER = defineOptionalSecret('SMTP_USER');
-export const SMTP_PASS = defineOptionalSecret('SMTP_PASS');
-export const SMTP_FROM = defineOptionalSecret('SMTP_FROM');
+export const SMTP_HOST = defineSecret('SMTP_HOST');
+export const SMTP_PORT = defineSecret('SMTP_PORT');
+export const SMTP_USER = defineSecret('SMTP_USER');
+export const SMTP_PASS = defineSecret('SMTP_PASS');
+export const SMTP_FROM = defineSecret('SMTP_FROM');
+
+/**
+ * Unused placeholder: Resend API Key.
+ * NOTE: The active email delivery service (emailDeliveryService.ts) exclusively implements
+ * standard SMTP transport via nodemailer. RESEND_API_KEY is not implemented or used.
+ * If Resend is used, configure it as an SMTP relay using SMTP_HOST=smtp.resend.com,
+ * SMTP_PORT=465 or 587, SMTP_USER=resend, and SMTP_PASS=<your_resend_api_key>.
+ */
 export const RESEND_API_KEY = defineOptionalSecret('RESEND_API_KEY');

@@ -34,13 +34,25 @@ export interface EmailTransport {
 }
 
 /**
+ * Safely retrieves secret parameter value at runtime or falls back to process.env.
+ * Prevents build-time / deployment-time evaluation exceptions.
+ */
+function getSecret(param: { value: () => string }, envName: string): string {
+  try {
+    return process.env[envName] || param.value() || '';
+  } catch {
+    return process.env[envName] || '';
+  }
+}
+
+/**
  * Checks whether production SMTP credentials are fully configured.
  */
 export function isEmailConfigured(): boolean {
   try {
-    const host = process.env.SMTP_HOST || SMTP_HOST.value();
-    const user = process.env.SMTP_USER || SMTP_USER.value();
-    const pass = process.env.SMTP_PASS || SMTP_PASS.value();
+    const host = getSecret(SMTP_HOST, 'SMTP_HOST').trim();
+    const user = getSecret(SMTP_USER, 'SMTP_USER').trim();
+    const pass = getSecret(SMTP_PASS, 'SMTP_PASS').trim();
     return Boolean(host && user && pass);
   } catch {
     return false;
@@ -51,11 +63,12 @@ export function isEmailConfigured(): boolean {
  * Creates the production nodemailer transporter using Secret Manager values.
  */
 function createSmtpTransporter(): nodemailer.Transporter {
-  const host = process.env.SMTP_HOST || SMTP_HOST.value();
-  const portStr = process.env.SMTP_PORT || SMTP_PORT.value();
-  const port = portStr ? parseInt(portStr, 10) : 587;
-  const user = process.env.SMTP_USER || SMTP_USER.value();
-  const pass = process.env.SMTP_PASS || SMTP_PASS.value();
+  const host = getSecret(SMTP_HOST, 'SMTP_HOST').trim();
+  const rawPort = getSecret(SMTP_PORT, 'SMTP_PORT').trim();
+  const parsedPort = rawPort ? parseInt(rawPort, 10) : 587;
+  const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 587;
+  const user = getSecret(SMTP_USER, 'SMTP_USER').trim();
+  const pass = getSecret(SMTP_PASS, 'SMTP_PASS');
   const secure = port === 465;
 
   return nodemailer.createTransport({
@@ -128,7 +141,7 @@ export async function sendAccountDeletionVerificationEmail(
     const transporter = createSmtpTransporter();
     let fromAddress = '"Madrasa Tus Salikat Lil Banat" <privacy@madrasatussalikat.com>';
     try {
-      const configuredFrom = process.env.SMTP_FROM || SMTP_FROM.value();
+      const configuredFrom = getSecret(SMTP_FROM, 'SMTP_FROM').trim();
       if (configuredFrom) fromAddress = configuredFrom;
     } catch {
       // Use default fromAddress
