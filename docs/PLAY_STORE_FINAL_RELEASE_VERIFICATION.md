@@ -15,8 +15,9 @@
 * **Release Working Branch:** `release/play-store-submission-v50`
 * **Starting Baseline HEAD Commit:** `933285e871e3c0294d457cf08d307e3586eee68d`  
   *Message:* `fix(release): v1.0.13 (build 50) - academic scoping, modal keyboard avoidance, payment domain separation, and Cloud Functions hardening`
-* **Finished Release HEAD Commit:** `0e3d26b9043a2f1bc160a08338049035200d38f9`  
-  *Message:* `docs(release): add Play Store final release verification, data safety, and reviewer access guides`
+* **Finished Release HEAD Commit:** `b643aee`  
+  *Message:* `fix(release): eliminate legacy payment webviews, harden account deletion error handling, and tighten deletion rules`
+* **Remote Tracking Status:** Release branch exists locally (`release/play-store-submission-v50`) and has not yet been pushed to GitHub.
 * **Local Working Tree Integrity:** Confirmed 100% preserved. All pre-existing modified files from the local working tree were carried into `release/play-store-submission-v50` without reset, discard, or overwrite.
 
 ---
@@ -125,8 +126,8 @@ Google Play requires that apps offering account creation must allow users to del
 ## 7. Android App Bundle (AAB) Details
 
 * **AAB Artifact File:** `C:\Users\xioas\.gemini\antigravity\scratch\msdl\app-release.aab`
-* **File Size:** `57,896,697 bytes` (55.21 MB)
-* **SHA-256 Checksum:** `0B4E2D243E5E54BABCE99B3D6C5E7CC4FEB26C8DF22C75D86DBD97380A7293A5`
+* **File Size:** `57,890,379 bytes` (55.21 MB)
+* **SHA-256 Checksum:** `DEA4B44F56E07EBE850C256BD45984C2882F3BC53DCDCE931C44544684AB69FB`
 * **Package Name:** `com.madrasatussalikat.lilbanat`
 * **Version Name:** `1.0.13`
 * **Version Code:** `50`
