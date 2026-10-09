@@ -1243,14 +1243,22 @@ service cloud.firestore {
 
     function isValidPublicPrivacyRequestCreate() {
       return isSignedIn()
-        && hasOnlyAllowedKeys(request.resource.data, ['user_id', 'type', 'reason', 'email', 'state', 'lifecycle', 'created_at', 'updated_at'])
+        && hasOnlyAllowedKeys(request.resource.data, [
+          'user_id', 'anonymous_requester_uid', 'source', 'type', 'reason',
+          'email', 'state', 'verification_status', 'target_uid', 'lifecycle',
+          'created_at', 'updated_at'
+        ])
         && request.resource.data.user_id == request.auth.uid
+        && (!('anonymous_requester_uid' in request.resource.data) || request.resource.data.anonymous_requester_uid == request.auth.uid)
         && request.resource.data.type == 'deletion'
         && request.resource.data.reason is string
         && request.resource.data.reason.size() >= 8
         && request.resource.data.reason.size() <= 600
         && ('email' in request.resource.data && request.resource.data.email is string && request.resource.data.email.size() >= 5 && request.resource.data.email.size() <= 120)
         && request.resource.data.state == 'requested'
+        && (!('source' in request.resource.data) || request.resource.data.source == 'public_web')
+        && (!('verification_status' in request.resource.data) || request.resource.data.verification_status == 'unverified')
+        && (!('target_uid' in request.resource.data) || request.resource.data.target_uid == null)
         && request.resource.data.lifecycle is list
         && request.resource.data.lifecycle.size() <= 10
         && request.resource.data.created_at is timestamp

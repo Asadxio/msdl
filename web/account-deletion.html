@@ -84,16 +84,20 @@
         const combinedReason = `Email: ${email}\nRequest: ${reason}`.slice(0, 600);
         await addDoc(collection(db, 'privacy_requests'), {
           user_id: credential.user.uid,
+          anonymous_requester_uid: credential.user.uid,
+          source: 'public_web',
           email: email,
           type: 'deletion',
           reason: combinedReason,
           state: 'requested',
+          verification_status: 'unverified',
+          target_uid: null,
           lifecycle: [{ state: 'requested', at: new Date().toISOString(), source: 'public_account_deletion_page' }],
           created_at: serverTimestamp(),
           updated_at: serverTimestamp(),
         });
         form.reset();
-        showMessage('Your account deletion request has been submitted for review.', 'success');
+        showMessage('Your deletion request has been registered. To safeguard accounts, ownership verification is required before permanent account deletion is processed.', 'success');
       } catch (error) {
         console.error(error);
         showMessage('Could not submit the request. Please try again or email madrastussalikatlilbanat@gmail.com.', 'error');
