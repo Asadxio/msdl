@@ -42,3 +42,5 @@ scratch/
 android/
 ios/
 cxx/
+*.keystore
+keystore.properties

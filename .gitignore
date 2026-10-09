@@ -110,6 +110,10 @@ serviceAccountKey.json
 **/*.apk
 *.aab
 **/*.aab
+*.keystore
+**/*.keystore
+*.jks
+**/*.jks
 qa/artifacts/**/*.apk
 qa/artifacts_final/**/*.apk
 
@@ -118,3 +122,4 @@ ui_*.xml
 current_ui*.xml
 playwright-report/
 test-results/
+keystore.properties
