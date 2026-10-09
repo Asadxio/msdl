@@ -1895,6 +1895,7 @@ service cloud.firestore {
         && request.resource.data.type == resource.data.type
         && request.resource.data.created_at == resource.data.created_at
         && request.resource.data.state in ['requested', 'reviewing', 'processing', 'completed', 'rejected']
+        && (resource.data.type != 'deletion' || request.resource.data.state != 'completed')
         && request.resource.data.updated_at is timestamp;
       allow delete: if false;
     }

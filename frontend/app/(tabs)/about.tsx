@@ -119,8 +119,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   about_madrasa: DEFAULT_ABOUT_CONTENT,
 };
 
-const DEV_RAZORPAY_TEST_LINK = 'https://rzp.io/l/test123';
-
 const CURATED_COMMUNITY_TESTIMONIALS = [
   {
     id: 'curated_1',
@@ -737,136 +735,25 @@ export default function AboutScreen() {
       ...(platformSnap.exists() ? (platformSnap.data() as any) : {}),
       ...(globalSnap.exists() ? (globalSnap.data() as any) : {}),
     };
-    const rawLink = String(data.razorpay_link || settings.razorpay_link || '').trim();
-    const fallbackLink = __DEV__ && !rawLink ? DEV_RAZORPAY_TEST_LINK : '';
     return {
-      razorpay_link: rawLink || fallbackLink,
       fees_amount: Number(data.fees_amount ?? settings.fees_amount ?? 0),
     };
   };
 
-  const createPaymentNotification = async (name: string, amount: number, type: string) => {
-    await addDoc(collection(db, 'notifications'), {
-      title: 'Payment Submitted',
-      message: `${name} submitted ${type} payment of ₹${Number(amount || 0).toFixed(2)}.`,
-      user_id: 'all',
-      category: 'notification',
-      created_at: serverTimestamp(),
-    });
-  };
-
-  const payFees = async () => {
-    if (!user || !profile) return;
+  const donate = async (_donationType: 'sadqa' | 'zakat' | 'fitra' | 'langar') => {
     try {
-      const paymentSettings = await getLatestPaymentSettings();
-      const link = paymentSettings.razorpay_link;
-      const amount = Number(paymentSettings.fees_amount || 0);
-      if (!link) {
-        Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
-        return;
-      }
-      if (!isValidHttpsUrl(link)) {
-        Alert.alert('Invalid Link', 'Payment link must be a valid http/https URL.');
-        return;
-      }
-      if (!Number.isFinite(amount) || amount <= 0) {
-        Alert.alert('Invalid Fees', 'Fees amount must be greater than 0.');
-        return;
-      }
-
-      await addDoc(collection(db, 'payments'), {
-        user_id: user.uid,
-        user_name: profile.name,
-        amount,
-        state: 'pending',
-        status: 'pending',
-        provider: 'razorpay',
-        review_mode: 'manual',
-        currency: 'INR',
-        type: 'fees',
-        created_at: serverTimestamp(),
-      });
-      await createPaymentNotification(profile.name, amount, 'fees');
-      const safeUrl = prepareExternalUrl(link);
-      if (!safeUrl) {
-        Alert.alert('Invalid Link', 'Payment link is invalid.');
-        return;
-      }
-      await Linking.openURL(safeUrl).catch(() => {
-        Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
-      });
-      Alert.alert('Recorded', 'Your payment attempt was recorded and is pending admin approval.');
-    } catch (error) {
-      console.log('[About] payFees ERROR', error);
-      Alert.alert('Error', 'Could not start fees payment.');
-    }
-  };
-
-  const donate = async (donationType: 'sadqa' | 'zakat' | 'fitra' | 'langar') => {
-    if (!user || !profile) return;
-    try {
-      const paymentSettings = await getLatestPaymentSettings();
-      const link = paymentSettings.razorpay_link;
-      const amount = Number(donationAmount || 0);
-      if (!link) {
-        Alert.alert('Unavailable', 'Payment link is not configured by admin yet.');
-        return;
-      }
-      if (!isValidHttpsUrl(link)) {
-        Alert.alert('Invalid Link', 'Payment link must be a valid http/https URL.');
-        return;
-      }
-      if (!Number.isFinite(amount) || amount <= 0) {
-        setDonationError('Enter a valid donation amount greater than 0.');
-        Alert.alert('Invalid Amount', 'Enter a valid donation amount.');
-        return;
-      }
-      setDonationError('');
-      await addDoc(collection(db, 'payments'), {
-        user_id: user.uid,
-        user_name: profile.name,
-        amount,
-        state: 'pending',
-        status: 'pending',
-        provider: 'razorpay',
-        review_mode: 'manual',
-        currency: 'INR',
-        type: donationType,
-        created_at: serverTimestamp(),
-      });
-      await createPaymentNotification(profile.name, amount, donationType);
-      const safeUrl = prepareExternalUrl(link);
-      if (!safeUrl) {
-        Alert.alert('Invalid Link', 'Payment link is invalid.');
-        return;
-      }
-      await Linking.openURL(safeUrl).catch(() => {
-        Alert.alert('Payment Link Unavailable', 'Could not open the Razorpay link. Please contact admin for manual payment instructions.');
-      });
-      Alert.alert('Donation Initiated', `${donationType.toUpperCase()} donation recorded and pending admin approval.`);
-    } catch (error) {
-      console.log('[About] donate ERROR', error);
-      Alert.alert('Error', 'Could not start donation right now.');
+      await Linking.openURL('https://madrasatussalikat.com/donations');
+    } catch {
+      Alert.alert('Donation Portal', 'Please visit https://madrasatussalikat.com/donations in your web browser to make voluntary contributions.');
     }
   };
 
   const savePaymentSettings = async () => {
     if (!isAdmin) return;
-    const link = settings.razorpay_link.trim();
     const feeAmount = Number(settings.fees_amount || 0);
-    if (!link) {
-      setPaymentError('Razorpay payment link is required.');
-      Alert.alert('Missing Link', 'Please set the Razorpay payment link.');
-      return;
-    }
-    if (!isValidHttpsUrl(link)) {
-      setPaymentError('Please enter a valid http/https URL.');
-      Alert.alert('Invalid Link', 'Please enter a valid payment link URL.');
-      return;
-    }
-    if (!Number.isFinite(feeAmount) || feeAmount <= 0) {
-      setPaymentError('Fees amount must be greater than 0.');
-      Alert.alert('Invalid Fees', 'Fees amount must be greater than 0.');
+    if (!Number.isFinite(feeAmount) || feeAmount < 0) {
+      setPaymentError('Fees amount must be 0 or greater.');
+      Alert.alert('Invalid Fees', 'Fees amount must be 0 or greater.');
       return;
     }
     setPaymentError('');
@@ -1748,7 +1635,7 @@ export default function AboutScreen() {
           </SectionCard>
         ) : (
           <>
-            <SectionCard title="Pay Fees (Razorpay Link)" icon="card-outline">
+            <SectionCard title="Fee Management & Configuration" icon="card-outline">
               <Text style={styles.bodyText}>Current Configured Fees: ₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
               {myPayments[0] && (
                 <View style={styles.statusCard}>
@@ -1756,9 +1643,15 @@ export default function AboutScreen() {
                   <Text style={styles.statusValue}>{paymentState(myPayments[0])}</Text>
                 </View>
               )}
-              <TouchableOpacity style={styles.primaryBtn} onPress={payFees} testID="pay-fees-btn" accessibilityRole="button" accessibilityLabel="Pay Fees">
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => router.push('/payment')}
+                testID="open-unified-payment-btn-admin"
+                accessibilityRole="button"
+                accessibilityLabel="Open Unified Payment Flow"
+              >
                 <Ionicons name="card-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.primaryBtnText}>Test Pay Fees</Text>
+                <Text style={styles.primaryBtnText}>Open Unified Payment Flow</Text>
               </TouchableOpacity>
               
               <View style={{ marginTop: 14, gap: 8 }}>
@@ -1772,18 +1665,6 @@ export default function AboutScreen() {
                   value={String(settings.fees_amount || '')}
                   onChangeText={(v) => setSettings((p) => ({ ...p, fees_amount: Number(v || 0) }))}
                   onFocus={() => setFocusedInput('fees_amount')}
-                  onBlur={() => setFocusedInput(null)}
-                />
-                <Text style={styles.inputLabel}>Razorpay Payment Link</Text>
-                <TextInput
-                  style={[styles.input, focusedInput === 'razorpay_link' && styles.inputFocused]}
-                  placeholder="Razorpay Payment Link (https://...)"
-                  placeholderTextColor={THEME.textMuted}
-                  value={settings.razorpay_link}
-                  onChangeText={(v) => setSettings((p) => ({ ...p, razorpay_link: v }))}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  onFocus={() => setFocusedInput('razorpay_link')}
                   onBlur={() => setFocusedInput(null)}
                 />
                 {paymentError ? <Text style={styles.inputError}>{paymentError}</Text> : null}

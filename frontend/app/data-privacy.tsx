@@ -65,37 +65,36 @@ export default function DataPrivacyScreen() {
     try {
       const uid = user.uid;
 
-      // 1. Process server-side personal data deletion & anonymization (Firestore, tokens, presence, storage)
-      try {
-        const functions = getFunctions(getApp(), 'us-central1');
-        const processFn = httpsCallable<{ targetUid: string; reason?: string }, { success: boolean }>(
-          functions,
-          'processAccountDeletion'
-        );
-        await processFn({ targetUid: uid, reason: 'Immediate user self-service account deletion' });
-      } catch (e) {
-        console.warn('Server processAccountDeletion notice:', e);
+      // 1. Process server-side personal data deletion & anonymization (Firestore, tokens, presence, storage, Auth)
+      const functions = getFunctions(getApp(), 'us-central1');
+      const processFn = httpsCallable<{ targetUid: string; reason?: string }, { success: boolean; message?: string }>(
+        functions,
+        'processAccountDeletion'
+      );
+      const res = await processFn({ targetUid: uid, reason: 'Immediate user self-service account deletion' });
+      if (!res.data?.success) {
+        throw new Error(res.data?.message || 'Server-side account deletion failed.');
       }
 
-      // 2. Record immediate deletion request in compliance audit trail
-      try {
-        await createPrivacyRequest(uid, 'deletion', 'Immediate user self-service account deletion');
-      } catch (e) {
-        console.warn('Could not create privacy deletion request audit:', e);
-      }
-
-      // 3. Delete user from Firebase Auth
+      // 2. Client-side Firebase Auth cleanup (handled gracefully as server has already deleted Auth record)
       if (auth.currentUser) {
         try {
           await deleteUser(auth.currentUser);
-        } catch (e: any) {
-          if (e?.code !== 'auth/user-not-found') throw e;
+        } catch (authErr: any) {
+          // auth/user-not-found is expected because backend processAccountDeletion already removed the user
+          if (authErr?.code !== 'auth/user-not-found') {
+            console.warn('Client-side deleteUser non-critical code:', authErr?.code);
+          }
         }
       }
 
-      // 4. Clear auth and redirect
+      // 3. Clear auth and redirect
       setDeleteModalVisible(false);
-      await signOut();
+      try {
+        await signOut();
+      } catch (signOutErr) {
+        console.warn('Sign out cleanup notice:', signOutErr);
+      }
       Alert.alert('Account Deleted', 'Your account has been permanently deleted from Madrasatu-s-Salikat Lil Banat.');
       router.replace('/auth/login');
     } catch (err: any) {

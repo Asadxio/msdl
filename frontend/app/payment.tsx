@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator, KeyboardAvoidingView, Platform, Modal,
 } from "react-native";
-import { WebView } from "react-native-webview";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { goBackOrReplace } from "@/lib/navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,7 +13,7 @@ import { useData } from "@/context/DataContext";
 import { db, auth } from "@/lib/firebase";
 import { normalizeFirebaseError } from "@/lib/errors";
 import { logFirestoreFailure } from "@/lib/firestoreDebug";
-import { createRazorpayOrder, verifyRazorpayPayment, enrollInFreeCourse } from "@/lib/razorpayFunctions";
+import { enrollInFreeCourse } from "@/lib/razorpayFunctions";
 import { IslamicReceiptModal } from "@/components/IslamicReceiptModal";
 import type { FeeReceiptData } from "@/lib/receiptGenerator";
 
@@ -73,18 +72,6 @@ export default function PaymentFlowScreen() {
   // Receipt Modal
   const [selectedReceipt, setSelectedReceipt] = useState<FeeReceiptData | null>(null);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
-
-  // Razorpay Checkout Modal
-  const [checkoutModalVisible, setCheckoutModalVisible] = useState(false);
-  const [checkoutData, setCheckoutData] = useState<{
-    orderId: string;
-    paymentDocId: string;
-    amount: number;
-    currency: string;
-    keyId: string;
-    paymentDomain?: PaymentDomain;
-    paymentType?: string;
-  } | null>(null);
 
   const [concessionLoading, setConcessionLoading] = useState(false);
 
@@ -307,137 +294,6 @@ export default function PaymentFlowScreen() {
       setError(normalizeFirebaseError(err, "Failed to complete free enrollment."));
     } finally {
       setFreeEnrolling(false);
-    }
-  };
-
-  const checkoutHtml = useMemo(() => {
-    if (!checkoutData) return "";
-    const { keyId, orderId, amount: orderAmt, currency } = checkoutData;
-    const isDonation = activeDomain === "donation";
-    const title = isDonation
-      ? `Madrasa Donation: ${donationType.toUpperCase()}`
-      : `Academic Fee: ${selectedCourse?.name || "Course Fee"}`;
-    const studentName = profile?.name || user?.displayName || "Student / Donor";
-    const studentEmail = profile?.email || user?.email || "";
-
-    return `<!DOCTYPE html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <style>
-      body, html { margin: 0; padding: 0; height: 100%; width: 100%; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; }
-      .loader { text-align: center; color: #475569; }
-      .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top: 3px solid #005F46; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
-      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-  </head>
-  <body>
-    <div class="loader">
-      <div class="spinner"></div>
-      <p style="font-size: 15px; font-weight: 500;">Securing Razorpay Gateway...</p>
-    </div>
-    <script>
-      function launchCheckout() {
-        var options = {
-          "key": "${keyId}",
-          "amount": ${orderAmt},
-          "currency": "${currency}",
-          "name": "Madrasatu-s-Salikat Lil Banat",
-          "description": "${title.replace(/"/g, "")}",
-          "order_id": "${orderId}",
-          "prefill": {
-            "name": "${studentName.replace(/"/g, "")}",
-            "email": "${studentEmail.replace(/"/g, "")}"
-          },
-          "theme": {
-            "color": "#005F46"
-          },
-          "handler": function (response) {
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                event: "PAYMENT_SUCCESS",
-                payment_id: response.razorpay_payment_id,
-                order_id: response.razorpay_order_id,
-                signature: response.razorpay_signature
-              }));
-            }
-          },
-          "modal": {
-            "ondismiss": function () {
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ event: "MODAL_CLOSED" }));
-              }
-            }
-          }
-        };
-        var rzp = new Razorpay(options);
-        rzp.on("payment.failed", function (response) {
-          if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              event: "PAYMENT_FAILED",
-              error: response.error
-            }));
-          }
-        });
-        rzp.open();
-      }
-      window.onload = launchCheckout;
-    </script>
-  </body>
-</html>`;
-  }, [checkoutData, activeDomain, donationType, selectedCourse, profile, user]);
-
-  const onInitiateCheckout = async () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser || !user?.uid) {
-      Alert.alert("Sign In Required", "Please sign in to proceed with payment.");
-      return;
-    }
-
-    setError("");
-    setOpeningPayment(true);
-
-    try {
-      const orderData = await createRazorpayOrder({
-        paymentDomain: activeDomain,
-        // ...(paymentType === 'fees' ? { course_id: selectedCourseId } : {})
-        courseId: activeDomain === "academic_fee" ? selectedCourseId : undefined,
-        paymentType: activeDomain === "academic_fee" ? academicType : donationType,
-        donationAmountInr: activeDomain === "donation" ? payableDonationAmount : undefined,
-      });
-
-      setCurrentPaymentId(orderData.paymentDocId);
-      setCheckoutData(orderData);
-      setCheckoutModalVisible(true);
-      setStep(3);
-    } catch (err: any) {
-      logFirestoreFailure(
-        { collection: "payments", operation: "add", query: "createRazorpayOrder", role: profile?.role, status: profile?.status },
-        err
-      );
-      setError(normalizeFirebaseError(err, "Failed to initialize payment checkout."));
-    } finally {
-      setOpeningPayment(false);
-    }
-  };
-
-  const checkStatusManual = async () => {
-    if (!currentPaymentId) return;
-    try {
-      const snap = await getDoc(doc(db, "payments", currentPaymentId));
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        const st = String(data.state ?? data.status ?? "pending");
-        if (st === "succeeded") {
-          setStep(4);
-          await loadHistory();
-        } else {
-          Alert.alert("Status Update", `Current payment status: ${st.toUpperCase()}. Confirming with bank...`);
-        }
-      }
-    } catch {
-      Alert.alert("Error", "Unable to check status. Please check your connection.");
     }
   };
 
@@ -837,43 +693,7 @@ export default function PaymentFlowScreen() {
             </View>
           ) : null}
 
-          {/* STEP 3: PROCESSING & WAITING */}
-          {step === 3 ? (
-            <View style={styles.card}>
-              <View style={styles.statusCenter}>
-                <ActivityIndicator size="large" color={COLORS.primary} style={{ marginBottom: SPACING.md }} />
-                <Text style={styles.statusTitle}>Confirming Transaction...</Text>
-                <Text style={styles.statusDescription}>
-                  {activeDomain === "academic_fee"
-                    ? "Completing your fee payment via Razorpay. Your course will be automatically unlocked upon bank confirmation."
-                    : "Finalizing your donation through Razorpay. Your official Islamic voucher will be ready instantly upon bank confirmation."}
-                </Text>
 
-                {waitingTimeout ? (
-                  <View style={styles.timeoutNotice}>
-                    <Text style={styles.timeoutText}>
-                      Reconciliation is taking a moment. If you completed payment, click below to check status.
-                    </Text>
-                    <TouchableOpacity style={styles.refreshBtn} onPress={checkStatusManual}>
-                      <Ionicons name="refresh" size={16} color={COLORS.primary} />
-                      <Text style={styles.refreshBtnText}>Check Status</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-
-                <TouchableOpacity
-                  style={[styles.primaryBtn, { width: "100%", marginTop: SPACING.md }]}
-                  onPress={() => setCheckoutModalVisible(true)}
-                >
-                  <Text style={styles.primaryBtnText}>Open Razorpay Window</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.cancelLink} onPress={() => setStep(2)}>
-                  <Text style={styles.cancelLinkText}>Back to Review</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
 
           {/* STEP 4: SUCCESS CONFIRMATION */}
           {step === 4 ? (
@@ -999,87 +819,6 @@ export default function PaymentFlowScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* RAZORPAY WEBVIEW MODAL */}
-      <Modal
-        visible={checkoutModalVisible}
-        animationType="slide"
-        onRequestClose={() => setCheckoutModalVisible(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: COLORS.background }}>
-          <View style={[styles.header, { paddingTop: insets.top + SPACING.sm, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Ionicons name="shield-checkmark" size={20} color={COLORS.primary} />
-              <Text style={styles.title}>Secure Razorpay Checkout</Text>
-            </View>
-            <TouchableOpacity style={{ padding: 8 }} onPress={() => setCheckoutModalVisible(false)}>
-              <Ionicons name="close" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-          </View>
-          {checkoutData ? (
-            <WebView
-              originWhitelist={["https://*", "upi://*", "phonepe://*", "paytmmp://*", "gpay://*", "bhim://*", "credpay://*", "about:blank"]}
-              source={{ html: checkoutHtml }}
-              onMessage={(event) => {
-                try {
-                  const data = JSON.parse(event.nativeEvent.data);
-                  if (data.event === "PAYMENT_SUCCESS") {
-                    setCheckoutModalVisible(false);
-                    const paymentId = data.payment_id;
-                    const orderId = data.order_id;
-                    const signature = data.signature;
-                    if (currentPaymentId && orderId && paymentId && signature) {
-                      verifyRazorpayPayment({
-                        paymentDocId: currentPaymentId,
-                        orderId,
-                        paymentId,
-                        signature,
-                      })
-                        .then((res) => {
-                          if (res?.success) {
-                            setStep(4);
-                            loadHistory().catch(() => {});
-                          }
-                        })
-                        .catch((err) => {
-                          logFirestoreFailure(
-                            { collection: "payments", operation: "update", query: "verifyRazorpayPayment callable fallback to webhook", role: profile?.role, status: profile?.status },
-                            err
-                          );
-                        });
-                    }
-                  } else if (data.event === "MODAL_CLOSED") {
-                    setCheckoutModalVisible(false);
-                  } else if (data.event === "PAYMENT_FAILED") {
-                    setCheckoutModalVisible(false);
-                    setError(data.error?.description || "Payment failed. Please try again.");
-                    setStep(2);
-                  }
-                } catch {
-                  // Ignore JSON parse error from non-JSON message
-                }
-              }}
-              onShouldStartLoadWithRequest={(request) => {
-                const u = request.url;
-                if (u.startsWith("upi://") || u.startsWith("phonepe://") || u.startsWith("paytmmp://") || u.startsWith("gpay://")) {
-                  Linking.openURL(u).catch(() => {});
-                  return false;
-                }
-                return true;
-              }}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              startInLoadingState={true}
-              renderLoading={() => (
-                <View style={[StyleSheet.absoluteFill, { justifyContent: "center", alignItems: "center", backgroundColor: COLORS.background }]}>
-                  <ActivityIndicator size="large" color={COLORS.primary} />
-                  <Text style={{ marginTop: 12, ...TYPOGRAPHY.label, color: COLORS.textMuted }}>Loading Razorpay Gateway...</Text>
-                </View>
-              )}
-            />
-          ) : null}
-        </View>
-      </Modal>
 
       {/* ISLAMIC RECEIPT MODAL */}
       <IslamicReceiptModal
