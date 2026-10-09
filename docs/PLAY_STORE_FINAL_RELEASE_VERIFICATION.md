@@ -15,9 +15,9 @@
 * **Release Working Branch:** `release/play-store-submission-v50`
 * **Starting Baseline HEAD Commit:** `933285e871e3c0294d457cf08d307e3586eee68d`  
   *Message:* `fix(release): v1.0.13 (build 50) - academic scoping, modal keyboard avoidance, payment domain separation, and Cloud Functions hardening`
-* **Finished Release HEAD Commit:** `b643aee`  
-  *Message:* `fix(release): eliminate legacy payment webviews, harden account deletion error handling, and tighten deletion rules`
-* **Remote Tracking Status:** Release branch exists locally (`release/play-store-submission-v50`) and has not yet been pushed to GitHub.
+* **Finished Release HEAD Commit:** `61cc214`  
+  *Message:* `fix(privacy): resolve public deletion account targeting, enforce ownership verification, and eliminate false success`
+* **Remote Tracking Status:** Release branch pushed to GitHub `origin/release/play-store-submission-v50` (`https://github.com/Asadxio/msdl/tree/release/play-store-submission-v50`).
 * **Local Working Tree Integrity:** Confirmed 100% preserved. All pre-existing modified files from the local working tree were carried into `release/play-store-submission-v50` without reset, discard, or overwrite.
 
 ---
@@ -69,8 +69,8 @@ Google Play requires that apps offering account creation must allow users to del
 4. **Statutory & Legal Data Retention:**
    * **Financial Records:** Documents in `payments` collection are **strictly preserved** (unmodified) to comply with statutory accounting standards, Indian tax laws (Section 44AA of Income Tax Act), and payment dispute resolution. This retention is clearly disclosed in `docs/play-store-data-safety.md` and `web/privacy-policy.html`.
 5. **Emulator Test Results:**
-   * `public_account_deletion_verification.test.js`: **3/3 PASS (100%)**
-   * `account_deletion_lifecycle.test.js`: **6/6 PASS (100%)**
+   * `public_account_deletion_verification.test.js`: **5/5 PASS (100%)**
+   * `account_deletion_lifecycle.test.js`: **15/15 PASS (100%)**
 
 ---
 
@@ -126,8 +126,8 @@ Google Play requires that apps offering account creation must allow users to del
 ## 7. Android App Bundle (AAB) Details
 
 * **AAB Artifact File:** `C:\Users\xioas\.gemini\antigravity\scratch\msdl\app-release.aab`
-* **File Size:** `57,890,379 bytes` (55.21 MB)
-* **SHA-256 Checksum:** `DEA4B44F56E07EBE850C256BD45984C2882F3BC53DCDCE931C44544684AB69FB`
+* **File Size:** `57,892,118 bytes` (55.21 MB)
+* **SHA-256 Checksum:** `8F2731FDD08F3EFA3A776BE72FEE146B8DD80452E5380AE817DBC80933D47913`
 * **Package Name:** `com.madrasatussalikat.lilbanat`
 * **Version Name:** `1.0.13`
 * **Version Code:** `50`

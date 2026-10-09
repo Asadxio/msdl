@@ -3,8 +3,8 @@
 **Project:** Madrasa Tus Salikat Lil Banat (MSLB)  
 **Repository:** `https://github.com/Asadxio/msdl`  
 **Working Branch:** `release/play-store-submission-v50`  
-**Current HEAD Commit:** `b643aee`  
-**Baseline Commit:** `933285e` (ahead by 5 commits: `ecefa0d`, `8c71204`, `e849f35`, `cb3ed0c`, `b643aee`)  
+**Current HEAD Commit:** `61cc214`  
+**Baseline Commit:** `933285e` (ahead by 7 commits: `ecefa0d`, `8c71204`, `e849f35`, `cb3ed0c`, `b643aee`, `78b4580`, `61cc214`)  
 **Package ID:** `com.madrasatussalikat.lilbanat`  
 **Version Name:** `1.0.13`  
 **Version Code:** `50`  
@@ -18,14 +18,14 @@
 
 | Gate # | Category / Verification Domain | Status | Key Evidence / Verification Basis |
 |---|---|---|---|
-| **GATE-1** | **Git & Working Tree Integrity** | **PASS** | Local branch `release/play-store-submission-v50` verified clean; commits `ecefa0d`, `8c71204`, `e849f35`, `cb3ed0c`, and `b643aee` validated; 0 uncommitted changes. Remote check confirms branch is currently local and not yet pushed to GitHub. |
-| **GATE-2** | **Account Deletion End-to-End Lifecycle** | **PASS** | `processAccountDeletion` Cloud Function verified; Auth, profile anonymization, tokens, presence, notification settings, and Cloud Storage purged; financial records retained for statutory tax compliance; `firestore.rules` prevents manual admin completion bypass; emulator tests pass 100% (6/6). |
-| **GATE-3** | **Public Account Deletion Web Request** | **PASS** | `web/account-deletion.html` clarifies request submission vs instant deletion; `firestore.rules` validates anonymous submission schema (`isValidPublicPrivacyRequestCreate()`); emulator tests pass 100% (3/3). |
+| **GATE-1** | **Git & Working Tree Integrity** | **PASS** | Local branch `release/play-store-submission-v50` verified clean; commits `ecefa0d`, `8c71204`, `e849f35`, `cb3ed0c`, `b643aee`, `78b4580`, and `61cc214` validated; 0 uncommitted changes. Pushed to remote tracking branch `origin/release/play-store-submission-v50`. |
+| **GATE-2** | **Account Deletion End-to-End Lifecycle** | **PASS** | `processAccountDeletion` Cloud Function verified; Auth, profile anonymization, tokens, presence, notification settings, and Cloud Storage purged; financial records retained for statutory tax compliance; `firestore.rules` prevents manual admin completion bypass; emulator integration tests pass 100% (15/15). |
+| **GATE-3** | **Public Account Deletion Web Request** | **PASS** | `web/account-deletion.html` records request with `source: 'public_web'`, `verification_status: 'unverified'`, `target_uid: null`, and `anonymous_requester_uid`; admin console enforces ownership verification before setting real `target_uid`; backend rejects unverified public requests and never deletes anonymous identities; emulator tests pass 100% (5/5). |
 | **GATE-4** | **Google Play Payment Policy Compliance** | **PASS** | Embedded Razorpay WebView and modal completely removed; `DEV_RAZORPAY_TEST_LINK` and direct URL pay fees removed; 1-click free course enrollment (`enrollInFreeCourse`); external browser redirect for charitable donations per policy; paid course fee concession/scholarship inquiries route to admissions desk. |
 | **GATE-5** | **Target Audience & Child Safety Safeguards** | **PASS** | Declared target audience is 13-15, 16-17, and 18+; under-13 registration blocked; minor registration (<18) requires parental name, phone, and explicit consent; UGC reporting (`ReportReasonModal`) and bidirectional user blocking active; 0 ad SDKs, 0 tracking SDKs. |
 | **GATE-6** | **Static Analysis & Type Safety** | **PASS** | `frontend` (`npx tsc --noEmit`) passes with 0 errors; `functions` (`npm run build`) compiles with 0 errors. |
-| **GATE-7** | **Automated Test Verification** | **PASS** | All emulator and unit test suites pass (21/21 assertions, 100% pass rate). |
-| **GATE-8** | **Production AAB Packaging & Signing** | **PASS** | `app-release.aab` verified on disk (57,890,379 bytes); SHA-256 `DEA4B44F56E07EBE850C256BD45984C2882F3BC53DCDCE931C44544684AB69FB`; signed with valid 2048-bit RSA key valid to Feb 2054; target SDK 36, min SDK 24, versionCode 50, versionName 1.0.13. Keystore not exposed. |
+| **GATE-7** | **Automated Test Verification** | **PASS** | All emulator and unit test suites pass (33/33 assertions, 100% pass rate: 15/15 account deletion lifecycle, 5/5 public deletion rules, 6/6 payment functions, 7/7 payment verification). |
+| **GATE-8** | **Production AAB Packaging & Signing** | **PASS** | `app-release.aab` verified on disk (57,892,118 bytes); SHA-256 `8F2731FDD08F3EFA3A776BE72FEE146B8DD80452E5380AE817DBC80933D47913`; signed with valid 2048-bit RSA key valid to Feb 2054; target SDK 36, min SDK 24, versionCode 50, versionName 1.0.13. Keystore not exposed. |
 | **GATE-9** | **Physical Hardware Device Testing** | **NOT VERIFIED** | Explicitly marked NOT VERIFIED due to headless CI/agent environment lacking physical USB ADB hardware. Verified extensively on Android Virtual Devices and Firebase Emulators. Physical verification recommended via Play Console Internal Testing track. |
 
 ---
@@ -34,14 +34,16 @@
 
 ### Gate 1: Git and Source Verification
 - **Local Branch:** `release/play-store-submission-v50`
-- **HEAD Commit:** `b643aee` (`fix(release): eliminate legacy payment webviews, harden account deletion error handling, and tighten deletion rules`)
-- **Remote Tracking Status:** Branch exists exclusively on the local machine. `git ls-remote origin release/play-store-submission-v50` returned empty. **The release branch has NOT been pushed to GitHub.**
+- **HEAD Commit:** `61cc214` (`fix(privacy): resolve public deletion account targeting, enforce ownership verification, and eliminate false success`)
+- **Remote Tracking Status:** Release branch pushed to GitHub `origin/release/play-store-submission-v50` (`https://github.com/Asadxio/msdl/tree/release/play-store-submission-v50`).
 - **Commit History Ahead of `origin/main` (`933285e`):**
   1. `ecefa0d` - `chore(release): configure gitignore and release packaging automation scripts`
   2. `8c71204` - `feat(privacy): implement end-to-end account deletion lifecycle and public request verification`
   3. `e849f35` - `fix(payments): align payments with Google Play policy separating free courses, donations, and admissions`
   4. `cb3ed0c` - `docs(release): add Play Store final release verification, data safety, and reviewer access guides`
   5. `b643aee` - `fix(release): eliminate legacy payment webviews, harden account deletion error handling, and tighten deletion rules`
+  6. `78b4580` - `docs(release): add final release gate audit report and synchronize AAB verification details`
+  7. `61cc214` - `fix(privacy): resolve public deletion account targeting, enforce ownership verification, and eliminate false success`
 - **Secrets Protection:** `.gitignore` excludes `release.keystore`, `*.jks`, `keystore.properties`, and `.env.signing`. No keys or passwords are staged or committed.
 
 ### Gate 2 & 3: Account Deletion Lifecycle & Verification
@@ -62,8 +64,8 @@
    - Public requests: `isValidPublicPrivacyRequestCreate()` allows anonymous submission with strict validation (must specify `email`, `type == 'deletion'`, `state == 'requested'`, `created_at == request.time`).
    - Admin restriction: Rules strictly prevent client/admin SDK calls from updating deletion requests to `state == 'completed'`. Only the Cloud Function (Admin SDK) can mark deletion completed, ensuring auditable processing evidence.
 5. **Test Evidence:**
-   - `firebase emulators:exec --only firestore,auth "node functions/tests/public_account_deletion_verification.test.js"`: **3/3 PASS**
-   - `firebase emulators:exec --only firestore,auth "node functions/tests/account_deletion_lifecycle.test.js"`: **6/6 PASS**
+   - `firebase emulators:exec --only firestore,auth "node functions/tests/public_account_deletion_verification.test.js"`: **5/5 PASS**
+   - `firebase emulators:exec --only firestore,auth "node functions/tests/account_deletion_lifecycle.test.js"`: **15/15 PASS**
 
 ### Gate 4: Google Play Payments Policy
 1. **Prohibited Links & WebViews Eliminated:**
@@ -76,7 +78,7 @@
    - **Paid Institutional Courses:** Concession and scholarship inquiry writing to `admission_inquiries` + admissions desk email contact.
 3. **Test Evidence:**
    - `node functions/tests/paymentFunctions.test.js`: **6/6 PASS**
-   - `node functions/tests/verifyRazorpayPayment.test.js`: **6/6 PASS**
+   - `node functions/tests/verifyRazorpayPayment.test.js`: **7/7 PASS**
 
 ### Gate 5: Target Audience & Minor Safety
 - **Target Audience:** 13-15, 16-17, and 18+. Not directed to children under 13.
@@ -88,15 +90,15 @@
 - `functions` TypeScript Build: `npm run build` -> **0 errors, Exit 0**
 - `frontend` TypeScript Check: `npx tsc --noEmit` -> **0 errors, Exit 0**
 - Payment Functions Unit Tests: **6/6 PASS**
-- Razorpay Verification Unit Tests: **6/6 PASS**
-- Public Account Deletion Rules Tests: **3/3 PASS**
-- Account Deletion Lifecycle Emulator Tests: **6/6 PASS**
-- **Total Assertions:** **21/21 PASS (100%)**
+- Razorpay Verification Unit Tests: **7/7 PASS**
+- Public Account Deletion Rules Tests: **5/5 PASS**
+- Account Deletion Lifecycle Emulator Tests: **15/15 PASS**
+- **Total Assertions:** **33/33 PASS (100%)**
 
 ### Gate 8: Production AAB Artifact Verification
 - **Artifact Location:** `C:\Users\xioas\.gemini\antigravity\scratch\msdl\app-release.aab`
-- **File Size:** `57,890,379 bytes` (~55.21 MB)
-- **SHA-256 Checksum:** `DEA4B44F56E07EBE850C256BD45984C2882F3BC53DCDCE931C44544684AB69FB`
+- **File Size:** `57,892,118 bytes` (~55.21 MB)
+- **SHA-256 Checksum:** `8F2731FDD08F3EFA3A776BE72FEE146B8DD80452E5380AE817DBC80933D47913`
 - **Bundle Manifest (Protobuf decoded directly from `app-release.aab`):**
   - `package`: `com.madrasatussalikat.lilbanat`
   - `versionCode`: `50`
@@ -127,13 +129,13 @@
 ## 3. Answers to the 6 Critical Release Questions
 
 1. **Is the release branch on GitHub?**
-   - **NO.** The release branch `release/play-store-submission-v50` exists strictly on the local repository. It has not been pushed to GitHub. The operator can push it when desired using `git push origin release/play-store-submission-v50`.
+   - **YES.** The release branch `release/play-store-submission-v50` is pushed to GitHub at `https://github.com/Asadxio/msdl/tree/release/play-store-submission-v50`.
 
 2. **Is account deletion genuinely end-to-end?**
-   - **YES.** Authenticated in-app requests and public web requests (`web/account-deletion.html`) are backed by the deployed `processAccountDeletion` Cloud Function. Firebase Auth, Firestore profile data, ancillary public collections, FCM tokens, user presence, and Cloud Storage files are purged or anonymized. Financial payment records are legally retained for statutory compliance. Client-side error swallowing has been eliminated, and security rules block unauthorized completion. All 9 emulator lifecycle assertions passed with 100% success.
+   - **YES.** Authenticated in-app requests and public web requests (`web/account-deletion.html`) are backed by the deployed `processAccountDeletion` Cloud Function. Public requests strictly resolve to verified account UIDs without deleting anonymous identities. Firebase Auth, Firestore profile data, ancillary public collections, FCM tokens, user presence, and Cloud Storage files are purged or anonymized. Financial payment records are legally retained for statutory compliance. False successes on Storage/Auth failures have been eliminated, and security rules block unauthorized completion. All 20 emulator lifecycle and rules assertions passed with 100% success.
 
 3. **Is the actual AAB verified?**
-   - **YES.** `app-release.aab` was independently verified on disk. SHA-256 hash is `DEA4B44F56E07EBE850C256BD45984C2882F3BC53DCDCE931C44544684AB69FB`. The package name is `com.madrasatussalikat.lilbanat`, version is `1.0.13` (versionCode `50`), target SDK is `36`, and the signing certificate matches the configured production upload key valid through 2054.
+   - **YES.** `app-release.aab` was independently verified on disk. SHA-256 hash is `8F2731FDD08F3EFA3A776BE72FEE146B8DD80452E5380AE817DBC80933D47913`. The package name is `com.madrasatussalikat.lilbanat`, version is `1.0.13` (versionCode `50`), target SDK is `36`, and the signing certificate matches the configured production upload key valid through 2054.
 
 4. **Does any payment-policy blocker remain?**
    - **NO.** All embedded Razorpay checkout WebViews, scripts, and legacy payment links have been removed from the application bundle. Free courses enroll instantly; voluntary donations redirect to the external browser per Google Play Charitable Donations policy; and paid courses use institutional inquiry forms.
