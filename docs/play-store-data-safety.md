@@ -21,8 +21,8 @@ This checklist is based on the current app features: Firebase authentication, Fi
 | Agora recordings/recording metadata | Yes, if recording enabled | Yes | Yes | Partial | Recording files/metadata may be processed by Agora and storage providers; retention depends on madrasa policy and legal/safety needs. |
 | Push notification tokens | Yes | Yes | Yes | Yes | Expo/Firebase push tokens are used for class, chat, payment, and admin notifications. |
 | Device/app diagnostics | Yes | Yes | Yes | Partial | Error logs, security events, performance data, and abuse-prevention logs help operate and secure the app. |
-| Approximate location | No current core feature verified | No | Yes, if ever used | Yes | Do not mark collected unless the production build actually requests or stores location. |
-| Precise location | No current core feature verified | No | Yes, if ever used | Yes | Do not mark collected unless a production feature requests or stores precise location. |
+| Approximate location | Yes (on-device only) | No | Yes | N/A (not stored on server) | Accessed on-device via expo-location for Qibla direction & local prayer times calculator. Coordinates cached locally in device storage; not transmitted to server or third parties. |
+| Precise location | Yes (on-device only) | No | Yes | N/A (not stored on server) | Accessed on-device for precise compass orientation towards Kaaba in Qibla Finder. Coordinates cached locally in device storage; not transmitted to server or third parties. |
 | Contacts | No | No | N/A | N/A | No contacts collection was identified as a current app requirement. |
 | SMS/call logs | No | No | N/A | N/A | No SMS or call-log collection was identified. |
 
