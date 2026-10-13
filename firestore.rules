@@ -1799,56 +1799,61 @@ service cloud.firestore {
       allow delete: if canManageAudioLesson(resource.data);
     }
 
+    function canCreateRecording(data) {
+      return isSuperAdmin()
+        || (
+          isApprovedVerifiedUser()
+          && ('organization_id' in data)
+          && isMemberOfRecordingOrg(data)
+          && (
+            roleOf(request.auth.uid) in ['admin', 'super_admin']
+            || (roleOf(request.auth.uid) in ['teacher', 'assistant_teacher'] && data.teacher_id == request.auth.uid)
+          )
+          && (!('course_id' in data)
+              || data.course_id == null
+              || data.course_id == ''
+              || (exists(/databases/$(database)/documents/courses/$(data.course_id))
+                  && (
+                    !('organization_id' in get(/databases/$(database)/documents/courses/$(data.course_id)).data)
+                    || get(/databases/$(database)/documents/courses/$(data.course_id)).data.organization_id == data.organization_id
+                    || (data.organization_id == 'mslb-main' && !('organization_id' in get(/databases/$(database)/documents/courses/$(data.course_id)).data))
+                  )
+              )
+          )
+        );
+    }
+
+    function canUpdateRecording(prev, next) {
+      return isSuperAdmin()
+        || (
+          isApprovedVerifiedUser()
+          && isMemberOfRecordingOrg(prev)
+          && (
+            roleOf(request.auth.uid) in ['admin', 'super_admin']
+            || (roleOf(request.auth.uid) in ['teacher', 'assistant_teacher'] && prev.teacher_id == request.auth.uid)
+          )
+          && (!('course_id' in prev) || !('course_id' in next) || next.course_id == prev.course_id)
+          && (!('organization_id' in prev) || !('organization_id' in next) || next.organization_id == prev.organization_id)
+        );
+    }
+
+    function canDeleteRecording(data) {
+      return isSuperAdmin()
+        || (
+          isApprovedVerifiedUser()
+          && isMemberOfRecordingOrg(data)
+          && (
+            roleOf(request.auth.uid) in ['admin', 'super_admin']
+            || (roleOf(request.auth.uid) in ['teacher', 'assistant_teacher'] && data.teacher_id == request.auth.uid)
+          )
+        );
+    }
+
     match /recordings/{recordingId} {
       allow read: if canReadRecordingData(resource.data);
-      allow create: if isApprovedVerifiedUser()
-        && (
-          isSuperAdmin()
-          || (
-            isTeacherOrAdmin()
-            && ('organization_id' in request.resource.data)
-            && isMemberOfRecordingOrg(request.resource.data)
-            && (
-              isTenantAdmin(recordingOrgId(request.resource.data))
-              || (isApprovedTeacher() && request.resource.data.teacher_id == request.auth.uid)
-            )
-            && (!('course_id' in request.resource.data)
-                || request.resource.data.course_id == null
-                || request.resource.data.course_id == ''
-                || (exists(/databases/$(database)/documents/courses/$(request.resource.data.course_id))
-                    && (
-                      !('organization_id' in get(/databases/$(database)/documents/courses/$(request.resource.data.course_id)).data)
-                      || get(/databases/$(database)/documents/courses/$(request.resource.data.course_id)).data.organization_id == request.resource.data.organization_id
-                      || (request.resource.data.organization_id == 'mslb-main' && !('organization_id' in get(/databases/$(database)/documents/courses/$(request.resource.data.course_id)).data))
-                    )
-                )
-            )
-          )
-        );
-      allow update: if isApprovedVerifiedUser()
-        && (
-          isSuperAdmin()
-          || (
-            isMemberOfRecordingOrg(resource.data)
-            && (
-              isTenantAdmin(recordingOrgId(resource.data))
-              || (isApprovedTeacher() && resource.data.teacher_id == request.auth.uid)
-            )
-            && (!('course_id' in resource.data) || !('course_id' in request.resource.data) || request.resource.data.course_id == resource.data.course_id)
-            && (!('organization_id' in resource.data) || !('organization_id' in request.resource.data) || request.resource.data.organization_id == resource.data.organization_id)
-          )
-        );
-      allow delete: if isApprovedVerifiedUser()
-        && (
-          isSuperAdmin()
-          || (
-            isMemberOfRecordingOrg(resource.data)
-            && (
-              isTenantAdmin(recordingOrgId(resource.data))
-              || (isApprovedTeacher() && resource.data.teacher_id == request.auth.uid)
-            )
-          )
-        );
+      allow create: if canCreateRecording(request.resource.data);
+      allow update: if canUpdateRecording(resource.data, request.resource.data);
+      allow delete: if canDeleteRecording(resource.data);
     }
 
     match /live_classes/{classId} {

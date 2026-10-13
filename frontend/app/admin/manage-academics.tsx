@@ -24,6 +24,7 @@ import { getEnrollmentDocId } from '@/lib/enrollments';
 import { withTimeout } from '@/lib/errors';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
 import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { deleteClassRecording } from '@/lib/classRecording';
 import { AdminTeacherProfileModal } from '@/components/admin/AdminTeacherProfileModal';
 import {
   type TeacherProfile,
@@ -91,6 +92,7 @@ type RecordingItem = {
   file_url: string;
   course_id: string;
   lesson_id?: string;
+  storage_path?: string;
 };
 
 type StudentOption = {
@@ -309,6 +311,7 @@ export default function ManageAcademicsScreen() {
           file_url: data.file_url || '',
           course_id: data.course_id || '',
           lesson_id: data.lesson_id || '',
+          storage_path: data.storage_path || '',
         });
       });
       setRecordings(nextRecordings);
@@ -1135,11 +1138,15 @@ export default function ManageAcademicsScreen() {
         onPress: async () => {
           try {
             setActionLoading(true);
-            await withTimeout(
-              deleteDoc(doc(db, 'recordings', recording.id)),
-              10000,
-              'Deleting recording timed out'
-            );
+            if (recording.storage_path) {
+              await deleteClassRecording(recording.id, recording.storage_path);
+            } else {
+              await withTimeout(
+                deleteDoc(doc(db, 'recordings', recording.id)),
+                10000,
+                'Deleting recording timed out'
+              );
+            }
             if (editingRecordingId === recording.id) clearRecordingForm();
             await fetchData();
           } catch (error: unknown) {

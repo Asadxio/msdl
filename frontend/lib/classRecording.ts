@@ -20,6 +20,7 @@ export type ClassRecordingMeta = {
   teacherId: string;
   teacherName: string;
   organizationId?: string; // Phase 57: Authoritative tenant context
+  durationSec?: number;    // Phase 79: Accurate tracked duration fallback
 };
 
 export type SavedRecording = {
@@ -35,6 +36,13 @@ export type SavedRecording = {
   organization_id: string; // Phase 57: Stamped authoritative organization
   duration_sec: number;
   size_bytes: number;
+};
+
+export type DeleteRecordingResult = {
+  success: boolean;
+  firestoreDeleted: boolean;
+  storageDeleted: boolean;
+  storageError?: string;
 };
 
 
@@ -110,7 +118,8 @@ export async function stopAndSaveRecording(
   if (!uri) throw new Error('Recording URI is missing — could not save.');
 
   const status = await recording.getStatusAsync().catch(() => null);
-  const durationSec = Math.round(((status as any)?.durationMillis ?? 0) / 1000);
+  const measuredSec = Math.round(((status as any)?.durationMillis ?? 0) / 1000);
+  const durationSec = measuredSec > 0 ? measuredSec : (meta.durationSec ?? 0);
 
   onProgress?.(10);
 
@@ -144,7 +153,9 @@ export async function stopAndSaveRecording(
 
   const dateStr = new Date().toISOString().split('T')[0];
   const safeTitle = meta.classTitle.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40);
-  const fileName = `${dateStr}_${safeTitle}.m4a`;
+  // Phase 79: Unique entropy to prevent accidental overwrites or collisions on repeated same-day takes
+  const uniqueEntropy = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+  const fileName = `${dateStr}_${safeTitle}_${uniqueEntropy}.m4a`;
   // Canonical tenant-scoped storage path
   const storagePath = `organizations/${authoritativeOrgId}/courses/${meta.courseId}/recordings/${meta.classId}/${fileName}`;
   const storageRef = ref(storage, storagePath);
@@ -204,26 +215,63 @@ export async function stopAndSaveRecording(
   };
 }
 
+// ─── Recording Cancel / Discard ───────────────────────────────────────────────
+
+export async function cancelClassRecording(recording: Audio.Recording): Promise<void> {
+  try {
+    await recording.stopAndUnloadAsync();
+  } finally {
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+  }
+}
 
 // ─── Delete Recording ─────────────────────────────────────────────────────────
 
 export async function deleteClassRecording(
   recordingId: string,
-  storagePath: string,
-): Promise<void> {
+  storagePath?: string,
+): Promise<DeleteRecordingResult> {
+  let storageDeleted = false;
+  let storageError: string | undefined;
+
+  // 1. Delete cloud storage file first if path is provided
+  if (storagePath) {
+    try {
+      const storageRef = ref(storage, storagePath);
+      await withTimeout(
+        deleteObject(storageRef),
+        10000,
+        'Deleting recording storage object timed out'
+      );
+      storageDeleted = true;
+    } catch (err: any) {
+      // If object is already missing from storage, that is acceptable for cleanup
+      if (err?.code === 'storage/object-not-found' || err?.message?.includes('does not exist')) {
+        storageDeleted = true;
+      } else {
+        storageError = err?.message || 'Failed to delete audio from cloud storage';
+        console.error('[deleteClassRecording] Storage deletion failure:', err);
+        // Do not silently swallow storage failure: preserve Firestore record so orphan file can be tracked & retried
+        throw new Error(`Cloud storage deletion failed: ${storageError}. Firestore record preserved to prevent orphaned files.`);
+      }
+    }
+  } else {
+    storageDeleted = true; // No storage object was attached (e.g. external link)
+  }
+
+  // 2. Delete Firestore metadata document once storage deletion has succeeded
   await withTimeout(
     deleteDoc(doc(db, 'recordings', recordingId)),
     10000,
     'Deleting recording document timed out'
   );
-  if (storagePath) {
-    const storageRef = ref(storage, storagePath);
-    await withTimeout(
-      deleteObject(storageRef),
-      10000,
-      'Deleting recording storage object timed out'
-    ).catch(() => {});
-  }
+
+  return {
+    success: true,
+    firestoreDeleted: true,
+    storageDeleted,
+    storageError,
+  };
 }
 
 // ─── Format helpers ───────────────────────────────────────────────────────────

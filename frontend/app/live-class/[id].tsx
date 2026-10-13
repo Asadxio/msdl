@@ -37,6 +37,7 @@ import { TajweedBoard, type TajweedBoardView } from '@/components/classroom/Tajw
 import {
   startClassRecording,
   stopAndSaveRecording,
+  cancelClassRecording,
   formatDuration,
   type SavedRecording,
 } from '@/lib/classRecording';
@@ -141,6 +142,15 @@ export default function LiveClassroomScreen() {
     };
   }, [isRecording]);
 
+  // Phase 79: Safety unmount cleanup to release microphone if screen is closed during active recording
+  useEffect(() => {
+    return () => {
+      if (recordingInstance) {
+        cancelClassRecording(recordingInstance).catch(() => {});
+      }
+    };
+  }, [recordingInstance]);
+
   // Inbuilt Class Audio Recording handlers
   const handleStartAudioRecording = async () => {
     if (!isTeacher) return;
@@ -156,11 +166,26 @@ export default function LiveClassroomScreen() {
 
   const handleStopAndSaveAudioRecording = () => {
     if (!recordingInstance || !liveClass || !user || !profile) return;
+    const currentRec = recordingInstance;
+    const currentDuration = recordingDurationSec;
+
     Alert.alert(
-      'Save Audio Recording',
-      'Stop recording and upload this session to the Madrasa Recordings library?',
+      'Audio Recording',
+      'Choose an action for this recording session:',
       [
         { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard Take',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelClassRecording(currentRec);
+            } catch {}
+            setRecordingInstance(null);
+            setIsRecording(false);
+            setRecordingDurationSec(0);
+          },
+        },
         {
           text: 'Stop & Save',
           onPress: async () => {
@@ -168,7 +193,7 @@ export default function LiveClassroomScreen() {
             setIsRecording(false);
             try {
               const saved = await stopAndSaveRecording(
-                recordingInstance,
+                currentRec,
                 {
                   classId: (classId as string) || '',
                   classTitle: liveClass.title || 'Live Class Session',
@@ -176,6 +201,7 @@ export default function LiveClassroomScreen() {
                   teacherId: user.uid,
                   teacherName: profile.name || liveClass.teacher_name || 'Ustaadha',
                   organizationId: (liveClass as any)?.organization_id || activeOrgId || undefined,
+                  durationSec: currentDuration,
                 },
                 (progress) => setSaveProgress(progress)
               );
@@ -183,6 +209,7 @@ export default function LiveClassroomScreen() {
               setSavedRecording(saved);
               Alert.alert('Recording Saved ✓', `"${saved.title}" is now available in the Recordings library.`);
             } catch (err: any) {
+              setRecordingInstance(null);
               Alert.alert('Save Failed', err?.message || 'Could not save recording.');
             } finally {
               setIsSavingRecording(false);

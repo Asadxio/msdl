@@ -78,6 +78,13 @@ export async function downloadAudioForOffline(
     return downloadedFile.uri;
   } catch (err: any) {
     onProgress?.(0);
+    try {
+      if (file.exists) {
+        file.delete();
+      }
+    } catch {
+      // ignore cleanup errors
+    }
     throw new Error(err?.message || 'Failed to download audio recording.');
   }
 }

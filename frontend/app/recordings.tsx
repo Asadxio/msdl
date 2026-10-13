@@ -441,7 +441,7 @@ export default function RecordingsScreen() {
               },
               error
             );
-            Alert.alert('Delete Failed', 'Could not delete recording.');
+            Alert.alert('Delete Failed', (error as any)?.message || 'Could not delete recording.');
           } finally {
             setUpdatingId(null);
           }

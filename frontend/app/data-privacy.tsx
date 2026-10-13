@@ -46,11 +46,7 @@ export default function DataPrivacyScreen() {
     setError('');
     setLoading(type);
     try {
-      if (type === 'deletion') {
-        await createPrivacyRequest(user.uid, 'deletion', trimmed);
-      } else {
-        await createPrivacyRequest(user.uid, 'export', trimmed);
-      }
+      await createPrivacyRequest(user.uid, type, trimmed);
       Alert.alert('Request submitted', `Your ${type} request was recorded and queued for review.`);
       setReason('');
     } finally {
@@ -80,7 +76,14 @@ export default function DataPrivacyScreen() {
         throw new Error(res.data?.message || 'Server-side account deletion failed.');
       }
 
-      // 2. Client-side Firebase Auth cleanup (handled gracefully as server has already deleted Auth record)
+      // 2. Record immediate deletion request in compliance audit trail
+      try {
+        await createPrivacyRequest(uid, 'deletion', 'Immediate user self-service account deletion');
+      } catch (auditErr) {
+        console.warn('Could not create privacy deletion request audit:', auditErr);
+      }
+
+      // 3. Client-side Firebase Auth cleanup (handled gracefully as server has already deleted Auth record)
       if (auth.currentUser) {
         try {
           await deleteUser(auth.currentUser);
