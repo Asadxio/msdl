@@ -31,15 +31,23 @@ if (Test-Path $apkSource) {
     $apkItem = Get-Item $apkSource
     Write-Host "Build Successful! APK size: $($apkItem.Length) bytes, timestamp: $($apkItem.LastWriteTime)"
     
-    $targetArtifact = "C:\Users\xioas\.gemini\antigravity\brain\16e00e45-d040-413f-b760-5793b5956f07\scratch\mslb-release-v46.apk"
-    $targetLocal = "C:\Users\xioas\.gemini\antigravity\scratch\msdl\mslb-release-v46.apk"
+    $targetLocal = "C:\Users\xioas\.gemini\antigravity\scratch\msdl\mslb-release-v50.apk"
     
-    Copy-Item $apkSource $targetArtifact -Force
     Copy-Item $apkSource $targetLocal -Force
+
+    # Automatically copy to Google Drive if available
+    $googleDriveReleases = "G:\My Drive\MSLB_App_Releases"
+    if (Test-Path "G:\My Drive") {
+        if (!(Test-Path $googleDriveReleases)) {
+            New-Item -ItemType Directory -Path $googleDriveReleases -Force | Out-Null
+        }
+        Copy-Item $apkSource "$googleDriveReleases\mslb-app-latest.apk" -Force
+        Copy-Item $apkSource "$googleDriveReleases\mslb-app-v1.0.13-b50.apk" -Force
+        Write-Host "✓ Automatically copied to Google Drive: $googleDriveReleases\mslb-app-latest.apk"
+    }
     
-    $hash = Get-FileHash -Algorithm SHA256 $targetArtifact
+    $hash = Get-FileHash -Algorithm SHA256 $apkSource
     Write-Host "SHA-256: $($hash.Hash)"
-    Write-Host "Artifact copied to: $targetArtifact"
 } else {
     Write-Error "Gradle build finished but app-release.apk was not found!"
 }
