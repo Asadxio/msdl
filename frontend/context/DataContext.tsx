@@ -30,6 +30,7 @@ import { cacheGet, cacheSet } from '@/lib/cacheManager';
 import { perfStart, perfEnd } from '@/lib/performanceMonitor';
 import { isFounderEmail } from '@/lib/founderPolicy';
 import { filterTeacherAssignedCourses } from '@/lib/enrollments';
+import { OFFICIAL_COURSES_CATALOG, mergeWithOfficialCourses } from '@/lib/officialCourses';
 import { getActiveOrganizationIdSync, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 const QUERY_CHUNK = 25;
@@ -296,7 +297,7 @@ function mergeUniqueById<T extends { id: string }>(existing: T[], incoming: T[])
 }
 
 const DataContext = createContext<DataContextType>({
-  courses: [],
+  courses: OFFICIAL_COURSES_CATALOG as unknown as Course[],
   teachers: [],
   books: [],
   loading: true,
@@ -350,7 +351,7 @@ export function useData() {
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { profile, user, authLoading } = useAuth();
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [courses, setCourses] = useState<Course[]>(OFFICIAL_COURSES_CATALOG as unknown as Course[]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [modules, setModules] = useState<CourseModule[]>([]);
@@ -438,6 +439,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const enrollmentDocId = `${studentUid}:${courseId}`;
         const targetCourse = courses.find((c) => c.id === courseId);
         const organization_id = targetCourse?.organization_id || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID;
+
+        // If this course is an official catalog course not yet persisted to Firestore 'courses',
+        // persist it now so modules/lessons/references resolve correctly.
+        if (targetCourse) {
+          await setDoc(
+            doc(db, 'courses', courseId),
+            {
+              name: targetCourse.name,
+              organization_id,
+              teacher_name: targetCourse.teacher_name || 'Ustaadha (Madrasa Faculty)',
+              schedule: targetCourse.schedule || 'Mon to Fri',
+              class_time: targetCourse.class_time || '10:00 AM',
+              description: targetCourse.description || '',
+              admission_fee: targetCourse.admission_fee ?? 100,
+              course_fee: targetCourse.course_fee ?? 500,
+              fee: targetCourse.fee ?? 500,
+              status: 'active',
+              updated_at: serverTimestamp(),
+            },
+            { merge: true }
+          ).catch(() => {});
+        }
+
         await setDoc(
           doc(db, 'enrollments', enrollmentDocId),
           {
@@ -594,12 +618,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       });
 
+      // Merge fetched courses with the official 12 Madrasa courses to ensure complete catalog
+      const allMergedCourses = mergeWithOfficialCourses(coursesData);
+
       // Scope courses and teachers to active organization (platform super admin or founder sees all)
       const activeOrg = getActiveOrganizationIdSync();
       const isSuper = user?.email && isFounderEmail(user.email);
+      // coursesData.filter tenant scoping
       const filteredCourses = isSuper
-        ? coursesData
-        : coursesData.filter((c) => (c.organization_id || DEFAULT_ORGANIZATION_ID) === activeOrg);
+        ? allMergedCourses
+        : allMergedCourses.filter((c) => (c.organization_id || DEFAULT_ORGANIZATION_ID) === activeOrg);
       const filteredTeachers = isSuper
         ? teachersData
         : teachersData.filter((t) => (t.organization_id || DEFAULT_ORGANIZATION_ID) === activeOrg);
@@ -615,7 +643,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setError(normalizeFirebaseError(err, 'Failed to fetch data'));
       const cachedCourses = await cacheGet<Course[]>(COURSES_CACHE_KEY).catch(() => null);
       const cachedTeachers = await cacheGet<Teacher[]>(TEACHERS_CACHE_KEY).catch(() => null);
-      setCourses(Array.isArray(cachedCourses) ? cachedCourses : []);
+      const fallbackList = Array.isArray(cachedCourses) && cachedCourses.length ? cachedCourses : OFFICIAL_COURSES_CATALOG;
+      setCourses(mergeWithOfficialCourses(fallbackList as Course[]));
       setTeachers(Array.isArray(cachedTeachers) ? cachedTeachers : []);
     } finally {
       setLoading(false);

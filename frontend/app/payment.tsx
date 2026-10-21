@@ -102,7 +102,7 @@ export default function PaymentFlowScreen() {
       Alert.alert(
         "Application Received",
         "Mubarak! Your fee concession and admission inquiry has been submitted to the Madrasa Academic Board. Our administration will contact you shortly.",
-        [{ text: "Back to Courses", onPress: () => router.replace("/courses") }]
+        [{ text: "Back to Courses", onPress: () => router.replace("/(tabs)/courses") }]
       );
     } catch (err: any) {
       logFirestoreFailure(
@@ -287,7 +287,7 @@ export default function PaymentFlowScreen() {
         Alert.alert(
           "Enrollment Successful!",
           `Mubarak! You have been successfully enrolled in ${selectedCourse?.name || "this free course"}.`,
-          [{ text: "Go to Courses", onPress: () => router.replace("/courses") }]
+          [{ text: "Go to Courses", onPress: () => router.replace("/(tabs)/courses") }]
         );
       }
     } catch (err: any) {
@@ -711,7 +711,7 @@ export default function PaymentFlowScreen() {
                     </Text>
                     <TouchableOpacity
                       style={styles.primaryBtn}
-                      onPress={() => router.replace("/courses")}
+                      onPress={() => router.replace("/(tabs)/courses")}
                     >
                       <Text style={styles.primaryBtnText}>Go to My Courses</Text>
                     </TouchableOpacity>

@@ -665,25 +665,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Write users/{uid} document immediately to establish authoritative profile before any background listeners
       debugLog('[SIGNUP_DEBUG] Attempting immediate write to users/', cred.user.uid);
       try {
-        await setDoc(doc(db, 'users', cred.user.uid), {
+        await withTimeout(
+          setDoc(doc(db, 'users', cred.user.uid), {
+            name: safeName,
+            email: (cred.user.email || safeEmail).trim().toLowerCase(),
+            role: safeRole,
+            status: 'pending',
+            referral_code: generateReferralCode(name),
+            referred_by: referrerId,
+            referral_count: 0,
+            last_login_at: serverTimestamp(),
+            created_at: serverTimestamp(),
+            is_minor: Boolean(complianceData?.is_minor),
+            age_bracket: complianceData?.age_bracket || (complianceData?.is_minor ? 'under_18' : '18_plus'),
+            ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
+            ...(complianceData?.guardian_phone ? { guardian_phone: complianceData.guardian_phone } : {}),
+            ...(complianceData?.phone ? { phone: complianceData.phone } : {}),
+            whatsapp_consent: Boolean(complianceData?.whatsapp_consent ?? true),
+            whatsapp_consent_at: serverTimestamp(),
+          }),
+          10000,
+          'Profile initialization timed out'
+        );
+        debugLog('[SIGNUP_DEBUG] Successfully wrote users/', cred.user.uid);
+
+        // Establish synchronous authoritative profile state immediately so navigation guards
+        // have full access without an unnecessary network round-trip.
+        const initialProfile: UserProfile = {
+          uid: cred.user.uid,
           name: safeName,
-          email: (cred.user.email || safeEmail).trim().toLowerCase(),
+          email: safeEmail,
           role: safeRole,
           status: 'pending',
-          referral_code: generateReferralCode(name),
-          referred_by: referrerId,
-          referral_count: 0,
-          last_login_at: serverTimestamp(),
-          created_at: serverTimestamp(),
-          is_minor: Boolean(complianceData?.is_minor),
-          age_bracket: complianceData?.age_bracket || (complianceData?.is_minor ? 'under_18' : '18_plus'),
-          ...(complianceData?.guardian_name ? { guardian_name: complianceData.guardian_name } : {}),
-          ...(complianceData?.guardian_phone ? { guardian_phone: complianceData.guardian_phone } : {}),
-          ...(complianceData?.phone ? { phone: complianceData.phone } : {}),
-          whatsapp_consent: Boolean(complianceData?.whatsapp_consent ?? true),
-          whatsapp_consent_at: serverTimestamp(),
-        });
-        debugLog('[SIGNUP_DEBUG] Successfully wrote users/', cred.user.uid);
+        };
+        setProfile(initialProfile);
+        setProfileOffline(false);
+        void AsyncStorage.setItem(getProfileCacheKey(cred.user.uid), JSON.stringify(initialProfile)).catch(() => {});
       } catch (userErr: any) {
         debugError('[SIGNUP_DEBUG] FAILED write to users/. Rolling back auth user. Code:', userErr?.code, 'Message:', userErr?.message);
         // Rollback orphaned Firebase Auth account so subsequent attempt does not throw 'email-already-in-use'
@@ -708,7 +725,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           uid: cred.user.uid,
           emailDomain: safeEmail.split('@')[1] || 'unknown',
         }, `verification-email-signup-requested-${cred.user.uid}`);
-        await withTimeout(sendEmailVerification(cred.user, VERIFICATION_ACTION_CODE_SETTINGS));
+        try {
+          await withTimeout(sendEmailVerification(cred.user, VERIFICATION_ACTION_CODE_SETTINGS), 8000);
+        } catch (settingsErr) {
+          debugLog('[SIGNUP_DEBUG] ActionCodeSettings email send failed, falling back to standard sendEmailVerification', settingsErr);
+          await withTimeout(sendEmailVerification(cred.user), 8000);
+        }
         debugLog('[SIGNUP_DEBUG] sendEmailVerification SUCCESS for uid:', cred.user.uid);
         void markVerificationEmailSent(cred.user.uid);
       } catch (error: any) {
@@ -799,10 +821,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       void dispatchWelcomeNotification(cred.user.uid, safeName).catch((err) => {
         debugError('[SIGNUP_DEBUG] Welcome notification dispatch failed:', err);
       });
-      setShowSignupVerificationPrompt(false);
-      await fetchProfile(cred.user.uid);
+      setShowSignupVerificationPrompt(true);
       return null;
     } catch (err: any) {
+      setSignupVerificationFlowActive(false);
+      setShowSignupVerificationPrompt(false);
       const code = err?.code || '';
       if (code === 'auth/email-already-in-use') {
         // Auto-heal recovery: If this user was previously created in Auth during an interrupted signup,
@@ -845,9 +868,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 updated_at: serverTimestamp(),
               }, { merge: true }).catch(() => {});
 
+              const recoveryProfile: UserProfile = {
+                uid: recoveryCred.user.uid,
+                name: safeName,
+                email: safeEmail,
+                role: safeRole,
+                status: 'pending',
+              };
+              setProfile(recoveryProfile);
+              setProfileOffline(false);
+              void AsyncStorage.setItem(getProfileCacheKey(recoveryCred.user.uid), JSON.stringify(recoveryProfile)).catch(() => {});
+
               void markSignupCompleted(recoveryCred.user.uid);
-              setShowSignupVerificationPrompt(false);
-              await fetchProfile(recoveryCred.user.uid);
+              setSignupVerificationFlowActive(true);
+              setShowSignupVerificationPrompt(true);
               return null; // Seamless recovery success!
             }
           }
@@ -862,7 +896,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return normalizeFirebaseError(err, 'Signup failed. Please try again');
     } finally {
       isSigningUpRef.current = false;
-      setSignupVerificationFlowActive(false);
     }
   };
 

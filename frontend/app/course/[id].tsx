@@ -55,6 +55,7 @@ import {
 } from "@/lib/audioLessons";
 import { saveDarsPlaybackPosition, loadDarsPlaybackPosition } from "@/lib/quranStorage";
 import { enrollInFreeCourse } from "@/lib/razorpayFunctions";
+import { isAuthoritativelyFreeCourse } from "@/lib/officialCourses";
 
 
 
@@ -1168,13 +1169,13 @@ export default function CourseDetailScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.enrollPromptTitle}>Enrollment Required for Full Access</Text>
                       <Text style={styles.enrollPromptSub}>
-                        Admission Fee: ₹{course.admission_fee ?? 100} • Course Fee: {course.course_fee === 0 ? "FREE (بلامعاوضہ)" : `₹${course.course_fee ?? 500}`}
+                        Admission Fee: ₹{course.admission_fee ?? 100} • Course Fee: {isAuthoritativelyFreeCourse(course) ? "FREE (بلامعاوضہ)" : `₹${course.course_fee ?? course.fee ?? 500}`}
                       </Text>
                       <Text style={[styles.enrollPromptSub, { marginTop: 4 }]}>
                         To attend live purdah classrooms, listen to audio dars lectures, and submit assignments, please enroll in this class.
                       </Text>
                     </View>
-                    {course.course_fee === 0 ? (
+                    {isAuthoritativelyFreeCourse(course) ? (
                       <TouchableOpacity
                         style={[styles.enrollPromptBtn, { backgroundColor: '#059669' }]}
                         onPress={handleFreeEnroll}

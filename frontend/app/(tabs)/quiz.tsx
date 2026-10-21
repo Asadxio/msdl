@@ -728,12 +728,11 @@ export default function QuizScreen() {
                   key={cat} 
                   style={styles.categoryCard} 
                   onPress={() => selectCategory(cat)}
-                  disabled={count === 0 && !isAdmin}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.categoryTitle}>{cat}</Text>
                   <Text style={styles.categoryCount}>
-                    {count === 1 ? '1 Question' : `${count} Questions`}
+                    {count === 0 ? 'Practice Questions' : (count === 1 ? '1 Question' : `${count} Questions`)}
                   </Text>
                 </TouchableOpacity>
               );

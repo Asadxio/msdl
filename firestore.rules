@@ -1918,6 +1918,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /privacy_email_rate_limits/{rateLimitId} {
+      // Server-side Admin SDK only — client access strictly prohibited
+      allow read, write: if false;
+    }
+
     match /user_notification_settings/{uid} {
       allow read: if isAdmin() || isSelf(uid);
       allow create, update: if isValidNotificationSettings(uid);
@@ -1991,7 +1996,8 @@ service cloud.firestore {
     }
 
     match /admin_logs/{logId} {
-      allow read, create: if isAdmin();
+      allow read: if isAdmin();
+      allow create: if false;
       allow update, delete: if false;
     }
 

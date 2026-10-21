@@ -30,6 +30,97 @@ interface EnrollInFreeCourseResponse {
   alreadyEnrolled?: boolean;
 }
 
+export const AUTHORITATIVE_FREE_COURSE_IDS: ReadonlySet<string> = new Set([
+  'course_short',
+]);
+
+/**
+ * Authoritatively determines whether a course is free.
+ *
+ * CRITICAL SECURITY INVARIANTS:
+ * 1. Title alone is NEVER trusted to determine free status.
+ * 2. Any positive fee (> 0) in course_fee, fee, or admission_fee strictly blocks free enrollment,
+ *    even if the title is "Short Courses" or is_free is claimed.
+ * 3. Conflicting fees (e.g. course_fee: 500, fee: 0) fail safely to NOT FREE.
+ * 4. Malformed values (NaN, 'invalid') fail safely to NOT FREE.
+ * 5. Missing, null, or empty string fees do NOT grant free enrollment.
+ * 6. Free status requires EITHER an explicit numeric/string zero fee (0 or "0"),
+ *    OR an explicit authoritative indicator (is_free === true) with no positive fee,
+ *    OR an approved course ID under administrative control ('course_short').
+ */
+export function isAuthoritativelyFreeCourse(course: {
+  id?: string;
+  name?: string;
+  course_fee?: any;
+  fee?: any;
+  admission_fee?: any;
+  is_free?: any;
+  isFree?: any;
+} | null | undefined): boolean {
+  if (!course) return false;
+
+  const parseFee = (val: any): number => {
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string' && val.trim() !== '') return Number(val.trim());
+    return NaN;
+  };
+
+  const isMalformed = (val: any): boolean => {
+    if (val === null || val === undefined) return false;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed === '') return false;
+      return isNaN(Number(trimmed));
+    }
+    if (typeof val === 'number') {
+      return isNaN(val);
+    }
+    return true;
+  };
+
+  // 1. Any malformed fee field fails safely to NOT FREE
+  if (isMalformed(course.course_fee) || isMalformed(course.fee) || isMalformed(course.admission_fee)) {
+    return false;
+  }
+
+  const numCourseFee = parseFee(course.course_fee);
+  const numFee = parseFee(course.fee);
+  const numAdmissionFee = parseFee(course.admission_fee);
+
+  // 2. A positive fee strictly prevents free enrollment
+  const hasPositiveFee =
+    (!isNaN(numCourseFee) && numCourseFee > 0) ||
+    (!isNaN(numFee) && numFee > 0) ||
+    (!isNaN(numAdmissionFee) && numAdmissionFee > 0);
+
+  if (hasPositiveFee) {
+    return false;
+  }
+
+  // 3. Explicit zero fee
+  const isExplicitZero = (val: any): boolean => {
+    if (val === 0) return true;
+    if (typeof val === 'string' && val.trim() === '0') return true;
+    return false;
+  };
+
+  const hasExplicitZeroFee = isExplicitZero(course.course_fee) || isExplicitZero(course.fee);
+  if (hasExplicitZeroFee) {
+    return true;
+  }
+
+  // 4. Explicit authoritative free indicator or approved free course ID (only if no positive fee)
+  const isExplicitlyMarkedFree = course.is_free === true || course.isFree === true;
+  const isApprovedFreeId = typeof course.id === 'string' && AUTHORITATIVE_FREE_COURSE_IDS.has(course.id.trim());
+
+  if (isExplicitlyMarkedFree || isApprovedFreeId) {
+    return true;
+  }
+
+  // 5. Title alone is NEVER trusted if fees are missing, null, or undefined
+  return false;
+}
+
 export const enrollInFreeCourse = onCall(
   { region: 'us-central1' },
   async (request: CallableRequest<EnrollInFreeCourseRequest>): Promise<EnrollInFreeCourseResponse> => {
@@ -48,8 +139,8 @@ export const enrollInFreeCourse = onCall(
       throw permissionDeniedError('User profile not found.');
     }
     const userProfile = userSnap.data()!;
-    if (userProfile.status === 'suspended' || userProfile.status === 'banned' || userProfile.status === 'deactivated') {
-      throw permissionDeniedError('Account is not eligible for course enrollment.');
+    if (userProfile.status !== 'approved') {
+      throw permissionDeniedError('Account is not eligible for course enrollment. Only approved students can enroll.');
     }
 
     // 3. Verify course exists & is FREE
@@ -62,8 +153,7 @@ export const enrollInFreeCourse = onCall(
     if (courseData.status === 'inactive' || courseData.status === 'archived') {
       throw invalidArgumentError('This course is currently inactive and not accepting new enrollments.');
     }
-    const courseName = String(courseData.name || '').trim().toLowerCase();
-    const isFree = courseData.course_fee === 0 || courseData.fee === 0 || courseName === 'short courses' || courseName.includes('short course');
+    const isFree = isAuthoritativelyFreeCourse(courseData);
 
     if (!isFree) {
       logger.warn(`[enrollInFreeCourse] Attempted free enrollment in paid course id=${courseId} fee=${courseData.course_fee}`);

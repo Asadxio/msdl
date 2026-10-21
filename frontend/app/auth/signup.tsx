@@ -26,6 +26,7 @@ import { useAuth } from '@/context/AuthContext';
 import type { OnboardingRole } from '@/lib/roles';
 import { FadeInView, ScalePressable } from '@/components/ui';
 import { WHATSAPP_HELP_URL } from '@/lib/links';
+import { safeReplace } from '@/lib/navigation';
 import {
   markSignupStarted,
   markVerificationModalContinue,
@@ -215,6 +216,7 @@ export default function SignupScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Name Validation derived cleanly
   const nameError = useMemo(() => {
@@ -287,10 +289,11 @@ export default function SignupScreen() {
 
   // Determine if form is ready to submit
   const formIsValid = useMemo(() => {
+    const cleanedMobile = mobile.replace(/\s+/g, '');
     const basicValid =
       name.trim().length >= 3 &&
       !/\d/.test(name) &&
-      /^\d{10}$/.test(mobile) &&
+      /^\d{10}$/.test(cleanedMobile) &&
       emailValid &&
       passwordValidation.isValid &&
       confirmPassword === password &&
@@ -300,10 +303,11 @@ export default function SignupScreen() {
     if (!basicValid) return false;
 
     if (ageCategory === 'minor') {
+      const cleanedGuardianPhone = guardianPhone.replace(/\s+/g, '');
       return (
         guardianName.trim().length >= 3 &&
         !/\d/.test(guardianName) &&
-        /^\d{10}$/.test(guardianPhone) &&
+        /^\d{10}$/.test(cleanedGuardianPhone) &&
         guardianConsent
       );
     }
@@ -330,9 +334,7 @@ export default function SignupScreen() {
     void markVerificationModalShown(user?.uid || '');
     const timer = setTimeout(() => {
       acknowledgeSignupVerificationPrompt();
-      if (user) {
-        router.replace('/');
-      }
+      safeReplace(router, '/auth/pending');
     }, 2800);
     return () => clearTimeout(timer);
   }, [showSignupVerificationPrompt, acknowledgeSignupVerificationPrompt, router, user]);
@@ -341,7 +343,7 @@ export default function SignupScreen() {
     void markVerificationModalContinue(user?.uid);
     acknowledgeSignupVerificationPrompt();
     try {
-      router.replace('/auth/pending');
+      safeReplace(router, '/auth/pending');
     } catch (err) {
       trackEmailVerificationError('verification_navigation_failed', err, { uid: user?.uid || '', target: '/auth/pending' });
     }
@@ -349,27 +351,60 @@ export default function SignupScreen() {
 
   const handleSignup = async () => {
     setSubmitted(true);
-    if (!formIsValid || loading) return;
+    if (!formIsValid) {
+      const cleanedMobile = mobile.replace(/\s+/g, '');
+      if (name.trim().length < 3 || /\d/.test(name)) {
+        setError('Please enter a valid full name (letters only, at least 3 characters).');
+      } else if (!emailValid) {
+        setError('Please enter a valid email address.');
+      } else if (!/^\d{10}$/.test(cleanedMobile)) {
+        setError('Please enter a valid 10-digit mobile number.');
+      } else if (!passwordValidation.isValid) {
+        setError('Password does not meet the security requirements.');
+      } else if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+      } else if (!termsAccepted) {
+        setError('Please accept the Terms & Conditions and Privacy Policy.');
+      } else if (ageCategory === 'minor') {
+        const cleanedGuardianPhone = guardianPhone.replace(/\s+/g, '');
+        if (guardianName.trim().length < 3 || /\d/.test(guardianName)) {
+          setError('Please enter a valid guardian name.');
+        } else if (!/^\d{10}$/.test(cleanedGuardianPhone)) {
+          setError('Please enter a valid 10-digit guardian mobile number.');
+        } else if (!guardianConsent) {
+          setError('Parent/guardian consent is required for students under 18.');
+        } else {
+          setError('Please review all fields and correct the highlighted errors.');
+        }
+      } else {
+        setError('Please fill all required fields correctly.');
+      }
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    if (loading) return;
 
     markSignupStarted();
     setLoading(true);
     setError('');
 
     // Future-ready Phone architecture trigger hook
+    const cleanedMobile = mobile.replace(/\s+/g, '');
+    const cleanedGuardianPhone = guardianPhone.replace(/\s+/g, '');
     if (FUTURE_CHANNELS_CONFIG.persistence.phonePersistenceEnabled) {
-      console.log('[FUTURE_ARCHITECTURE] Phone capability trigger placeholder. Value:', `+91${mobile}`);
+      console.log('[FUTURE_ARCHITECTURE] Phone capability trigger placeholder. Value:', `+91${cleanedMobile}`);
     }
 
     try {
       const complianceData = {
         is_minor: ageCategory === 'minor',
         age_bracket: ageCategory === 'minor' ? 'under_18' : '18_plus',
-        phone: mobile.trim() ? `+91${mobile.trim()}` : '',
+        phone: cleanedMobile ? `+91${cleanedMobile}` : '',
         whatsapp_consent: Boolean(whatsappConsent),
         ...(ageCategory === 'minor'
           ? {
               guardian_name: guardianName.trim(),
-              guardian_phone: guardianPhone.trim() ? `+91${guardianPhone.trim()}` : '',
+              guardian_phone: cleanedGuardianPhone ? `+91${cleanedGuardianPhone}` : '',
             }
           : {}),
       };
@@ -385,7 +420,8 @@ export default function SignupScreen() {
       if (err) {
         setError(err);
       } else {
-        router.replace('/');
+        // Account created successfully. The AuthContext showSignupVerificationPrompt modal
+        // will be shown. The modal button and timeout will transition the user cleanly to /auth/pending.
       }
     } catch (e: any) {
       setError(e?.message || 'Signup failed. Please try again.');
@@ -412,6 +448,7 @@ export default function SignupScreen() {
         style={styles.flex}
       >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           removeClippedSubviews={false}
@@ -829,7 +866,7 @@ export default function SignupScreen() {
                   try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
                   handleSignup();
                 }} 
-                disabled={!formIsValid || loading} 
+                disabled={loading} 
                 testID="signup-submit-btn"
                 accessibilityLabel="Create Account button"
               >

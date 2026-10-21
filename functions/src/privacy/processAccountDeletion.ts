@@ -228,7 +228,24 @@ export async function executeAccountDeletion(
         }
         cleanTargetUid = caller.uid;
       } else {
-        cleanTargetUid = privacyReqDoc.target_uid || privacyReqDoc.user_id || cleanTargetUid;
+        // Admin recovery verification (Phase 4):
+        // 1. Target UID MUST come from the trusted request document.
+        const trustedTargetUid = privacyReqDoc.target_uid || privacyReqDoc.user_id;
+        if (!trustedTargetUid) {
+          throw invalidArgumentError('Privacy request document does not specify a valid target user ID.');
+        }
+        // 2. Caller cannot delete an arbitrary UID by supplying a mismatched targetUid.
+        if (rawUid && rawUid.trim() !== trustedTargetUid) {
+          throw invalidArgumentError('Supplied targetUid does not match the target UID recorded in the privacy request document.');
+        }
+        // 3. Request must be in an eligible incomplete/failed state.
+        const eligibleStates = ['failed', 'pending', 'processing'];
+        if (!eligibleStates.includes(privacyReqDoc.state)) {
+          throw failedPreconditionError(
+            `Privacy request '${requestId}' has ineligible state '${privacyReqDoc.state}' for deletion processing.`
+          );
+        }
+        cleanTargetUid = trustedTargetUid;
       }
     }
   } else {
@@ -244,16 +261,17 @@ export async function executeAccountDeletion(
         throw permissionDeniedError('You are not authorized to delete another user\'s account.');
       }
       cleanTargetUid = caller.uid;
-    } else if (!cleanTargetUid && cleanTargetEmail) {
-      try {
-        const authUser = await auth.getUserByEmail(cleanTargetEmail);
-        cleanTargetUid = authUser.uid;
-      } catch {
-        const userQuery = await collections.users().where('email', '==', cleanTargetEmail).limit(1).get();
-        if (!userQuery.empty) {
-          cleanTargetUid = userQuery.docs[0].id;
-        }
+    } else {
+      // Admin direct invocation:
+      // If admin is deleting another user's account, a pre-existing deletion request is MANDATORY
+      if (rawUid && rawUid !== caller.uid) {
+        throw invalidArgumentError('Admin deletion or recovery of another user\'s account requires a pre-existing privacy request ID.');
       }
+      if (cleanTargetEmail && cleanTargetEmail !== (caller.email || '').toLowerCase()) {
+        throw invalidArgumentError('Admin deletion or recovery of another user\'s account requires a pre-existing privacy request ID.');
+      }
+      // Self-deletion by admin:
+      cleanTargetUid = caller.uid;
     }
 
     if (!cleanTargetUid) {

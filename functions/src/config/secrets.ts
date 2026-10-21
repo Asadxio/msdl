@@ -100,6 +100,14 @@ export const SMTP_PASS = defineSecret('SMTP_PASS');
 export const SMTP_FROM = defineSecret('SMTP_FROM');
 
 /**
+ * Server-side key for HMAC-SHA256 verification code hashing and email rate-limit identifier derivation.
+ * Prevents offline rainbow-table / brute-force recovery of 6-digit codes and obfuscates rate-limit records.
+ * Managed in Google Cloud Secret Manager:
+ *   firebase functions:secrets:set PRIVACY_VERIFICATION_SECRET
+ */
+export const PRIVACY_VERIFICATION_SECRET = defineSecret('PRIVACY_VERIFICATION_SECRET');
+
+/**
  * Unused placeholder: Resend API Key.
  * NOTE: The active email delivery service (emailDeliveryService.ts) exclusively implements
  * standard SMTP transport via nodemailer. RESEND_API_KEY is not implemented or used.

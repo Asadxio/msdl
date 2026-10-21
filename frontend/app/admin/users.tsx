@@ -3,7 +3,7 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  StatusBar, ActivityIndicator, Alert, ScrollView, TextInput, Image,
+  StatusBar, ActivityIndicator, Alert, ScrollView, TextInput, Image, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,8 @@ import { getEnrollmentDocId } from '@/lib/enrollments';
 import { withTimeout } from '@/lib/errors';
 import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 import { AdminTeacherProfileModal } from '@/components/admin/AdminTeacherProfileModal';
+import { AdminCourseEnrollmentModal } from '@/components/admin/AdminCourseEnrollmentModal';
+import { OFFICIAL_COURSES_CATALOG, mergeWithOfficialCourses } from '@/lib/officialCourses';
 import {
   saveTeacherProfileAsAdmin,
   type TeacherProfile,
@@ -55,6 +57,9 @@ export default function AdminUsersScreen() {
   const [fetching, setFetching] = useState(false);
   const [selectedTeacherForEdit, setSelectedTeacherForEdit] = useState<Partial<TeacherProfile> | null>(null);
   const [showTeacherProfileModal, setShowTeacherProfileModal] = useState(false);
+  const [studentForCourseEnrollment, setStudentForCourseEnrollment] = useState<UserWithId | null>(null);
+  const [showCourseEnrollmentModal, setShowCourseEnrollmentModal] = useState(false);
+  const [showBulkEnrollModal, setShowBulkEnrollModal] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -116,9 +121,10 @@ export default function AdminUsersScreen() {
             : await getDocs(coursesRef);
           const cList: Array<{ id: string; name: string }> = [];
           snap.forEach((d) => cList.push({ id: d.id, name: d.data().name || 'Course' }));
-          setAvailableCourses(cList);
+          const mergedList = mergeWithOfficialCourses(cList);
+          setAvailableCourses(mergedList);
         } catch {
-          // Silently ignore courses fetch failure
+          setAvailableCourses(OFFICIAL_COURSES_CATALOG);
         }
       })();
     }
@@ -127,49 +133,8 @@ export default function AdminUsersScreen() {
 
 
   const handleGrantCourseAccess = (u: UserWithId) => {
-    if (!availableCourses.length) {
-      Alert.alert('No Courses', 'No courses found in the system to grant access.');
-      return;
-    }
-    const options = availableCourses.map((c) => ({
-      text: c.name,
-      onPress: async () => {
-        try {
-          const enrollmentDocId = getEnrollmentDocId(u.id, c.id);
-          await withTimeout(
-            setDoc(doc(db, 'enrollments', enrollmentDocId), {
-              user_id: u.id,
-              course_id: c.id,
-              organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
-              status: 'active',
-              enrolled_at: serverTimestamp(),
-              created_at: serverTimestamp(),
-              granted_by_admin: profile?.email || profile?.name || 'admin',
-              granted_free: true,
-            }, { merge: true }),
-            10000,
-            'Granting course access timed out'
-          );
-
-          await createAdminLog(profile, {
-            action: 'grant_free_course_access',
-            performed_by: profile?.email || profile?.name || 'admin',
-            target_id: u.id,
-            details: `Enrolled in course: ${c.name} (${c.id}) without fees`,
-          }).catch(() => {});
-
-          Alert.alert('Access Granted! ✨', `${u.name} now has full access to "${c.name}" without fees.`);
-        } catch (err: any) {
-          Alert.alert('Error', err?.message || 'Failed to grant course access');
-        }
-      },
-    }));
-
-    Alert.alert(
-      'Grant Free Course Access',
-      `Select a course to give ${u.name} full access:`,
-      [...options, { text: 'Cancel', style: 'cancel' }]
-    );
+    setStudentForCourseEnrollment(u);
+    setShowCourseEnrollmentModal(true);
   };
 
   const updateUser = async (uid: string, updates: Partial<UserProfile> & { updated_at?: any; organization_id?: string }) => {
@@ -272,65 +237,72 @@ export default function AdminUsersScreen() {
     await fetchUsers();
   };
 
-  // 12.1 — Bulk student enrollment into a selected course
+  // 12.1 — Bulk student enrollment into a selected course (supports ALL 12 courses without Android alert limits)
   const runBulkEnroll = () => {
     if (!canBulk || selectedIds.length < 2 || !availableCourses.length) {
       Alert.alert('Bulk Enroll', availableCourses.length === 0 ? 'No courses available.' : 'Select at least 2 students first.');
       return;
     }
-    const courseOptions = availableCourses.map((c) => ({
-      text: c.name,
-      onPress: async () => {
-        setBulkEnrolling(true);
-        let enrolled = 0;
-        let failed = 0;
+    setShowBulkEnrollModal(true);
+  };
+
+  const executeBulkEnrollInCourse = async (c: { id: string; name: string }) => {
+    setShowBulkEnrollModal(false);
+    setBulkEnrolling(true);
+    let enrolled = 0;
+    let failed = 0;
+    const adminIdentity = profile?.email || profile?.name || 'admin';
+
+    try {
+      // Ensure course doc exists in Firestore
+      await setDoc(doc(db, 'courses', c.id), {
+        name: c.name,
+        organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
+        status: 'active',
+        updated_at: serverTimestamp(),
+      }, { merge: true }).catch(() => {});
+
+      for (let i = 0; i < selectedIds.length; i++) {
+        const uid = selectedIds[i];
+        setBulkEnrollProgress(`Enrolling ${i + 1}/${selectedIds.length}...`);
         try {
-          for (let i = 0; i < selectedIds.length; i++) {
-            const uid = selectedIds[i];
-            setBulkEnrollProgress(`Enrolling ${i + 1}/${selectedIds.length}...`);
-            try {
-              const enrollmentDocId = getEnrollmentDocId(uid, c.id);
-              await withTimeout(
-                setDoc(doc(db, 'enrollments', enrollmentDocId), {
-                  user_id: uid,
-                  course_id: c.id,
-                  organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
-                  status: 'active',
-                  enrolled_at: serverTimestamp(),
-                  created_at: serverTimestamp(),
-                  granted_by_admin: profile?.email || profile?.name || 'admin',
-                  granted_free: true,
-                  bulk_enrolled: true,
-                }, { merge: true }),
-                10000,
-                'Enrolling student timed out'
-              );
-              await createAdminLog(profile, {
-                action: 'bulk_enroll',
-                performed_by: profile?.email || profile?.name || 'admin',
-                target_id: uid,
-                details: `Bulk enrolled in course: ${c.name} (${c.id})`,
-              }).catch(() => {});
-              enrolled++;
-            } catch {
-              failed++;
-            }
-          }
-        } finally {
-          setBulkEnrolling(false);
-          setBulkEnrollProgress('');
-          setSelectedIds([]);
+          const enrollmentDocId = getEnrollmentDocId(uid, c.id);
+          await withTimeout(
+            setDoc(doc(db, 'enrollments', enrollmentDocId), {
+              user_id: uid,
+              course_id: c.id,
+              course_name: c.name,
+              organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
+              status: 'active',
+              enrolled_at: serverTimestamp(),
+              created_at: serverTimestamp(),
+              granted_by_admin: adminIdentity,
+              granted_free: true,
+              bulk_enrolled: true,
+            }, { merge: true }),
+            10000,
+            'Enrolling student timed out'
+          );
+          await createAdminLog(profile, {
+            action: 'bulk_enroll',
+            performed_by: adminIdentity,
+            target_id: uid,
+            details: `Bulk enrolled in course: ${c.name} (${c.id}) without fees`,
+          }).catch(() => {});
+          enrolled++;
+        } catch {
+          failed++;
         }
-        Alert.alert(
-          'Bulk Enrollment Done ✅',
-          `${enrolled} students enrolled in "${c.name}"` + (failed > 0 ? `\n${failed} failed` : ''),
-        );
-      },
-    }));
+      }
+    } finally {
+      setBulkEnrolling(false);
+      setBulkEnrollProgress('');
+      setSelectedIds([]);
+    }
     Alert.alert(
-      `Bulk Enroll ${selectedIds.length} Students`,
-      'Select a course to enroll all selected students:',
-      [...courseOptions, { text: 'Cancel', style: 'cancel' as const }],
+      'Bulk Enrollment Done ✅',
+      `${enrolled} students enrolled in "${c.name}" for free!` + (failed > 0 ? `\n${failed} failed` : ''),
+      [{ text: 'OK' }]
     );
   };
 
@@ -669,6 +641,61 @@ export default function AdminUsersScreen() {
         initialTeacher={selectedTeacherForEdit}
         onTeacherSaved={fetchUsers}
       />
+
+      {/* Individual Student Free Course Enrollment Modal (ALL 12 courses with multi-select) */}
+      <AdminCourseEnrollmentModal
+        visible={showCourseEnrollmentModal}
+        onClose={() => {
+          setShowCourseEnrollmentModal(false);
+          setStudentForCourseEnrollment(null);
+        }}
+        student={studentForCourseEnrollment}
+        availableCourses={availableCourses}
+        activeOrgId={activeOrgId}
+        onEnrollmentUpdated={fetchUsers}
+      />
+
+      {/* Bulk Course Enrollment Modal */}
+      <Modal
+        visible={showBulkEnrollModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowBulkEnrollModal(false)}
+      >
+        <View style={styles.bulkModalOverlay}>
+          <View style={styles.bulkModalContainer}>
+            <View style={styles.bulkModalHeader}>
+              <View>
+                <Text style={styles.bulkModalTitle}>Bulk Enroll {selectedIds.length} Students</Text>
+                <Text style={styles.bulkModalSubtitle}>Select any course to grant free access to all selected students</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowBulkEnrollModal(false)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={22} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 380, padding: 12 }}>
+              {availableCourses.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.bulkCourseOption}
+                  onPress={() => executeBulkEnrollInCourse(c)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bulkCourseName}>{c.name}</Text>
+                    <Text style={styles.bulkCourseSub}>Official Madrasa Course • Free Grant</Text>
+                  </View>
+                  <Ionicons name="arrow-forward-circle" size={22} color={COLORS.primary} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={styles.bulkModalFooter}>
+              <TouchableOpacity style={styles.bulkCancelBtn} onPress={() => setShowBulkEnrollModal(false)}>
+                <Text style={styles.bulkCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -751,4 +778,15 @@ const styles = StyleSheet.create({
   // 12.1 — Bulk Enroll
   bulkEnrollBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0EA5E9', paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.xxl },
   bulkEnrollBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  bulkModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: SPACING.md },
+  bulkModalContainer: { width: '100%', maxWidth: 480, backgroundColor: '#FFFFFF', borderRadius: RADIUS.lg, overflow: 'hidden' },
+  bulkModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  bulkModalTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+  bulkModalSubtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  bulkCourseOption: { flexDirection: 'row', alignItems: 'center', padding: SPACING.sm, borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8, backgroundColor: '#F8FAFC' },
+  bulkCourseName: { fontSize: 14, fontWeight: '700', color: '#1E293B' },
+  bulkCourseSub: { fontSize: 11, color: '#059669', marginTop: 2, fontWeight: '600' },
+  bulkModalFooter: { padding: SPACING.sm, borderTopWidth: 1, borderTopColor: '#F1F5F9', alignItems: 'flex-end', backgroundColor: '#F8FAFC' },
+  bulkCancelBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.md, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1' },
+  bulkCancelText: { fontSize: 13, fontWeight: '600', color: '#475569' },
 });
