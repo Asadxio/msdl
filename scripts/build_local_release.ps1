@@ -23,6 +23,16 @@ if (Test-Path "app\build\outputs\apk\release\app-release.apk") {
     Remove-Item -Force "app\build\outputs\apk\release\app-release.apk" -ErrorAction SilentlyContinue
 }
 
+# Remove manual/stale index.android.bundle in src/main/assets to avoid AGP duplicate asset collision
+if (Test-Path "app\src\main\assets\index.android.bundle") {
+    Remove-Item -Force "app\src\main\assets\index.android.bundle" -ErrorAction SilentlyContinue
+}
+
+# Clean compressed_assets intermediate cache
+if (Test-Path "app\build\intermediates\compressed_assets") {
+    Remove-Item -Recurse -Force "app\build\intermediates\compressed_assets" -ErrorAction SilentlyContinue
+}
+
 Write-Host "Starting Gradle assembleRelease..."
 .\gradlew.bat assembleRelease --daemon --build-cache
 
