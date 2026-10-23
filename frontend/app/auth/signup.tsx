@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   ActivityIndicator,
@@ -350,6 +351,7 @@ export default function SignupScreen() {
   }, [acknowledgeSignupVerificationPrompt, router, user?.uid]);
 
   const handleSignup = async () => {
+    Keyboard.dismiss();
     setSubmitted(true);
     if (!formIsValid) {
       const cleanedMobile = mobile.replace(/\s+/g, '');
@@ -450,7 +452,8 @@ export default function SignupScreen() {
         <ScrollView
           ref={scrollViewRef}
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="on-drag"
           removeClippedSubviews={false}
           showsVerticalScrollIndicator={false}
         >
@@ -847,7 +850,8 @@ export default function SignupScreen() {
               </View>
 
               {/* Submit Button & Creating Account Loader overlay details */}
-              <ScalePressable 
+              <TouchableOpacity 
+                activeOpacity={0.85}
                 style={[
                   styles.primaryBtn, 
                   { 
@@ -881,7 +885,7 @@ export default function SignupScreen() {
                     <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
                   </View>
                 )}
-              </ScalePressable>
+              </TouchableOpacity>
 
               {loading && (
                 <Text style={[styles.loaderSubtext, { color: colors.textMuted }]}>

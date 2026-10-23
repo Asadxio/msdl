@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   ActivityIndicator,
@@ -189,8 +190,12 @@ export default function LoginScreen() {
   }, [emailValid, password, loading]);
 
   const handleLogin = async () => {
+    Keyboard.dismiss();
     setSubmitted(true);
-    if (!formIsValid || loading) return;
+    if (!emailValid || password.length < 6 || loading) {
+      try { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -215,7 +220,8 @@ export default function LoginScreen() {
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="on-drag"
           removeClippedSubviews={false}
           showsVerticalScrollIndicator={false}
         >
@@ -319,7 +325,8 @@ export default function LoginScreen() {
               </View>
 
               {/* Primary Action Button (Sign In) */}
-              <ScalePressable 
+              <TouchableOpacity 
+                activeOpacity={0.85}
                 style={[
                   styles.primaryBtn, 
                   { 
@@ -338,7 +345,7 @@ export default function LoginScreen() {
                   try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
                   handleLogin();
                 }} 
-                disabled={!formIsValid || loading} 
+                disabled={loading} 
                 testID="login-submit-btn"
               >
                 {loading ? (
@@ -352,7 +359,7 @@ export default function LoginScreen() {
                     <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
                   </View>
                 )}
-              </ScalePressable>
+              </TouchableOpacity>
 
               {loading && (
                 <Text style={[styles.loaderSubtext, { color: colors.textMuted }]}>

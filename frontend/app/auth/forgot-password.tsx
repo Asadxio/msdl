@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar, Image, useColorScheme, TextInput,
+  KeyboardAvoidingView,
+  Keyboard, Platform, ScrollView, ActivityIndicator, StatusBar, Image, useColorScheme, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -31,6 +32,7 @@ export default function ForgotPasswordScreen() {
   }, [error]);
 
   const handleReset = async () => {
+    Keyboard.dismiss();
     const trimmed = email.trim();
     if (!trimmed) { setError('Please enter your email address'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { setError('Please enter a valid email address'); return; }
@@ -56,7 +58,7 @@ export default function ForgotPasswordScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" removeClippedSubviews={false} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" removeClippedSubviews={false} showsVerticalScrollIndicator={false}>
           
           <TouchableOpacity 
             style={styles.backRow} 
@@ -161,7 +163,8 @@ export default function ForgotPasswordScreen() {
                 </View>
               </View>
 
-              <ScalePressable 
+              <TouchableOpacity 
+                activeOpacity={0.85}
                 style={[
                   styles.primaryBtn, 
                   { 
@@ -177,7 +180,7 @@ export default function ForgotPasswordScreen() {
                   (!isFormValid || loading) && styles.btnDisabled
                 ]} 
                 onPress={handleReset} 
-                disabled={!isFormValid || loading} 
+                disabled={loading} 
                 testID="forgot-submit-btn"
               >
                 {loading ? (
@@ -191,7 +194,7 @@ export default function ForgotPasswordScreen() {
                     <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
                   </View>
                 )}
-              </ScalePressable>
+              </TouchableOpacity>
             </View>
           </FadeInView>
         </ScrollView>
