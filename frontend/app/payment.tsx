@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator, KeyboardAvoidingView, Platform, Modal,
 } from "react-native";
+import { WebView } from "react-native-webview";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { goBackOrReplace } from "@/lib/navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,7 +14,7 @@ import { useData } from "@/context/DataContext";
 import { db, auth } from "@/lib/firebase";
 import { normalizeFirebaseError } from "@/lib/errors";
 import { logFirestoreFailure } from "@/lib/firestoreDebug";
-import { enrollInFreeCourse } from "@/lib/razorpayFunctions";
+import { createRazorpayOrder, verifyRazorpayPayment, enrollInFreeCourse } from "@/lib/razorpayFunctions";
 import { IslamicReceiptModal } from "@/components/IslamicReceiptModal";
 import type { FeeReceiptData } from "@/lib/receiptGenerator";
 
@@ -72,6 +73,19 @@ export default function PaymentFlowScreen() {
   // Receipt Modal
   const [selectedReceipt, setSelectedReceipt] = useState<FeeReceiptData | null>(null);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+
+  // Razorpay Checkout Modal (1-Click Instant Payment)
+  const [checkoutModalVisible, setCheckoutModalVisible] = useState(false);
+  const [checkoutData, setCheckoutData] = useState<{
+    orderId: string;
+    paymentDocId: string;
+    amount: number;
+    currency: string;
+    keyId: string;
+    paymentDomain?: PaymentDomain;
+    paymentType?: string;
+  } | null>(null);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
 
   const [concessionLoading, setConcessionLoading] = useState(false);
 
@@ -296,6 +310,122 @@ export default function PaymentFlowScreen() {
       setFreeEnrolling(false);
     }
   };
+
+  const onInitiateRazorpayPayment = async () => {
+    if (!user?.uid) {
+      setError("Please sign in to make a payment.");
+      return;
+    }
+    setError("");
+    setOpeningPayment(true);
+    try {
+      const isDonation = activeDomain === "donation";
+      const orderPayload: any = {
+        paymentDomain: activeDomain,
+        paymentType: isDonation ? donationType : academicType,
+        currency: "INR",
+      };
+      if (isDonation) {
+        orderPayload.donationAmountInr = payableDonationAmount;
+      } else {
+        orderPayload.courseId = selectedCourseId;
+      }
+
+      const orderData = await createRazorpayOrder(orderPayload);
+      setCurrentPaymentId(orderData.paymentDocId);
+      setCheckoutData(orderData);
+      setCheckoutModalVisible(true);
+      setStep(3);
+    } catch (err: any) {
+      const msg = normalizeFirebaseError(err, "Failed to initiate payment gateway.");
+      setError(msg);
+      Alert.alert("Payment Notice", msg);
+    } finally {
+      setOpeningPayment(false);
+    }
+  };
+
+  const checkoutHtml = useMemo(() => {
+    if (!checkoutData) return "";
+    const { keyId, orderId, amount: orderAmt, currency } = checkoutData;
+    const isDonation = activeDomain === "donation";
+    const title = isDonation
+      ? `Madrasa Donation: ${donationType.toUpperCase()}`
+      : `Academic Fee: ${selectedCourse?.name || "Course Fee"}`;
+    const studentName = profile?.name || user?.displayName || "Student / Donor";
+    const studentEmail = profile?.email || user?.email || "";
+    const studentPhone = profile?.phone || "";
+
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+      body, html { margin: 0; padding: 0; height: 100%; width: 100%; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; }
+      .loader { text-align: center; color: #475569; }
+      .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top: 3px solid #005F46; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  </head>
+  <body>
+    <div class="loader">
+      <div class="spinner"></div>
+      <p style="font-size: 15px; font-weight: 500;">Securing Razorpay Gateway...</p>
+    </div>
+    <script>
+      function launchCheckout() {
+        var options = {
+          "key": "${keyId}",
+          "amount": ${orderAmt},
+          "currency": "${currency}",
+          "name": "Madrasatu-s-Salikat Lil Banat",
+          "description": "${title.replace(/"/g, "")}",
+          "order_id": "${orderId}",
+          "prefill": {
+            "name": "${studentName.replace(/"/g, "")}",
+            "email": "${studentEmail.replace(/"/g, "")}",
+            "contact": "${studentPhone.replace(/"/g, "")}"
+          },
+          "theme": {
+            "color": "#005F46"
+          },
+          "handler": function (response) {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                event: "PAYMENT_SUCCESS",
+                payment_id: response.razorpay_payment_id,
+                order_id: response.razorpay_order_id,
+                signature: response.razorpay_signature
+              }));
+            }
+          },
+          "modal": {
+            "ondismiss": function () {
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ event: "MODAL_CLOSED" }));
+              }
+            }
+          }
+        };
+        var rzp = new Razorpay(options);
+        rzp.on("payment.failed", function (response) {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              event: "PAYMENT_FAILED",
+              error: response.error
+            }));
+          }
+        });
+        rzp.open();
+      }
+      window.onload = function () {
+        setTimeout(launchCheckout, 400);
+      };
+    </script>
+  </body>
+</html>`;
+  }, [checkoutData, activeDomain, donationType, selectedCourse, profile, user]);
 
   // Open receipt modal from history item
   const openReceiptModal = (item: PaymentHistoryItem) => {
@@ -632,55 +762,86 @@ export default function PaymentFlowScreen() {
 
               {activeDomain === "academic_fee" ? (
                 <>
-                  <View style={styles.policyNoticeBox}>
-                    <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} />
-                    <Text style={styles.policyNoticeTitle}>Institutional Admission & Concession Policy</Text>
-                    <Text style={styles.policyNoticeText}>
-                      In compliance with Google Play Store Policies, digital course purchases via external gateways are restricted on Android. Deserving students can request fee concession / institutional sponsorship, or connect with the Madrasa Admissions Desk.
-                    </Text>
-                  </View>
-
                   <TouchableOpacity
-                    style={[styles.primaryBtn, concessionLoading && styles.primaryBtnDisabled]}
-                    onPress={handleScholarshipConcessionRequest}
-                    disabled={concessionLoading}
+                    style={[styles.primaryBtn, openingPayment && styles.primaryBtnDisabled]}
+                    onPress={onInitiateRazorpayPayment}
+                    disabled={openingPayment}
                   >
-                    {concessionLoading ? (
+                    {openingPayment ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                       <View style={styles.btnRow}>
-                        <Ionicons name="school-outline" size={18} color="#FFFFFF" />
+                        <Ionicons name="card-outline" size={18} color="#FFFFFF" />
                         <Text style={styles.primaryBtnText}>
-                          Apply for Fee Concession / Scholarship
+                          Pay ₹{payableAcademicAmount} with Razorpay (Instant Access)
                         </Text>
                       </View>
                     )}
                   </TouchableOpacity>
 
-                  <TouchableOpacity style={styles.secondaryBtn} onPress={handleContactAdmissions}>
-                    <View style={styles.btnRow}>
-                      <Ionicons name="mail-outline" size={18} color={COLORS.primary} />
-                      <Text style={styles.secondaryBtnText}>Contact Admissions Desk</Text>
-                    </View>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <View style={styles.donationNoticeBox}>
-                    <Ionicons name="information-circle-outline" size={18} color="#005F46" />
-                    <Text style={styles.donationNoticeText}>
-                      Google Play Policy Disclosure: To comply with Google Play's Charitable Donations Policy, all voluntary religious contributions (Zakat, Sadqah, Fitrah) are processed securely using your device's web browser outside the app.
+                  <View style={styles.instantAccessBadge}>
+                    <Ionicons name="flash" size={14} color="#059669" />
+                    <Text style={styles.instantAccessText}>
+                      1-Click Automatic Payment • Instant Course Access • No Admin Wait
                     </Text>
                   </View>
 
                   <TouchableOpacity
-                    style={styles.primaryBtn}
+                    style={[styles.secondaryConcessionBtn, concessionLoading && styles.primaryBtnDisabled]}
+                    onPress={handleScholarshipConcessionRequest}
+                    disabled={concessionLoading}
+                  >
+                    {concessionLoading ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <View style={styles.btnRow}>
+                        <Ionicons name="school-outline" size={16} color={COLORS.primary} />
+                        <Text style={styles.secondaryConcessionText}>
+                          Need Financial Aid / Concession? Apply Here
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.contactAdmissionsLink} onPress={handleContactAdmissions}>
+                    <Ionicons name="mail-outline" size={14} color={COLORS.textMuted} />
+                    <Text style={styles.contactAdmissionsText}>Contact Admissions Desk</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, openingPayment && styles.primaryBtnDisabled]}
+                    onPress={onInitiateRazorpayPayment}
+                    disabled={openingPayment}
+                  >
+                    {openingPayment ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <View style={styles.btnRow}>
+                        <Ionicons name="heart" size={18} color="#FFFFFF" />
+                        <Text style={styles.primaryBtnText}>
+                          Donate ₹{payableDonationAmount.toLocaleString()} with Razorpay
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={styles.instantAccessBadge}>
+                    <Ionicons name="flash" size={14} color="#059669" />
+                    <Text style={styles.instantAccessText}>
+                      Secure Instant Payment • Automatic Receipt Issued
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.secondaryBtn}
                     onPress={onProceedToDonationWeb}
                   >
                     <View style={styles.btnRow}>
-                      <Ionicons name="open-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.primaryBtnText}>
-                        Donate ₹{currentTotalAmount.toLocaleString()} via External Web Browser
+                      <Ionicons name="open-outline" size={16} color={COLORS.textMuted} />
+                      <Text style={styles.secondaryBtnText}>
+                        Or Donate via External Web Browser
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -690,6 +851,58 @@ export default function PaymentFlowScreen() {
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep(1)}>
                 <Text style={styles.secondaryBtnText}>Modify Selection</Text>
               </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* STEP 3: PAYMENT IN PROGRESS / GATEWAY WINDOW */}
+          {step === 3 ? (
+            <View style={styles.card}>
+              <View style={styles.statusCenter}>
+                {verifyingPayment ? (
+                  <>
+                    <ActivityIndicator size="large" color="#10B981" />
+                    <Text style={styles.statusTitle}>Verifying Payment & Granting Access...</Text>
+                    <Text style={styles.statusDescription}>
+                      Mubarak! Razorpay payment received. Finalizing your course enrollment now.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.statusTitle}>Razorpay Gateway Active</Text>
+                    <Text style={styles.statusDescription}>
+                      Please complete your payment of ₹{currentTotalAmount.toLocaleString()} in the Razorpay window. Your access will unlock automatically.
+                    </Text>
+
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, { width: "100%", marginTop: SPACING.md }]}
+                      onPress={() => setCheckoutModalVisible(true)}
+                    >
+                      <View style={styles.btnRow}>
+                        <Ionicons name="open-outline" size={18} color="#FFFFFF" />
+                        <Text style={styles.primaryBtnText}>Open Razorpay Window</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    {waitingTimeout ? (
+                      <View style={styles.timeoutNotice}>
+                        <Ionicons name="time-outline" size={18} color="#92400E" />
+                        <Text style={styles.timeoutText}>
+                          Payment verification is taking a moment. If you completed the payment, your course access will update automatically.
+                        </Text>
+                        <TouchableOpacity style={styles.refreshBtn} onPress={loadHistory}>
+                          <Ionicons name="refresh" size={14} color={COLORS.primary} />
+                          <Text style={styles.refreshBtnText}>Check Payment Status</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+
+                    <TouchableOpacity style={styles.cancelLink} onPress={() => setStep(2)}>
+                      <Text style={styles.cancelLinkText}>Back to Review</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
           ) : null}
 
@@ -819,6 +1032,91 @@ export default function PaymentFlowScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* RAZORPAY WEBVIEW MODAL */}
+      <Modal
+        visible={checkoutModalVisible}
+        animationType="slide"
+        onRequestClose={() => setCheckoutModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: COLORS.background }}>
+          <View style={[styles.header, { paddingTop: insets.top + SPACING.sm, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="shield-checkmark" size={20} color={COLORS.primary} />
+              <Text style={styles.title}>Secure Razorpay Checkout</Text>
+            </View>
+            <TouchableOpacity style={{ padding: 8 }} onPress={() => setCheckoutModalVisible(false)}>
+              <Ionicons name="close" size={24} color={COLORS.text} />
+            </TouchableOpacity>
+          </View>
+          {checkoutData ? (
+            <WebView
+              originWhitelist={["https://*", "upi://*", "phonepe://*", "paytmmp://*", "gpay://*", "bhim://*", "credpay://*", "about:blank"]}
+              source={{ html: checkoutHtml }}
+              onMessage={(event) => {
+                try {
+                  const data = JSON.parse(event.nativeEvent.data);
+                  if (data.event === "PAYMENT_SUCCESS") {
+                    setCheckoutModalVisible(false);
+                    const paymentId = data.payment_id;
+                    const orderId = data.order_id;
+                    const signature = data.signature;
+                    if (currentPaymentId && orderId && paymentId && signature) {
+                      setVerifyingPayment(true);
+                      verifyRazorpayPayment({
+                        paymentDocId: currentPaymentId,
+                        orderId,
+                        paymentId,
+                        signature,
+                      })
+                        .then((res) => {
+                          if (res?.success) {
+                            setStep(4);
+                            loadHistory().catch(() => {});
+                          }
+                        })
+                        .catch((err) => {
+                          logFirestoreFailure(
+                            { collection: "payments", operation: "update", query: "verifyRazorpayPayment callable fallback to webhook", role: profile?.role, status: profile?.status },
+                            err
+                          );
+                        })
+                        .finally(() => {
+                          setVerifyingPayment(false);
+                        });
+                    }
+                  } else if (data.event === "MODAL_CLOSED") {
+                    setCheckoutModalVisible(false);
+                  } else if (data.event === "PAYMENT_FAILED") {
+                    setCheckoutModalVisible(false);
+                    setError(data.error?.description || "Payment failed. Please try again.");
+                    setStep(2);
+                  }
+                } catch {
+                  // Ignore JSON parse error from non-JSON message
+                }
+              }}
+              onShouldStartLoadWithRequest={(request) => {
+                const u = request.url;
+                if (u.startsWith("upi://") || u.startsWith("phonepe://") || u.startsWith("paytmmp://") || u.startsWith("gpay://") || u.startsWith("credpay://") || u.startsWith("bhim://")) {
+                  Linking.openURL(u).catch(() => {});
+                  return false;
+                }
+                return true;
+              }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={[StyleSheet.absoluteFill, { justifyContent: "center", alignItems: "center", backgroundColor: COLORS.background }]}>
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                  <Text style={{ marginTop: 12, ...TYPOGRAPHY.label, color: COLORS.textMuted }}>Loading Razorpay Gateway...</Text>
+                </View>
+              )}
+            />
+          ) : null}
+        </View>
+      </Modal>
 
       {/* ISLAMIC RECEIPT MODAL */}
       <IslamicReceiptModal
@@ -996,6 +1294,54 @@ const styles = StyleSheet.create({
   primaryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 14, alignItems: "center", justifyContent: "center", marginTop: SPACING.xs },
   primaryBtnDisabled: { opacity: 0.7 },
   primaryBtnText: { ...TYPOGRAPHY.heading, color: "#FFFFFF", fontSize: 15 },
+  instantAccessBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#F0FDF4",
+    paddingVertical: 8,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    marginTop: 6,
+  },
+  instantAccessText: {
+    ...TYPOGRAPHY.label,
+    fontSize: 12,
+    color: "#166534",
+    fontWeight: "600",
+  },
+  secondaryConcessionBtn: {
+    borderRadius: RADIUS.lg,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceAlt,
+    marginTop: 8,
+  },
+  secondaryConcessionText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  contactAdmissionsLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  contactAdmissionsText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textMuted,
+    fontSize: 12,
+  },
   secondaryBtn: { borderRadius: RADIUS.lg, paddingVertical: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.border, marginTop: 6 },
   secondaryBtnText: { ...TYPOGRAPHY.body, color: COLORS.textMuted, fontSize: 13 },
   btnRow: { flexDirection: "row", alignItems: "center", gap: SPACING.xs },

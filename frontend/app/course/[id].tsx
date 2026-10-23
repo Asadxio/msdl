@@ -608,7 +608,7 @@ export default function CourseDetailScreen() {
           "You are not enrolled in this course. Please enroll to attend live classes and access course materials.",
           [
             { text: "Cancel", style: "cancel" },
-            { text: "Pay Fee & Enroll", onPress: () => router.push('/payment') }
+            { text: "Pay Fee & Unlock Course", onPress: () => router.push({ pathname: '/payment', params: { courseId: course.id } }) }
           ]
         );
         return;
@@ -1197,7 +1197,7 @@ export default function CourseDetailScreen() {
                         onPress={() => router.push({ pathname: '/payment', params: { courseId: course.id } })}
                         activeOpacity={0.85}
                       >
-                        <Text style={styles.enrollPromptBtnText}>Pay Fee & Enroll</Text>
+                        <Text style={styles.enrollPromptBtnText}>Pay Fee & Unlock Course</Text>
                         <Ionicons name="arrow-forward" size={14} color="#FFF" />
                       </TouchableOpacity>
                     )}
@@ -1222,11 +1222,11 @@ export default function CourseDetailScreen() {
                 <View style={styles.lockedGateActionRow}>
                   <TouchableOpacity
                     style={styles.lockedGatePrimaryBtn}
-                    onPress={() => router.push('/payment')}
+                    onPress={() => router.push({ pathname: '/payment', params: { courseId: course.id } })}
                     activeOpacity={0.85}
                   >
                     <Ionicons name="card-outline" size={16} color="#FFF" />
-                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fees & Request Enrollment</Text>
+                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fee & Unlock Course (Instant Access)</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.lockedGateSecondaryBtn}
@@ -1371,11 +1371,11 @@ export default function CourseDetailScreen() {
                 <View style={styles.lockedGateActionRow}>
                   <TouchableOpacity
                     style={styles.lockedGatePrimaryBtn}
-                    onPress={() => router.push('/payment')}
+                    onPress={() => router.push({ pathname: '/payment', params: { courseId: course.id } })}
                     activeOpacity={0.85}
                   >
                     <Ionicons name="card-outline" size={16} color="#FFF" />
-                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fees & Request Enrollment</Text>
+                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fee & Unlock Course (Instant Access)</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.lockedGateSecondaryBtn}
@@ -1503,11 +1503,11 @@ export default function CourseDetailScreen() {
                 <View style={styles.lockedGateActionRow}>
                   <TouchableOpacity
                     style={styles.lockedGatePrimaryBtn}
-                    onPress={() => router.push('/payment')}
+                    onPress={() => router.push({ pathname: '/payment', params: { courseId: course.id } })}
                     activeOpacity={0.85}
                   >
                     <Ionicons name="card-outline" size={16} color="#FFF" />
-                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fees & Request Enrollment</Text>
+                    <Text style={styles.lockedGatePrimaryBtnText}>Pay Fee & Unlock Course (Instant Access)</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.lockedGateSecondaryBtn}
