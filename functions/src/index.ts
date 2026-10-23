@@ -60,6 +60,9 @@ export {
   onUserApprovalTrigger,
   onSubmissionWrittenTrigger,
   onLiveClassWrittenTrigger,
+  onLessonWrittenTrigger,
+  onAssignmentCreatedTrigger,
+  onCertificateIssuedTrigger,
 } from "./notifications/notificationTriggers";
 
 // ─── Phase 79: User Data & Play Store Account Deletion Compliance ─────────────

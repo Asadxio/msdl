@@ -22,6 +22,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { initPushNotifications, registerDevicePushToken } from '@/lib/pushNotifications';
+import { syncAutomatedNotificationSchedules } from '@/lib/scheduledDailyNotifications';
 import { checkAndTriggerInactivityNudge } from '@/lib/inactivityNudge';
 import { validateConfig, getMissingConfigVars } from '@/lib/config';
 import { dedupeNotificationEvent, resolveRouteFromNotificationData } from '@/lib/notificationCenter';
@@ -456,7 +457,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    initPushNotifications().catch((error) => {
+    initPushNotifications()
+      .then(() => syncAutomatedNotificationSchedules())
+      .catch((error) => {
       console.log('[Notifications] initPushNotifications effect ERROR', error);
     });
   }, []);

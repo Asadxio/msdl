@@ -67,6 +67,22 @@ export async function initPushNotifications(): Promise<void> {
         lightColor: '#0FA958',
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
+      await Notifications.setNotificationChannelAsync('spiritual', {
+        name: 'Spiritual & Azkar',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#0FA958',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      await Notifications.setNotificationChannelAsync('reminders', {
+        name: 'Reminders & Fasting',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#0FA958',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
       console.log('[Notifications] Android notification channels configured');
     }
   } catch (error) {

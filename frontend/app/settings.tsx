@@ -34,6 +34,15 @@ import {
 } from '@/lib/storageCleaner';
 import { openGooglePlayStore } from '@/lib/inAppReview';
 import {
+  syncAutomatedNotificationSchedules,
+  PREF_DAILY_HADITH_KEY,
+  PREF_DAILY_TILAWAT_KEY,
+  PREF_BEDTIME_DUA_KEY,
+  PREF_SUNNAH_FASTING_KEY,
+  PREF_WEEKLY_QUIZ_KEY,
+  dispatchTestSpiritualNotification,
+} from '@/lib/scheduledDailyNotifications';
+import {
   isAppLockEnabled,
   isBiometricEnabled,
   getLockTimeoutMs,
@@ -343,6 +352,11 @@ export default function SettingsScreen() {
   const [prayerMadhab, setPrayerMadhab] = useState('hanafi');
   const [prayerNotifications, setPrayerNotifications] = useState(true);
   const [islamicReminders, setIslamicReminders] = useState(true);
+  const [dailyHadithReminder, setDailyHadithReminder] = useState(true);
+  const [dailyTilawatReminder, setDailyTilawatReminder] = useState(true);
+  const [bedtimeDuaReminder, setBedtimeDuaReminder] = useState(true);
+  const [sunnahFastingReminder, setSunnahFastingReminder] = useState(true);
+  const [weeklyQuizReminder, setWeeklyQuizReminder] = useState(true);
   const [azanSound, setAzanSound] = useState(true);
   const [fridayReminder, setFridayReminder] = useState(true);
   const [reminderTime, setReminderTime] = useState('09:00 AM');
@@ -374,6 +388,11 @@ export default function SettingsScreen() {
             AsyncStorage.getItem(AUTO_PLAY_KEY),
             AsyncStorage.getItem(WIFI_ONLY_KEY),
             AsyncStorage.getItem(REMEMBER_PDF_KEY),
+            AsyncStorage.getItem(PREF_DAILY_HADITH_KEY),
+            AsyncStorage.getItem(PREF_DAILY_TILAWAT_KEY),
+            AsyncStorage.getItem(PREF_BEDTIME_DUA_KEY),
+            AsyncStorage.getItem(PREF_SUNNAH_FASTING_KEY),
+            AsyncStorage.getItem(PREF_WEEKLY_QUIZ_KEY),
           ]),
           isAppLockEnabled(),
           isBiometricEnabled(),
@@ -406,6 +425,11 @@ export default function SettingsScreen() {
         setAutoPlay(vals[19] !== 'false');
         setWifiOnly(vals[20] === 'true');
         setRememberPdf(vals[21] !== 'false');
+        setDailyHadithReminder(vals[22] !== 'false');
+        setDailyTilawatReminder(vals[23] !== 'false');
+        setBedtimeDuaReminder(vals[24] !== 'false');
+        setSunnahFastingReminder(vals[25] !== 'false');
+        setWeeklyQuizReminder(vals[26] !== 'false');
       } catch {}
     };
     loadPrefs().catch(() => {});
@@ -422,11 +446,23 @@ export default function SettingsScreen() {
   const toggleBooleanPref = async (key: string, value: boolean, setter: React.Dispatch<React.SetStateAction<boolean>>) => {
     setter(value);
     await AsyncStorage.setItem(key, value ? 'true' : 'false').catch(() => {});
+    if (
+      key === ISLAMIC_REMINDERS_KEY ||
+      key === FRIDAY_REMINDER_KEY ||
+      key === PREF_DAILY_HADITH_KEY ||
+      key === PREF_DAILY_TILAWAT_KEY ||
+      key === PREF_BEDTIME_DUA_KEY ||
+      key === PREF_SUNNAH_FASTING_KEY ||
+      key === PREF_WEEKLY_QUIZ_KEY
+    ) {
+      syncAutomatedNotificationSchedules().catch(() => {});
+    }
   };
 
   const toggleNotifications = async (value: boolean) => {
     setNotificationsEnabled(value);
     await AsyncStorage.setItem(NOTIFICATION_PREF_KEY, value ? 'true' : 'false').catch(() => {});
+    syncAutomatedNotificationSchedules({ masterEnabled: value }).catch(() => {});
     if (user?.uid) {
       const channels = Object.keys(channelPrefs).reduce((acc, k) => ({ ...acc, [k]: value }), {} as Record<NotificationChannel, boolean>);
       setChannelPrefs(channels);
@@ -681,9 +717,57 @@ export default function SettingsScreen() {
             <Switch value={fridayReminder} onValueChange={(v) => toggleBooleanPref(FRIDAY_REMINDER_KEY, v, setFridayReminder)} trackColor={{ true: COLORS.primary }} />
           </View>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Islamic Reminders</Text>
+            <Text style={styles.rowLabel}>Islamic Reminders (All)</Text>
             <Switch value={islamicReminders} onValueChange={(v) => toggleBooleanPref(ISLAMIC_REMINDERS_KEY, v, setIslamicReminders)} trackColor={{ true: COLORS.primary }} />
           </View>
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Morning Hadith & Azkar (06:30 AM)</Text>
+              <Text style={styles.rowSubtext}>Daily authentic Hadith & morning Azkar</Text>
+            </View>
+            <Switch value={dailyHadithReminder} onValueChange={(v) => toggleBooleanPref(PREF_DAILY_HADITH_KEY, v, setDailyHadithReminder)} trackColor={{ true: COLORS.primary }} />
+          </View>
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Daily Quran Tilawat (04:30 PM)</Text>
+              <Text style={styles.rowSubtext}>Asr daily Quran reading reminder</Text>
+            </View>
+            <Switch value={dailyTilawatReminder} onValueChange={(v) => toggleBooleanPref(PREF_DAILY_TILAWAT_KEY, v, setDailyTilawatReminder)} trackColor={{ true: COLORS.primary }} />
+          </View>
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Bedtime Dua & Azkar (09:15 PM)</Text>
+              <Text style={styles.rowSubtext}>Night Duas & Ayat-ul-Kursi before sleep</Text>
+            </View>
+            <Switch value={bedtimeDuaReminder} onValueChange={(v) => toggleBooleanPref(PREF_BEDTIME_DUA_KEY, v, setBedtimeDuaReminder)} trackColor={{ true: COLORS.primary }} />
+          </View>
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Sunnah Fasting (Mon & Thu)</Text>
+              <Text style={styles.rowSubtext}>Fasting reminder on Sun & Wed evening</Text>
+            </View>
+            <Switch value={sunnahFastingReminder} onValueChange={(v) => toggleBooleanPref(PREF_SUNNAH_FASTING_KEY, v, setSunnahFastingReminder)} trackColor={{ true: COLORS.primary }} />
+          </View>
+          <View style={styles.row}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.rowLabel}>Weekly Revision & Quiz (Saturday)</Text>
+              <Text style={styles.rowSubtext}>Weekly sabaq revision reminder at 11:00 AM</Text>
+            </View>
+            <Switch value={weeklyQuizReminder} onValueChange={(v) => toggleBooleanPref(PREF_WEEKLY_QUIZ_KEY, v, setWeeklyQuizReminder)} trackColor={{ true: COLORS.primary }} />
+          </View>
+          <TouchableOpacity
+            style={[styles.actionButton, { marginTop: 12 }]}
+            onPress={async () => {
+              try {
+                await dispatchTestSpiritualNotification('hadith');
+                Alert.alert('روحانی یاد دہانی (Spiritual Reminder)', 'ایک نمونہ حدیث و ذکر کا نوٹیفکیشن آپ کے فون پر بھیج دیا گیا ہے۔');
+              } catch (err: any) {
+                Alert.alert('Error', err?.message || 'Failed to dispatch test reminder.');
+              }
+            }}
+          >
+            <Text style={styles.actionButtonText}>🌸 Test Spiritual Notification</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.linkRow} onPress={() => {
             Alert.alert('Reminder Time', 'Select daily reminder time:', [
               { text: '09:00 AM', onPress: async () => { setReminderTime('09:00 AM'); await AsyncStorage.setItem(ISLAMIC_REMINDER_TIME_KEY, '09:00 AM'); } },

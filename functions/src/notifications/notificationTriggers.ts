@@ -312,3 +312,254 @@ export const onLiveClassWrittenTrigger = onDocumentWritten(
     }
   }
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trigger 4: Lesson Written / Published Trigger
+// ─────────────────────────────────────────────────────────────────────────────
+export const onLessonWrittenTrigger = onDocumentWritten(
+  {
+    document: "lessons/{lessonId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const beforeData = event.data?.before.exists ? event.data.before.data() : null;
+    const afterData = event.data?.after.exists ? event.data.after.data() : null;
+    const lessonId = event.params.lessonId;
+
+    if (!afterData) return; // Deleted lesson, no action
+
+    // Only notify if published (either newly created published or updated from draft/unpublished to published)
+    const wasPublished = beforeData && (beforeData.is_published === true || beforeData.status === "published");
+    const isNowPublished = afterData.is_published === true || afterData.status === "published" || (!beforeData && afterData.is_published !== false);
+
+    if (!isNowPublished || (beforeData && wasPublished)) {
+      return; // Not newly published
+    }
+
+    const courseId = afterData.course_id;
+    if (!courseId) return;
+
+    logger.info(`[onLessonWrittenTrigger] Lesson ${lessonId} published for course ${courseId}. Notifying students.`);
+
+    try {
+      // 1. Fetch course details
+      const courseSnap = await collections.courses().doc(courseId).get();
+      const courseData = courseSnap.exists ? courseSnap.data()! : {};
+      const courseTitle = courseData.name || courseData.title || "Course";
+
+      // 2. Query active enrollments for this course
+      const enrollmentsSnap = await collections.enrollments()
+        .where("course_id", "==", courseId)
+        .where("status", "==", "active")
+        .limit(500)
+        .get();
+
+      const studentUids = Array.from(
+        new Set(enrollmentsSnap.docs.map((d) => d.data().user_id).filter(Boolean))
+      );
+
+      if (studentUids.length === 0) {
+        logger.info(`[onLessonWrittenTrigger] No active students found for course ${courseId}`);
+        return;
+      }
+
+      const lessonTitle = afterData.title || "نیا سبق";
+      const title = `📖 نیا سبق دستیاب ہے (New Lesson Uploaded)`;
+      const body = `"${lessonTitle}" has been uploaded to "${courseTitle}". Tap to start learning now!`;
+      const route = `/course/${courseId}`;
+      const dedupeId = `lesson_notif_${lessonId}`;
+
+      // Deliver native FCM push to enrolled students
+      await deliverPushNotificationInternal({
+        recipientUids: studentUids,
+        title,
+        body,
+        channelId: "academic",
+        organizationId: courseData.organization_id || "mslb-main",
+        sentByUid: afterData.created_by || afterData.teacher_id || "system",
+        dedupeId,
+        data: {
+          type: "lesson_uploaded",
+          lesson_id: lessonId,
+          course_id: courseId,
+          route,
+        },
+      });
+
+      // Write in-app notification doc for targeted students
+      await collections.notifications().add({
+        recipient_id: "enrolled_students",
+        user_id: "role_targeted",
+        target_user_ids: studentUids,
+        actor_id: afterData.created_by || afterData.teacher_id || "system",
+        channel: "academic",
+        event: "lesson_uploaded",
+        title,
+        body,
+        message: body,
+        route,
+        data: { lesson_id: lessonId, course_id: courseId, route },
+        dedupe_id: dedupeId,
+        organization_id: courseData.organization_id || "mslb-main",
+        created_at: FieldValue.serverTimestamp(),
+        created_at_ms: Date.now(),
+      });
+    } catch (err) {
+      logger.error(`[onLessonWrittenTrigger] Error notifying students on lesson publish:`, err);
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trigger 5: Assignment Created Trigger
+// ─────────────────────────────────────────────────────────────────────────────
+export const onAssignmentCreatedTrigger = onDocumentWritten(
+  {
+    document: "assignments/{assignmentId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const beforeData = event.data?.before.exists ? event.data.before.data() : null;
+    const afterData = event.data?.after.exists ? event.data.after.data() : null;
+    const assignmentId = event.params.assignmentId;
+
+    if (!afterData || beforeData) return; // Only trigger on creation
+
+    const courseId = afterData.course_id;
+    if (!courseId) return;
+
+    logger.info(`[onAssignmentCreatedTrigger] New assignment ${assignmentId} created for course ${courseId}.`);
+
+    try {
+      // 1. Fetch course details
+      const courseSnap = await collections.courses().doc(courseId).get();
+      const courseData = courseSnap.exists ? courseSnap.data()! : {};
+      const courseTitle = courseData.name || courseData.title || "Course";
+
+      // 2. Query active enrollments for this course
+      const enrollmentsSnap = await collections.enrollments()
+        .where("course_id", "==", courseId)
+        .where("status", "==", "active")
+        .limit(500)
+        .get();
+
+      const studentUids = Array.from(
+        new Set(enrollmentsSnap.docs.map((d) => d.data().user_id).filter(Boolean))
+      );
+
+      if (studentUids.length === 0) return;
+
+      const assignmentTitle = afterData.title || "اسائنمنٹ";
+      const dueDateStr = afterData.due_date ? ` (Due: ${afterData.due_date})` : "";
+      const title = `📝 نیا ہوم ورک / اسائنمنٹ (New Assignment)`;
+      const body = `A new assignment "${assignmentTitle}" has been posted in "${courseTitle}".${dueDateStr} Please review and submit on time.`;
+      const route = `/course/${courseId}`;
+      const dedupeId = `assign_created_${assignmentId}`;
+
+      // Deliver native FCM push
+      await deliverPushNotificationInternal({
+        recipientUids: studentUids,
+        title,
+        body,
+        channelId: "academic",
+        organizationId: courseData.organization_id || "mslb-main",
+        sentByUid: afterData.created_by || "teacher",
+        dedupeId,
+        data: {
+          type: "assignment_created",
+          assignment_id: assignmentId,
+          course_id: courseId,
+          route,
+        },
+      });
+
+      // Write in-app notification doc
+      await collections.notifications().add({
+        recipient_id: "enrolled_students",
+        user_id: "role_targeted",
+        target_user_ids: studentUids,
+        actor_id: afterData.created_by || "teacher",
+        channel: "assignments",
+        event: "assignment_posted",
+        title,
+        body,
+        message: body,
+        route,
+        data: { assignment_id: assignmentId, course_id: courseId, route },
+        dedupe_id: dedupeId,
+        organization_id: courseData.organization_id || "mslb-main",
+        created_at: FieldValue.serverTimestamp(),
+        created_at_ms: Date.now(),
+      });
+    } catch (err) {
+      logger.error(`[onAssignmentCreatedTrigger] Error notifying students on assignment:`, err);
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trigger 6: Certificate Issued Trigger
+// ─────────────────────────────────────────────────────────────────────────────
+export const onCertificateIssuedTrigger = onDocumentWritten(
+  {
+    document: "certificates/{certificateId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const beforeData = event.data?.before.exists ? event.data.before.data() : null;
+    const afterData = event.data?.after.exists ? event.data.after.data() : null;
+    const certificateId = event.params.certificateId;
+
+    if (!afterData || beforeData) return; // Only trigger on creation
+
+    const studentUid = afterData.user_id || afterData.uid;
+    if (!studentUid) return;
+
+    logger.info(`[onCertificateIssuedTrigger] Certificate ${certificateId} issued to student ${studentUid}.`);
+
+    try {
+      const courseName = afterData.course_name || afterData.course_title || "Course";
+      const title = `🎓 مبارک ہو! سند جاری ہو گئی (Certificate Issued)`;
+      const body = `ماشاءاللہ! Congratulations! Your official Sanad / Certificate for "${courseName}" has been issued. Tap to view and download.`;
+      const route = `/certificate/${certificateId}`;
+      const dedupeId = `cert_issued_${certificateId}`;
+
+      // Deliver native FCM push
+      await deliverPushNotificationInternal({
+        recipientUids: [studentUid],
+        title,
+        body,
+        channelId: "academic",
+        organizationId: afterData.organization_id || "mslb-main",
+        sentByUid: "system",
+        dedupeId,
+        data: {
+          type: "certificate_issued",
+          certificate_id: certificateId,
+          route,
+        },
+      });
+
+      // Write in-app notification doc
+      await collections.notifications().add({
+        recipient_id: studentUid,
+        user_id: studentUid,
+        actor_id: "system",
+        channel: "academic",
+        event: "certificate_issued",
+        title,
+        body,
+        message: body,
+        route,
+        read: { [studentUid]: false },
+        data: { certificate_id: certificateId, route },
+        dedupe_id: dedupeId,
+        organization_id: afterData.organization_id || "mslb-main",
+        created_at: FieldValue.serverTimestamp(),
+        created_at_ms: Date.now(),
+      });
+    } catch (err) {
+      logger.error(`[onCertificateIssuedTrigger] Error notifying student on certificate:`, err);
+    }
+  }
+);
