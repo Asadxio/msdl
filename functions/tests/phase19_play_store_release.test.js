@@ -37,11 +37,11 @@ test('P19-01: App identity matches Play Store release parameters', () => {
 // PART 2: ANDROID PERMISSIONS AUDIT
 // ============================================================
 
-test('P19-02: All 15 Android permissions are documented and legitimate for an educational app', () => {
+test('P19-02: All 13 Android permissions are documented and legitimate under Purdah mode', () => {
   const appJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'frontend/app.json'), 'utf8'));
   const perms = appJson.expo.android.permissions;
-  assert.strictEqual(perms.length, 15);
-  assert.ok(perms.includes('android.permission.CAMERA'));
+  assert.strictEqual(perms.length, 13);
+  assert.ok(!perms.includes('android.permission.CAMERA'), 'Purdah mode: CAMERA must not be present');
   assert.ok(perms.includes('android.permission.RECORD_AUDIO'));
   assert.ok(perms.includes('android.permission.ACCESS_FINE_LOCATION'));
   assert.ok(perms.includes('android.permission.POST_NOTIFICATIONS'));
