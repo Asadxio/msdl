@@ -42,8 +42,8 @@ if (Test-Path "app\build\intermediates\compressed_assets") {
     Remove-Item -Recurse -Force "app\build\intermediates\compressed_assets" -ErrorAction SilentlyContinue
 }
 
-Write-Host "Starting Gradle assembleRelease and bundleRelease..."
-.\gradlew.bat assembleRelease bundleRelease --daemon --build-cache
+Write-Host "Starting Gradle assembleRelease (APK only as requested)..."
+.\gradlew.bat assembleRelease --daemon --build-cache
 
 $apkSource = "X:\frontend\android\app\build\outputs\apk\release\app-release.apk"
 $aabSource = "X:\frontend\android\app\build\outputs\bundle\release\app-release.aab"
