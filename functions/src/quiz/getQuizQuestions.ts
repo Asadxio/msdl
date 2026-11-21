@@ -23,6 +23,7 @@ export interface SafeQuizQuestion {
 
 interface GetQuizQuestionsRequest {
   category?: string;
+  organization_id?: string;
 }
 
 export const getQuizQuestions = onCall(
@@ -30,7 +31,8 @@ export const getQuizQuestions = onCall(
   async (request: https.CallableRequest<GetQuizQuestionsRequest>): Promise<{ questions: SafeQuizQuestion[] }> => {
     // 1. Require authentication
     const user = await requireAuthenticatedUser(request);
-    logger.info(`[getQuizQuestions] uid=${user.uid} category=${request.data?.category ?? 'all'}`);
+    const targetOrg = String(request.data?.organization_id || (user as any).organization_id || 'mslb-main').trim();
+    logger.info(`[getQuizQuestions] uid=${user.uid} targetOrg=${targetOrg} category=${request.data?.category ?? 'all'}`);
 
     const category = request.data?.category;
 
@@ -42,6 +44,9 @@ export const getQuizQuestions = onCall(
     // 3. Build Firestore query
     try {
       let query: FirebaseFirestore.Query = db.collection('quizzes');
+      if (targetOrg !== 'mslb-main') {
+        query = query.where('organization_id', '==', targetOrg);
+      }
       if (category && category.trim().length > 0) {
         query = query.where('category', '==', category.trim());
       }
@@ -51,8 +56,16 @@ export const getQuizQuestions = onCall(
       const snapshot = await query.get();
 
       // 4. Strip answer keys — ONLY return safe fields using allowlist
-      const questions: SafeQuizQuestion[] = snapshot.docs.map((doc) => {
-        const data = doc.data();
+      const questions: SafeQuizQuestion[] = snapshot.docs
+        .filter((doc) => {
+          if (targetOrg === 'mslb-main') {
+            const docOrg = doc.data().organization_id;
+            return !docOrg || docOrg === 'mslb-main';
+          }
+          return true;
+        })
+        .map((doc) => {
+          const data = doc.data();
         
         let options: string[] = [];
         if (Array.isArray(data.options)) {

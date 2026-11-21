@@ -34,7 +34,7 @@ export default function LegalGateScreen() {
         </View>
 
         <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
-        <Text style={styles.madrasaTitle}>Madrasatu-s-Salikat Lil Banat</Text>
+        <Text style={styles.madrasaTitle}>Suffah • Islamic Madrasa Portal</Text>
         <Text style={styles.title}>Updated Institutional Policies</Text>
         <Text style={styles.subtitle}>
           Please review and accept our updated Islamic Academic Guidelines, Purdah Code of Conduct, and Data Privacy Policies to continue into the learning portal.

@@ -21,7 +21,6 @@ import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { Magnetometer } from 'expo-sensors';
-import { Camera, CameraView } from 'expo-camera';
 import { WebView } from 'react-native-webview';
 import { goBackOrReplace } from '@/lib/navigation';
 import { withTimeout } from '@/lib/errors';
@@ -64,7 +63,6 @@ type QiblaLocation = {
   updatedAt?: number;
 };
 
-type CameraPermission = 'idle' | 'requesting' | 'granted' | 'denied' | 'unavailable';
 type AccuracyLabel = 'Low' | 'Medium' | 'High';
 
 const FALLBACK_LOCATION: QiblaLocation = {
@@ -96,11 +94,6 @@ const CARDINALS = [
 function formatCoordinate(value: number, axis: 'lat' | 'lng') {
   const dir = axis === 'lat' ? (value >= 0 ? 'N' : 'S') : (value >= 0 ? 'E' : 'W');
   return `${Math.abs(value).toFixed(5)}° ${dir}`;
-}
-
-async function requestCameraPermission(): Promise<CameraPermission> {
-  const perm = await Camera.requestCameraPermissionsAsync();
-  return perm?.status === 'granted' ? 'granted' : 'denied';
 }
 
 // ─── METRIC CARD ──────────────────────────────────────────────────────────────
@@ -173,8 +166,6 @@ export default function QiblaScreen() {
   const [headingAccuracy, setHeadingAccuracy] = useState<number | null>(null);
   const [headingSource, setHeadingSource]     = useState<'True North' | 'Magnetic North' | 'Unknown'>('Unknown');
   const [sensorStatus, setSensorStatus]       = useState<'checking' | 'active' | 'unavailable'>('checking');
-  const [cameraMode, setCameraMode]           = useState(false);
-  const [cameraPermission, setCameraPermission] = useState<CameraPermission>('idle');
   const [mapMode, setMapMode]                 = useState(false);
   const [mapError, setMapError]               = useState(false);
 
@@ -543,24 +534,16 @@ export default function QiblaScreen() {
 </html>`;
   }, [location.latitude, location.longitude, location.city]);
 
-  const openNativeCameraMode = useCallback(async () => {
-    setEntryVisible(false); setMapMode(false); setCameraPermission('requesting');
-    const p = await requestCameraPermission().catch(() => 'unavailable' as CameraPermission);
-    setCameraPermission(p);
-    if (p === 'granted') setCameraMode(true);
-  }, []);
-
-  const openCompassMode = useCallback(() => { setEntryVisible(false); setCameraMode(false); setMapMode(false); }, []);
-  const openMapMode     = useCallback(() => { setEntryVisible(false); setCameraMode(false); setMapMode(true); }, []);
+  const openCompassMode = useCallback(() => { setEntryVisible(false); setMapMode(false); }, []);
+  const openMapMode     = useCallback(() => { setEntryVisible(false); setMapMode(true); }, []);
 
   useEffect(() => {
     if ((params.mode === 'camera' || params.mode === 'google') && !googlePromptedRef.current) {
       googlePromptedRef.current = true; setEntryVisible(false); openGoogleQiblaFinder();
     }
-    if (params.mode === 'native-camera' && cameraPermission === 'idle') openNativeCameraMode().catch(() => setCameraPermission('unavailable'));
     if (params.mode === 'compass') openCompassMode();
     if (params.mode === 'map') openMapMode();
-  }, [cameraPermission, openGoogleQiblaFinder, openNativeCameraMode, openCompassMode, openMapMode, params.mode]);
+  }, [openGoogleQiblaFinder, openCompassMode, openMapMode, params.mode]);
 
   // Compass dial rotates by -continuousHeading
   const compassRot = headingAnim.interpolate({
@@ -611,29 +594,12 @@ export default function QiblaScreen() {
         </View>
       </Modal>
 
-      {/* CAMERA MODE */}
-      {cameraMode ? (
-        <View style={styles.cameraFullScreen} testID="qibla-camera-finder">
-          <CameraView style={StyleSheet.absoluteFill} facing="back" />
-          <View style={[styles.cameraTopBar, { paddingTop: insets.top + 10 }]}>
-            <TouchableOpacity style={styles.roundButton} onPress={() => setCameraMode(false)}><Ionicons name="close" size={22} color={W} /></TouchableOpacity>
-            <Text style={styles.cameraTitle}>Camera Qibla</Text>
-            <TouchableOpacity style={styles.roundButton} onPress={() => setMapMode((v) => !v)}><Ionicons name="map-outline" size={20} color={W} /></TouchableOpacity>
-          </View>
-          <View style={styles.arOverlay}>
-            <Animated.View style={[styles.arCircle, { transform: [{ rotate: qiblaRot }] }]}>
-              <Ionicons name={qibla.offset < 0 ? 'arrow-back' : qibla.offset > 0 ? 'arrow-forward' : 'checkmark'} size={52} color={qibla.aligned ? EMERALD_LIGHT : GOLD_PRIMARY} />
-            </Animated.View>
-            <Text style={[styles.alignBadge, qibla.aligned && styles.alignBadgeReady]}>{qibla.aligned ? '✦ Facing Qibla' : qibla.guidance}</Text>
-            <Text style={styles.arSub}>Qibla {Math.round(qibla.qiblaAngle)}° · Heading {Math.round(qibla.heading)}°</Text>
-          </View>
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        >
+      {/* HIGH-PRECISION COMPASS & QIBLA SYSTEM */}
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
           {/* HEADER */}
           <View style={styles.headerRow}>
             <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')}>
@@ -936,7 +902,6 @@ export default function QiblaScreen() {
             ))}
           </View>
         </ScrollView>
-      )}
     </View>
   );
 }
@@ -1078,15 +1043,4 @@ const styles = StyleSheet.create({
   entryText:     { color: W60, fontSize: 12, marginTop: 2 },
   entryTag:      { backgroundColor: W10, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   entryTagTxt:   { color: GOLD_PRIMARY, fontWeight: '800', fontSize: 10 },
-
-  // Camera
-  cameraFullScreen: { flex: 1, backgroundColor: '#000' },
-  cameraTopBar:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18 },
-  cameraTitle:      { color: W, fontSize: 17, fontWeight: '800' },
-  roundButton:      { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
-  arOverlay:        { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  arCircle:         { width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 3, borderColor: GOLD_PRIMARY, alignItems: 'center', justifyContent: 'center' },
-  alignBadge:       { backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, color: GOLD_PRIMARY, fontWeight: '800', fontSize: 15 },
-  alignBadgeReady:  { backgroundColor: 'rgba(16,185,129,0.8)', color: W },
-  arSub:            { color: W60, fontSize: 13, fontWeight: '700' },
 });

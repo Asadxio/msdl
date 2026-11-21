@@ -29,6 +29,14 @@
       {
         "source": "/account-deletion",
         "destination": "/account-deletion.html"
+      },
+      {
+        "source": "/verify-sanad",
+        "destination": "/verify-sanad.html"
+      },
+      {
+        "source": "/terms-of-service",
+        "destination": "/terms-of-service.html"
       }
     ]
   },

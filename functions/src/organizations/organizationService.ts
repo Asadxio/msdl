@@ -12,11 +12,19 @@ import { invalidArgumentError, permissionDeniedError, notFoundError } from "../s
 export interface CreateOrganizationPayload {
   id?: string;
   name: string;
+  name_arabic?: string;
   slug?: string;
   tagline?: string;
   logo_url?: string;
   phone?: string;
   email?: string;
+  website?: string;
+  whatsapp_channel?: string;
+  whatsapp_contact?: string;
+  instagram?: string;
+  youtube_link?: string;
+  telegram_link?: string;
+  about_madrasa?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -29,6 +37,9 @@ export interface CreateOrganizationPayload {
   primary_color?: string;
   secondary_color?: string;
   starter_course_name?: string;
+  principal_name?: string;
+  upi_id?: string;
+  upi_name?: string;
   is_demo?: boolean;
 }
 
@@ -101,11 +112,19 @@ export const createOrganization = onCall(
     const newOrg = {
       id: orgId,
       name: cleanName,
+      name_arabic: payload.name_arabic || "",
       slug: (payload.slug || orgId).toLowerCase().trim(),
       tagline: payload.tagline || "",
       logo_url: payload.logo_url || "",
       phone: payload.phone || "",
       email: payload.email || "",
+      website: payload.website || "",
+      whatsapp_channel: payload.whatsapp_channel || "",
+      whatsapp_contact: payload.whatsapp_contact || "",
+      instagram: payload.instagram || "",
+      youtube_link: payload.youtube_link || "",
+      telegram_link: payload.telegram_link || "",
+      about_madrasa: payload.about_madrasa?.trim() || "",
       address: payload.address || "",
       city: payload.city || "",
       state: payload.state || "",
@@ -122,6 +141,8 @@ export const createOrganization = onCall(
       teacher_limit: typeof payload.teacher_limit === "number" ? payload.teacher_limit : 20,
       primary_color: payload.primary_color || "#005F46",
       secondary_color: payload.secondary_color || "#C8A84E",
+      upi_id: payload.upi_id || "",
+      upi_name: payload.upi_name || cleanName,
       setup_checklist_dismissed: false,
       is_demo: Boolean(payload.is_demo),
       created_by: caller.uid,
@@ -142,6 +163,31 @@ export const createOrganization = onCall(
       joined_at: FieldValue.serverTimestamp(),
       created_at: FieldValue.serverTimestamp(),
     });
+
+    // Provision or upgrade user profile to institutional admin for this organization
+    const principalName = payload.principal_name?.trim() || caller.email.split("@")[0] || `${cleanName} Admin`;
+    const userDocRef = db.collection("users").doc(caller.uid);
+    const userSnap = await userDocRef.get();
+    if (!userSnap.exists) {
+      await userDocRef.set({
+        name: principalName,
+        email: caller.email,
+        phone: payload.phone || "",
+        role: assignedRole,
+        status: "approved",
+        organization_id: orgId,
+        created_at: FieldValue.serverTimestamp(),
+        updated_at: FieldValue.serverTimestamp(),
+      });
+    } else {
+      await userDocRef.set({
+        role: assignedRole,
+        organization_id: orgId,
+        status: "approved",
+        name: principalName,
+        updated_at: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
 
     // Optional: Auto-provision starter course if requested
     let createdCourseId: string | null = null;
@@ -303,10 +349,19 @@ export const recordManualPayment = onCall(
 export interface UpdateOrgSettingsPayload {
   organization_id: string;
   name?: string;
+  name_arabic?: string;
   tagline?: string;
   logo_url?: string;
   phone?: string;
   email?: string;
+  website?: string;
+  whatsapp_channel?: string;
+  whatsapp_contact?: string;
+  instagram?: string;
+  youtube_link?: string;
+  telegram_link?: string;
+  about_madrasa?: string;
+  donation_url?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -314,6 +369,13 @@ export interface UpdateOrgSettingsPayload {
   timezone?: string;
   primary_color?: string;
   secondary_color?: string;
+  upi_id?: string;
+  upi_name?: string;
+  bank_name?: string;
+  account_number?: string;
+  ifsc_code?: string;
+  account_holder?: string;
+  fee_instructions?: string;
   setup_checklist_dismissed?: boolean;
 }
 
@@ -359,10 +421,19 @@ export const updateOrganizationSettings = onCall(
     };
 
     if (typeof settings.name === "string" && settings.name.trim().length > 0) allowedUpdates.name = settings.name.trim();
+    if (typeof settings.name_arabic === "string") allowedUpdates.name_arabic = settings.name_arabic.trim();
     if (typeof settings.tagline === "string") allowedUpdates.tagline = settings.tagline.trim();
     if (typeof settings.logo_url === "string") allowedUpdates.logo_url = settings.logo_url.trim();
     if (typeof settings.phone === "string") allowedUpdates.phone = settings.phone.trim();
     if (typeof settings.email === "string") allowedUpdates.email = settings.email.trim();
+    if (typeof settings.website === "string") allowedUpdates.website = settings.website.trim();
+    if (typeof settings.whatsapp_channel === "string") allowedUpdates.whatsapp_channel = settings.whatsapp_channel.trim();
+    if (typeof settings.whatsapp_contact === "string") allowedUpdates.whatsapp_contact = settings.whatsapp_contact.trim();
+    if (typeof settings.instagram === "string") allowedUpdates.instagram = settings.instagram.trim();
+    if (typeof settings.youtube_link === "string") allowedUpdates.youtube_link = settings.youtube_link.trim();
+    if (typeof settings.telegram_link === "string") allowedUpdates.telegram_link = settings.telegram_link.trim();
+    if (typeof settings.about_madrasa === "string") allowedUpdates.about_madrasa = settings.about_madrasa.trim();
+    if (typeof settings.donation_url === "string") allowedUpdates.donation_url = settings.donation_url.trim();
     if (typeof settings.address === "string") allowedUpdates.address = settings.address.trim();
     if (typeof settings.city === "string") allowedUpdates.city = settings.city.trim();
     if (typeof settings.state === "string") allowedUpdates.state = settings.state.trim();
@@ -370,6 +441,13 @@ export const updateOrganizationSettings = onCall(
     if (typeof settings.timezone === "string") allowedUpdates.timezone = settings.timezone.trim();
     if (typeof settings.primary_color === "string") allowedUpdates.primary_color = settings.primary_color.trim();
     if (typeof settings.secondary_color === "string") allowedUpdates.secondary_color = settings.secondary_color.trim();
+    if (typeof settings.upi_id === "string") allowedUpdates.upi_id = settings.upi_id.trim();
+    if (typeof settings.upi_name === "string") allowedUpdates.upi_name = settings.upi_name.trim();
+    if (typeof settings.bank_name === "string") allowedUpdates.bank_name = settings.bank_name.trim();
+    if (typeof settings.account_number === "string") allowedUpdates.account_number = settings.account_number.trim();
+    if (typeof settings.ifsc_code === "string") allowedUpdates.ifsc_code = settings.ifsc_code.trim().toUpperCase();
+    if (typeof settings.account_holder === "string") allowedUpdates.account_holder = settings.account_holder.trim();
+    if (typeof settings.fee_instructions === "string") allowedUpdates.fee_instructions = settings.fee_instructions.trim();
     if (typeof settings.setup_checklist_dismissed === "boolean") allowedUpdates.setup_checklist_dismissed = settings.setup_checklist_dismissed;
 
     await orgRef.update(allowedUpdates);

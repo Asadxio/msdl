@@ -242,17 +242,13 @@ export default function PaymentHistoryScreen() {
     setLoading(true);
     setError('');
     try {
-      let q;
-      if (isAdmin) {
-        q = query(collection(db, 'payments'), orderBy('created_at', 'desc'), limit(500));
-      } else {
-        q = query(
-          collection(db, 'payments'),
-          where('user_id', '==', user.uid),
-          orderBy('created_at', 'desc'),
-          limit(100),
-        );
-      }
+      // Personal payment history: strictly scoped to the logged-in user's own receipts
+      const q = query(
+        collection(db, 'payments'),
+        where('user_id', '==', user.uid),
+        orderBy('created_at', 'desc'),
+        limit(100),
+      );
       const snap = await getDocs(q);
       const arr: PaymentRecord[] = [];
       snap.forEach((d) => {
@@ -264,7 +260,7 @@ export default function PaymentHistoryScreen() {
       logFirestoreFailure({
         collection: 'payments',
         operation: 'get',
-        query: isAdmin ? 'all payments admin' : `payments where user_id == ${user.uid}`,
+        query: `payments where user_id == ${user.uid}`,
         role: profile?.role,
         status: profile?.status,
       }, err);
@@ -272,7 +268,7 @@ export default function PaymentHistoryScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.uid, isAdmin, profile?.role, profile?.status]);
+  }, [user?.uid, profile?.role, profile?.status]);
 
   useEffect(() => {
     fetchPayments().catch(() => {});
@@ -317,9 +313,9 @@ export default function PaymentHistoryScreen() {
           <Ionicons name="arrow-back" size={20} color={COLORS.textMain} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.topBarTitle}>{isAdmin ? 'All Payments & Funds' : 'My Payment History'}</Text>
+          <Text style={styles.topBarTitle}>My Payment Receipts</Text>
           {!loading && (
-            <Text style={styles.topBarSub}>{filtered.length} records</Text>
+            <Text style={styles.topBarSub}>{filtered.length} private receipts</Text>
           )}
         </View>
         <TouchableOpacity onPress={() => { void fetchPayments(); }} disabled={loading} style={styles.refreshIconBtn}>
@@ -327,6 +323,31 @@ export default function PaymentHistoryScreen() {
             ? <ActivityIndicator size="small" color={COLORS.primary} />
             : <Ionicons name="refresh" size={20} color={COLORS.primary} />}
         </TouchableOpacity>
+      </View>
+
+      {/* Admin Quick Switch Notice */}
+      {isAdmin ? (
+        <TouchableOpacity
+          style={styles.adminSwitchBanner}
+          onPress={() => router.push('/admin/payments')}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+            <Ionicons name="shield-checkmark" size={16} color="#005F46" />
+            <Text style={styles.adminSwitchText}>
+              Madrasa Admin: To audit all incoming student fees & charitable donations, open the Admin Payments Console.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color="#005F46" />
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Privacy Assurance Banner */}
+      <View style={styles.privacyBadgeWrap}>
+        <Ionicons name="lock-closed" size={13} color="#059669" />
+        <Text style={styles.privacyBadgeText}>
+          Strictly Private & Confidential (خفیہ رسیدیں): These receipts are visible only to you.
+        </Text>
       </View>
 
       {/* Summary Bar */}
@@ -508,6 +529,45 @@ const styles = StyleSheet.create({
   },
   txRef: { fontSize: 11, color: COLORS.textMuted, fontFamily: 'monospace' },
   txId: { fontSize: 10, color: COLORS.border, fontFamily: 'monospace' },
+  adminSwitchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    marginHorizontal: SPACING.md,
+    marginTop: 8,
+    borderRadius: RADIUS.md,
+  },
+  adminSwitchText: {
+    fontSize: 12,
+    color: '#065F46',
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 16,
+  },
+  privacyBadgeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    marginHorizontal: SPACING.md,
+    marginTop: 8,
+    borderRadius: RADIUS.full,
+  },
+  privacyBadgeText: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '500',
+    flex: 1,
+  },
   viewReceiptBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: COLORS.surfaceAlt, paddingHorizontal: 10, paddingVertical: 4,

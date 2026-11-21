@@ -24,7 +24,7 @@ export function CustomerSupportModal({ visible, onClose }: CustomerSupportModalP
 
   const handleWhatsAppSupport = async () => {
     const phone = '916366919122';
-    const text = `Assalamu Alaikum MSLB Support Team,\n\nI am contacting you from *${orgName}* (ID: ${activeOrg?.id || 'N/A'}). I need assistance with our institutional workspace.`;
+    const text = `Assalamu Alaikum Platform Support Team,\n\nI am contacting you from *${orgName}* (ID: ${activeOrg?.id || 'N/A'}). I need assistance with our institutional workspace.`;
     const webUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
     const directUrl = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
 
@@ -40,14 +40,14 @@ export function CustomerSupportModal({ visible, onClose }: CustomerSupportModalP
         }
       }
     } catch {
-      Alert.alert('Unable to open WhatsApp', 'Please contact MSLB directly at +91 63669 19122.');
+      Alert.alert('Unable to open WhatsApp', 'Please contact Platform Support directly at +91 63669 19122.');
     }
   };
 
   const handleEmailSupport = async () => {
     const email = 'sumraftm@gmail.com';
-    const subject = `MSLB Support Request: ${orgName}`;
-    const body = `Assalamu Alaikum MSLB Team,\n\nMadrasa: ${orgName}\nWorkspace ID: ${activeOrg?.id || 'N/A'}\n\nPlease help us with: `;
+    const subject = `Madrasa Support Request: ${orgName}`;
+    const body = `Assalamu Alaikum Support Team,\n\nMadrasa: ${orgName}\nWorkspace ID: ${activeOrg?.id || 'N/A'}\n\nPlease help us with: `;
     const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     try {
@@ -83,7 +83,7 @@ export function CustomerSupportModal({ visible, onClose }: CustomerSupportModalP
               <Ionicons name="logo-whatsapp" size={22} color="#FFFFFF" style={{ marginRight: 10 }} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.whatsappBtnText}>Chat on WhatsApp</Text>
-                <Text style={styles.whatsappSubtext}>Instant response from MSLB Support</Text>
+                <Text style={styles.whatsappSubtext}>Instant response from Central Support</Text>
               </View>
               <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
             </TouchableOpacity>

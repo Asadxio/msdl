@@ -47,7 +47,7 @@ export function LegalDocScreen({
 
         <View style={styles.headerTitleBlock}>
           <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
-          <Text style={styles.madrasaName}>MADRASATU-S-SALIKAT LIL BANAT</Text>
+          <Text style={styles.madrasaName}>SUFFAH • DIGITAL MADRASA PORTAL</Text>
           {arabicTitle ? <Text style={styles.arabicTitle}>{arabicTitle}</Text> : null}
           <Text allowFontScaling style={styles.title}>{title}</Text>
           <Text allowFontScaling style={styles.subtitle}>{subtitle}</Text>
@@ -63,7 +63,7 @@ export function LegalDocScreen({
           <View style={styles.complianceFooter}>
             <Ionicons name={iconName} size={24} color="#005F46" />
             <View style={styles.footerTextWrap}>
-              <Text style={styles.footerHeading}>Madrasatu-s-Salikat Lil Banat</Text>
+              <Text style={styles.footerHeading}>Suffah Digital Madrasa Platform</Text>
               <Text style={styles.footerSub}>Academic Directorate & Islamic Ethics Governance Council</Text>
             </View>
           </View>

@@ -8,7 +8,7 @@ describe('P0 launch blocker fixes', () => {
     expect(source).toContain('const { courses } = useData();');
     expect(source).toContain('selectedCourseId');
     expect(source).toContain("Please select the course this fee payment is for.");
-    expect(source).toContain("...(paymentType === 'fees' ? { course_id: selectedCourseId } : {})");
+    expect(source).toContain("orderPayload.courseId = selectedCourseId");
   });
 
   it('backend payment initiation persists course_id and rejects missing fee course', () => {

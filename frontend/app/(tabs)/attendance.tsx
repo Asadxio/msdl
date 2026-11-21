@@ -36,6 +36,8 @@ import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 import { exportAdminCsvAndShare } from '@/lib/adminExportService';
 import { withTimeout } from '@/lib/errors';
 import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { getAttendanceDocId, getInstitutionalDateString } from '@/lib/attendanceId';
+import { deduplicateAttendanceRecords, type ConflictAuditRecord } from '@/lib/attendanceDeduplication';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,11 @@ export type AttendanceItem = {
   created_at?: { toDate?: () => Date };
   marked_at?: { toDate?: () => Date };
   updated_at?: { toDate?: () => Date };
+  hasConflict?: boolean;
+  conflict?: boolean;
+  conflictReason?: string;
+  resolvedConflict?: boolean;
+  conflictAudit?: ConflictAuditRecord;
 };
 
 type AppUser = {
@@ -65,11 +72,11 @@ type AppUser = {
   status: string;
 };
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => getInstitutionalDateString(new Date());
 const yesterdayStr = () => {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return getInstitutionalDateString(d);
 };
 
 function getMillis(value?: { toDate?: () => Date }): number {
@@ -133,7 +140,7 @@ export default function AttendanceScreen() {
   const handleExportAttendanceCsv = async () => {
     try {
       setExportingCsv(true);
-      await exportAdminCsvAndShare('attendance');
+      await exportAdminCsvAndShare('attendance', undefined, undefined, activeOrgId || DEFAULT_ORGANIZATION_ID);
     } catch (err: any) {
       Alert.alert(
         'Export Failed',
@@ -194,15 +201,16 @@ export default function AttendanceScreen() {
       (snap) => {
         const arr: AttendanceItem[] = [];
         snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+        const deduped = deduplicateAttendanceRecords(arr);
 
-        arr.sort((a, b) => {
+        deduped.sort((a, b) => {
           const bTime = getMillis(b.marked_at || b.created_at);
           const aTime = getMillis(a.marked_at || a.created_at);
           if (bTime !== aTime) return bTime - aTime;
           return String(b.date || '').localeCompare(String(a.date || ''));
         });
 
-        setHistory(arr);
+        setHistory(deduped);
         setLoading(false);
         setRefreshing(false);
       },
@@ -281,14 +289,14 @@ export default function AttendanceScreen() {
       return;
     }
 
-    const cId = courseIdTarget !== undefined ? courseIdTarget : (selectedCourseId !== 'all' ? selectedCourseId : '');
+    const cId = courseIdTarget !== undefined ? courseIdTarget : (selectedCourseId !== 'all' ? selectedCourseId : (availableCourses.length > 0 ? availableCourses[0].id : ''));
     const activeCourse = availableCourses.find((c) => c.id === cId);
     const courseName = activeCourse ? activeCourse.name : 'General Class';
 
     // Unique document per student, date, and course
-    const docId = cId
-      ? `${targetUser.id}_${selectedDate}_${cId}`
-      : `${targetUser.id}_${selectedDate}`;
+    const effectiveCourseId = (cId || '').trim() || 'general';
+    // Canonical deterministic document ID per student, date, and course
+    const docId = getAttendanceDocId(targetUser.id, selectedDate, effectiveCourseId);
 
     setSavingUserId(targetUser.id);
     try {
@@ -301,6 +309,7 @@ export default function AttendanceScreen() {
 
       const nextRecord: Record<string, any> = {
         user_id: targetUser.id,
+        organization_id: activeCourse?.organization_id || activeOrgId || DEFAULT_ORGANIZATION_ID,
         user_name: targetUser.name,
         user_email: targetUser.email,
         date: selectedDate,
@@ -312,9 +321,8 @@ export default function AttendanceScreen() {
         updated_at: serverTimestamp(),
       };
 
-      if (cId) {
-        nextRecord.course_id = cId;
-      }
+      nextRecord.course_id = effectiveCourseId;
+      nextRecord.organization_id = activeCourse?.organization_id || activeOrgId || DEFAULT_ORGANIZATION_ID;
 
       if (!existing.exists()) {
         nextRecord.created_at = serverTimestamp();
@@ -331,6 +339,7 @@ export default function AttendanceScreen() {
         title: `Attendance: ${status === 'present' ? 'Present ✓' : 'Absent ✕'}`,
         message: `${courseName} attendance for ${selectedDate} has been recorded as ${status}.`,
         user_id: targetUser.id,
+        organization_id: activeCourse?.organization_id || activeOrgId || DEFAULT_ORGANIZATION_ID,
         created_at: serverTimestamp(),
       }).catch(() => {});
 
@@ -346,6 +355,10 @@ export default function AttendanceScreen() {
 
   const handleMarkAllPresent = async () => {
     if (!user?.uid || filteredStudents.length === 0) return;
+    if (selectedCourseId === 'all' && availableCourses.length > 1) {
+      Alert.alert('Select a Course', 'Please select a specific course before marking all students present.');
+      return;
+    }
     const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
     const courseName = targetCourse ? targetCourse.name : 'Selected Class';
 
@@ -359,17 +372,16 @@ export default function AttendanceScreen() {
           onPress: async () => {
             setMarkingAllLoading(true);
             try {
-              const cId = selectedCourseId !== 'all' ? selectedCourseId : '';
+              const cId = selectedCourseId !== 'all' ? selectedCourseId : (availableCourses.length > 0 ? availableCourses[0].id : '');
               const CHUNK_SIZE = 100;
 
               for (let i = 0; i < filteredStudents.length; i += CHUNK_SIZE) {
                 const chunk = filteredStudents.slice(i, i + CHUNK_SIZE);
                 const batch = writeBatch(db);
 
+                const effectiveCourseId = (cId || '').trim() || 'general';
                 for (const student of chunk) {
-                  const docId = cId
-                    ? `${student.id}_${selectedDate}_${cId}`
-                    : `${student.id}_${selectedDate}`;
+                  const docId = getAttendanceDocId(student.id, selectedDate, effectiveCourseId);
                   const ref = doc(db, 'attendance', docId);
 
                   const payload: any = {
@@ -383,8 +395,9 @@ export default function AttendanceScreen() {
                     marked_by_name: profile?.name || user.email || 'Teacher',
                     marked_at: serverTimestamp(),
                     updated_at: serverTimestamp(),
+                    course_id: effectiveCourseId,
+                    organization_id: targetCourse?.organization_id || activeOrgId || DEFAULT_ORGANIZATION_ID,
                   };
-                  if (cId) payload.course_id = cId;
 
                   batch.set(ref, payload, { merge: true });
                 }
@@ -877,25 +890,34 @@ export default function AttendanceScreen() {
                 </View>
                 <View
                   style={
-                    item.status === 'present'
+                    item.hasConflict
+                      ? styles.badgeConflictCompact
+                      : item.status === 'present'
                       ? styles.badgePresentCompact
                       : styles.badgeAbsentCompact
                   }
                 >
                   <Text
                     style={
-                      item.status === 'present'
+                      item.hasConflict
+                        ? styles.badgeTextConflict
+                        : item.status === 'present'
                         ? styles.badgeTextPresent
                         : styles.badgeTextAbsent
                     }
                   >
-                    {item.status.toUpperCase()}
+                    {item.hasConflict ? '⚠️ CONFLICT' : item.status.toUpperCase()}
                   </Text>
                 </View>
               </View>
               <Text style={styles.historyTeacherText}>
                 Recorded by: {item.marked_by_name || item.marked_by || 'Ustaadha'} •{' '}
                 {formatMarkedAt(item.marked_at || item.created_at)}
+                {item.resolvedConflict && (
+                  <Text style={{ color: '#D97706', fontWeight: '700' }}>
+                    {' '}• [Overrode earlier mark]
+                  </Text>
+                )}
               </Text>
             </View>
           ))}
@@ -1091,15 +1113,23 @@ export default function AttendanceScreen() {
                     <Text style={styles.timelineDate}>{item.date}</Text>
                     <View
                       style={
-                        isPresent ? styles.badgePresentCompact : styles.badgeAbsentCompact
+                        item.hasConflict
+                          ? styles.badgeConflictCompact
+                          : isPresent
+                          ? styles.badgePresentCompact
+                          : styles.badgeAbsentCompact
                       }
                     >
                       <Text
                         style={
-                          isPresent ? styles.badgeTextPresent : styles.badgeTextAbsent
+                          item.hasConflict
+                            ? styles.badgeTextConflict
+                            : isPresent
+                            ? styles.badgeTextPresent
+                            : styles.badgeTextAbsent
                         }
                       >
-                        {item.status.toUpperCase()}
+                        {item.hasConflict ? '⚠️ CONFLICT' : item.status.toUpperCase()}
                       </Text>
                     </View>
                   </View>
@@ -1110,6 +1140,11 @@ export default function AttendanceScreen() {
                   <Text style={styles.timelineMeta}>
                     Verified by: {item.marked_by_name || 'Ustaadha'} • Recorded on{' '}
                     {formatMarkedAt(item.marked_at || item.created_at)}
+                {item.resolvedConflict && (
+                  <Text style={{ color: '#D97706', fontWeight: '700' }}>
+                    {' '}• [Overrode earlier mark]
+                  </Text>
+                )}
                   </Text>
                 </View>
               </View>
@@ -1692,6 +1727,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#94A3B8',
     marginTop: 4,
+  },
+  badgeConflictCompact: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  badgeTextConflict: {
+    color: '#B45309',
+    fontSize: 9.5,
+    fontWeight: '800',
   },
   badgePresentCompact: {
     backgroundColor: '#ECFDF5',

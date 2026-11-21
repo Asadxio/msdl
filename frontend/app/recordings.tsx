@@ -16,7 +16,12 @@ import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantCont
 import { prepareExternalUrl } from '@/lib/links';
 import { EmptyState, FullScreenLoader, RetryState } from '@/components/ui';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
-import { formatDuration, formatFileSize, deleteClassRecording } from '@/lib/classRecording';
+import {
+  formatDuration,
+  formatFileSize,
+  deleteClassRecording,
+  getLocalClassRecordings,
+} from '@/lib/classRecording';
 import {
   isAudioCached,
   getPlayableAudioUri,
@@ -26,6 +31,62 @@ import {
 } from '@/lib/offlineAudioCache';
 
 const PLAYBACK_SPEEDS = [0.75, 1.0, 1.25, 1.5, 2.0];
+
+type DateFilter = 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'older';
+
+const DATE_FILTERS: { key: DateFilter; label: string; icon: string }[] = [
+  { key: 'all', label: 'All Dates', icon: 'calendar-outline' },
+  { key: 'today', label: 'Today', icon: 'today-outline' },
+  { key: 'yesterday', label: 'Yesterday', icon: 'time-outline' },
+  { key: 'week', label: 'This Week', icon: 'calendar' },
+  { key: 'month', label: 'This Month', icon: 'albums-outline' },
+  { key: 'older', label: 'Older', icon: 'archive-outline' },
+];
+
+function parseRecordingDate(item: RecordingItem): Date | null {
+  const raw = item.recorded_at || item.created_at;
+  if (!raw) return null;
+  if (typeof raw.toDate === 'function') {
+    return raw.toDate();
+  }
+  if (raw instanceof Date) {
+    return raw;
+  }
+  if (typeof raw === 'number') {
+    return new Date(raw);
+  }
+  if (typeof raw === 'string') {
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
+function formatRecordingDate(date: Date | null): string {
+  if (!date) return 'Class Dars';
+  const now = new Date();
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
+
+  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (isToday) {
+    return `Today • ${timeStr}`;
+  }
+  if (isYesterday) {
+    return `Yesterday • ${timeStr}`;
+  }
+  return `${date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} • ${timeStr}`;
+}
 
 type RecordingItem = {
   id: string;
@@ -43,6 +104,7 @@ type RecordingItem = {
   size_bytes?: number;
   recorded_at?: any;
   created_at?: any;
+  is_local_only?: boolean;
 };
 
 type CourseMap = Record<string, string>;
@@ -66,6 +128,8 @@ export default function RecordingsScreen() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<DateFilter>('all');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   // Audio Playback State
   const [soundObj, setSoundObj] = useState<Audio.Sound | null>(null);
@@ -91,8 +155,12 @@ export default function RecordingsScreen() {
   const checkOfflineCacheForItems = useCallback(async (recordingsList: RecordingItem[]) => {
     const map: Record<string, boolean> = {};
     for (const rec of recordingsList) {
-      map[rec.id] = await isAudioCached(rec.id);
-    }
+        if (rec.is_local_only) {
+          map[rec.id] = true;
+        } else {
+          map[rec.id] = await isAudioCached(rec.id);
+        }
+      }
     setOfflineMap(map);
   }, []);
 
@@ -190,10 +258,39 @@ export default function RecordingsScreen() {
           created_at: data.created_at,
         });
       });
+      // Phase P0.1: Merge On-Device Local Recordings for Teachers
+      const localItems: RecordingItem[] = [];
+      if (isTeacher && user?.uid) {
+        try {
+          const localSaved = await getLocalClassRecordings(user.uid);
+          for (const loc of localSaved) {
+            localItems.push({
+              id: loc.id,
+              title: loc.title,
+              description: loc.description || '',
+              notes_text: '',
+              file_url: loc.file_url,
+              storage_path: loc.storage_path,
+              course_id: loc.course_id,
+              organization_id: loc.organization_id,
+              teacher_id: loc.teacher_id,
+              teacher_name: loc.teacher_name,
+              duration_sec: loc.duration_sec,
+              size_bytes: loc.size_bytes,
+              recorded_at: loc.recorded_at,
+              created_at: loc.created_at,
+              is_local_only: true,
+            });
+          }
+        } catch (locErr) {
+          console.warn('[Recordings] Failed to load local recordings:', locErr);
+        }
+      }
 
-      setItems(next);
+      const allItems = [...localItems, ...next];
+      setItems(allItems);
       setCourseMap(nextMap);
-      await checkOfflineCacheForItems(next);
+      await checkOfflineCacheForItems(allItems);
 
       // Deep link resolution & validation
       if (deepLinkCourseId && nextMap[deepLinkCourseId]) {
@@ -265,11 +362,18 @@ export default function RecordingsScreen() {
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
 
       // Get playable URI (local file:// if offline, otherwise remote https:// stream)
-      const rawRemoteUrl = prepareExternalUrl(item.file_url) || item.file_url;
-      const playUri = await getPlayableAudioUri(item.id, rawRemoteUrl);
+      let playUri: string;
+      if (item.is_local_only || item.file_url.startsWith('file://')) {
+        playUri = item.file_url;
+      } else {
+        const rawRemoteUrl = prepareExternalUrl(item.file_url) || item.file_url;
+        playUri = await getPlayableAudioUri(item.id, rawRemoteUrl);
+      }
 
       const { sound } = await Audio.Sound.createAsync(
         { uri: playUri },
@@ -411,7 +515,12 @@ export default function RecordingsScreen() {
     if (!canDelete) return;
 
 
-    Alert.alert('Delete Recording', `Delete "${item.title || 'recording'}" permanently from the Madrasa library?`, [
+    const alertTitle = item.is_local_only ? 'Delete Local Recording' : 'Delete Recording';
+    const alertMsg = item.is_local_only
+      ? `Delete "${item.title || 'recording'}" permanently from this device storage? This action cannot be undone.`
+      : `Delete "${item.title || 'recording'}" permanently from the Madrasa library?`;
+
+    Alert.alert(alertTitle, alertMsg, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -422,11 +531,15 @@ export default function RecordingsScreen() {
           }
           setUpdatingId(item.id);
           try {
-            await deleteCachedAudio(item.id);
-            if (item.storage_path) {
-              await deleteClassRecording(item.id, item.storage_path);
+            if (item.is_local_only || item.id.startsWith('rec_local_')) {
+              await deleteClassRecording(item.id);
             } else {
-              await deleteDoc(doc(db, 'recordings', item.id));
+              await deleteCachedAudio(item.id);
+              if (item.storage_path) {
+                await deleteClassRecording(item.id, item.storage_path);
+              } else {
+                await deleteDoc(doc(db, 'recordings', item.id));
+              }
             }
             await fetchRecordings();
           } catch (error: unknown) {
@@ -453,7 +566,17 @@ export default function RecordingsScreen() {
   const sortedItems = useMemo(() => {
     const base = Array.isArray(items) ? items : [];
     const q = search.trim().toLowerCase();
-    return base.filter((item) => {
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(startOfToday);
+    startOfYesterday.setDate(startOfToday.getDate() - 1);
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfToday.getDate() - 7);
+    const startOfMonth = new Date(startOfToday);
+    startOfMonth.setDate(startOfToday.getDate() - 30);
+
+    const filtered = base.filter((item) => {
       const matchSearch =
         !q ||
         item.title.toLowerCase().includes(q) ||
@@ -461,9 +584,39 @@ export default function RecordingsScreen() {
         (item.teacher_name || '').toLowerCase().includes(q) ||
         (courseMap[item.course_id || ''] || '').toLowerCase().includes(q);
       const matchCourse = !selectedCourseId || item.course_id === selectedCourseId;
-      return matchSearch && matchCourse;
+      if (!matchSearch || !matchCourse) return false;
+
+      if (selectedDateFilter === 'all') return true;
+      const d = parseRecordingDate(item);
+      if (!d) return selectedDateFilter === 'older';
+      const t = d.getTime();
+
+      if (selectedDateFilter === 'today') {
+        return t >= startOfToday.getTime();
+      }
+      if (selectedDateFilter === 'yesterday') {
+        return t >= startOfYesterday.getTime() && t < startOfToday.getTime();
+      }
+      if (selectedDateFilter === 'week') {
+        return t >= startOfWeek.getTime();
+      }
+      if (selectedDateFilter === 'month') {
+        return t >= startOfMonth.getTime();
+      }
+      if (selectedDateFilter === 'older') {
+        return t < startOfMonth.getTime();
+      }
+      return true;
     });
-  }, [items, search, selectedCourseId, courseMap]);
+
+    filtered.sort((a, b) => {
+      const da = parseRecordingDate(a)?.getTime() || 0;
+      const db = parseRecordingDate(b)?.getTime() || 0;
+      return sortOrder === 'desc' ? db - da : da - db;
+    });
+
+    return filtered;
+  }, [items, search, selectedCourseId, selectedDateFilter, sortOrder, courseMap]);
 
   const courseOptions = useMemo(
     () => Object.entries(courseMap).map(([id, name]) => ({ id, name })),
@@ -502,6 +655,24 @@ export default function RecordingsScreen() {
         />
       ) : (
         <>
+          {/* Phase P0.1: Teacher Purdah & Device Retention Banner */}
+          {isTeacher && (
+            <View style={styles.purdahBanner}>
+              <View style={styles.purdahIconContainer}>
+                <Ionicons name="shield-checkmark" size={20} color="#059669" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.purdahTitle}>Strict On-Device Recording (Purdah Protection)</Text>
+                <Text style={styles.purdahNotice}>
+                  Class audio recordings recorded on this device are saved exclusively on your phone's storage and are never uploaded to the cloud.
+                </Text>
+                <Text style={styles.purdahWarning}>
+                  ⚠️ Notice: Device loss, clearing app data, or uninstalling will permanently remove local recordings.
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Search + Course filter */}
           <View style={styles.filterArea}>
             <TextInput
@@ -536,6 +707,48 @@ export default function RecordingsScreen() {
                 ))}
               </ScrollView>
             )}
+
+            {/* Date-wise Filter & Sort Toggle Bar */}
+            <View style={styles.subFilterBar}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.dateFilterRow}
+              >
+                {DATE_FILTERS.map((df) => (
+                  <TouchableOpacity
+                    key={df.key}
+                    style={[styles.dateChip, selectedDateFilter === df.key && styles.dateChipActive]}
+                    onPress={() => setSelectedDateFilter(df.key)}
+                  >
+                    <Ionicons
+                      name={df.icon as any}
+                      size={12}
+                      color={selectedDateFilter === df.key ? '#FFFFFF' : COLORS.textSecondary}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.dateChipText, selectedDateFilter === df.key && styles.dateChipTextActive]}>
+                      {df.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <TouchableOpacity
+                style={styles.sortToggleBtn}
+                onPress={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                accessibilityLabel={`Sort by date: ${sortOrder === 'desc' ? 'newest first' : 'oldest first'}`}
+              >
+                <Ionicons
+                  name={sortOrder === 'desc' ? 'arrow-down' : 'arrow-up'}
+                  size={13}
+                  color={COLORS.primary}
+                />
+                <Text style={styles.sortToggleText}>
+                  {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <FlatList
@@ -561,6 +774,10 @@ export default function RecordingsScreen() {
                     <View style={styles.cardInfo}>
                       <Text style={styles.cardTitle}>{item.title || 'Live Class Recording'}</Text>
                       <View style={styles.metaRow}>
+                        <View style={styles.dateMetaBadge}>
+                          <Ionicons name="calendar-outline" size={11} color={COLORS.primary} />
+                          <Text style={styles.dateMetaText}>{formatRecordingDate(parseRecordingDate(item))}</Text>
+                        </View>
                         <Text style={styles.cardMetaCourse}>{courseMap[item.course_id || ''] || 'General Session'}</Text>
                         {item.teacher_name ? (
                           <Text style={styles.cardMetaTeacher}> • {item.teacher_name}</Text>
@@ -587,13 +804,18 @@ export default function RecordingsScreen() {
                     </Text>
                   ) : null}
 
-                  {/* Offline Status Badge */}
-                  {isOffline && (
+                  {/* Phase P0.1: On-Device & Offline Badges */}
+                  {item.is_local_only ? (
+                    <View style={styles.localPurdahBadge}>
+                      <Ionicons name="shield-checkmark" size={13} color="#059669" />
+                      <Text style={styles.localPurdahBadgeText}>On-Device Only • Purdah Protected</Text>
+                    </View>
+                  ) : isOffline ? (
                     <View style={styles.offlineNotice}>
                       <Ionicons name="checkmark-circle" size={13} color={COLORS.success} />
                       <Text style={styles.offlineNoticeText}>Saved on device • Plays without internet</Text>
                     </View>
-                  )}
+                  ) : null}
 
                   {/* Actions Row */}
                   <View style={styles.cardActionsRow}>
@@ -619,32 +841,35 @@ export default function RecordingsScreen() {
                       )}
                     </TouchableOpacity>
 
-                    {/* Offline Download / Delete Button */}
-                    {downloadPercent !== undefined ? (
-                      <View style={styles.downloadProgressBtn}>
-                        <ActivityIndicator size="small" color={COLORS.primary} />
-                        <Text style={styles.downloadPercentText}>{downloadPercent}%</Text>
-                      </View>
-                    ) : isOffline ? (
-                      <TouchableOpacity
-                        style={styles.cachedBtn}
-                        onPress={() => void handleDeleteOffline(item)}
-                      >
-                        <Ionicons name="cloud-done" size={16} color={COLORS.success} />
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.downloadBtn}
-                        onPress={() => void handleDownloadOffline(item)}
-                      >
-                        <Ionicons name="download-outline" size={16} color={COLORS.primary} />
+                    {/* Offline Download / Delete Button (Hidden for on-device recordings) */}
+                    {!item.is_local_only &&
+                      (downloadPercent !== undefined ? (
+                        <View style={styles.downloadProgressBtn}>
+                          <ActivityIndicator size="small" color={COLORS.primary} />
+                          <Text style={styles.downloadPercentText}>{downloadPercent}%</Text>
+                        </View>
+                      ) : isOffline ? (
+                        <TouchableOpacity
+                          style={styles.cachedBtn}
+                          onPress={() => void handleDeleteOffline(item)}
+                        >
+                          <Ionicons name="cloud-done" size={16} color={COLORS.success} />
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.downloadBtn}
+                          onPress={() => void handleDownloadOffline(item)}
+                        >
+                          <Ionicons name="download-outline" size={16} color={COLORS.primary} />
+                        </TouchableOpacity>
+                      ))}
+
+                    {/* External Link Option (Hidden for local on-device files) */}
+                    {!item.is_local_only && (
+                      <TouchableOpacity style={styles.externalBtn} onPress={() => void safeOpenExternal(item.file_url)}>
+                        <Ionicons name="open-outline" size={15} color={COLORS.textSecondary} />
                       </TouchableOpacity>
                     )}
-
-                    {/* External Link Option */}
-                    <TouchableOpacity style={styles.externalBtn} onPress={() => void safeOpenExternal(item.file_url)}>
-                      <Ionicons name="open-outline" size={15} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
 
                     {/* Delete Option */}
                     {canDelete && (
@@ -670,7 +895,7 @@ export default function RecordingsScreen() {
                 message={
                   profile?.role === 'student' && Object.keys(courseMap).length === 0
                     ? 'You must be enrolled in an active course to access class recordings.'
-                    : search || selectedCourseId
+                    : search || selectedCourseId || selectedDateFilter !== 'all'
                     ? 'No recordings match your filter.'
                     : 'Live class recordings will appear here once teachers record audio sessions.'
                 }
@@ -1566,6 +1791,123 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#fff',
+  },
+  purdahBanner: {
+    flexDirection: 'row',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  purdahIconContainer: {
+    marginTop: 2,
+  },
+  purdahTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#065F46',
+    marginBottom: 4,
+  },
+  purdahNotice: {
+    fontSize: 12,
+    color: '#047857',
+    lineHeight: 17,
+  },
+  purdahWarning: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B45309',
+    marginTop: 4,
+  },
+  localPurdahBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+    gap: 5,
+    marginBottom: 8,
+  },
+  localPurdahBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065F46',
+  },
+  subFilterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    marginTop: 8,
+    marginBottom: 4,
+    gap: 8,
+  },
+  dateFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  dateChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  dateChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  dateChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  sortToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  sortToggleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  dateMetaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  dateMetaText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.primaryDeep,
   },
 });
 

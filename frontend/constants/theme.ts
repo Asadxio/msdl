@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export const COLORS = {
   primary: '#075B49', // Primary Emerald
   primaryDeep: '#043C32', // Deep Emerald for hero cards and headers
@@ -105,6 +107,41 @@ export const TYPOGRAPHY = {
     fontSize: 16,
     fontWeight: '700' as const,
     lineHeight: 22,
+  },
+  quranArabic: {
+    fontFamily: Platform.select({
+      ios: 'Geeza Pro',
+      android: 'serif',
+      default: 'serif',
+    }),
+    fontSize: 24,
+    lineHeight: 42,
+    textAlign: 'right' as const,
+    writingDirection: 'rtl' as const,
+    fontWeight: '700' as const,
+  },
+  urduText: {
+    fontFamily: Platform.select({
+      ios: 'Noto Nastaliq Urdu',
+      android: 'serif',
+      default: 'serif',
+    }),
+    fontSize: 16,
+    lineHeight: 30,
+    textAlign: 'right' as const,
+    writingDirection: 'rtl' as const,
+    fontWeight: '500' as const,
+  },
+  calligraphyHeading: {
+    fontFamily: Platform.select({
+      ios: 'Amiri',
+      android: 'serif',
+      default: 'serif',
+    }),
+    fontSize: 22,
+    lineHeight: 34,
+    fontWeight: '700' as const,
+    color: '#075B49',
   },
 };
 

@@ -1,6 +1,7 @@
 import { loadCachedSurah, cacheSurah, saveDailyAyat, loadDailyAyat } from './quranStorage';
 import { STARTER_SURAHS } from './quranStarterSurahs';
 import { QURAN_AUDIO_FILENAMES } from '@/constants/quranAudioFiles';
+import { getSurahByNumber } from '@/constants/quranSurahs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MSDL — Quran API Layer
@@ -308,5 +309,46 @@ export function getFullSurahUrduAudioUrl(surahNumber: number): string {
   }
   const sStr = String(surahNumber).padStart(3, '0');
   return `https://server8.mp3quran.net/afs/${sStr}.mp3`;
+}
+
+/**
+ * Pre-cache a specific Surah's text, translation, and metadata for offline reading
+ */
+export async function preCacheSurahText(surahNumber: number): Promise<boolean> {
+  try {
+    const meta = getSurahByNumber(surahNumber);
+    if (!meta) return false;
+    await fetchSurah(surahNumber, meta.blogSlug || '', meta.englishName || `Surah ${surahNumber}`);
+    return true;
+  } catch (err) {
+    console.warn(`[QuranApi] Failed to pre-cache Surah ${surahNumber}:`, err);
+    return false;
+  }
+}
+
+/**
+ * 1-Tap Pre-cache for entire Juz 30 (Juz Amma — Surahs 78 to 114) for offline Hifz revision
+ */
+export async function preCacheJuzAmma(
+  onProgress?: (done: number, total: number) => void
+): Promise<number> {
+  const JUZ_AMMA_SURAHS: number[] = [];
+  for (let s = 78; s <= 114; s++) {
+    JUZ_AMMA_SURAHS.push(s);
+  }
+
+  let successCount = 0;
+  for (let i = 0; i < JUZ_AMMA_SURAHS.length; i++) {
+    const sNum = JUZ_AMMA_SURAHS[i];
+    try {
+      const ok = await preCacheSurahText(sNum);
+      if (ok) successCount++;
+    } catch {
+      // Continue next surah
+    }
+    onProgress?.(i + 1, JUZ_AMMA_SURAHS.length);
+  }
+
+  return successCount;
 }
 

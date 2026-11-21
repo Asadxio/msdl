@@ -148,7 +148,8 @@ test('P13-12: All declared Android permissions are accounted for and justified',
     'android.permission.FOREGROUND_SERVICE': 'Background audio lesson playback',
     'android.permission.FOREGROUND_SERVICE_MICROPHONE': 'Live class audio',
     'android.permission.FOREGROUND_SERVICE_CAMERA': 'Live class video',
-    'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK': 'Audio lesson playback'
+    'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK': 'Audio lesson playback',
+    'android.permission.WAKE_LOCK': 'Quran recitation and audio lesson background playback',
   };
 
   for (const perm of permissions) {

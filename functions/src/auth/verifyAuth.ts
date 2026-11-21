@@ -45,8 +45,9 @@ export async function requireAuthenticatedUser(
   // Read role from Firestore (server-side trust boundary)
   const userSnap = await collections.users().doc(uid).get();
   if (!userSnap.exists) {
-    logger.warn(`[requireAuthenticatedUser] Firestore users doc not found for uid=${uid}`);
-    throw unauthenticatedError();
+    logger.warn(`[requireAuthenticatedUser] Firestore users doc not found for uid=${uid}; returning authenticated base role.`);
+    // Allow newly created authenticated users without a profile yet (e.g. during onboarding / organization registration)
+    return { uid, email, role: "student" as UserRole };
   }
 
   const userData = userSnap.data()!;

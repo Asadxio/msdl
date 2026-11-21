@@ -39,11 +39,6 @@ import {
   EmailDeliveryResult,
 } from '../services/emailDeliveryService';
 import {
-  SMTP_HOST,
-  SMTP_PORT,
-  SMTP_USER,
-  SMTP_PASS,
-  SMTP_FROM,
   PRIVACY_VERIFICATION_SECRET,
 } from '../config/secrets';
 
@@ -586,14 +581,6 @@ export async function executeVerifyPublicDeletionRequest(
 export const initiatePublicDeletionVerification = onCall(
   {
     region: 'us-central1',
-    secrets: [
-      SMTP_HOST,
-      SMTP_PORT,
-      SMTP_USER,
-      SMTP_PASS,
-      SMTP_FROM,
-      PRIVACY_VERIFICATION_SECRET,
-    ],
   },
   async (request: CallableRequest<InitiateVerificationData>) => {
     if (!request.auth) {
@@ -613,7 +600,6 @@ export const initiatePublicDeletionVerification = onCall(
 export const verifyPublicDeletionRequest = onCall(
   {
     region: 'us-central1',
-    secrets: [PRIVACY_VERIFICATION_SECRET],
   },
   async (request: CallableRequest<VerifyCodeData>) => {
     if (!request.auth) {

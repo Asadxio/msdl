@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
@@ -38,6 +38,13 @@ const SAMPLE_AYAH_WORDS = [
   { text: 'نَسْتَعِينُ', tajweed: 'madd' },
 ];
 
+const TAJWEED_RULES = [
+  { id: 'ghunnah', label: 'Ghunnah / Ikhfa', arabic: 'غُنَّة', color: '#059669' },
+  { id: 'qalqalah', label: 'Qalqalah', arabic: 'قلقلة', color: '#2563EB' },
+  { id: 'madd', label: 'Madd', arabic: 'مَدّ', color: '#DC2626' },
+  { id: 'idgham', label: 'Idgham', arabic: 'إدغام', color: '#D97706' },
+];
+
 export const TajweedBoard: React.FC<TajweedBoardProps> = ({
   viewMode,
   isTeacher,
@@ -47,6 +54,19 @@ export const TajweedBoard: React.FC<TajweedBoardProps> = ({
   onToggleHighlight,
   onSelectMakhraj,
 }) => {
+  const [activeRuleId, setActiveRuleId] = useState<string>('ghunnah');
+  const displayMushafHeader = (() => {
+    if (typeof currentAyahOrPage === 'string') {
+      try {
+        const p = JSON.parse(currentAyahOrPage);
+        if (p && p.englishName) {
+          return `Surah ${p.englishName} (${p.arabicName || ''}) — Ayah ${p.ayah || 1}`;
+        }
+      } catch {}
+    }
+    return `Surah Al-Fatihah (الفاتحة) — Ayah ${currentAyahOrPage}`;
+  })();
+
   return (
     <View style={styles.container}>
       {/* Board Mode Switcher */}
@@ -83,9 +103,37 @@ export const TajweedBoard: React.FC<TajweedBoardProps> = ({
       {viewMode === 'mushaf' && (
         <View style={styles.mushafBox}>
           <View style={styles.mushafHeader}>
-            <Text style={styles.mushafTitle}>Surah Al-Fatihah (الفاتحة) — Ayah {currentAyahOrPage}</Text>
-            {isTeacher && <Text style={styles.teacherHint}>Tap a word to highlight for students</Text>}
+            <Text style={styles.mushafTitle}>{displayMushafHeader}</Text>
+            {isTeacher && <Text style={styles.teacherHint}>Select rule & tap word to highlight</Text>}
           </View>
+
+          {/* Teacher Tajweed Rule Palette Bar */}
+          {isTeacher && (
+            <View style={styles.tajweedPaletteRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.paletteScroll}>
+                {TAJWEED_RULES.map((rule) => {
+                  const isActive = activeRuleId === rule.id;
+                  return (
+                    <TouchableOpacity
+                      key={rule.id}
+                      style={[
+                        styles.paletteChip,
+                        { borderColor: rule.color },
+                        isActive && { backgroundColor: rule.color },
+                      ]}
+                      onPress={() => setActiveRuleId(rule.id)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.paletteDot, { backgroundColor: isActive ? '#FFFFFF' : rule.color }]} />
+                      <Text style={[styles.paletteChipText, isActive ? { color: '#FFFFFF' } : { color: rule.color }]}>
+                        {rule.label} ({rule.arabic})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
           <View style={styles.arabicFlow}>
             {SAMPLE_AYAH_WORDS.map((w, idx) => {
               const isHigh = highlightedWords.includes(w.text);
@@ -373,5 +421,33 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     flex: 1,
     lineHeight: 16,
+  },
+  tajweedPaletteRow: {
+    marginBottom: SPACING.sm,
+    paddingBottom: 4,
+  },
+  paletteScroll: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+  paletteChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    borderWidth: 1.5,
+    backgroundColor: '#FFFFFF',
+  },
+  paletteDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  paletteChipText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

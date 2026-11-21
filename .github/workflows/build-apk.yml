@@ -3,7 +3,7 @@ name: Build Android Release APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, release/play-store-submission-v50 ]
     paths:
       - 'frontend/**'
 

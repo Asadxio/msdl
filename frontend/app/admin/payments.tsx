@@ -21,7 +21,7 @@ import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { IslamicReceiptModal } from '@/components/IslamicReceiptModal';
 import { shareReceiptToWhatsApp, type FeeReceiptData } from '@/lib/receiptGenerator';
-import { useActiveOrganization } from '@/lib/tenantContext';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_NAME } from '@/lib/tenantContext';
 
 type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled' | 'refunded' | 'disputed' | 'expired' | 'approved' | 'verified' | 'submitted';
 type PaymentDomain = 'academic_fee' | 'donation';
@@ -78,7 +78,7 @@ export default function AdminPaymentsScreen() {
   const { user, profile } = useAuth();
   const isFounder = isFounderEmail(profile?.email || user?.email);
   const isAdmin = isFounder || hasPermission(profile, 'admin.payments.review') || profile?.role === 'super_admin' || profile?.role === 'admin';
-  const { activeOrgId, isDefaultOrg } = useActiveOrganization();
+  const { activeOrgId, isDefaultOrg, activeOrg } = useActiveOrganization();
 
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
@@ -324,8 +324,9 @@ export default function AdminPaymentsScreen() {
     const rawAmt = Number(payment.amount || 0);
     const amt = rawAmt > 10000 ? rawAmt / 100 : rawAmt;
 
+    const orgPrefix = (activeOrg?.slug || 'CAMPUS').toUpperCase();
     const receiptData: FeeReceiptData = {
-      receiptId: `MSLB-${isDonation ? 'DON' : 'FEE'}-${payment.id.slice(-6).toUpperCase()}`,
+      receiptId: `${orgPrefix}-${isDonation ? 'DON' : 'FEE'}-${payment.id.slice(-6).toUpperCase()}`,
       studentName: payment.user_name || (isDonation ? 'محترم ڈونر' : 'طالبہ'),
       donorName: isDonation ? payment.user_name : undefined,
       studentId: payment.user_id,
@@ -337,6 +338,9 @@ export default function AdminPaymentsScreen() {
       transactionId: payment.provider_payment_id || payment.id,
       issueDateGregorian: formatDate(payment) || new Date().toLocaleDateString(),
       status: 'منظور شدہ (Approved & Verified)',
+      institutionName: activeOrg?.name || DEFAULT_ORGANIZATION_NAME,
+      institutionArabic: activeOrg?.name_arabic,
+      institutionSeal: orgPrefix,
     };
 
     await shareReceiptToWhatsApp(receiptData, parentPhone);
@@ -355,7 +359,7 @@ export default function AdminPaymentsScreen() {
     setBulkReminderLoading(true);
     try {
       const lines: string[] = [
-        '🕌 *Madrasatu-s-Salikat Lil Banat*',
+        `🕌 *${activeOrg?.name || 'Suffah Madrasa'}*`,
         '📋 *Fee Reminder — Pending Academic Fees*',
         `📅 Date: ${new Date().toLocaleDateString('en-IN')}`,
         '━━━━━━━━━━━━━━━━━━━━━━',
@@ -380,7 +384,7 @@ export default function AdminPaymentsScreen() {
       if (canOpen) {
         await Linking.openURL(waUrl);
       } else {
-        await Share.share({ message: fullText, title: 'Fee Reminder — MSLB' });
+        await Share.share({ message: fullText, title: `Fee Reminder — ${activeOrg?.name || 'Madrasa'}` });
       }
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Could not prepare reminder.');
@@ -429,6 +433,14 @@ export default function AdminPaymentsScreen() {
         <TouchableOpacity onPress={() => void loadPayments('reset')} disabled={fetching} style={{ padding: 8 }}>
           {fetching ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={20} color={COLORS.primary} />}
         </TouchableOpacity>
+      </View>
+
+      {/* CONFIDENTIAL ADMINISTRATIVE BADGE */}
+      <View style={styles.confidentialBanner}>
+        <Ionicons name="shield-checkmark" size={15} color="#065F46" />
+        <Text style={styles.confidentialBannerText}>
+          Institutional Financial Ledger • Confidential & restricted exclusively to authorized administrators of {activeOrg?.name || DEFAULT_ORGANIZATION_NAME}.
+        </Text>
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -685,8 +697,9 @@ export default function AdminPaymentsScreen() {
                     <TouchableOpacity
                       style={styles.receiptBtn}
                       onPress={() => {
+                        const orgPrefix = (activeOrg?.slug || 'CAMPUS').toUpperCase();
                         setSelectedReceipt({
-                          receiptId: `MSLB-${isDonation ? 'DON' : 'FEE'}-${item.id.slice(-6).toUpperCase()}`,
+                          receiptId: `${orgPrefix}-${isDonation ? 'DON' : 'FEE'}-${item.id.slice(-6).toUpperCase()}`,
                           studentName: item.user_name || (isDonation ? 'Donor' : 'Student'),
                           donorName: isDonation ? item.user_name : undefined,
                           studentId: item.user_id,
@@ -698,6 +711,9 @@ export default function AdminPaymentsScreen() {
                           transactionId: item.provider_payment_id || item.id,
                           issueDateGregorian: formatDate(item) || new Date().toLocaleDateString(),
                           status: isSucceeded ? 'Verified & Paid' : isRefunded ? 'Refunded' : 'Pending',
+                          institutionName: activeOrg?.name || DEFAULT_ORGANIZATION_NAME,
+                          institutionArabic: activeOrg?.name_arabic,
+                          institutionSeal: orgPrefix,
                         });
                         setReceiptModalVisible(true);
                       }}
@@ -781,6 +797,26 @@ const styles = StyleSheet.create({
   backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   topBarTitle: { fontSize: 17, fontWeight: '800', color: COLORS.textMain },
   topBarSub: { fontSize: 11, color: COLORS.textMuted },
+  confidentialBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: RADIUS.md,
+  },
+  confidentialBannerText: {
+    fontSize: 11,
+    color: '#065F46',
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 15,
+  },
   searchBarContainer: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface,
     marginHorizontal: 16, marginTop: 8, marginBottom: 4, paddingHorizontal: 12,

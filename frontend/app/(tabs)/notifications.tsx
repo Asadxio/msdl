@@ -152,7 +152,8 @@ export default function NotificationsScreen() {
       const next = Array.from(byId.values())
         .filter((item) => {
           if (Array.isArray(item.hidden_by) && item.hidden_by.includes(user.uid)) return false;
-          if (item.organization_id && item.organization_id !== userOrgId && !isSuper) return false;
+          const notifOrg = item.organization_id || 'mslb-main';
+          if (notifOrg !== userOrgId && !isSuper) return false;
           return true;
         })
         .sort((a, b) => Number(b.created_at?.toDate?.()?.getTime?.() || 0) - Number(a.created_at?.toDate?.()?.getTime?.() || 0))

@@ -102,7 +102,7 @@ export default function DataPrivacyScreen() {
       } catch (signOutErr) {
         console.warn('Sign out cleanup notice:', signOutErr);
       }
-      Alert.alert('Account Deleted', 'Your account has been permanently deleted from Madrasatu-s-Salikat Lil Banat.');
+      Alert.alert('Account Deleted', 'Your account has been permanently deleted from Suffah.');
       router.replace('/auth/login');
     } catch (err: any) {
       if (err?.code === 'auth/requires-recent-login') {

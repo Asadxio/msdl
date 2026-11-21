@@ -709,7 +709,7 @@ export default function ChatsScreen() {
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                       <Text style={styles.contactSubtitle}>
-                        {item.status === 'approved' || item.status === 'active' ? 'Active MSLB Member' : 'Member'}
+                        {item.status === 'approved' || item.status === 'active' ? 'Active Member' : 'Member'}
                       </Text>
                       {item.student_id ? (
                         <Text style={styles.contactStudentId}>• ID: {item.student_id}</Text>

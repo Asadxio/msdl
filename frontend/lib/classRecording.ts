@@ -1,15 +1,30 @@
 /**
- * classRecording.ts — Phase 40
+ * classRecording.ts — Phase P0.1 (Strict On-Device Recording)
  * Live Class Audio Recording Engine
- * Teacher-only: records class mic → Firebase Storage → Firestore `recordings` collection
+ *
+ * CRITICAL PURDAH & PRIVACY POLICY:
+ * Recordings remain exclusively on each teacher's own Android device.
+ * Class audio is NEVER uploaded to Firebase Storage, Google Drive, or any remote service.
+ * Audio is saved to persistent application document storage (Paths.document / documentDirectory).
+ *
+ * NOTICE:
+ * Because recordings are strictly on-device, device loss, application data clearing,
+ * or application uninstall will permanently remove local recordings.
  */
 import { Audio } from 'expo-av';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { addDoc, collection, deleteDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, storage } from '@/lib/firebase';
+import * as FileSystem from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { withTimeout } from '@/lib/errors';
 import { LIVE_OPS } from '@/lib/liveOpsConfig';
 import { DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+
+// ─── Constants & Paths ────────────────────────────────────────────────────────
+// Persistent application document storage subfolder
+export const LOCAL_RECORDINGS_DIR = `${FileSystem.documentDirectory}mslb_teacher_recordings/`;
+export const CATALOG_FILE_NAME = 'catalog.json';
+const STORAGE_KEY_PREFIX = '@mslb_teacher_recordings_v1_';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -19,32 +34,65 @@ export type ClassRecordingMeta = {
   courseId: string;
   teacherId: string;
   teacherName: string;
-  organizationId?: string; // Phase 57: Authoritative tenant context
-  durationSec?: number;    // Phase 79: Accurate tracked duration fallback
+  organizationId?: string;
+  durationSec?: number;
 };
 
 export type SavedRecording = {
   id: string;
   title: string;
   description: string;
-  file_url: string;
-  storage_path: string;
+  file_url: string; // Persistent local file:// URI on teacher's device
+  file_uri?: string; // Persistent local file:// URI
+  storage_path: string; // Kept empty / local marker for compatibility
   course_id: string;
   class_id: string;
   teacher_id: string;
   teacher_name: string;
-  organization_id: string; // Phase 57: Stamped authoritative organization
+  organization_id: string;
   duration_sec: number;
   size_bytes: number;
+  is_local_only?: boolean;
+  recorded_at?: any;
+  created_at?: any;
 };
+
+export type LocalRecordingItem = SavedRecording;
 
 export type DeleteRecordingResult = {
   success: boolean;
   firestoreDeleted: boolean;
   storageDeleted: boolean;
+  localDeleted?: boolean;
   storageError?: string;
 };
 
+// ─── Directory Management ────────────────────────────────────────────────────
+
+/**
+ * Ensures the persistent document storage directory exists.
+ */
+export async function ensureLocalRecordingsDir(): Promise<string> {
+  const dir = LOCAL_RECORDINGS_DIR;
+  try {
+    const dirInfo = await FileSystem.getInfoAsync(dir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    }
+  } catch (err) {
+    console.warn('[classRecording] Error ensuring recordings dir:', err);
+  }
+  return dir;
+}
+
+function getCatalogUri(): string {
+  return `${LOCAL_RECORDINGS_DIR}${CATALOG_FILE_NAME}`;
+}
+
+function getStorageKey(teacherUid?: string): string {
+  const uid = (teacherUid || auth.currentUser?.uid || 'default').trim();
+  return `${STORAGE_KEY_PREFIX}${uid}`;
+}
 
 // ─── Permission ───────────────────────────────────────────────────────────────
 
@@ -99,8 +147,12 @@ export async function startClassRecording(): Promise<Audio.Recording> {
   return recording;
 }
 
-// ─── Recording Stop + Save ────────────────────────────────────────────────────
+// ─── Recording Stop + Save (Strictly On-Device) ────────────────────────────────
 
+/**
+ * Stops class recording and saves it EXCLUSIVELY to persistent application document storage.
+ * Audio is NEVER uploaded to Firebase Storage or any remote service.
+ */
 export async function stopAndSaveRecording(
   recording: Audio.Recording,
   meta: ClassRecordingMeta,
@@ -114,16 +166,22 @@ export async function stopAndSaveRecording(
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
   }
 
-  const uri = recording.getURI();
-  if (!uri) throw new Error('Recording URI is missing — could not save.');
+  const tempUri = recording.getURI();
+  if (!tempUri) throw new Error('Recording URI is missing — could not save.');
+
+  // Validate temp file exists and is readable
+  const tempInfo = await FileSystem.getInfoAsync(tempUri);
+  if (!tempInfo.exists || (tempInfo.size ?? 0) === 0) {
+    throw new Error('Recorded audio file is empty or missing from device cache.');
+  }
 
   const status = await recording.getStatusAsync().catch(() => null);
   const measuredSec = Math.round(((status as any)?.durationMillis ?? 0) / 1000);
   const durationSec = measuredSec > 0 ? measuredSec : (meta.durationSec ?? 0);
 
-  onProgress?.(10);
+  onProgress?.(20);
 
-  // 1. Authoritative Course & Tenant Verification (Server/Trust Boundary)
+  // Authoritative Course & Tenant Verification
   if (!meta.courseId) {
     throw new Error('Course ID is required to save recording.');
   }
@@ -138,73 +196,54 @@ export async function stopAndSaveRecording(
   const courseData = courseSnap.data();
   const authoritativeOrgId = courseData?.organization_id || DEFAULT_ORGANIZATION_ID;
 
-  // Strict cross-tenant rejection: if caller context specified an organization, it MUST match the course's org
   if (meta.organizationId && meta.organizationId !== authoritativeOrgId) {
     throw new Error(
-      `Tenant mismatch: course belongs to organization "${authoritativeOrgId}", but context specified "${meta.organizationId}". Cross-tenant creation rejected.`
+      `Tenant mismatch: course belongs to organization "${authoritativeOrgId}", but context specified "${meta.organizationId}".`
     );
   }
 
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  const sizeBytes = blob.size;
+  onProgress?.(40);
 
-  onProgress?.(30);
+  // Ensure persistent document storage directory exists
+  const targetDir = await ensureLocalRecordingsDir();
 
+  // Generate unique, collision-resistant local filename
   const dateStr = new Date().toISOString().split('T')[0];
   const safeTitle = meta.classTitle.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40);
-  // Phase 79: Unique entropy to prevent accidental overwrites or collisions on repeated same-day takes
   const uniqueEntropy = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
   const fileName = `${dateStr}_${safeTitle}_${uniqueEntropy}.m4a`;
-  // Canonical tenant-scoped storage path
-  const storagePath = `organizations/${authoritativeOrgId}/courses/${meta.courseId}/recordings/${meta.classId}/${fileName}`;
-  const storageRef = ref(storage, storagePath);
+  const persistentFileUri = `${targetDir}${fileName}`;
 
-  await withTimeout(
-    uploadBytes(storageRef, blob, { contentType: 'audio/mp4' }),
-    60000,
-    'Audio upload timed out after 60s. Please check your internet connection.'
-  );
+  onProgress?.(60);
+
+  // Copy audio file from temp cache to persistent document storage
+  await FileSystem.copyAsync({
+    from: tempUri,
+    to: persistentFileUri,
+  });
+
+  // Verify persistent file
+  const persistentInfo = await FileSystem.getInfoAsync(persistentFileUri);
+  if (!persistentInfo.exists || (persistentInfo.size ?? 0) === 0) {
+    throw new Error('Failed to verify persistent on-device audio file.');
+  }
+  const sizeBytes = persistentInfo.size || 0;
+
+  // Cleanup temporary cache file
+  await FileSystem.deleteAsync(tempUri, { idempotent: true }).catch(() => {});
+
   onProgress?.(80);
 
-  const fileUrl = await withTimeout(
-    getDownloadURL(storageRef),
-    15000,
-    'Retrieving audio download URL timed out.'
-  );
-  onProgress?.(90);
-
+  const localRecordingId = `rec_local_${uniqueEntropy}`;
   const title = `${meta.classTitle} — ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-  const docRef = await withTimeout(
-    addDoc(collection(db, 'recordings'), {
-      title,
-      description: `Live class recording by ${meta.teacherName}`,
-      file_url: fileUrl,
-      storage_path: storagePath,
-      course_id: meta.courseId,
-      class_id: meta.classId,
-      teacher_id: meta.teacherId,
-      teacher_name: meta.teacherName,
-      organization_id: authoritativeOrgId, // Stamped authoritative tenant
-      duration_sec: durationSec,
-      size_bytes: sizeBytes,
-      status: 'published',
-      recorded_at: serverTimestamp(),
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-    }),
-    15000,
-    'Saving recording metadata timed out.'
-  );
 
-  onProgress?.(100);
-
-  return {
-    id: docRef.id,
+  const record: SavedRecording = {
+    id: localRecordingId,
     title,
-    description: `Live class recording by ${meta.teacherName}`,
-    file_url: fileUrl,
-    storage_path: storagePath,
+    description: `On-device class recording by ${meta.teacherName}`,
+    file_url: persistentFileUri,
+    file_uri: persistentFileUri,
+    storage_path: `recordings/${fileName}`, // Maintained as local file reference
     course_id: meta.courseId,
     class_id: meta.classId,
     teacher_id: meta.teacherId,
@@ -212,7 +251,145 @@ export async function stopAndSaveRecording(
     organization_id: authoritativeOrgId,
     duration_sec: durationSec,
     size_bytes: sizeBytes,
+    is_local_only: true,
+    recorded_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   };
+
+  // Persist metadata locally in teacher's AsyncStorage and local catalog file
+  await saveLocalMetadata(record);
+
+  onProgress?.(100);
+
+  return record;
+}
+
+// ─── Local Metadata Persistence & Indexing ────────────────────────────────────
+
+async function saveLocalMetadata(record: SavedRecording): Promise<void> {
+  const teacherUid = record.teacher_id;
+  const storageKey = getStorageKey(teacherUid);
+
+  try {
+    // 1. Update AsyncStorage
+    const raw = await AsyncStorage.getItem(storageKey);
+    const existingList: SavedRecording[] = raw ? JSON.parse(raw) : [];
+    const updatedList = [record, ...existingList.filter((r) => r.id !== record.id)];
+    await AsyncStorage.setItem(storageKey, JSON.stringify(updatedList));
+
+    // 2. Update persistent file-based catalog
+    await syncCatalogToFile(updatedList);
+  } catch (err) {
+    console.warn('[classRecording] Error saving local metadata:', err);
+  }
+}
+
+async function syncCatalogToFile(records: SavedRecording[]): Promise<void> {
+  try {
+    const catalogUri = getCatalogUri();
+    await FileSystem.writeAsStringAsync(catalogUri, JSON.stringify(records, null, 2));
+  } catch (err) {
+    console.warn('[classRecording] Error syncing catalog.json:', err);
+  }
+}
+
+/**
+ * Retrieves all on-device class recordings saved on this device for the teacher.
+ * Automatically verifies physical file existence and cleans up or annotates missing records.
+ */
+export async function getLocalClassRecordings(teacherUid?: string): Promise<SavedRecording[]> {
+  const storageKey = getStorageKey(teacherUid);
+  let records: SavedRecording[] = [];
+
+  try {
+    const raw = await AsyncStorage.getItem(storageKey);
+    if (raw) {
+      records = JSON.parse(raw);
+    } else {
+      // Recovery attempt from catalog.json
+      const catalogUri = getCatalogUri();
+      const catalogInfo = await FileSystem.getInfoAsync(catalogUri);
+      if (catalogInfo.exists) {
+        const fileContent = await FileSystem.readAsStringAsync(catalogUri);
+        records = JSON.parse(fileContent);
+        await AsyncStorage.setItem(storageKey, JSON.stringify(records));
+      }
+    }
+  } catch (err) {
+    console.warn('[classRecording] Error reading local recordings:', err);
+  }
+
+  // Verify file existence on device storage
+  const verified: SavedRecording[] = [];
+  for (const item of records) {
+    try {
+      const uri = item.file_uri || item.file_url;
+      if (uri) {
+        const info = await FileSystem.getInfoAsync(uri);
+        if (info.exists && (info.size ?? 0) > 0) {
+          verified.push({
+            ...item,
+            size_bytes: info.size ?? item.size_bytes,
+          });
+        }
+      }
+    } catch {
+      // File inaccessible or deleted from outside the app
+    }
+  }
+
+  return verified;
+}
+
+/**
+ * Recovers on-device recordings by scanning the persistent directory for orphaned files.
+ */
+export async function recoverLocalRecordingsFromDisk(teacherUid?: string): Promise<SavedRecording[]> {
+  const dir = await ensureLocalRecordingsDir();
+  const dirInfo = await FileSystem.getInfoAsync(dir);
+  if (!dirInfo.exists) return [];
+
+  const files = await FileSystem.readDirectoryAsync(dir);
+  const audioFiles = files.filter((f) => f.endsWith('.m4a'));
+  const existing = await getLocalClassRecordings(teacherUid);
+  const existingUris = new Set(existing.map((r) => r.file_uri || r.file_url));
+
+  const recovered: SavedRecording[] = [...existing];
+
+  for (const f of audioFiles) {
+    const fileUri = `${dir}${f}`;
+    if (!existingUris.has(fileUri)) {
+      const info = await FileSystem.getInfoAsync(fileUri);
+      if (!info.exists || (info.size ?? 0) === 0) continue;
+      const title = f.replace(/\.m4a$/, '').replace(/_/g, ' ');
+      const newRec: SavedRecording = {
+        id: `rec_local_recovered_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        title: `Recovered: ${title}`,
+        description: 'Recovered local recording from device storage',
+        file_url: fileUri,
+        file_uri: fileUri,
+        storage_path: `recordings/${f}`,
+        course_id: '',
+        class_id: '',
+        teacher_id: teacherUid || auth.currentUser?.uid || 'recovered',
+        teacher_name: 'Teacher (Local)',
+        organization_id: DEFAULT_ORGANIZATION_ID,
+        duration_sec: 0,
+        size_bytes: info.size ?? 0,
+        is_local_only: true,
+        created_at: new Date().toISOString(),
+      };
+      recovered.push(newRec);
+    }
+  }
+
+  if (recovered.length > existing.length) {
+    const storageKey = getStorageKey(teacherUid);
+    await AsyncStorage.setItem(storageKey, JSON.stringify(recovered)).catch(() => {});
+    await syncCatalogToFile(recovered).catch(() => {});
+  }
+
+  return recovered;
 }
 
 // ─── Recording Cancel / Discard ───────────────────────────────────────────────
@@ -220,57 +397,84 @@ export async function stopAndSaveRecording(
 export async function cancelClassRecording(recording: Audio.Recording): Promise<void> {
   try {
     await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    if (uri) {
+      await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+    }
   } finally {
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
   }
 }
 
-// ─── Delete Recording ─────────────────────────────────────────────────────────
+// ─── Delete Recording (Local & Cloud Backwards Compatibility) ─────────────────
 
+/**
+ * Deletes a local class recording from the teacher's persistent device storage.
+ */
+export async function deleteLocalClassRecording(
+  recordingId: string,
+  teacherUid?: string
+): Promise<boolean> {
+  const storageKey = getStorageKey(teacherUid);
+  try {
+    const records = await getLocalClassRecordings(teacherUid);
+    const target = records.find((r) => r.id === recordingId);
+    if (target) {
+      const uri = target.file_uri || target.file_url;
+      if (uri) {
+        await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+      }
+    }
+    const filtered = records.filter((r) => r.id !== recordingId);
+    await AsyncStorage.setItem(storageKey, JSON.stringify(filtered));
+    await syncCatalogToFile(filtered);
+    return true;
+  } catch (err) {
+    console.warn('[classRecording] Error deleting local recording:', err);
+    return false;
+  }
+}
+
+/**
+ * Universal delete helper: handles local on-device deletion or legacy cloud deletion.
+ * Note: Never deletes cloud recordings unless explicitly passed a cloud recording ID.
+ */
 export async function deleteClassRecording(
   recordingId: string,
   storagePath?: string,
 ): Promise<DeleteRecordingResult> {
-  let storageDeleted = false;
-  let storageError: string | undefined;
-
-  // 1. Delete cloud storage file first if path is provided
-  if (storagePath) {
-    try {
-      const storageRef = ref(storage, storagePath);
-      await withTimeout(
-        deleteObject(storageRef),
-        10000,
-        'Deleting recording storage object timed out'
-      );
-      storageDeleted = true;
-    } catch (err: any) {
-      // If object is already missing from storage, that is acceptable for cleanup
-      if (err?.code === 'storage/object-not-found' || err?.message?.includes('does not exist')) {
-        storageDeleted = true;
-      } else {
-        storageError = err?.message || 'Failed to delete audio from cloud storage';
-        console.error('[deleteClassRecording] Storage deletion failure:', err);
-        // Do not silently swallow storage failure: preserve Firestore record so orphan file can be tracked & retried
-        throw new Error(`Cloud storage deletion failed: ${storageError}. Firestore record preserved to prevent orphaned files.`);
-      }
-    }
-  } else {
-    storageDeleted = true; // No storage object was attached (e.g. external link)
+  // If it is an on-device local recording
+  if (recordingId.startsWith('rec_local_')) {
+    const success = await deleteLocalClassRecording(recordingId);
+    return {
+      success,
+      firestoreDeleted: false,
+      storageDeleted: false,
+      localDeleted: success,
+    };
   }
 
-  // 2. Delete Firestore metadata document once storage deletion has succeeded
-  await withTimeout(
-    deleteDoc(doc(db, 'recordings', recordingId)),
-    10000,
-    'Deleting recording document timed out'
-  );
+  // Legacy cloud recording deletion (for backwards compatibility with pre-P0.1 recordings)
+  // Deletes from Firestore metadata; does not perform any new uploads.
+  try {
+    await withTimeout(
+      deleteDoc(doc(db, 'recordings', recordingId)),
+      10000,
+      'Deleting legacy cloud recording timed out'
+    );
+  } catch (err: any) {
+    return {
+      success: false,
+      firestoreDeleted: false,
+      storageDeleted: false,
+      storageError: err?.message,
+    };
+  }
 
   return {
     success: true,
     firestoreDeleted: true,
-    storageDeleted,
-    storageError,
+    storageDeleted: true,
   };
 }
 

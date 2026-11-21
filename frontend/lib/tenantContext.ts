@@ -11,10 +11,19 @@ export interface Organization {
   id: string;
   name: string;
   slug: string;
+  name_arabic?: string;
   tagline?: string;
+  about_madrasa?: string;
   logo_url?: string;
   phone?: string;
   email?: string;
+  website?: string;
+  whatsapp_channel?: string;
+  whatsapp_contact?: string;
+  instagram?: string;
+  youtube_link?: string;
+  telegram_link?: string;
+  donation_url?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -32,6 +41,13 @@ export interface Organization {
   teacher_limit?: number;
   primary_color?: string;
   secondary_color?: string;
+  upi_id?: string;
+  upi_name?: string;
+  bank_name?: string;
+  account_number?: string;
+  ifsc_code?: string;
+  account_holder?: string;
+  fee_instructions?: string;
   setup_checklist_dismissed?: boolean;
   is_demo?: boolean;
   created_at?: any;
@@ -131,9 +147,12 @@ export async function ensureDefaultOrganization(): Promise<Organization> {
   const defaultOrg: Organization = {
     id: DEFAULT_ORGANIZATION_ID,
     name: DEFAULT_ORGANIZATION_NAME,
+    name_arabic: 'مدرسۃ السالکات للبنات',
     slug: 'mslb',
     phone: '+91-9999999999',
     email: 'sumraftm@gmail.com',
+    website: 'https://suffah.nooreharam.com/',
+    whatsapp_contact: 'https://wa.link/mrtyi1',
     status: 'active',
     plan_id: 'enterprise',
     subscription_status: 'active',

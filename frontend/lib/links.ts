@@ -46,8 +46,10 @@ export function prepareExternalUrl(raw: string): string | null {
 }
 
 export const WHATSAPP_HELP_URL = 'https://wa.link/mrtyi1';
-export const MADRASA_WEBSITE_URL = 'https://asadxio.github.io/madrasa-website/';
-export const MADRASA_WEBSITE_DISPLAY = 'asadxio.github.io/madrasa-website';
+export const SUFFAH_CUSTOM_DOMAIN = 'suffah.nooreharam.com';
+export const MADRASA_WEBSITE_URL = 'https://suffah.nooreharam.com/';
+export const MADRASA_WEBSITE_DISPLAY = 'suffah.nooreharam.com';
+export const SUFFAH_HOSTING_FALLBACK_URL = 'https://madrasa-app-50d6c.web.app/';
 
 export function normalizeWhatsAppUrl(raw: string): string | null {
   const value = String(raw || '').trim();

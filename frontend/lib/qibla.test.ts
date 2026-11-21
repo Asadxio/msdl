@@ -47,12 +47,9 @@ describe('qibla calculations', () => {
 
     expect(QIBLA_LOCATION_CACHE_KEY).toBe('qibla_location_cache_v1');
     expect(moreScreen).toContain("route: '/qibla'");
-    expect(moreScreen).toContain('Camera Qibla & Compass Direction');
     expect(qiblaScreen).toContain('Magnetometer.addListener');
-    expect(qiblaScreen).toContain('CameraView');
+    expect(qiblaScreen).not.toContain('CameraView'); // Strict Purdah & modesty compliance: zero camera
     expect(qiblaScreen).toContain('GOOGLE_QIBLA_FINDER_URL');
-    expect(qiblaScreen).toContain("params.mode === 'camera' || params.mode === 'google'");
-    expect(qiblaScreen).toContain("params.mode === 'native-camera'");
     expect(qiblaScreen).toContain('https://qiblafinder.withgoogle.com/');
     expect(qiblaScreen).toContain('QIBLA_LOCATION_CACHE_KEY');
     expect(qiblaScreen).toContain('WebView');

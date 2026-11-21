@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { useActiveOrganization } from '@/lib/tenantContext';
 import type { QuizCertificateData } from '@/lib/quizCertificate';
 import {
   CERTIFICATE_THEMES,
@@ -37,6 +38,7 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
   onClose,
 }) => {
   const router = useRouter();
+  const { activeOrg } = useActiveOrganization();
   const [selectedTheme, setSelectedTheme] = useState<CertificateThemeKey>('emerald');
   const [sharing, setSharing] = useState(false);
   const [sharingImage, setSharingImage] = useState(false);
@@ -89,7 +91,7 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
               </View>
               <View>
                 <Text style={styles.topBarTitle}>Official Islamic Sanad</Text>
-                <Text style={styles.topBarSub}>Madrasatu-s-Salikat Lil Banat</Text>
+                <Text style={styles.topBarSub}>{activeOrg?.name || 'Suffah Digital Sanad'}</Text>
               </View>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -144,17 +146,17 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
 
                 {/* Official Madrasa Logo */}
                 <Image
-                  source={require('@/assets/images/mslb_logo.png')}
+                  source={activeOrg?.logo_url ? { uri: activeOrg.logo_url } : require('@/assets/images/mslb_logo.png')}
                   style={styles.logoImage}
                   resizeMode="contain"
                 />
 
                 {/* Madrasa Titles */}
                 <Text style={[styles.madrasaName, { color: currentTheme.primaryColor }]}>
-                  MADRASATU-S-SALIKAT LIL BANAT
+                  {activeOrg?.name ? activeOrg.name.toUpperCase() : 'SUFFAH DIGITAL MADRASA'}
                 </Text>
                 <Text style={[styles.madrasaArabic, { color: currentTheme.secondaryColor }]}>
-                  مدرسۃ السالکات للبنات
+                  {activeOrg?.name_arabic || (activeOrg?.slug === 'mslb' || !activeOrg ? 'مدرسۃ السالکات للبنات' : activeOrg.name)}
                 </Text>
 
                 {/* Certificate Ribbon */}
@@ -205,7 +207,7 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
                   {/* Official Seal Badge & QR Code */}
                   <View style={styles.sealBox}>
                     <View style={[styles.sealCircle, { borderColor: currentTheme.secondaryColor }]}>
-                      <Text style={[styles.sealStar, { color: currentTheme.secondaryColor }]}>★ MSLB ★</Text>
+                      <Text style={[styles.sealStar, { color: currentTheme.secondaryColor }]}>★ {activeOrg?.slug ? activeOrg.slug.toUpperCase() : 'OFFICIAL'} ★</Text>
                       <Text style={[styles.sealText, { color: currentTheme.secondaryColor }]}>OFFICIAL</Text>
                       <Text style={[styles.sealSubText, { color: currentTheme.secondaryColor }]}>SEAL</Text>
                     </View>
@@ -220,7 +222,7 @@ export const IslamicCertificateModal: React.FC<IslamicCertificateModalProps> = (
                   <View style={styles.footerRight}>
                     <View style={styles.signLine} />
                     <Text style={[styles.signTitle, { color: currentTheme.primaryColor }]}>Academic Directorate</Text>
-                    <Text style={styles.signSub}>MSLB Lil Banat</Text>
+                    <Text style={styles.signSub}>{activeOrg?.name || 'Academic Board'}</Text>
                   </View>
                 </View>
               </View>

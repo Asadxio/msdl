@@ -13,12 +13,15 @@ import { loadPrayerSettings, PrayerSettings, subscribeToPrayerSettings } from '@
 import { scheduleOfflinePrayerAlarms } from '@/lib/prayerAlarmService';
 import { DAILY_WISDOM, MASNOON_DUAS, HADITHS, MOTIVATIONAL_QUOTES } from '@/constants/wisdomData';
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
+import { useActiveOrganization } from '@/lib/tenantContext';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
 import { MADRASA_WEBSITE_URL } from '@/lib/links';
 import { useLanguage } from '@/context/LanguageContext';
 import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
 import { StudentLearningCard } from '@/components/dashboard/StudentLearningCard';
 import { PremiumWelcomeCard } from '@/components/dashboard/PremiumWelcomeCard';
+import { StudentFeeDueCard } from '@/components/dashboard/StudentFeeDueCard';
+import { StudentTodayHeroCard } from '@/components/dashboard/StudentTodayHeroCard';
 import { DailyWisdomCard } from '@/components/dashboard/DailyWisdomCard';
 import { SpiritualMomentsRow } from '@/components/dashboard/SpiritualMomentsRow';
 import { PrayerTimesHeroCard } from '@/components/dashboard/PrayerTimesHeroCard';
@@ -47,6 +50,7 @@ function formatTime(date: Date) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { activeOrg } = useActiveOrganization();
   const { profile, user } = useAuth();
   const { 
     courses,
@@ -390,7 +394,7 @@ export default function HomeScreen() {
             {/* Institutional Tagline */}
             <View style={styles.taglineRow}>
               <View style={styles.goldLine} />
-              <Text style={styles.tagline}>MADRASATU-S-SALIKAT LIL BANAT</Text>
+              <Text style={styles.tagline}>{activeOrg?.name ? activeOrg.name.toUpperCase() : 'SUFFAH DIGITAL MADRASA'}</Text>
               <View style={styles.goldLine} />
             </View>
           </View>
@@ -401,6 +405,20 @@ export default function HomeScreen() {
           <PremiumWelcomeCard
             profile={profile}
             onExplore={() => router.push('/(tabs)/courses')}
+          />
+        )}
+
+        {/* Section 1.6: Daily Sabaq & Active Live Dars Hero Card (Ghalati 4 Fix) */}
+        {(!profile?.role || profile?.role === 'student') && (
+          <StudentTodayHeroCard />
+        )}
+
+        {/* Section 1.75: Student Monthly Fee Due Badge / Payment Card */}
+        {(!profile?.role || profile?.role === 'student') && (
+          <StudentFeeDueCard
+            organizationId={activeOrg?.id}
+            organizationName={activeOrg?.name}
+            monthlyFee={(activeOrg as any)?.monthly_fee || 500}
           />
         )}
 
@@ -589,7 +607,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <Text style={styles.ornamentText}>❁ ❖ ❁</Text>
           <Text style={styles.footerQuote}>&quot;{randomQuote.text}&quot;</Text>
-          <Text style={styles.footerInstitutionText}>Madrasa Tus Salikat Lil Banat • Nurturing Faith & Excellence</Text>
+          <Text style={styles.footerInstitutionText}>{(activeOrg?.name || 'Suffah Digital Madrasa')} • Nurturing Faith & Excellence</Text>
         </Animated.View>
 
       </ScrollView>

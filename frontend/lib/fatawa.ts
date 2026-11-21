@@ -14,6 +14,11 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { withTimeout } from '@/lib/errors';
+import {
+  DEFAULT_ORGANIZATION_ID,
+  DEFAULT_ORGANIZATION_NAME,
+  getActiveOrganizationIdSync,
+} from '@/lib/tenantContext';
 
 export type FatawaCategoryKey =
   | 'taharat'
@@ -80,6 +85,8 @@ export interface FatawaQuestion {
   id: string;
   student_id: string;
   student_name: string;
+  organization_id?: string;
+  institution_name?: string;
   category: FatawaCategoryKey;
   title: string;
   question: string;
@@ -97,6 +104,8 @@ export interface FatawaQuestion {
 export async function askFatawaQuestion(params: {
   userId: string;
   userName: string;
+  organizationId?: string;
+  institutionName?: string;
   category: FatawaCategoryKey;
   title: string;
   question: string;
@@ -111,6 +120,9 @@ export async function askFatawaQuestion(params: {
     throw new Error('Question must be at least 10 characters long.');
   }
 
+  const targetOrgId = params.organizationId || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID;
+  const targetOrgName = params.institutionName || DEFAULT_ORGANIZATION_NAME;
+
   const colRef = collection(db, 'fatawa_questions');
   const newDocRef = doc(colRef);
 
@@ -118,6 +130,8 @@ export async function askFatawaQuestion(params: {
     id: newDocRef.id,
     student_id: params.userId,
     student_name: params.userName || 'Taliba',
+    organization_id: targetOrgId,
+    institution_name: targetOrgName,
     category: params.category,
     title,
     question,
@@ -133,7 +147,7 @@ export async function askFatawaQuestion(params: {
     'Failed to submit fatwa question: server timed out.'
   );
 
-  // Notify teachers/Dar-ul-Ifta scholars about the new question
+  // Notify teachers/Dar-ul-Ifta scholars of this specific madrasa
   try {
     const notifRef = doc(collection(db, 'notifications'));
     const dedupeId = `fatwa_ask:${newDocRef.id}:${Date.now()}`;
@@ -141,13 +155,15 @@ export async function askFatawaQuestion(params: {
       setDoc(notifRef, {
         id: notifRef.id,
         user_id: 'role_targeted',
+        organization_id: targetOrgId,
+        institution_name: targetOrgName,
         target_roles: ['teacher'],
         recipient_id: 'all_teachers',
         actor_id: params.userId,
         category: 'fatawa_question_asked',
         channel: 'announcements',
         event: 'system_alert',
-        title: 'New Dar-ul-Iftaa Question',
+        title: `New Dar-ul-Iftaa Question (${targetOrgName})`,
         message: `A student has submitted a new question: "${title}"`,
         body: `A student has submitted a new question: "${title}"`,
         route: '/fatawa/manage',
@@ -168,7 +184,8 @@ export async function askFatawaQuestion(params: {
 
 export function subscribeToMyQuestions(
   userId: string,
-  callback: (questions: FatawaQuestion[]) => void
+  callback: (questions: FatawaQuestion[]) => void,
+  orgId?: string
 ): () => void {
   const q = query(
     collection(db, 'fatawa_questions'),
@@ -181,7 +198,12 @@ export function subscribeToMyQuestions(
     (snapshot) => {
       const list: FatawaQuestion[] = [];
       snapshot.forEach((docSnap) => {
-        list.push(docSnap.data() as FatawaQuestion);
+        const item = docSnap.data() as FatawaQuestion;
+        if (orgId && orgId !== 'all') {
+          const itemOrg = item.organization_id || DEFAULT_ORGANIZATION_ID;
+          if (itemOrg !== orgId) return;
+        }
+        list.push(item);
       });
       callback(list);
     },
@@ -194,22 +216,38 @@ export function subscribeToMyQuestions(
 
 export function subscribeToPublicFatawa(
   categoryFilter: FatawaCategoryKey | 'all',
-  callback: (questions: FatawaQuestion[]) => void
+  callback: (questions: FatawaQuestion[]) => void,
+  orgId?: string
 ): () => void {
-  const baseQuery = categoryFilter === 'all'
-    ? query(
-        collection(db, 'fatawa_questions'),
-        where('is_public', '==', true),
-        where('status', '==', 'answered'),
-        orderBy('answered_at', 'desc')
-      )
-    : query(
-        collection(db, 'fatawa_questions'),
-        where('is_public', '==', true),
-        where('status', '==', 'answered'),
-        where('category', '==', categoryFilter),
-        orderBy('answered_at', 'desc')
-      );
+  const targetOrg = orgId || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID;
+
+  const baseQuery = targetOrg === DEFAULT_ORGANIZATION_ID
+    ? (categoryFilter === 'all'
+        ? query(
+            collection(db, 'fatawa_questions'),
+            where('is_public', '==', true),
+            where('status', '==', 'answered')
+          )
+        : query(
+            collection(db, 'fatawa_questions'),
+            where('is_public', '==', true),
+            where('status', '==', 'answered'),
+            where('category', '==', categoryFilter)
+          ))
+    : (categoryFilter === 'all'
+        ? query(
+            collection(db, 'fatawa_questions'),
+            where('is_public', '==', true),
+            where('status', '==', 'answered'),
+            where('organization_id', '==', targetOrg)
+          )
+        : query(
+            collection(db, 'fatawa_questions'),
+            where('is_public', '==', true),
+            where('status', '==', 'answered'),
+            where('organization_id', '==', targetOrg),
+            where('category', '==', categoryFilter)
+          ));
 
   return onSnapshot(
     baseQuery,
@@ -217,10 +255,23 @@ export function subscribeToPublicFatawa(
       const list: FatawaQuestion[] = [];
       snapshot.forEach((docSnap) => {
         const item = docSnap.data() as FatawaQuestion;
+        if (targetOrg === DEFAULT_ORGANIZATION_ID) {
+          if (item.organization_id && item.organization_id !== DEFAULT_ORGANIZATION_ID) {
+            return;
+          }
+        }
         // Redact student name for privacy in public view
         item.student_name = 'Anonymous Student (Privacy Protected)';
         list.push(item);
       });
+
+      // Sort descending by answered_at or created_at
+      list.sort((a, b) => {
+        const tA = a.answered_at?.toMillis?.() ?? a.created_at?.toMillis?.() ?? 0;
+        const tB = b.answered_at?.toMillis?.() ?? b.created_at?.toMillis?.() ?? 0;
+        return tB - tA;
+      });
+
       callback(list);
     },
     (err) => {
@@ -234,23 +285,38 @@ export type TeacherFatawaFilter = 'all' | 'pending' | 'answered';
 
 export function subscribeToQuestionsForTeacher(
   options: {
+    orgId?: string;
     status?: TeacherFatawaFilter;
     category?: FatawaCategoryKey | 'all';
   },
   callback: (questions: FatawaQuestion[]) => void
 ): () => void {
-  // Query all questions ordered by creation descending so scholars have full visibility
-  const q = query(
-    collection(db, 'fatawa_questions'),
-    orderBy('created_at', 'desc')
-  );
+  const targetOrg = options.orgId || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID;
+
+  // Multi-tenant query: partition by madrasa
+  const q = targetOrg === DEFAULT_ORGANIZATION_ID
+    ? query(collection(db, 'fatawa_questions'))
+    : query(collection(db, 'fatawa_questions'), where('organization_id', '==', targetOrg));
 
   return onSnapshot(
     q,
     (snapshot) => {
       const all: FatawaQuestion[] = [];
       snapshot.forEach((docSnap) => {
-        all.push(docSnap.data() as FatawaQuestion);
+        const item = docSnap.data() as FatawaQuestion;
+        if (targetOrg === DEFAULT_ORGANIZATION_ID) {
+          if (item.organization_id && item.organization_id !== DEFAULT_ORGANIZATION_ID) {
+            return;
+          }
+        }
+        all.push(item);
+      });
+
+      // Sort by creation date descending in memory to avoid missing composite index crashes
+      all.sort((a, b) => {
+        const tA = a.created_at?.toMillis?.() ?? 0;
+        const tB = b.created_at?.toMillis?.() ?? 0;
+        return tB - tA;
       });
 
       const filtered = all.filter((item) => {
@@ -275,9 +341,10 @@ export function subscribeToQuestionsForTeacher(
 }
 
 export function subscribeToPendingQuestionsForTeacher(
-  callback: (questions: FatawaQuestion[]) => void
+  callback: (questions: FatawaQuestion[]) => void,
+  orgId?: string
 ): () => void {
-  return subscribeToQuestionsForTeacher({ status: 'pending' }, callback);
+  return subscribeToQuestionsForTeacher({ status: 'pending', orgId }, callback);
 }
 
 export async function answerFatawaQuestion(params: {
@@ -326,6 +393,7 @@ export async function answerFatawaQuestion(params: {
             id: notifRef.id,
             recipient_id: qData.student_id,
             user_id: qData.student_id,
+            organization_id: qData.organization_id || DEFAULT_ORGANIZATION_ID,
             actor_id: params.teacherUid,
             channel: 'announcements',
             event: 'system_alert',

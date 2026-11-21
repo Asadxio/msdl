@@ -36,9 +36,10 @@ const ACTION_CATEGORIES: ActionCategory[] = [
     title: 'Academic & Faculty',
     items: [
       { id: 'users', label: 'Approve Students', subLabel: 'Roster Review', icon: 'person-add-outline', route: ROUTES.admin.users, color: '#10B981' },
-      { id: 'teachers', label: 'Manage Faculty', subLabel: 'Teachers Roster', icon: 'people-outline', route: ROUTES.admin.academics, color: '#3B82F6' },
-      { id: 'courses', label: 'Manage Courses', subLabel: 'LMS Curriculum', icon: 'school-outline', route: ROUTES.admin.academics, color: '#8B5CF6' },
-      { id: 'library', label: 'Manage Library', subLabel: 'Publish Books', icon: 'book-outline', route: ROUTES.admin.addBook, color: '#06B6D4' },
+      { id: 'academics', label: 'Courses & Faculty', subLabel: 'LMS Curriculum & Teachers', icon: 'school-outline', route: ROUTES.admin.academics, color: '#8B5CF6' },
+      { id: 'quizzes', label: 'Quiz & Exams', subLabel: 'Questions & Evaluation', icon: 'list-outline', route: ROUTES.admin.manageQuizzes, color: '#F59E0B' },
+      { id: 'sabaq', label: 'Sabaq Diary', subLabel: 'Hifz & Dars Progress', icon: 'journal-outline', route: '/sabaq-diary' as Href, color: '#047857' },
+      { id: 'library', label: 'Madrasa Library', subLabel: 'Publish Textbooks', icon: 'book-outline', route: ROUTES.admin.addBook, color: '#06B6D4' },
       { id: 'attendance', label: 'Class Attendance', subLabel: 'Student Logs', icon: 'calendar-outline', route: ROUTES.attendance, color: '#6366F1' },
       { id: 'certificates', label: 'Sanads & Credentials', subLabel: 'Academic Certificates', icon: 'ribbon-outline', route: ROUTES.certificate, color: '#D97706' },
     ],
@@ -47,22 +48,22 @@ const ACTION_CATEGORIES: ActionCategory[] = [
     title: 'Operations & Broadcasting',
     items: [
       { id: 'live', label: 'Create Live Class', subLabel: 'Stream Host', icon: 'videocam-outline', route: ROUTES.liveClasses, color: '#EF4444' },
-      { id: 'recording', label: 'Upload Recording', subLabel: 'Lesson Video', icon: 'cloud-upload-outline', route: ROUTES.admin.academics, color: '#F59E0B' },
       { id: 'payments', label: 'Manage Payments', subLabel: 'Financial Audit', icon: 'card-outline', route: ROUTES.admin.payments, color: '#10B981' },
+      { id: 'org_settings', label: 'Madrasa Settings', subLabel: 'Branding, UPI & Bank', icon: 'settings-outline', route: ROUTES.admin.organizationSettings, color: '#059669' },
     ],
   },
   {
     title: 'Communication & Outreach',
     items: [
-      { id: 'notify', label: 'Send Broadcast', subLabel: 'Notice Board', icon: 'notifications-outline', route: ROUTES.admin.sendPush, color: '#EC4899' },
-      { id: 'push', label: 'Push Notifications', subLabel: 'FCM Alerts', icon: 'megaphone-outline', route: ROUTES.admin.sendPush, color: '#8B5CF6' },
+      { id: 'broadcast', label: 'Broadcast & Push', subLabel: 'Student & Faculty Alerts', icon: 'megaphone-outline', route: ROUTES.admin.sendPush, color: '#EC4899' },
+      { id: 'fatawa', label: 'Dar-ul-Iftaa', subLabel: 'Questions & Islamic Q&A', icon: 'shield-checkmark-outline', route: ROUTES.tools.fatawaManage, color: '#D97706' },
     ],
   },
   {
     title: 'Governance & Security',
     items: [
       { id: 'analytics', label: 'Analytics Dashboard', subLabel: 'LMS Telemetry', icon: 'bar-chart-outline', route: ROUTES.admin.analytics, color: '#3B82F6' },
-      { id: 'moderation', label: 'Moderation Queue', subLabel: 'Community Review', icon: 'shield-checkmark-outline', route: ROUTES.admin.moderation, color: '#F97316' },
+      { id: 'moderation', label: 'Moderation Queue', subLabel: 'Community Review', icon: 'flag-outline', route: ROUTES.admin.moderation, color: '#F97316' },
       { id: 'security', label: 'Security Diagnostics', subLabel: 'System Audit', icon: 'lock-closed-outline', route: ROUTES.admin.security, color: '#EF4444' },
       { id: 'privacy', label: 'Privacy & GDPR', subLabel: 'Data Inquiries', icon: 'document-lock-outline', route: ROUTES.admin.privacyRequests, color: '#64748B' },
     ],

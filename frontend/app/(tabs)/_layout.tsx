@@ -37,7 +37,9 @@ type TabIconName =
   | 'stats-chart'
   | 'stats-chart-outline'
   | 'ribbon'
-  | 'ribbon-outline';
+  | 'ribbon-outline'
+  | 'radio'
+  | 'radio-outline';
 
 function TabIcon({ name, color, focused }: { name: TabIconName; color: string; focused: boolean }) {
   return (
@@ -93,7 +95,13 @@ export default function TabLayout() {
           if (change.type === 'removed') notificationCounts.delete(change.doc.id);
           else {
             const data = change.doc.data() as any;
-            notificationCounts.set(change.doc.id, !data.read?.[user.uid]);
+            const notifOrg = data.organization_id || 'mslb-main';
+            const userOrg = profile?.organization_id || 'mslb-main';
+            if (notifOrg === userOrg || profile?.role === 'super_admin') {
+              notificationCounts.set(change.doc.id, !data.read?.[user.uid]);
+            } else {
+              notificationCounts.delete(change.doc.id);
+            }
           }
         });
         recomputeNotifications();
@@ -166,14 +174,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="notifications"
+        name="live-class"
         options={{
-          title: t('tabs.notifications', 'Notifications'),
-          tabBarBadge: unreadNotifications > 0 ? (unreadNotifications > 99 ? '99+' : unreadNotifications) : undefined,
-          tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'notifications' : 'notifications-outline'} color={color} focused={focused} />,
+          title: 'Live Dars',
+          tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'radio' : 'radio-outline'} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen name="about" options={{ title: t('tabs.profile', 'Profile'), tabBarIcon: ({ color, focused }) => <TabIcon name={focused ? 'person' : 'person-outline'} color={color} focused={focused} /> }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="teachers" options={{ href: null }} />
       <Tabs.Screen name="library" options={{ href: null }} />
       <Tabs.Screen name="quiz" options={{ href: null }} />

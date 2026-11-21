@@ -7,6 +7,7 @@ import { COLORS } from '@/constants/theme';
 import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { ForceUpdateModal } from '@/components/ForceUpdateModal';
 import { AppLockModal } from '@/components/AppLockModal';
+import { LiveClassFloatingBanner } from '@/components/LiveClassFloatingBanner';
 import { fetchRemoteVersionConfig, evaluateVersionRequirements, type VersionStatus } from '@/lib/versionCheck';
 import {
   isAppLockEnabled,
@@ -524,7 +525,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       );
       void Notifications.scheduleNotificationAsync({
         content: {
-          title: String(docData.title || 'Madrasatu-s-Salikat Notice'),
+          title: String(docData.title || 'Suffah Notice'),
           body: String((docData.message as string | undefined) || (docData.body as string | undefined) || ''),
           sound: 'default',
           priority: Notifications.AndroidNotificationPriority.MAX,
@@ -649,6 +650,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         <ForceUpdateModal status={versionStatus} onRefresh={checkVersion} />
         <AppLockModal visible={isAppLocked} onUnlock={() => setIsAppLocked(false)} />
         {children}
+        <LiveClassFloatingBanner />
         {showLoader ? (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: COLORS.background }]}>
             <FullScreenLoader label={splashHidden ? 'Loading account…' : 'Starting app…'} />
@@ -733,6 +735,8 @@ export default function RootLayout() {
               <Stack.Screen name="admin/send-push" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="onboarding-entry" options={{ animation: 'fade' }} />
               <Stack.Screen name="onboarding-first-time" options={{ animation: 'fade' }} />
+              <Stack.Screen name="select-madrasa" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="register-madrasa" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="auth/login" options={{ animation: 'fade' }} />
               <Stack.Screen name="auth/signup" options={{ animation: 'fade' }} />
               <Stack.Screen name="auth/pending" options={{ animation: 'fade' }} />

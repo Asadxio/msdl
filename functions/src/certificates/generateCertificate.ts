@@ -16,6 +16,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
 import { collections } from "../shared/firestore";
+import { db } from "../config/admin";
 import PDFDocument from 'pdfkit';
 
 export const generateCertificate = onCall(
@@ -70,6 +71,29 @@ export const generateCertificate = onCall(
     }
     const courseData = courseSnap.data()!;
     const courseTitle = courseData.name || courseId;
+    const orgId = (courseData.organization_id || 'mslb-main').trim();
+
+    // Cross-tenant protection: verify enrollment belongs to course organization
+    if (enrollmentData.organization_id && enrollmentData.organization_id !== orgId) {
+      throw new HttpsError('permission-denied', 'Cross-tenant enrollment certificate generation rejected');
+    }
+
+    let institutionName = 'Suffah Madrasa';
+    try {
+      const orgSnap = await db.collection('organizations').doc(orgId).get();
+      if (orgSnap.exists) {
+        const oData = orgSnap.data();
+        if (oData?.status === 'suspended' || oData?.status === 'archived') {
+          throw new HttpsError('permission-denied', `Cannot generate certificates for ${oData.status} institution.`);
+        }
+        if (oData?.name) {
+          institutionName = oData.name;
+        }
+      }
+    } catch (orgErr: any) {
+      if (orgErr instanceof HttpsError) throw orgErr;
+      logger.warn(`[generateCertificate] Could not load organization "${orgId}", falling back to default name:`, orgErr);
+    }
 
     // 7. Student name load
     const userSnap = await collections.users().doc(uid).get();
@@ -84,7 +108,7 @@ export const generateCertificate = onCall(
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
       
-      doc.fontSize(28).text('Madrasa-tus-Salikat Lil Banat', { align: 'center' });
+      doc.fontSize(28).text(institutionName, { align: 'center' });
       doc.moveDown();
       doc.fontSize(20).text('Certificate of Completion', { align: 'center' });
       doc.moveDown(2);
@@ -103,7 +127,7 @@ export const generateCertificate = onCall(
     });
 
     // 9. Firebase Storage write
-    const storagePath = `certificates/${uid}/${certificateId}.pdf`;
+    const storagePath = `organizations/${orgId}/certificates/${uid}/${certificateId}.pdf`;
     const bucket = getStorage().bucket();
     const file = bucket.file(storagePath);
     await file.save(pdfBuffer, {
@@ -118,6 +142,8 @@ export const generateCertificate = onCall(
       user_id: uid,
       courseId,
       course_id: courseId,
+      organization_id: orgId,
+      institution_name: institutionName,
       certificateId,
       user_name: studentName,
       studentName,
@@ -132,7 +158,7 @@ export const generateCertificate = onCall(
       created_at: issuedAt,
     });
 
-    logger.info(`[generateCertificate] Certificate generated for uid=${uid} courseId=${courseId} certId=${certificateId}`);
+    logger.info(`[generateCertificate] Certificate generated for uid=${uid} courseId=${courseId} certId=${certificateId} org=${orgId}`);
 
     // 11. Write public verification record (minimal safe data — no UID, email, phone)
     // This allows QR code public verification without exposing private data.
@@ -142,7 +168,8 @@ export const generateCertificate = onCall(
       studentNameMasked: (studentName.split(' ')[0] || 'طالبہ') + ' (محفوظ)',
       issuedAt,
       status: 'issued',
-      institution: 'Madrasatu-s-Salikat Lil Banat',
+      institution: institutionName,
+      organization_id: orgId,
     });
 
     // 12. Return

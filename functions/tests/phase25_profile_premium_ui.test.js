@@ -24,6 +24,8 @@ const repoRoot = path.resolve(__dirname, '../../');
 const aboutSrc = fs.readFileSync(path.join(repoRoot, 'frontend/app/(tabs)/about.tsx'), 'utf8');
 const themeSrc = fs.readFileSync(path.join(repoRoot, 'frontend/constants/theme.ts'), 'utf8');
 
+const paymentSrc = fs.readFileSync(path.join(repoRoot, 'frontend/app/payment.tsx'), 'utf8');
+
 // ============================================================
 // PART 1: PROFILE IDENTITY & METADATA INVENTORY
 // ============================================================
@@ -43,10 +45,9 @@ test('P25-02: Verified and Active status indicators are rendered accurately', ()
   assert.ok(aboutSrc.includes("Pending"));
 });
 
-test('P25-03: Metadata rows preserve Email, Phone, Joined date, Last Active, and Referral code', () => {
+test('P25-03: Metadata rows preserve Email, Phone, Joined date, and Last Active', () => {
   assert.ok(aboutSrc.includes("user.metadata.creationTime"));
   assert.ok(aboutSrc.includes("user.metadata.lastSignInTime"));
-  assert.ok(aboutSrc.includes("profile.referral_code"));
   assert.ok(aboutSrc.includes("user.phoneNumber"));
 });
 
@@ -77,34 +78,28 @@ test('P25-06: Quick actions are organized into Academic, Faith, and Account cate
   assert.ok(aboutSrc.includes("Faith & Tools"));
 });
 
-test('P25-07: All 11 Quick Action navigation destinations exist and are correctly wired', () => {
-  assert.ok(aboutSrc.includes("safePush('/payment')"));
+test('P25-07: Streamlined Quick Action navigation destinations exist and are correctly wired', () => {
   assert.ok(aboutSrc.includes("safePush('/(tabs)/courses')"));
   assert.ok(aboutSrc.includes("safePush('/(tabs)/library')"));
   assert.ok(aboutSrc.includes("safePush('/(tabs)/quiz')"));
   assert.ok(aboutSrc.includes("safePush('/prayer-times')"));
   assert.ok(aboutSrc.includes("safePush('/qibla')"));
   assert.ok(aboutSrc.includes("safePush('/(tabs)/notifications')"));
-  assert.ok(aboutSrc.includes("safePush('/settings')"));
-  assert.ok(aboutSrc.includes("openHelp"));
-  assert.ok(aboutSrc.includes("scrollToAbout"));
   assert.ok(aboutSrc.includes("handleSignOutConfirm") || aboutSrc.includes("signOut"));
 });
 
 // ============================================================
-// PART 4: FEE MANAGEMENT & PAYMENTS
+// PART 4: FEE MANAGEMENT & PAYMENTS (Unified in Pay Fees screen)
 // ============================================================
 
 test('P25-08: Fee management section displays current fees and unified payment CTA', () => {
-  assert.ok(aboutSrc.includes("Fee Management & Payments"));
-  assert.ok(aboutSrc.includes("fees_amount"));
-  assert.ok(aboutSrc.includes("testID=\"open-unified-payment-btn\""));
-  assert.ok(aboutSrc.includes("router.push('/payment')"));
+  assert.ok(paymentSrc.includes("fees_amount") || paymentSrc.includes("feesAmount"));
+  assert.ok(paymentSrc.includes("Admin Fee") || paymentSrc.includes("Fee & Payment Governance"));
 });
 
-test('P25-09: Latest payment status reflects approved, pending, and verified states', () => {
-  assert.ok(aboutSrc.includes("Latest Payment Status"));
-  assert.ok(aboutSrc.includes("paymentState(myPayments[0])"));
+test('P25-09: Fee management and payment donation actions are available', () => {
+  assert.ok(paymentSrc.includes("donation") && paymentSrc.includes("academic_fee"));
+  assert.ok(paymentSrc.includes("fees_amount") || paymentSrc.includes("feesAmount"));
 });
 
 // ============================================================
@@ -117,10 +112,10 @@ test('P25-10: Feedback form and testimonials subsystem is fully functional', () 
   assert.ok(aboutSrc.includes("submitFeedback"));
 });
 
-test('P25-11: About Madrasa section preserves complete institutional text and expansion', () => {
+test('P25-11: About Madrasa section supports multi-tenant content and admin editing', () => {
   assert.ok(aboutSrc.includes("AboutMadrasaSection"));
-  assert.ok(aboutSrc.includes("DEFAULT_ABOUT_CONTENT"));
-  assert.ok(aboutSrc.includes("Madrasatu-s-Salikat Lil Banat"));
+  assert.ok(aboutSrc.includes("about_madrasa"));
+  assert.ok(aboutSrc.includes("saveAboutMadrasa"));
 });
 
 test('P25-12: Account Security & Privacy preserves all 4 management actions', () => {

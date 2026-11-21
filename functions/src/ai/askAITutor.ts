@@ -18,6 +18,7 @@
 
 import { onCall, CallableRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
+import { db } from '../config/admin';
 import { GEMINI_API_KEY } from '../config/secrets';
 import { requireAuthenticatedUser } from '../auth/verifyAuth';
 import { internalError, invalidArgumentError } from '../shared/errors';
@@ -25,11 +26,11 @@ import {
   enforceRateLimit,
   validateQuestion,
   validateTutorMode,
-  validateLanguage,
   sanitizeLessonTitle,
   callGemini,
   logAiUsage,
   buildIslamicTutorSystemPrompt,
+  MadrasaContext,
 } from './aiGateway';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -40,12 +41,13 @@ interface ChatMessage {
 }
 
 interface AskAITutorRequest {
-  question:     string;
-  history?:     ChatMessage[];
-  language?:    string;        // 'en' | 'ur'
-  mode?:        string;        // 'tutor' | 'quiz' | 'vocab' | 'summary'
-  lessonTitle?: string;
-  courseTitle?: string;
+  question:         string;
+  history?:         ChatMessage[];
+  language?:        string;        // 'en' | 'ur' | 'auto'
+  mode?:            string;        // 'tutor' | 'quiz' | 'vocab' | 'summary'
+  lessonTitle?:     string;
+  courseTitle?:     string;
+  organization_id?: string;
 }
 
 interface AskAITutorResponse {
@@ -54,7 +56,7 @@ interface AskAITutorResponse {
   language: string;
 }
 
-const ALLOWED_LANGUAGES = ['en', 'ur'] as const;
+const ALLOWED_LANGUAGES = ['en', 'ur', 'auto'] as const;
 const MAX_HISTORY = 10;
 
 // ─── Callable ─────────────────────────────────────────────────────────────────
@@ -84,10 +86,43 @@ export const askAITutor = onCall(
         throw invalidArgumentError('question is required.');
       }
       const question    = validateQuestion(raw.question);
-      const language    = validateLanguage(raw.language ?? 'ur', ALLOWED_LANGUAGES) as 'en' | 'ur';
+      const reqLang     = typeof raw.language === 'string' ? raw.language.toLowerCase() : 'auto';
+      const language    = (ALLOWED_LANGUAGES.includes(reqLang as any) ? reqLang : 'auto') as 'en' | 'ur' | 'auto';
       const mode        = validateTutorMode(raw.mode ?? 'tutor');
       const lessonTitle = sanitizeLessonTitle(raw.lessonTitle);
       const courseTitle = sanitizeLessonTitle(raw.courseTitle);
+
+      // Multi-tenant resolution: load madrasa profile & courses
+      const targetOrg = String(raw.organization_id || (user as any).organization_id || 'mslb-main').trim();
+      let madrasaContext: MadrasaContext = {
+        name: 'Madrasatu-s-Salikat Lil Banat',
+      };
+      try {
+        const orgSnap = await db.collection('organizations').doc(targetOrg).get();
+        if (orgSnap.exists) {
+          const orgData = orgSnap.data() || {};
+          madrasaContext = {
+            name: String(orgData.name || madrasaContext.name),
+            nameArabic: orgData.name_arabic ? String(orgData.name_arabic) : undefined,
+            tagline: orgData.tagline ? String(orgData.tagline) : undefined,
+            about: orgData.about ? String(orgData.about) : undefined,
+            contact: [orgData.phone, orgData.whatsapp_number, orgData.email].filter(Boolean).join(' | '),
+          };
+        }
+        // Fetch active courses for this madrasa
+        let coursesQuery: FirebaseFirestore.Query = db.collection('courses');
+        if (targetOrg !== 'mslb-main') {
+          coursesQuery = coursesQuery.where('organization_id', '==', targetOrg);
+        }
+        const coursesSnap = await coursesQuery.limit(10).get();
+        if (!coursesSnap.empty) {
+          madrasaContext.courses = coursesSnap.docs
+            .map((d) => String(d.data().name || d.data().title || ''))
+            .filter((title) => Boolean(title));
+        }
+      } catch (ctxErr) {
+        logger.warn(`[askAITutor] Could not load madrasa context for org=${targetOrg}`, ctxErr);
+      }
 
       // 4. Validate + truncate history (client-provided — treat as untrusted)
       const rawHistory = Array.isArray(raw.history) ? raw.history : [];
@@ -112,7 +147,7 @@ export const askAITutor = onCall(
             : `\nموجودہ سبق: "${lessonTitle}"${courseTitle ? ` — کورس: ${courseTitle}` : ''}`)
         : '';
 
-      const systemInstruction = buildIslamicTutorSystemPrompt(language, mode, courseNote);
+      const systemInstruction = buildIslamicTutorSystemPrompt(language, mode, courseNote, madrasaContext);
 
       // 6. Build contents array
       const contents = [...history, { role: 'user' as const, parts: [{ text: question }] }];

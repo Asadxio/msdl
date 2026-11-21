@@ -67,6 +67,12 @@ service firebase.storage {
         );
     }
 
+    function isCredentialReviewAdmin(targetUid) {
+      return isSuperAdmin()
+        || (firestore.exists(/databases/(default)/documents/users/$(targetUid))
+            && isTenantTeacherOrAdmin(firestore.get(/databases/(default)/documents/users/$(targetUid)).data.get('organization_id', 'mslb-main')));
+    }
+
     function isSafeRecordingUpload() {
       return request.resource != null
         && request.resource.size > 0
@@ -201,7 +207,7 @@ service firebase.storage {
     function canReadCourseStorage(courseId) {
       return isApprovedVerifiedUser()
         && (
-          userDoc().role in ['teacher', 'admin', 'super_admin']
+          (firestore.exists(/databases/(default)/documents/courses/$(courseId)) && isTenantMember(firestore.get(/databases/(default)/documents/courses/$(courseId)).data.get('organization_id', 'mslb-main')) && isTenantTeacherOrAdmin(firestore.get(/databases/(default)/documents/courses/$(courseId)).data.get('organization_id', 'mslb-main')))
           || (firestore.exists(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId)))
             && firestore.get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.user_id == request.auth.uid
             && firestore.get(/databases/(default)/documents/enrollments/$(enrollmentDocId(request.auth.uid, courseId))).data.course_id == courseId
@@ -295,6 +301,12 @@ service firebase.storage {
       allow delete: if isSuperAdmin() || (isTenantMember(orgId) && isTenantTeacherOrAdmin(orgId));
     }
 
+    // 1b. Tenant Certificates
+    match /organizations/{orgId}/certificates/{userId}/{fileName} {
+      allow read: if isApprovedVerifiedUser() && isTenantMember(orgId) && (request.auth.uid == userId || isTenantTeacherOrAdmin(orgId));
+      allow write: if false;
+    }
+
     // 2. Tenant branding / root-level assets (e.g. logo.png)
     match /organizations/{orgId}/{fileName} {
       allow read: if isApprovedVerifiedUser() && isTenantMember(orgId);
@@ -302,6 +314,16 @@ service firebase.storage {
         && request.resource != null
         && request.resource.size > 0
         && request.resource.size <= 20971520;
+    }
+
+    // 2b. Tenant Library Books (PDFs up to 50MB)
+    match /organizations/{orgId}/library/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isApprovedVerifiedUser() && isTenantTeacherOrAdmin(orgId)
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 52428800
+        && request.resource.contentType == 'application/pdf';
     }
 
     // 3. Multi-tenant fallback / super admin catch-all partition
@@ -326,9 +348,8 @@ service firebase.storage {
         && (
           // Owner
           request.auth.uid == teacherUid
-          // Admin reviewing credentials
-          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+          // Admin reviewing credentials within same tenant or super admin
+          || isCredentialReviewAdmin(teacherUid)
         );
 
       allow write: if isSignedIn()
@@ -338,8 +359,7 @@ service firebase.storage {
             && request.resource.size <= 10 * 1024 * 1024
             && request.resource.contentType.matches('application/pdf|image/(jpeg|png|gif|webp)'))
           // Admin can write (for reject/delete operations)
-          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+          || isCredentialReviewAdmin(teacherUid)
         );
 
       allow delete: if isSignedIn()
@@ -347,8 +367,7 @@ service firebase.storage {
           // Owner can remove their own uploaded file
           request.auth.uid == teacherUid
           // Admin can delete as part of review
-          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'])
+          || isCredentialReviewAdmin(teacherUid)
         );
     }
 

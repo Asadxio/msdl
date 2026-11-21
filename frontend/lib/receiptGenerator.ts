@@ -26,6 +26,9 @@ export interface FeeReceiptData {
   note?: string;
   admissionFee?: number;
   courseFee?: number;
+  institutionName?: string;
+  institutionArabic?: string;
+  institutionSeal?: string;
 }
 
 export function formatCategoryLabel(cat: string): string {
@@ -248,8 +251,8 @@ export function generateFeeReceiptHtml(data: FeeReceiptData): string {
   <div class="receipt-card">
     <div class="header">
       <div class="bismillah">بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</div>
-      <h1 class="madrasa-name">Madrasatu-s-Salikat Lil Banat</h1>
-      <div class="madrasa-arabic">مدرسۃ السالکات للبنات</div>
+      <h1 class="madrasa-name">${data.institutionName || 'Madrasatu-s-Salikat Lil Banat'}</h1>
+      <div class="madrasa-arabic">${data.institutionArabic || (data.institutionName ? data.institutionName : 'مدرسۃ السالکات للبنات')}</div>
       <div class="receipt-title">${isDonation ? 'Official Donation Voucher / رسیدِ عطیہ و صدقات' : 'Official Academic Fee Receipt / رسیدِ تعلیمی فیس'}</div>
     </div>
     <div class="content">
@@ -313,17 +316,17 @@ export function generateFeeReceiptHtml(data: FeeReceiptData): string {
       <div class="disclaimer">
         ${isDonation 
           ? 'Note: This receipt confirms an Islamic charitable contribution towards madrasa welfare funds. It does not constitute academic tuition fees or student enrollment.'
-          : 'Note: Official academic tuition receipt confirming valid enrollment at Madrasatu-s-Salikat Lil Banat.'}
+          : `Note: Official academic tuition receipt confirming valid enrollment at ${data.institutionName || 'Madrasatu-s-Salikat Lil Banat'}.`}
       </div>
 
       <div class="footer">
         <div>
-          <div>Madrasatu-s-Salikat Lil Banat</div>
+          <div>${data.institutionName || 'Madrasatu-s-Salikat Lil Banat'}</div>
           <div>Authorized Electronic Document</div>
-          <div>Verified via MSLB Portal</div>
+          <div>Verified via Suffah Portal</div>
         </div>
         <div class="seal-wrap">
-          <div class="seal">MSLB<br>OFFICIAL<br>SEAL</div>
+          <div class="seal">${data.institutionSeal || 'OFFICIAL'}<br>SEAL</div>
           <div>Accounts & Finance</div>
         </div>
       </div>
@@ -364,14 +367,14 @@ export async function exportAndShareReceipt(data: FeeReceiptData): Promise<void>
     } else {
       await Share.share({
         title: `Receipt - ${data.receiptId}`,
-        message: `Official Receipt from Madrasatu-s-Salikat Lil Banat\nReceipt No: ${data.receiptId}\nReceived From: ${data.studentName}\nAmount: ₹${data.amount}\nStatus: ${data.status}\nDate: ${data.issueDateGregorian}`,
+        message: `Official Receipt from ${data.institutionName || 'Madrasatu-s-Salikat Lil Banat'}\nReceipt No: ${data.receiptId}\nReceived From: ${data.studentName}\nAmount: ₹${data.amount}\nStatus: ${data.status}\nDate: ${data.issueDateGregorian}`,
       });
     }
   } catch (err: unknown) {
     // Fallback to text share
     await Share.share({
       title: `Receipt - ${data.receiptId}`,
-      message: `Official Receipt from Madrasatu-s-Salikat Lil Banat\nReceipt No: ${data.receiptId}\nReceived From: ${data.studentName}\nAmount: ₹${data.amount}\nStatus: ${data.status}\nDate: ${data.issueDateGregorian}`,
+      message: `Official Receipt from ${data.institutionName || 'Madrasatu-s-Salikat Lil Banat'}\nReceipt No: ${data.receiptId}\nReceived From: ${data.studentName}\nAmount: ₹${data.amount}\nStatus: ${data.status}\nDate: ${data.issueDateGregorian}`,
     });
   }
 }

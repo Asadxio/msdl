@@ -1,6 +1,6 @@
 import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   StatusBar, ActivityIndicator, Alert, ScrollView, TextInput, Image, Modal,
@@ -223,6 +223,37 @@ export default function AdminUsersScreen() {
   const toggleSelected = (uid: string) => setSelectedIds((prev) => (prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]));
   const [bulkEnrolling, setBulkEnrolling] = useState(false);
   const [bulkEnrollProgress, setBulkEnrollProgress] = useState('');
+
+  // Ghalati 7 Fix: 1-Tap Bulk Approve All Pending Students
+  const pendingUsers = useMemo(() => users.filter((u) => u.status === 'pending'), [users]);
+
+  const handleApproveAllPending = async () => {
+    if (pendingUsers.length === 0) {
+      Alert.alert('No Pending Users', 'There are no pending accounts waiting for approval.');
+      return;
+    }
+    Alert.alert(
+      'Approve All Pending',
+      `Approve all ${pendingUsers.length} pending student(s) immediately?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: `Approve All (${pendingUsers.length})`,
+          onPress: async () => {
+            const pendingIds = pendingUsers.map((u) => u.id);
+            const result = await bulkUpdateUserStatus({
+              profile,
+              performedBy: profile?.email || profile?.name || 'admin',
+              userIds: pendingIds,
+              status: 'approved',
+            }).catch(() => ({ updated: 0 }));
+            Alert.alert('Bulk Approved', `Successfully approved ${result.updated} pending user(s).`);
+            await fetchUsers();
+          },
+        },
+      ]
+    );
+  };
 
   const runBulkStatus = async (status: 'approved' | 'rejected' | 'deactivated' | 'pending') => {
     if (!canBulk || selectedIds.length === 0) return;
@@ -455,6 +486,17 @@ export default function AdminUsersScreen() {
           <View style={[styles.roleBadge, { backgroundColor: rc.bg }]}>
             <Text style={[styles.roleBadgeText, { color: rc.text }]}>{item.role}</Text>
           </View>
+          {item.status === 'pending' && (
+            <TouchableOpacity
+              style={styles.quickCardApproveBadge}
+              onPress={() => updateUser(item.id, { status: 'approved' })}
+              testID={`quick-card-approve-${item.id}`}
+              accessibilityLabel="1-Tap Approve"
+            >
+              <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+              <Text style={styles.quickCardApproveText}>Approve</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.userBottom}>
           <View style={[
@@ -563,6 +605,16 @@ export default function AdminUsersScreen() {
       {canBulk ? (
         <View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, gap: 8, paddingBottom: 6 }}>
+            {pendingUsers.length > 0 && (
+              <TouchableOpacity
+                style={[styles.approveBtn, { backgroundColor: '#059669' }]}
+                onPress={handleApproveAllPending}
+                testID="approve-all-pending-btn"
+              >
+                <Ionicons name="checkmark-done" size={15} color="#FFF" />
+                <Text style={styles.approveBtnText}>Approve All Pending ({pendingUsers.length})</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.approveBtn} onPress={() => runBulkStatus('approved')}><Text style={styles.approveBtnText}>Bulk Approve ({selectedIds.length})</Text></TouchableOpacity>
             <TouchableOpacity style={styles.deactivateBtn} onPress={() => runBulkStatus('deactivated')}><Text style={styles.deactivateBtnText}>Bulk Deactivate</Text></TouchableOpacity>
             <TouchableOpacity style={styles.rejectBtn} onPress={() => runBulkStatus('rejected')}><Text style={styles.rejectBtnText}>Bulk Reject</Text></TouchableOpacity>
@@ -590,6 +642,26 @@ export default function AdminUsersScreen() {
         <FlatList removeClippedSubviews initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5}
           ListHeaderComponent={(
             <View style={{ gap: 8, marginBottom: 10 }}>
+              {pendingUsers.length > 0 && (
+                <View style={styles.pendingAlertBanner}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pendingAlertTitle}>
+                      {pendingUsers.length} Pending Registration{pendingUsers.length > 1 ? 's' : ''}
+                    </Text>
+                    <Text style={styles.pendingAlertSub}>
+                      Students awaiting madrasa access verification
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.approveAllBtn}
+                    onPress={handleApproveAllPending}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="checkmark-done" size={15} color="#FFFFFF" />
+                    <Text style={styles.approveAllBtnText}>Approve All ({pendingUsers.length})</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search users by name or email"
@@ -789,4 +861,53 @@ const styles = StyleSheet.create({
   bulkModalFooter: { padding: SPACING.sm, borderTopWidth: 1, borderTopColor: '#F1F5F9', alignItems: 'flex-end', backgroundColor: '#F8FAFC' },
   bulkCancelBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.md, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1' },
   bulkCancelText: { fontSize: 13, fontWeight: '600', color: '#475569' },
+  pendingAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: SPACING.xs,
+    gap: 12,
+  },
+  pendingAlertTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  pendingAlertSub: {
+    fontSize: 11,
+    color: '#B45309',
+    marginTop: 2,
+  },
+  approveAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#059669',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    gap: 6,
+  },
+  approveAllBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  quickCardApproveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#059669',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  quickCardApproveText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
 });

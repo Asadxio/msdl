@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { endLiveClass, startLiveClass } from '@/lib/liveClasses';
+import { endLiveClass, startLiveClass, subscribeScopedLiveClasses, type LiveClassListItem } from '@/lib/liveClasses';
 import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY } from '@/constants/theme';
 import { db } from '@/lib/firebase';
@@ -31,20 +31,13 @@ import { filterTeacherAssignedCourses } from '@/lib/enrollments';
 
 import { goBackOrReplace } from '@/lib/navigation';
 
-type LiveClassItem = {
-  id: string;
-  title: string;
-  teacher_name: string;
-  status: 'scheduled' | 'live' | 'ended';
-  class_time?: string;
-  time?: string;
-};
+type LiveClassItem = LiveClassListItem;
 
 export default function LiveClassesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile } = useAuth();
-  const { courses, teachers } = useData();
+  const { profile, user } = useAuth();
+  const { courses, teachers, enrolledCourses, userEnrollments } = useData();
   const { activeOrgId, isDefaultOrg } = useActiveOrganization();
   const isAdminOrTeacher = profile?.role === 'admin' || profile?.role === 'teacher' || profile?.role === 'assistant_teacher' || profile?.role === 'super_admin';
   const [classes, setClasses] = useState<LiveClassItem[]>([]);
@@ -59,31 +52,29 @@ export default function LiveClassesScreen() {
   const [createPurdah, setCreatePurdah] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  const fetchClasses = () => {
+  useEffect(() => {
     setLoading(true);
-    // Tenant-scoped query:
-    // - Custom tenants: filter by organization_id to show only their classes
-    // - Default/legacy tenant: fetch all (preserves backward-compatible global behavior)
-    const baseQ = (!isDefaultOrg && activeOrgId)
-      ? query(collection(db, 'live_classes'), where('organization_id', '==', activeOrgId), orderBy('status', 'asc'))
-      : query(collection(db, 'live_classes'), orderBy('status', 'asc'));
 
-    const unsub = onSnapshot(
-      baseQ,
-      (snapshot) => {
-        const items: LiveClassItem[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.status !== 'ended') {
-            items.push({
-              id: docSnap.id,
-              title: data.title || 'Untitled Class',
-              teacher_name: data.teacher_name || 'Unknown Teacher',
-              status: data.status || 'scheduled',
-              class_time: data.class_time || data.time || 'TBD',
-            });
-          }
-        });
+    const enrolledCourseIds = profile?.role === 'student'
+      ? (enrolledCourses.length > 0
+          ? enrolledCourses.map((c) => c.id)
+          : Object.keys(userEnrollments).filter((id) => Boolean(userEnrollments[id])))
+      : [];
+
+    const assignedCourseIds = (profile?.role === 'teacher' || profile?.role === 'assistant_teacher')
+      ? enrolledCourses.map((c) => c.id)
+      : [];
+
+    const unsub = subscribeScopedLiveClasses(
+      {
+        userUid: user?.uid,
+        profile,
+        enrolledCourseIds,
+        assignedCourseIds,
+        organizationId: activeOrgId || DEFAULT_ORGANIZATION_ID,
+        isDefaultOrg,
+      },
+      (items) => {
         setClasses(items);
         setLoading(false);
       },
@@ -92,15 +83,9 @@ export default function LiveClassesScreen() {
         setLoading(false);
       }
     );
-    return unsub;
-  };
 
-  useEffect(() => {
-    const unsub = fetchClasses();
     return () => unsub();
-  // Re-subscribe when tenant context changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeOrgId, isDefaultOrg]);
+  }, [user?.uid, profile?.role, profile?.status, enrolledCourses, userEnrollments, activeOrgId, isDefaultOrg]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     // Revalidation only - listeners are active

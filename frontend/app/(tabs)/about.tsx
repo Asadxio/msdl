@@ -20,6 +20,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { getInstitutionalDateString } from '@/lib/attendanceId';
+import { deduplicateAttendanceRecords } from '@/lib/attendanceDeduplication';
 import {
   addDoc,
   collection,
@@ -39,8 +41,13 @@ import {
 } from 'firebase/firestore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID, DEFAULT_ORGANIZATION_NAME } from '@/lib/tenantContext';
+// Canonical fallback: Madrasatu-s-Salikat Lil Banat
+// Unified destinations: /payment (Pay Fees) & /settings (Settings)
+export const CANONICAL_INSTITUTION_NAME = 'Madrasatu-s-Salikat Lil Banat';
 import { useData } from '@/context/DataContext';
-import { db } from '@/lib/firebase';
+import { db, functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL, isValidHttpsUrl, normalizeWhatsAppUrl, prepareExternalUrl } from '@/lib/links';
 
 // ─── MSLB Institutional Design System ───
@@ -81,7 +88,11 @@ type FeedbackItem = {
   message: string;
   rating?: number;
   user_id?: string;
+  organization_id?: string;
+  tag?: string;
+  verified?: boolean;
   created_at?: any;
+  updated_at?: any;
 };
 
 type PaymentItem = {
@@ -99,7 +110,7 @@ function paymentState(payment: Pick<PaymentItem, 'state' | 'status'>): string {
   return payment.state ?? payment.status ?? 'pending';
 }
 
-const DEFAULT_ABOUT_CONTENT = `Madrasatu-s-Salikat Lil Banat is dedicated to nurturing Islamic knowledge, noble character, and academic excellence for girls through authentic Quranic education, Tajweed, Hadith, Fiqh, and spiritual development.
+const DEFAULT_ABOUT_CONTENT = `Dedicated to nurturing authentic Islamic knowledge, noble character, and academic excellence through structured Quranic education, Tajweed, Hadith, Fiqh, and spiritual development.
 
 Our mission is to create confident, knowledgeable, and practicing Muslim women who embody Islamic values while contributing positively to society.
 
@@ -116,7 +127,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   youtube_link: '',
   telegram_link: '',
   donation_content: 'Your sadaqah, zakat, fitrah and langar support help students access Islamic education with dignity and consistency.',
-  about_madrasa: DEFAULT_ABOUT_CONTENT,
+  about_madrasa: '',
 };
 
 const CURATED_COMMUNITY_TESTIMONIALS = [
@@ -124,7 +135,7 @@ const CURATED_COMMUNITY_TESTIMONIALS = [
     id: 'curated_1',
     user_name: 'Fatima Zahra (Alimah Student)',
     rating: 5,
-    message: 'ماشاءاللہ! Madrasatu-s-Salikat has completely transformed my understanding of Deen. The live audio classes and Ustaadha guidance are truly top-notch.',
+    message: 'ماشاءاللہ! The classes have completely transformed my understanding of Deen. The live audio classes and Ustaadha guidance are truly top-notch.',
     tag: 'Live Classes & Tajweed',
     verified: true,
     timeAgo: '2 days ago',
@@ -184,11 +195,21 @@ function SectionCard({ title, icon, children }: { title: string; icon: string; c
 
 type AboutMadrasaSectionProps = {
   aboutMadrasa: string;
+  madrasaName: string;
+  madrasaWebsite?: string;
+  activeOrgId?: string;
   isAdmin: boolean;
   onSaved: (aboutMadrasa: string) => void;
 };
 
-const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadrasa, isAdmin, onSaved }: AboutMadrasaSectionProps) {
+const AboutMadrasaSection = React.memo(function AboutMadrasaSection({
+  aboutMadrasa,
+  madrasaName,
+  madrasaWebsite,
+  activeOrgId,
+  isAdmin,
+  onSaved,
+}: AboutMadrasaSectionProps) {
   const [aboutDraft, setAboutDraft] = useState(aboutMadrasa);
   const [aboutError, setAboutError] = useState('');
   const [savingAbout, setSavingAbout] = useState(false);
@@ -226,21 +247,37 @@ const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadra
     }
     setAboutError('');
     setSavingAbout(true);
+    const targetOrgId = activeOrgId || DEFAULT_ORGANIZATION_ID;
     try {
-      const settingsRef = doc(db, 'app_settings', 'platform');
-      await runTransaction(db, async (transaction) => {
-        transaction.set(settingsRef, {
+      try {
+        const updateCall = httpsCallable(functions, 'updateOrganizationSettings');
+        await updateCall({
+          organization_id: targetOrgId,
+          about_madrasa: cleanedAbout,
+        });
+      } catch (fnErr) {
+        console.warn('[About] updateOrganizationSettings failed, direct write fallback:', fnErr);
+        await setDoc(doc(db, 'organizations', targetOrgId), {
+          about_madrasa: cleanedAbout,
+          updated_at: serverTimestamp(),
+        }, { merge: true });
+      }
+
+      if (targetOrgId === DEFAULT_ORGANIZATION_ID) {
+        const settingsRef = doc(db, 'app_settings', 'platform');
+        await setDoc(settingsRef, {
           profile: { about_madrasa: cleanedAbout },
           updated_at: serverTimestamp(),
         }, { merge: true });
-      });
+      }
+
       latestServerAboutRef.current = cleanedAbout;
       setServerChangedWhileEditing(false);
       onSaved(cleanedAbout);
       setAboutDraft(cleanedAbout);
       Alert.alert('Saved', 'About Our Madrasa updated successfully.');
     } catch (error: any) {
-      console.error('[About] saveAboutMadrasa transaction ERROR', error);
+      console.error('[About] saveAboutMadrasa ERROR', error);
       const message = error?.message || 'Could not save About Our Madrasa content. Please check your connection and try again.';
       setAboutError(message);
       Alert.alert('Save failed', message);
@@ -249,31 +286,48 @@ const AboutMadrasaSection = React.memo(function AboutMadrasaSection({ aboutMadra
     }
   };
 
+  const hasContent = Boolean(aboutMadrasa && aboutMadrasa.trim().length > 0);
+  const websiteUrl = madrasaWebsite?.trim() || (activeOrgId === DEFAULT_ORGANIZATION_ID ? MADRASA_WEBSITE_URL : '');
+
   return (
     <SectionCard title="About Our Madrasa" icon="leaf-outline">
       <View style={{ marginBottom: 8 }}>
-        <Text style={[styles.bodyText, { lineHeight: 22 }]} numberOfLines={expanded ? undefined : 4}>
-          {aboutMadrasa || DEFAULT_ABOUT_CONTENT}
-        </Text>
-        <TouchableOpacity
-          onPress={() => setExpanded(!expanded)}
-          style={styles.readMoreBtn}
-          accessibilityRole="button"
-          accessibilityLabel={expanded ? "Read Less" : "Read More"}
-        >
-          <Text style={styles.readMoreText}>{expanded ? "Read Less ▲" : "Read More ▼"}</Text>
-        </TouchableOpacity>
+        {hasContent ? (
+          <>
+            <Text style={[styles.bodyText, { lineHeight: 22 }]} numberOfLines={expanded ? undefined : 4}>
+              {aboutMadrasa}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setExpanded(!expanded)}
+              style={styles.readMoreBtn}
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? "Read Less" : "Read More"}
+            >
+              <Text style={styles.readMoreText}>{expanded ? "Read Less ▲" : "Read More ▼"}</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={{ paddingVertical: SPACING.sm }}>
+            <Text style={[styles.bodyText, { lineHeight: 20, color: THEME.textMuted, fontStyle: 'italic' }]}>
+              {isAdmin
+                ? "No madrasa introduction added yet. As an administrator, you can write and publish your madrasa's details and mission below."
+                : `Welcome to ${madrasaName || 'our madrasa'}. Official overview and introduction will be shared here soon by the madrasa administration.`}
+            </Text>
+          </View>
+        )}
 
-        <TouchableOpacity
-          style={styles.websiteLinkButton}
-          onPress={() => Linking.openURL(MADRASA_WEBSITE_URL)}
-          accessibilityRole="button"
-          accessibilityLabel="Visit Official Madrasa Website"
-        >
-          <Ionicons name="globe-outline" size={16} color={THEME.primary} />
-          <Text style={styles.websiteLinkButtonText}>Visit Official Website</Text>
-          <Ionicons name="open-outline" size={14} color={THEME.primary} />
-        </TouchableOpacity>
+        {websiteUrl ? (
+          <TouchableOpacity
+            style={styles.websiteLinkButton}
+            onPress={() => Linking.openURL(websiteUrl)}
+            accessibilityRole="button"
+            accessibilityLabel="Visit Official Madrasa Website"
+          >
+            <Ionicons name="globe-outline" size={16} color={THEME.primary} />
+            <Text style={styles.websiteLinkButtonText}>Visit Official Website</Text>
+            <Ionicons name="open-outline" size={14} color={THEME.primary} />
+          </TouchableOpacity>
+        ) : null}
       </View>
       <View style={styles.premiumDivider} />
       {isAdmin ? (
@@ -311,6 +365,7 @@ export default function AboutScreen() {
   const { user, profile, signOut, updateProfileName } = useAuth();
   const { lessonProgress, courses, books } = useData();
   const router = useRouter();
+  const { activeOrg, activeOrgId } = useActiveOrganization();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher';
 
@@ -423,16 +478,20 @@ export default function AboutScreen() {
   }, [courses, profile?.name, user?.uid]);
 
   useEffect(() => {
-    if (!isTeacher) return;
-    const qLive = query(collection(db, 'live_classes'), where('status', 'in', ['live', 'scheduled']), limit(20));
+    if (!isTeacher || !user?.uid) return;
+    const qLive = query(collection(db, 'live_classes'), where('teacher_id', '==', user.uid), where('status', 'in', ['live', 'scheduled']), limit(20));
     const unsubLive = onSnapshot(qLive, (snap) => setTeacherLiveCount(snap.size), () => {});
 
     const qSub = query(collection(db, 'submissions'), where('status', '==', 'submitted'), limit(20));
     const unsubSub = onSnapshot(qSub, (snap) => setTeacherSubmissionsCount(snap.size), () => {});
 
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const qAtt = query(collection(db, 'attendance'), where('date', '==', todayStr), limit(50));
-    const unsubAtt = onSnapshot(qAtt, (snap) => setTeacherAttendanceCount(snap.size), () => {});
+    const todayStr = getInstitutionalDateString(new Date());
+    const qAtt = query(collection(db, 'attendance'), where('date', '==', todayStr), limit(100));
+    const unsubAtt = onSnapshot(qAtt, (snap) => {
+      const raw = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const deduped = deduplicateAttendanceRecords(raw);
+      setTeacherAttendanceCount(deduped.length);
+    }, () => {});
 
     return () => {
       unsubLive();
@@ -456,6 +515,9 @@ export default function AboutScreen() {
   const [donationAmount, setDonationAmount] = useState('');
   const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null);
   const [editingFeedbackMsg, setEditingFeedbackMsg] = useState('');
+  const [editingFeedbackRating, setEditingFeedbackRating] = useState<number>(5);
+  const [editingFeedbackTag, setEditingFeedbackTag] = useState('');
+  const [savingFeedbackEdit, setSavingFeedbackEdit] = useState(false);
   const [exportingCollection, setExportingCollection] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState('');
   const [donationError, setDonationError] = useState('');
@@ -470,32 +532,51 @@ export default function AboutScreen() {
       user_id: f.user_id,
       rating: f.rating || 5,
       message: f.message,
-      tag: (f as any).tag || 'Islamic Learning',
-      verified: true,
-      timeAgo: f.created_at ? new Date(f.created_at).toLocaleDateString() : 'Recent',
+      tag: f.tag || 'Islamic Learning',
+      verified: f.verified ?? true,
+      timeAgo: f.created_at
+        ? (f.created_at.toDate ? f.created_at.toDate().toLocaleDateString() : new Date(f.created_at).toLocaleDateString())
+        : 'Recent',
     }));
-    const combined = [...liveItems, ...CURATED_COMMUNITY_TESTIMONIALS];
+
+    // Multi-tenant isolation: Only the default organization uses curated placeholders when empty.
+    // Other madrasas only see their own authentic student feedback.
+    const combined = (liveItems.length > 0 || (activeOrgId && activeOrgId !== DEFAULT_ORGANIZATION_ID))
+      ? liveItems
+      : [...liveItems, ...CURATED_COMMUNITY_TESTIMONIALS];
+
     if (testimonialTab === 'highest') {
       return combined.filter((t) => (t.rating || 5) >= 5);
     }
     if (testimonialTab === 'verified') {
       return combined.filter((t) => t.verified);
     }
-    return combined.slice(0, 8);
-  }, [feedback, testimonialTab]);
+    return combined.slice(0, 20);
+  }, [feedback, testimonialTab, activeOrgId]);
 
-  const mySubmittedFeedback = useMemo(() => feedback.filter(f => f.user_id === user?.uid || (profile?.name && f.user_name === profile.name)), [feedback, user?.uid, profile?.name]);
+  const avgRating = useMemo(() => {
+    if (!testimonials.length) return '5.0';
+    const sum = testimonials.reduce((acc, f) => acc + (Number(f.rating) || 5), 0);
+    return (sum / testimonials.length).toFixed(1);
+  }, [testimonials]);
+
+  const positivePercent = useMemo(() => {
+    if (!testimonials.length) return '100%';
+    const count = testimonials.filter((f) => (Number(f.rating) || 5) >= 4).length;
+    return `${Math.round((count / testimonials.length) * 100)}%`;
+  }, [testimonials]);
+
+  const mySubmittedFeedback = useMemo(() => feedback.filter(f => f.user_id === user?.uid), [feedback, user?.uid]);
 
   const earnedBadges = useMemo(() => {
     const list = [];
-    if (user?.metadata?.creationTime) list.push({ id: 'active', title: 'Active Member', desc: 'Joined Madrasatu-s-Salikat Lil Banat', icon: 'ribbon-outline', color: '#10B981' });
+    if (user?.metadata?.creationTime) list.push({ id: 'active', title: 'Active Member', desc: `Joined ${activeOrg?.name || 'Madrasa'}`, icon: 'ribbon-outline', color: '#10B981' });
     if (lessonsCompletedCount >= 1) list.push({ id: 'first_lesson', title: 'First Lesson', desc: 'Completed your first Islamic lesson', icon: 'book-outline', color: '#4F46E5' });
     if (lessonsCompletedCount >= 5) list.push({ id: 'dedicated', title: 'Dedicated Learner', desc: 'Completed 5+ Islamic lessons', icon: 'flame-outline', color: '#D97706' });
     if (quizzesCompletedCount >= 1) list.push({ id: 'first_quiz', title: 'First Quiz', desc: 'Attempted your first knowledge assessment', icon: 'help-circle-outline', color: '#8B5CF6' });
     if (quizzesCompletedCount >= 5) list.push({ id: 'quiz_master', title: 'Quiz Master', desc: 'Completed 5+ quizzes', icon: 'trophy-outline', color: THEME.gold });
-    if (myPayments.length > 0) list.push({ id: 'supporter', title: 'Madrasa Supporter', desc: 'Contributed fees or sadqa to the madrasa', icon: 'heart-outline', color: '#E11D48' });
     return list;
-  }, [user, lessonsCompletedCount, quizzesCompletedCount, myPayments.length]);
+  }, [user, lessonsCompletedCount, quizzesCompletedCount]);
 
   const handleAboutSaved = useCallback((aboutMadrasa: string) => {
     setSettings((prev) => ({ ...prev, about_madrasa: aboutMadrasa }));
@@ -564,7 +645,7 @@ export default function AboutScreen() {
           youtube_link: data.youtube_link || ytTgLegacy || '',
           telegram_link: data.telegram_link || '',
           donation_content: data.donation_content || prev.donation_content,
-          about_madrasa: canonicalAbout,
+          about_madrasa: prev.about_madrasa || canonicalAbout,
         }));
       },
       (error) => {
@@ -575,14 +656,60 @@ export default function AboutScreen() {
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'feedback'), orderBy('created_at', 'desc'), limit(20));
-    const unsub = onSnapshot(q, (snap) => {
-      const arr: FeedbackItem[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
-      setFeedback(arr);
-    });
-    return unsub;
-  }, []);
+    if (!activeOrg) return;
+    setSettings((prev) => ({
+      ...prev,
+      whatsapp_channel: activeOrg.whatsapp_channel ?? prev.whatsapp_channel,
+      whatsapp_contact: activeOrg.whatsapp_contact ?? prev.whatsapp_contact,
+      instagram: activeOrg.instagram ?? prev.instagram,
+      youtube_link: activeOrg.youtube_link ?? prev.youtube_link,
+      telegram_link: activeOrg.telegram_link ?? prev.telegram_link,
+      about_madrasa: activeOrg.about_madrasa ?? prev.about_madrasa,
+    }));
+  }, [activeOrg]);
+
+  useEffect(() => {
+    const targetOrgId = activeOrgId || DEFAULT_ORGANIZATION_ID;
+    const q = query(
+      collection(db, 'feedback'),
+      where('organization_id', '==', targetOrgId),
+      orderBy('created_at', 'desc'),
+      limit(50)
+    );
+
+    let fallbackUnsub: (() => void) | null = null;
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const arr: FeedbackItem[] = [];
+        snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+        setFeedback(arr);
+      },
+      (err) => {
+        console.warn('[About] feedback onSnapshot with orderBy failed, fallback query without orderBy:', err);
+        const fallbackQ = query(
+          collection(db, 'feedback'),
+          where('organization_id', '==', targetOrgId),
+          limit(50)
+        );
+        fallbackUnsub = onSnapshot(fallbackQ, (fallbackSnap) => {
+          const arr: FeedbackItem[] = [];
+          fallbackSnap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+          arr.sort((a, b) => {
+            const timeA = a.created_at?.toMillis ? a.created_at.toMillis() : new Date(a.created_at || 0).getTime();
+            const timeB = b.created_at?.toMillis ? b.created_at.toMillis() : new Date(b.created_at || 0).getTime();
+            return timeB - timeA;
+          });
+          setFeedback(arr);
+        });
+      }
+    );
+
+    return () => {
+      unsub();
+      if (fallbackUnsub) fallbackUnsub();
+    };
+  }, [activeOrgId]);
 
   useEffect(() => {
     if (!user) return;
@@ -630,7 +757,42 @@ export default function AboutScreen() {
       return;
     }
     setSocialError('');
-    await saveSettings();
+    const targetOrgId = activeOrgId || DEFAULT_ORGANIZATION_ID;
+    const socialPayload = {
+      whatsapp_channel: settings.whatsapp_channel.trim(),
+      whatsapp_contact: settings.whatsapp_contact.trim(),
+      instagram: settings.instagram.trim(),
+      youtube_link: settings.youtube_link.trim(),
+      telegram_link: settings.telegram_link.trim(),
+    };
+
+    try {
+      try {
+        const updateCall = httpsCallable(functions, 'updateOrganizationSettings');
+        await updateCall({
+          organization_id: targetOrgId,
+          ...socialPayload,
+        });
+      } catch (fnErr) {
+        console.warn('[About] updateOrganizationSettings failed, direct write fallback:', fnErr);
+        await setDoc(doc(db, 'organizations', targetOrgId), {
+          ...socialPayload,
+          updated_at: serverTimestamp(),
+        }, { merge: true });
+      }
+
+      if (targetOrgId === DEFAULT_ORGANIZATION_ID || profile?.role === 'super_admin') {
+        await setDoc(doc(db, 'app_settings', 'platform'), {
+          ...socialPayload,
+          updated_at: serverTimestamp(),
+        }, { merge: true });
+      }
+
+      Alert.alert('Saved', 'Official Social & Support links for your madrasa updated successfully.');
+    } catch (error: any) {
+      console.error('[About] saveSocialSettings ERROR', error);
+      Alert.alert('Save failed', error?.message || 'Could not save settings.');
+    }
   };
 
   const submitFeedback = async () => {
@@ -642,53 +804,106 @@ export default function AboutScreen() {
     }
     setFeedbackError('');
     setSubmittingFeedback(true);
+    const targetOrgId = activeOrgId || DEFAULT_ORGANIZATION_ID;
     try {
       const parsed = Number(fbRating || 5);
       await addDoc(collection(db, 'feedback'), {
         user_id: user.uid,
-        user_name: profile.name,
+        user_name: profile.name || user.displayName || 'Student',
         message: fbMessage.trim(),
         rating: Number.isFinite(parsed) && parsed > 0 ? Math.min(5, Math.max(1, parsed)) : 5,
         tag: selectedAspect || 'General Experience',
+        organization_id: targetOrgId,
         created_at: serverTimestamp(),
       });
       setFbMessage('');
       setFbRating('5');
-      Alert.alert('جزاك الله خيرا / Thank You! ✨', 'Your valuable feedback has been submitted successfully to the Madrasa administration.');
-    } catch (error) {
+      Alert.alert('جزاك الله خيرا / Thank You! ✨', 'Your valuable feedback has been submitted successfully.');
+    } catch (error: any) {
       console.log('[About] submitFeedback ERROR', error);
-      Alert.alert('Error', 'Could not submit feedback right now.');
+      Alert.alert('Error', error?.message || 'Could not submit feedback right now.');
     } finally {
       setSubmittingFeedback(false);
     }
   };
 
+  const startEditingFeedback = (item: any) => {
+    setEditingFeedbackId(item.id);
+    setEditingFeedbackMsg(item.message);
+    setEditingFeedbackRating(Number(item.rating) || 5);
+    setEditingFeedbackTag(item.tag || 'Islamic Learning');
+  };
+
   const saveFeedbackEdit = async () => {
     if (!editingFeedbackId) return;
+    if (!editingFeedbackMsg.trim()) {
+      Alert.alert('Required', 'Feedback message cannot be empty.');
+      return;
+    }
+    setSavingFeedbackEdit(true);
     try {
-      await updateDoc(doc(db, 'feedback', editingFeedbackId), {
-        message: editingFeedbackMsg.trim(),
-        updated_at: serverTimestamp(),
-      });
+      const targetOrgId = activeOrgId || DEFAULT_ORGANIZATION_ID;
+      if (editingFeedbackId.startsWith('curated_')) {
+        const item = CURATED_COMMUNITY_TESTIMONIALS.find((c) => c.id === editingFeedbackId);
+        await addDoc(collection(db, 'feedback'), {
+          user_id: user?.uid || 'curated_user',
+          user_name: item?.user_name || 'Alimah Student',
+          message: editingFeedbackMsg.trim(),
+          rating: editingFeedbackRating,
+          tag: editingFeedbackTag.trim() || item?.tag || 'Islamic Learning',
+          organization_id: targetOrgId,
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+        });
+      } else {
+        await updateDoc(doc(db, 'feedback', editingFeedbackId), {
+          message: editingFeedbackMsg.trim(),
+          rating: editingFeedbackRating,
+          tag: editingFeedbackTag.trim() || 'Islamic Learning',
+          updated_at: serverTimestamp(),
+        });
+      }
       setEditingFeedbackId(null);
       setEditingFeedbackMsg('');
-    } catch (error) {
+      Alert.alert('Saved', 'Feedback updated successfully.');
+    } catch (error: any) {
       console.log('[About] saveFeedbackEdit ERROR', error);
-      Alert.alert('Error', 'Could not save feedback edit.');
+      Alert.alert('Error', error?.message || 'Could not save feedback edit.');
+    } finally {
+      setSavingFeedbackEdit(false);
     }
   };
 
   const deleteFeedback = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'feedback', id));
-    } catch (error) {
-      console.log('[About] deleteFeedback ERROR', error);
-      Alert.alert('Error', 'Could not delete feedback.');
-    }
+    Alert.alert(
+      'Delete Feedback',
+      'Are you sure you want to delete this student feedback / testimonial?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (id.startsWith('curated_')) {
+                Alert.alert('Notice', 'Sample template item removed from view.');
+              } else {
+                await deleteDoc(doc(db, 'feedback', id));
+                Alert.alert('Deleted', 'Feedback has been deleted successfully.');
+              }
+            } catch (error: any) {
+              console.log('[About] deleteFeedback ERROR', error);
+              Alert.alert('Error', error?.message || 'Could not delete feedback.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const openHelp = async () => {
-    const url = normalizeWhatsAppUrl(settings.whatsapp_contact || WHATSAPP_HELP_URL);
+    const rawTarget = settings.whatsapp_contact || activeOrg?.whatsapp_contact || WHATSAPP_HELP_URL;
+    const url = normalizeWhatsAppUrl(rawTarget);
     if (!url) {
       Alert.alert('Unavailable', 'WhatsApp support is not configured yet.');
       return;
@@ -724,7 +939,7 @@ export default function AboutScreen() {
 
   const shareApp = async () => {
     await Share.share({
-      message: `Join Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات) app for courses, library and updates.\n${MADRASA_WEBSITE_URL}`,
+      message: `Join ${activeOrg?.name || 'Suffah'} app for courses, library and updates.\n${MADRASA_WEBSITE_URL}`,
     });
   };
 
@@ -741,11 +956,7 @@ export default function AboutScreen() {
   };
 
   const donate = async (_donationType: 'sadqa' | 'zakat' | 'fitra' | 'langar') => {
-    try {
-      await Linking.openURL('https://madrasatussalikat.com/donations');
-    } catch {
-      Alert.alert('Donation Portal', 'Please visit https://madrasatussalikat.com/donations in your web browser to make voluntary contributions.');
-    }
+    router.push('/payment?domain=donation');
   };
 
   const savePaymentSettings = async () => {
@@ -761,9 +972,6 @@ export default function AboutScreen() {
   };
 
   const scrollRef = useRef<ScrollView>(null);
-  const scrollToAbout = () => {
-    scrollRef.current?.scrollToEnd({ animated: true });
-  };
 
   const safePush = (path: string) => {
     try {
@@ -806,7 +1014,7 @@ export default function AboutScreen() {
             <Text style={styles.headerTitle}>
               {isAdmin ? 'Institutional Administration' : isTeacher ? 'Faculty Services & Profile' : 'Student Services & Profile'}
             </Text>
-            <Text style={styles.headerSubtitle}>Madrasatu-s-Salikat Lil Banat • مدرسۃ السالکات للبنات</Text>
+            <Text style={styles.headerSubtitle}>{activeOrg?.name ? `${activeOrg.name} • Portal` : 'Suffah • Digital Madrasa Portal'}</Text>
           </View>
           <TouchableOpacity
             style={styles.headerSettingBtn}
@@ -942,12 +1150,6 @@ export default function AboutScreen() {
                     </Text>
                   </View>
                 )}
-                {!!profile.referral_code && (
-                  <View style={styles.premiumInfoRow}>
-                    <Ionicons name="share-social-outline" size={18} color={THEME.primary} style={styles.premiumInfoIcon} />
-                    <Text style={styles.premiumInfoText}>Referral Code: {profile.referral_code} • {profile.referral_count || 0} invites</Text>
-                  </View>
-                )}
                 {isAdmin && (
                   <View style={styles.execSummaryBox}>
                     <Text style={styles.execSummaryTitle}>🔐 Active Executive Authorization</Text>
@@ -977,7 +1179,7 @@ export default function AboutScreen() {
                     <Text style={styles.execPermTitle}>Platform Permissions</Text>
                   </View>
                   <Text style={styles.execPermDesc}>
-                    Authenticated with executive root privileges across the MSLB educational infrastructure.
+                    Authenticated with executive root privileges across the {activeOrg?.name || 'campus'} educational infrastructure.
                   </Text>
                   <View style={styles.execPermGrid}>
                     <View style={styles.execPermChip}><Ionicons name="people" size={13} color="#1565C0" /><Text style={styles.execPermChipText}>User Control</Text></View>
@@ -987,35 +1189,35 @@ export default function AboutScreen() {
                   </View>
                 </View>
 
-                <Text style={[styles.sectionSubtitleText, { marginTop: SPACING.md }]}>⚡ Quick Administration</Text>
+                <Text style={[styles.sectionSubtitleText, { marginTop: SPACING.md }]}>⚡ Executive Command Shortcuts</Text>
                 <View style={styles.statsGrid}>
-                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/users')} accessibilityRole="button" accessibilityLabel="User Roster">
+                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/(tabs)')} accessibilityRole="button" accessibilityLabel="Admin Dashboard Home">
                     <View style={[styles.statIconBox, { backgroundColor: '#EEF2FF' }]}>
-                      <Ionicons name="people" size={20} color="#4F46E5" />
+                      <Ionicons name="speedometer-outline" size={20} color="#4F46E5" />
                     </View>
-                    <Text style={styles.statCardValue}>Users</Text>
-                    <Text style={styles.statCardLabel}>Roster Control</Text>
+                    <Text style={styles.statCardValue}>Control Hub</Text>
+                    <Text style={styles.statCardLabel}>Full Dashboard</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/manage-academics')} accessibilityRole="button" accessibilityLabel="Academic Management">
+                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/organization-settings')} accessibilityRole="button" accessibilityLabel="Madrasa Settings">
                     <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
-                      <Ionicons name="school" size={20} color="#10B981" />
+                      <Ionicons name="business-outline" size={20} color="#10B981" />
                     </View>
-                    <Text style={styles.statCardValue}>LMS</Text>
-                    <Text style={styles.statCardLabel}>Courses & Teachers</Text>
+                    <Text style={styles.statCardValue}>Settings</Text>
+                    <Text style={styles.statCardLabel}>Bank, UPI & Profile</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/analytics')} accessibilityRole="button" accessibilityLabel="Analytics Dashboard">
+                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/send-push')} accessibilityRole="button" accessibilityLabel="Broadcast">
                     <View style={[styles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
-                      <Ionicons name="stats-chart" size={20} color="#D97706" />
+                      <Ionicons name="megaphone-outline" size={20} color="#D97706" />
                     </View>
-                    <Text style={styles.statCardValue}>Audit</Text>
-                    <Text style={styles.statCardLabel}>System Analytics</Text>
+                    <Text style={styles.statCardValue}>Broadcast</Text>
+                    <Text style={styles.statCardLabel}>Push Notifications</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/security')} accessibilityRole="button" accessibilityLabel="Security Diagnostics">
+                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/fatawa/manage')} accessibilityRole="button" accessibilityLabel="Dar-ul-Iftaa">
                     <View style={[styles.statIconBox, { backgroundColor: '#F5F3FF' }]}>
-                      <Ionicons name="shield-checkmark" size={20} color="#7C3AED" />
+                      <Ionicons name="ribbon-outline" size={20} color="#7C3AED" />
                     </View>
-                    <Text style={styles.statCardValue}>Security</Text>
-                    <Text style={styles.statCardLabel}>Health Check</Text>
+                    <Text style={styles.statCardValue}>Fatawa</Text>
+                    <Text style={styles.statCardLabel}>Dar-ul-Iftaa Q&A</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1123,7 +1325,7 @@ export default function AboutScreen() {
                         <Ionicons name="school" size={22} color="#10B981" />
                       </View>
                       <Text style={styles.badgeTitle} numberOfLines={1}>Faculty Member</Text>
-                      <Text style={styles.badgeDesc} numberOfLines={2}>Verified Islamic educator at MSLB</Text>
+                      <Text style={styles.badgeDesc} numberOfLines={2}>Verified Islamic educator at {activeOrg?.name || 'Madrasa'}</Text>
                     </View>
                     {earnedBadges.map((b) => (
                       <View key={b.id} style={styles.badgeCard}>
@@ -1210,61 +1412,31 @@ export default function AboutScreen() {
                   <>
                     <TouchableOpacity
                       style={styles.quickActionCard}
-                      onPress={() => safePush('/(tabs)/courses')}
+                      onPress={() => safePush('/sabaq-diary')}
                       accessibilityRole="button"
-                      accessibilityLabel="My Courses, Manage syllabus"
+                      accessibilityLabel="Sabaq Diary, Daily evaluations"
                     >
                       <View style={[styles.quickActionIconWrapper, { backgroundColor: '#ECFDF5' }]}>
-                        <Ionicons name="book-outline" size={20} color={THEME.primary} />
+                        <Ionicons name="journal-outline" size={20} color="#047857" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Assigned Courses</Text>
-                        <Text style={styles.quickActionSubText}>Manage Syllabus</Text>
+                        <Text style={styles.quickActionText}>Sabaq & Manzil</Text>
+                        <Text style={styles.quickActionSubText}>Daily Evaluation</Text>
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       style={styles.quickActionCard}
-                      onPress={() => safePush('/live-class')}
+                      onPress={() => safePush('/fatawa/manage')}
                       accessibilityRole="button"
-                      accessibilityLabel="Live Classroom, Host live session"
+                      accessibilityLabel="Dar-ul-Iftaa Scholar Q&A"
                     >
-                      <View style={[styles.quickActionIconWrapper, { backgroundColor: '#EFF6FF' }]}>
-                        <Ionicons name="videocam-outline" size={20} color="#2563EB" />
+                      <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FEF3C7' }]}>
+                        <Ionicons name="ribbon-outline" size={20} color="#D97706" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Live Classroom</Text>
-                        <Text style={styles.quickActionSubText}>Host & Stream</Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.quickActionCard}
-                      onPress={() => safePush('/attendance')}
-                      accessibilityRole="button"
-                      accessibilityLabel="Attendance, Mark daily presence"
-                    >
-                      <View style={[styles.quickActionIconWrapper, { backgroundColor: '#F0FDF4' }]}>
-                        <Ionicons name="checkbox-outline" size={20} color="#16A34A" />
-                      </View>
-                      <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Mark Attendance</Text>
-                        <Text style={styles.quickActionSubText}>Daily Presence</Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.quickActionCard}
-                      onPress={() => safePush('/(tabs)/quiz')}
-                      accessibilityRole="button"
-                      accessibilityLabel="Student Evaluations, Review quizzes"
-                    >
-                      <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FDF2F8' }]}>
-                        <Ionicons name="clipboard-outline" size={20} color="#DB2777" />
-                      </View>
-                      <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Evaluations</Text>
-                        <Text style={styles.quickActionSubText}>Review Quizzes</Text>
+                        <Text style={styles.quickActionText}>Dar-ul-Iftaa</Text>
+                        <Text style={styles.quickActionSubText}>Answer Questions</Text>
                       </View>
                     </TouchableOpacity>
 
@@ -1284,37 +1456,22 @@ export default function AboutScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={[styles.quickActionCard, styles.quickActionHighlight]}
-                      onPress={() => safePush('/payment')}
+                      style={styles.quickActionCard}
+                      onPress={() => safePush('/(tabs)/chats')}
                       accessibilityRole="button"
-                      accessibilityLabel="Pay Fees, Course & Support"
+                      accessibilityLabel="Faculty Chat, Direct Messages"
                     >
-                      <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FEF3C7' }]}>
-                        <Ionicons name="card-outline" size={20} color="#D97706" />
+                      <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FAF5FF' }]}>
+                        <Ionicons name="chatbubbles-outline" size={20} color="#9333EA" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Pay Fees</Text>
-                        <Text style={styles.quickActionSubText}>Fee & Donations</Text>
+                        <Text style={styles.quickActionText}>Faculty Chat</Text>
+                        <Text style={styles.quickActionSubText}>1-on-1 Messages</Text>
                       </View>
                     </TouchableOpacity>
                   </>
                 ) : (
                   <>
-                    <TouchableOpacity
-                      style={[styles.quickActionCard, styles.quickActionHighlight]}
-                      onPress={() => safePush('/payment')}
-                      accessibilityRole="button"
-                      accessibilityLabel="Pay Fees, Course & Support"
-                    >
-                      <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FEF3C7' }]}>
-                        <Ionicons name="card-outline" size={20} color="#D97706" />
-                      </View>
-                      <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Pay Fees</Text>
-                        <Text style={styles.quickActionSubText}>Fee & Donations</Text>
-                      </View>
-                    </TouchableOpacity>
-
                     <TouchableOpacity
                       style={styles.quickActionCard}
                       onPress={() => safePush('/(tabs)/courses')}
@@ -1359,6 +1516,21 @@ export default function AboutScreen() {
                         <Text style={styles.quickActionSubText}>Test & Results</Text>
                       </View>
                     </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.quickActionCard}
+                      onPress={() => safePush('/(tabs)/certificate')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Annual Result Sheet, Marksheet & Transcripts"
+                    >
+                      <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FEF3C7' }]}>
+                        <Ionicons name="ribbon-outline" size={20} color="#D97706" />
+                      </View>
+                      <View style={styles.quickActionContent}>
+                        <Text style={styles.quickActionText}>Annual Results</Text>
+                        <Text style={styles.quickActionSubText}>کارکردگی رپورٹ</Text>
+                      </View>
+                    </TouchableOpacity>
                   </>
                 )}
               </View>
@@ -1398,22 +1570,6 @@ export default function AboutScreen() {
 
               <Text style={styles.quickActionCategoryTitle}>{isTeacher ? 'Communication & Account' : 'Account & Services'}</Text>
               <View style={styles.quickActionsGrid}>
-                {isTeacher && (
-                  <TouchableOpacity
-                    style={styles.quickActionCard}
-                    onPress={() => safePush('/(tabs)/chats')}
-                    accessibilityRole="button"
-                    accessibilityLabel="Faculty Chat, Direct Messages"
-                  >
-                    <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FAF5FF' }]}>
-                      <Ionicons name="chatbubbles-outline" size={20} color="#9333EA" />
-                    </View>
-                    <View style={styles.quickActionContent}>
-                      <Text style={styles.quickActionText}>Faculty Chat</Text>
-                      <Text style={styles.quickActionSubText}>1-on-1 Messages</Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity
                   style={styles.quickActionCard}
                   onPress={() => safePush('/(tabs)/notifications')}
@@ -1426,66 +1582,6 @@ export default function AboutScreen() {
                   <View style={styles.quickActionContent}>
                     <Text style={styles.quickActionText}>Notifications</Text>
                     <Text style={styles.quickActionSubText}>Announcements</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.quickActionCard}
-                  onPress={() => safePush('/settings')}
-                  accessibilityRole="button"
-                  accessibilityLabel="Settings, Manage Account"
-                >
-                  <View style={[styles.quickActionIconWrapper, { backgroundColor: '#F1F5F9' }]}>
-                    <Ionicons name="settings-outline" size={20} color={THEME.textMain} />
-                  </View>
-                  <View style={styles.quickActionContent}>
-                    <Text style={styles.quickActionText}>Settings</Text>
-                    <Text style={styles.quickActionSubText}>Preferences & Security</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.quickActionCard}
-                  onPress={openHelp}
-                  accessibilityRole="button"
-                  accessibilityLabel="Help, Support"
-                >
-                  <View style={[styles.quickActionIconWrapper, { backgroundColor: '#ECFDF5' }]}>
-                    <Ionicons name="logo-whatsapp" size={20} color="#10B981" />
-                  </View>
-                  <View style={styles.quickActionContent}>
-                    <Text style={styles.quickActionText}>WhatsApp Help</Text>
-                    <Text style={styles.quickActionSubText}>Official Support</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.quickActionCard}
-                  onPress={() => Linking.openURL(MADRASA_WEBSITE_URL)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Official Website, Visit Web Portal"
-                >
-                  <View style={[styles.quickActionIconWrapper, { backgroundColor: '#E0E7FF' }]}>
-                    <Ionicons name="globe-outline" size={20} color="#4338CA" />
-                  </View>
-                  <View style={styles.quickActionContent}>
-                    <Text style={styles.quickActionText}>Web Portal</Text>
-                    <Text style={styles.quickActionSubText}>Official Website</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.quickActionCard}
-                  onPress={scrollToAbout}
-                  accessibilityRole="button"
-                  accessibilityLabel="About, Madrasa Info"
-                >
-                  <View style={[styles.quickActionIconWrapper, { backgroundColor: '#FEF9EE' }]}>
-                    <Ionicons name="information-circle-outline" size={20} color={THEME.gold} />
-                  </View>
-                  <View style={styles.quickActionContent}>
-                    <Text style={styles.quickActionText}>About Madrasa</Text>
-                    <Text style={styles.quickActionSubText}>Mission & Info</Text>
                   </View>
                 </TouchableOpacity>
 
@@ -1597,138 +1693,25 @@ export default function AboutScreen() {
           </View>
         )}
 
-        {/* ─── 6. Fee Management & Payments ─── */}
-        {!isAdmin ? (
-          <SectionCard title="Fee Management & Payments" icon="wallet-outline">
-            <Text style={styles.bodyText}>Secure and direct payment of academic fees and voluntary Islamic contributions.</Text>
-            <View style={styles.feeOverviewCard}>
-              <View style={styles.feeOverviewRow}>
-                <Text style={styles.feeLabelText}>Current Academic Fee</Text>
-                <Text style={styles.feeAmountText}>₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
-              </View>
-              {myPayments[0] ? (
-                <View style={[styles.statusCard, { marginVertical: 8 }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Ionicons
-                      name={paymentState(myPayments[0]) === 'Active' || paymentState(myPayments[0]) === 'Paid' ? "checkmark-circle" : "time"}
-                      size={16}
-                      color={paymentState(myPayments[0]) === 'Active' || paymentState(myPayments[0]) === 'Paid' ? THEME.success : THEME.gold}
-                    />
-                    <Text style={styles.statusLabel}>Latest Payment Status</Text>
-                  </View>
-                  <Text style={[styles.statusValue, { color: paymentState(myPayments[0]) === 'Active' || paymentState(myPayments[0]) === 'Paid' ? THEME.success : THEME.gold }]}>
-                    {paymentState(myPayments[0]).toUpperCase()}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={() => router.push('/payment')}
-              testID="open-unified-payment-btn"
-              accessibilityRole="button"
-              accessibilityLabel="Open Payment Flow"
-            >
-              <Ionicons name="card-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.primaryBtnText}>Open Unified Payment Flow</Text>
-            </TouchableOpacity>
-          </SectionCard>
-        ) : (
-          <>
-            <SectionCard title="Fee Management & Configuration" icon="card-outline">
-              <Text style={styles.bodyText}>Current Configured Fees: ₹{Number(settings.fees_amount || 0).toFixed(2)}</Text>
-              {myPayments[0] && (
-                <View style={styles.statusCard}>
-                  <Text style={styles.statusLabel}>Latest Payment Status</Text>
-                  <Text style={styles.statusValue}>{paymentState(myPayments[0])}</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                onPress={() => router.push('/payment')}
-                testID="open-unified-payment-btn-admin"
-                accessibilityRole="button"
-                accessibilityLabel="Open Unified Payment Flow"
-              >
-                <Ionicons name="card-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.primaryBtnText}>Open Unified Payment Flow</Text>
-              </TouchableOpacity>
-              
-              <View style={{ marginTop: 14, gap: 8 }}>
-                <Text style={styles.subTitle}>Admin Fee Configuration</Text>
-                <Text style={styles.inputLabel}>Monthly Fee Amount (INR)</Text>
-                <TextInput
-                  style={[styles.input, focusedInput === 'fees_amount' && styles.inputFocused]}
-                  placeholder="Fees amount (e.g. 1500)"
-                  placeholderTextColor={THEME.textMuted}
-                  keyboardType="numeric"
-                  value={String(settings.fees_amount || '')}
-                  onChangeText={(v) => setSettings((p) => ({ ...p, fees_amount: Number(v || 0) }))}
-                  onFocus={() => setFocusedInput('fees_amount')}
-                  onBlur={() => setFocusedInput(null)}
-                />
-                {paymentError ? <Text style={styles.inputError}>{paymentError}</Text> : null}
-                <TouchableOpacity style={styles.secondaryBtn} onPress={savePaymentSettings} accessibilityRole="button" accessibilityLabel="Save Payment Settings">
-                  <Text style={styles.secondaryBtnText}>Save Fee Settings</Text>
-                </TouchableOpacity>
-              </View>
-            </SectionCard>
-
-            <SectionCard title="Donations (Voluntary Contributions)" icon="heart-outline">
-              <Text style={styles.bodyText}>{settings.donation_content}</Text>
-              <Text style={[styles.inputLabel, { marginTop: 10 }]}>Editable Donation Appeal</Text>
-              <TextInput
-                style={[styles.input, styles.textArea, focusedInput === 'donation_content' && styles.inputFocused]}
-                placeholder="Write donation appeal content..."
-                placeholderTextColor={THEME.textMuted}
-                value={settings.donation_content}
-                onChangeText={(v) => setSettings((p) => ({ ...p, donation_content: v }))}
-                multiline
-                onFocus={() => setFocusedInput('donation_content')}
-                onBlur={() => setFocusedInput(null)}
-              />
-              <Text style={[styles.inputLabel, { marginTop: 10 }]}>Donation Amount</Text>
-              <TextInput
-                style={[styles.input, focusedInput === 'donation_amount' && styles.inputFocused]}
-                placeholder="Enter amount (₹)"
-                placeholderTextColor={THEME.textMuted}
-                keyboardType="numeric"
-                value={donationAmount}
-                onChangeText={setDonationAmount}
-                onFocus={() => setFocusedInput('donation_amount')}
-                onBlur={() => setFocusedInput(null)}
-              />
-              {donationError ? <Text style={styles.inputError}>{donationError}</Text> : null}
-              <View style={styles.row}>
-                <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('sadqa')} accessibilityRole="button" accessibilityLabel="Donate Sadqa">
-                  <Text style={styles.primaryBtnSmallText}>Donate Sadqa</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('zakat')} accessibilityRole="button" accessibilityLabel="Donate Zakat">
-                  <Text style={styles.primaryBtnSmallText}>Donate Zakat</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('fitra')} accessibilityRole="button" accessibilityLabel="Donate Fitra">
-                  <Text style={styles.primaryBtnSmallText}>Donate Fitra</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryBtnSmall} onPress={() => donate('langar')} accessibilityRole="button" accessibilityLabel="Donate Langar">
-                  <Text style={styles.primaryBtnSmallText}>Donate Langar</Text>
-                </TouchableOpacity>
-              </View>
-            </SectionCard>
-          </>
-        )}
-
         {/* ─── 7. Feedback & Community Testimonials ─── */}
         <SectionCard title="Student Feedback & Experiences" icon="chatbox-ellipses-outline">
           {/* Top Rating Scorecard Summary */}
           <View style={styles.testimonialScorecard}>
             <View style={styles.scorecardMainCol}>
-              <Text style={styles.scorecardBigNum}>4.9</Text>
+              <Text style={styles.scorecardBigNum}>{avgRating}</Text>
               <View style={styles.scorecardStarsRow}>
                 {[1, 2, 3, 4, 5].map((s) => (
-                  <Ionicons key={s} name="star" size={16} color="#F59E0B" />
+                  <Ionicons
+                    key={s}
+                    name={s <= Math.round(Number(avgRating)) ? 'star' : 'star-outline'}
+                    size={16}
+                    color="#F59E0B"
+                  />
                 ))}
               </View>
-              <Text style={styles.scorecardTotalText}>Overall Student Rating</Text>
+              <Text style={styles.scorecardTotalText}>
+                {testimonials.length > 0 ? `Based on ${testimonials.length} reviews` : 'Overall Student Rating'}
+              </Text>
             </View>
 
             <View style={styles.scorecardDivider} />
@@ -1736,15 +1719,15 @@ export default function AboutScreen() {
             <View style={styles.scorecardStatsCol}>
               <View style={styles.scoreStatRow}>
                 <Ionicons name="ribbon-outline" size={15} color="#059669" />
-                <Text style={styles.scoreStatText}>98% Positive Feedback</Text>
+                <Text style={styles.scoreStatText}>{positivePercent} Positive Feedback</Text>
               </View>
               <View style={styles.scoreStatRow}>
                 <Ionicons name="checkmark-circle-outline" size={15} color="#005F46" />
-                <Text style={styles.scoreStatText}>Verified Taliba Reviews</Text>
+                <Text style={styles.scoreStatText}>Verified Student Reviews</Text>
               </View>
               <View style={styles.scoreStatRow}>
-                <Ionicons name="sparkles-outline" size={15} color="#D97706" />
-                <Text style={styles.scoreStatText}>Authentic Guidance</Text>
+                <Ionicons name="shield-checkmark-outline" size={15} color="#D97706" />
+                <Text style={styles.scoreStatText}>Madrasa Isolated</Text>
               </View>
             </View>
           </View>
@@ -1774,13 +1757,29 @@ export default function AboutScreen() {
                   ))}
                   <Text style={styles.ratingNumText}>({mySubmittedFeedback[0].rating || 5}/5)</Text>
                 </View>
-                <Text style={styles.submittedNote}>جزاك الله خيرا — Reviewed by Admin</Text>
+                <Text style={styles.submittedNote}>جزاك الله خيرا — Active Submission</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 14, marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
+                <TouchableOpacity
+                  onPress={() => startEditingFeedback(mySubmittedFeedback[0])}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit My Feedback"
+                >
+                  <Text style={styles.actionLink}>Edit My Feedback</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => deleteFeedback(mySubmittedFeedback[0].id)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete My Feedback"
+                >
+                  <Text style={[styles.actionLink, { color: THEME.error }]}>Delete</Text>
+                </TouchableOpacity>
               </View>
             </View>
           ) : (
             <View style={styles.feedbackFormCard}>
               <Text style={styles.feedbackFormHeading}>Share Your Feedback & Experience</Text>
-              <Text style={styles.feedbackFormSub}>How has your Islamic learning journey been with Madrasatu-s-Salikat?</Text>
+              <Text style={styles.feedbackFormSub}>How has your Islamic learning journey been with {activeOrg?.name || 'the Madrasa'}?</Text>
 
               {/* Interactive Star Rating Selector */}
               <Text style={styles.inputLabel}>Your Overall Rating:</Text>
@@ -1898,7 +1897,14 @@ export default function AboutScreen() {
 
           {/* Testimonials Cards List */}
           {testimonials.length === 0 ? (
-            <Text style={styles.bodyText}>No student testimonials found.</Text>
+            <View style={{ paddingVertical: SPACING.lg, alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: RADIUS.md, marginVertical: SPACING.sm }}>
+              <Ionicons name="chatbubbles-outline" size={32} color={THEME.textMuted} style={{ marginBottom: 6 }} />
+              <Text style={[styles.bodyText, { textAlign: 'center', color: THEME.textMuted }]}>
+                {isAdmin
+                  ? `No student testimonials yet for ${activeOrg?.name || 'this madrasa'}. When students submit feedback, it will appear here. You can also write or manage testimonials above.`
+                  : `No testimonials yet for ${activeOrg?.name || 'this madrasa'}. Be the first student to share your learning experience above!`}
+              </Text>
+            </View>
           ) : null}
 
           {testimonials.map((item) => (
@@ -1937,7 +1943,34 @@ export default function AboutScreen() {
 
               {editingFeedbackId === item.id ? (
                 <View style={{ marginTop: 8 }}>
-                  <Text style={styles.inputLabel}>Edit Feedback Message</Text>
+                  <Text style={[styles.inputLabel, { marginTop: 4 }]}>Edit Rating:</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <TouchableOpacity
+                        key={s}
+                        onPress={() => setEditingFeedbackRating(s)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${s} Stars`}
+                      >
+                        <Ionicons
+                          name={s <= editingFeedbackRating ? 'star' : 'star-outline'}
+                          size={22}
+                          color="#F59E0B"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.inputLabel}>Aspect / Category:</Text>
+                  <TextInput
+                    style={[styles.input, { marginBottom: 8 }]}
+                    value={editingFeedbackTag}
+                    onChangeText={setEditingFeedbackTag}
+                    placeholder="e.g. Live Classes, Tajweed, Quran"
+                    placeholderTextColor={THEME.textMuted}
+                  />
+
+                  <Text style={styles.inputLabel}>Feedback Message:</Text>
                   <TextInput
                     style={[styles.input, styles.textArea, focusedInput === 'edit_feedback' && styles.inputFocused]}
                     value={editingFeedbackMsg}
@@ -1946,14 +1979,15 @@ export default function AboutScreen() {
                     onFocus={() => setFocusedInput('edit_feedback')}
                     onBlur={() => setFocusedInput(null)}
                   />
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity
                       style={[styles.secondaryBtn, { flex: 1 }]}
                       onPress={saveFeedbackEdit}
+                      disabled={savingFeedbackEdit}
                       accessibilityRole="button"
                       accessibilityLabel="Save Feedback Edit"
                     >
-                      <Text style={styles.secondaryBtnText}>Save</Text>
+                      <Text style={styles.secondaryBtnText}>{savingFeedbackEdit ? 'Saving...' : 'Save'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.secondaryBtn, { flex: 1, backgroundColor: '#F1F5F9' }]}
@@ -1971,10 +2005,7 @@ export default function AboutScreen() {
               {(isAdmin || (user?.uid && (item as any).user_id === user.uid)) && editingFeedbackId !== item.id && (
                 <View style={styles.feedbackActions}>
                   <TouchableOpacity
-                    onPress={() => {
-                      setEditingFeedbackId(item.id);
-                      setEditingFeedbackMsg(item.message);
-                    }}
+                    onPress={() => startEditingFeedback(item)}
                     accessibilityRole="button"
                     accessibilityLabel="Edit Feedback"
                   >
@@ -1995,7 +2026,10 @@ export default function AboutScreen() {
 
         {/* ─── 8. About Madrasa Section ─── */}
         <AboutMadrasaSection
-          aboutMadrasa={settings.about_madrasa}
+          aboutMadrasa={activeOrg?.about_madrasa ?? settings.about_madrasa ?? ''}
+          madrasaName={activeOrg?.name || DEFAULT_ORGANIZATION_NAME}
+          madrasaWebsite={activeOrg?.website}
+          activeOrgId={activeOrgId}
           isAdmin={isAdmin}
           onSaved={handleAboutSaved}
         />
@@ -2135,57 +2169,65 @@ export default function AboutScreen() {
             </>
           ) : (
             <View style={{ marginTop: 4, gap: 10 }}>
-              <TouchableOpacity
-                style={styles.premiumSocialBtn}
-                onPress={() => { void openSocialLink(normalizeWhatsAppUrl(settings.whatsapp_channel) || settings.whatsapp_channel, 'WhatsApp Channel'); }}
-                accessibilityRole="button"
-                accessibilityLabel="Open WhatsApp Channel"
-              >
-                <View style={[styles.socialIconContainer, { backgroundColor: '#ECFDF5' }]}>
-                  <Ionicons name="logo-whatsapp" size={18} color="#10B981" />
-                </View>
-                <Text style={styles.premiumSocialBtnText}>WhatsApp Channel</Text>
-                <Ionicons name="open-outline" size={16} color={THEME.textMuted} style={{ marginLeft: "auto" }} />
-              </TouchableOpacity>
+              {Boolean(settings.whatsapp_channel) && (
+                <TouchableOpacity
+                  style={styles.premiumSocialBtn}
+                  onPress={() => { void openSocialLink(normalizeWhatsAppUrl(settings.whatsapp_channel) || settings.whatsapp_channel, 'WhatsApp Channel'); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open WhatsApp Channel"
+                >
+                  <View style={[styles.socialIconContainer, { backgroundColor: '#ECFDF5' }]}>
+                    <Ionicons name="logo-whatsapp" size={18} color="#10B981" />
+                  </View>
+                  <Text style={styles.premiumSocialBtnText}>WhatsApp Channel</Text>
+                  <Ionicons name="open-outline" size={16} color={THEME.textMuted} style={{ marginLeft: "auto" }} />
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity
-                style={styles.premiumSocialBtn}
-                onPress={() => { void openSocialLink(settings.instagram, 'Instagram'); }}
-                accessibilityRole="button"
-                accessibilityLabel="Open Instagram Profile"
-              >
-                <View style={[styles.socialIconContainer, { backgroundColor: '#FDF2F8' }]}>
-                  <Ionicons name="logo-instagram" size={18} color="#DB2777" />
-                </View>
-                <Text style={styles.premiumSocialBtnText}>Instagram</Text>
-                <Ionicons name="open-outline" size={16} color={THEME.textMuted} style={{ marginLeft: "auto" }} />
-              </TouchableOpacity>
+              {Boolean(settings.instagram) && (
+                <TouchableOpacity
+                  style={styles.premiumSocialBtn}
+                  onPress={() => { void openSocialLink(settings.instagram, 'Instagram'); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open Instagram Profile"
+                >
+                  <View style={[styles.socialIconContainer, { backgroundColor: '#FDF2F8' }]}>
+                    <Ionicons name="logo-instagram" size={18} color="#DB2777" />
+                  </View>
+                  <Text style={styles.premiumSocialBtnText}>Instagram</Text>
+                  <Ionicons name="open-outline" size={16} color={THEME.textMuted} style={{ marginLeft: "auto" }} />
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity
-                style={styles.premiumSocialBtn}
-                onPress={() => { void openSocialLink(settings.youtube_link, 'YouTube'); }}
-                accessibilityRole="button"
-                accessibilityLabel="Open YouTube Channel"
-              >
-                <View style={[styles.socialIconContainer, { backgroundColor: '#FEF2F2' }]}>
-                  <Ionicons name="logo-youtube" size={18} color="#EF4444" />
-                </View>
-                <Text style={styles.premiumSocialBtnText}>YouTube</Text>
-                <Ionicons name="open-outline" size={16} color={THEME.textMuted} style={{ marginLeft: "auto" }} />
-              </TouchableOpacity>
+              {Boolean(settings.youtube_link) && (
+                <TouchableOpacity
+                  style={styles.premiumSocialBtn}
+                  onPress={() => { void openSocialLink(settings.youtube_link, 'YouTube'); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open YouTube Channel"
+                >
+                  <View style={[styles.socialIconContainer, { backgroundColor: '#FEF2F2' }]}>
+                    <Ionicons name="logo-youtube" size={18} color="#EF4444" />
+                  </View>
+                  <Text style={styles.premiumSocialBtnText}>YouTube</Text>
+                  <Ionicons name="open-outline" size={16} color={THEME.textMuted} style={{ marginLeft: "auto" }} />
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity
-                style={styles.premiumSocialBtn}
-                onPress={() => { void openSocialLink(settings.telegram_link, 'Telegram'); }}
-                accessibilityRole="button"
-                accessibilityLabel="Open Telegram Channel"
-              >
-                <View style={[styles.socialIconContainer, { backgroundColor: '#EFF6FF' }]}>
-                  <Ionicons name="paper-plane" size={18} color="#2563EB" />
-                </View>
-                <Text style={styles.premiumSocialBtnText}>Telegram</Text>
-                <Ionicons name="open-outline" size={16} color={THEME.textMuted} style={{ marginLeft: "auto" }} />
-              </TouchableOpacity>
+              {Boolean(settings.telegram_link) && (
+                <TouchableOpacity
+                  style={styles.premiumSocialBtn}
+                  onPress={() => { void openSocialLink(settings.telegram_link, 'Telegram'); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open Telegram Channel"
+                >
+                  <View style={[styles.socialIconContainer, { backgroundColor: '#EFF6FF' }]}>
+                    <Ionicons name="paper-plane" size={18} color="#2563EB" />
+                  </View>
+                  <Text style={styles.premiumSocialBtnText}>Telegram</Text>
+                  <Ionicons name="open-outline" size={16} color={THEME.textMuted} style={{ marginLeft: "auto" }} />
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 style={[styles.premiumSocialBtn, { borderColor: THEME.primary, backgroundColor: '#E8F5EE' }]}
@@ -2203,13 +2245,9 @@ export default function AboutScreen() {
           )}
 
           <View style={[styles.row, { marginTop: 14 }]}>
-            <TouchableOpacity style={styles.primaryBtnSmall} onPress={shareApp} testID="share-app-btn" accessibilityRole="button" accessibilityLabel="Share App with Friends">
+            <TouchableOpacity style={[styles.primaryBtnSmall, { flex: 1 }]} onPress={shareApp} testID="share-app-btn" accessibilityRole="button" accessibilityLabel="Share App with Friends">
               <Ionicons name="share-social-outline" size={16} color={THEME.gold} />
               <Text style={styles.primaryBtnSmallText}>Share App</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.primaryBtnSmall} onPress={openHelp} testID="help-btn" accessibilityRole="button" accessibilityLabel="Get Help on WhatsApp">
-              <Ionicons name="help-buoy-outline" size={16} color={THEME.gold} />
-              <Text style={styles.primaryBtnSmallText}>Help & Support</Text>
             </TouchableOpacity>
           </View>
         </SectionCard>

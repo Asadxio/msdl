@@ -173,6 +173,7 @@ export const claimTeacherAccessCode = onCall(
       role: "teacher",
       status: "approved",
       teacher_id: teacherId,
+      organization_id: teacherData.organization_id || "mslb-main",
       name: teacherName,
       updated_at: now,
     });

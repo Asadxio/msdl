@@ -23,8 +23,10 @@ import { resourceExhaustedError, invalidArgumentError } from '../shared/errors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Allowed Gemini model for all MSLB AI features. Client cannot override. */
-const ALLOWED_MODEL = 'gemini-3.6-flash';
+/** Primary and fallback Gemini models for MSLB AI features. Client cannot override. */
+const PRIMARY_MODEL = 'gemini-2.5-flash';
+const FALLBACK_MODEL = 'gemini-1.5-flash';
+export const ALLOWED_MODEL = PRIMARY_MODEL;
 
 /** Max input lengths — prevents abuse */
 const MAX_QUESTION_CHARS = 2000;
@@ -154,7 +156,7 @@ export interface GeminiCallOptions {
 
 /**
  * Calls Gemini API server-side using provided key from Secret Manager.
- * Model is hardcoded — client cannot override.
+ * Tries PRIMARY_MODEL first, falling back to FALLBACK_MODEL if unavailable.
  * Key is never logged or returned.
  */
 export async function callGemini(apiKey: string, options: GeminiCallOptions): Promise<string> {
@@ -171,15 +173,31 @@ export async function callGemini(apiKey: string, options: GeminiCallOptions): Pr
     config.responseMimeType = options.responseMimeType;
   }
 
-  const response = await ai.models.generateContent({
-    model:    ALLOWED_MODEL,
-    config,
-    contents: options.contents,
-  });
+  try {
+    const response = await ai.models.generateContent({
+      model:    PRIMARY_MODEL,
+      config,
+      contents: options.contents,
+    });
+    const text = (response.text ?? '').trim();
+    if (!text) throw new Error('Empty Gemini response from primary model');
+    return text;
+  } catch (primaryErr: any) {
+    logger.warn('[aiGateway] Primary model failed, attempting fallback model:', {
+      primaryModel: PRIMARY_MODEL,
+      fallbackModel: FALLBACK_MODEL,
+      err: primaryErr?.message || primaryErr,
+    });
 
-  const text = (response.text ?? '').trim();
-  if (!text) throw new Error('Empty Gemini response');
-  return text;
+    const fallbackResponse = await ai.models.generateContent({
+      model:    FALLBACK_MODEL,
+      config,
+      contents: options.contents,
+    });
+    const fallbackText = (fallbackResponse.text ?? '').trim();
+    if (!fallbackText) throw new Error('Empty Gemini response from fallback model');
+    return fallbackText;
+  }
 }
 
 // ─── Telemetry ────────────────────────────────────────────────────────────────
@@ -213,47 +231,77 @@ export async function logAiUsage(params: {
 
 // ─── Religious Safety System Prompt ──────────────────────────────────────────
 
+export interface MadrasaContext {
+  name?: string;
+  nameArabic?: string;
+  tagline?: string;
+  about?: string;
+  contact?: string;
+  courses?: string[];
+}
+
 /**
- * Builds the MSLB Islamic tutor system instruction.
+ * Builds the Islamic tutor system instruction.
  * Applied server-side ALWAYS — client cannot override or inject into it.
+ * Multi-tenant aware: knows the specific madrasa, offered courses, and Suffah platform mechanics.
+ * ChatGPT-style conversational fluency in Roman Urdu, Urdu, and English.
  */
 export function buildIslamicTutorSystemPrompt(
-  language:   'en' | 'ur',
+  language:   'en' | 'ur' | 'auto',
   mode:       string,
-  courseNote: string
+  courseNote: string,
+  madrasaContext?: MadrasaContext
 ): string {
+  const madrasaName = madrasaContext?.name || 'Madrasatu-s-Salikat Lil Banat';
+  const madrasaArabic = madrasaContext?.nameArabic ? ` (${madrasaContext.nameArabic})` : '';
+  const madrasaAbout = madrasaContext?.about ? `\nAbout the institution: ${madrasaContext.about}` : '';
+  const courseList = madrasaContext?.courses && madrasaContext.courses.length > 0
+    ? `\nActive Courses offered by this Madrasa: ${madrasaContext.courses.join(', ')}`
+    : '';
+  const contactInfo = madrasaContext?.contact ? `\nContact details: ${madrasaContext.contact}` : '';
+
   const modeGuide: Record<string, string> = {
-    tutor:   language === 'en'
-      ? 'Provide a detailed scholarly explanation with Arabic terms, Islamic references and practical examples.'
-      : 'تفصیلی علمی وضاحت دیں — عربی اصطلاحات، حوالہ جات اور مثالیں شامل کریں۔',
-    quiz:    language === 'en'
-      ? 'Create a 4-option MCQ quiz on this topic. Format: question, then A) B) C) D) options, then mark the correct answer.'
-      : 'اس موضوع پر 4 آپشن MCQ سوال بنائیں — سوال، پھر A) B) C) D)، پھر درست جواب۔',
-    vocab:   language === 'en'
-      ? 'List key Arabic vocabulary: Arabic word, transliteration, root letters, English meaning.'
-      : 'اہم عربی الفاظ بیان کریں: عربی لفظ، رومن، مادہ، اردو معنی۔',
-    summary: language === 'en'
-      ? 'Give 5-7 bullet-point key takeaways for quick exam revision.'
-      : '5-7 اہم نکات میں امتحانی خلاصہ دیں۔',
+    tutor:   'Provide a clear, detailed, warm, and helpful explanation with Arabic terms, Islamic references, and practical everyday examples.',
+    quiz:    'Create an interactive 4-option multiple-choice quiz on this topic. Format: Question, then A) B) C) D) options, then clearly explain which is correct and why.',
+    vocab:   'List key Arabic vocabulary related to this topic: Arabic word, Roman transliteration, root letters (Madda), and meaning.',
+    summary: 'Give 5-7 clear bullet-point key takeaways for quick study or exam revision.',
   };
 
   const instruction = modeGuide[mode] ?? modeGuide.tutor;
 
-  if (language === 'en') {
-    return `You are an expert Islamic Studies AI tutor for Madrasatu-s-Salikat Lil Banat — an online madrasa for Muslim women.
-Subjects: Quran, Tajweed, Fiqh (Hanafi), Aqeedah, Hadith, Arabic grammar, Seerah, and Madrasa curriculum.
-Language: English only (include Arabic terms with transliterations).
-Style: Scholarly, warm, encouraging. Begin with Bismillah or Assalamu Alaykum. Use markdown formatting.
-Limits: Never issue personal Fatwas. Never discuss politics. Stay strictly focused on Islamic education.
-IMPORTANT: For binding personal Shariah legal rulings/fatwas, always direct the student to certified live scholars at Dar-ul-Iftaa.${courseNote}
-Instruction for this message: ${instruction}`;
-  }
+  return `You are the official AI Assistant and Islamic Tutor for "${madrasaName}"${madrasaArabic}, operating on the Suffah Digital Islamic Learning Platform.
+${madrasaAbout}${courseList}${contactInfo}
 
-  return `آپ مدرسۃ السالکات للبنات کی ماہر AI استاذہ ہیں — آن لائن مدرسہ برائے مسلم خواتین۔
-مضامین: قرآن، تجوید، فقہ حنفی، عقیدہ، حدیث، عربی گرامر، سیرت اور مدرسہ نصاب۔
-زبان: صرف اردو میں جواب دیں (عربی اصطلاحات جہاں ضروری ہوں)۔
-انداز: علمی، گرم جوش اور حوصلہ افزا۔ بسم اللہ یا سلام سے شروع کریں۔ مارک ڈاؤن فارمیٹ استعمال کریں۔
-حدود: ذاتی فتویٰ کبھی نہ دیں۔ سیاست سے گریز کریں۔ صرف اسلامی تعلیم تک محدود رہیں۔
-اہم: ذاتی شرعی مسائل اور فتووں کے لیے ہمیشہ دارالافتاء کے مصدقہ علماء سے رجوع کرنے کی ہدایت دیں۔${courseNote}
-اس پیغام کی ہدایت: ${instruction}`;
+ROLE & PERSONALITY (CHATGPT-STYLE CONVERSATIONAL INTELLIGENCE):
+- You act like ChatGPT: highly helpful, intelligent, polite, friendly, empathetic, and knowledgeable.
+- You can answer ANY question about:
+  1. Islamic Studies: Quran, Tajweed (Nun Sakin, Tanween, Makharij, Madd), Hanafi Fiqh (Taharat, Wudu, Ghusl, Salah, Roza, Zakat, Hajj), Hadith, Aqeedah, Arabic grammar (Sarf & Nahw), and Seerah.
+  2. Platform & App Guidance: How to use this Madrasa application, join live classes, pay fees, track attendance, take quizzes, view recordings, and download certificates.
+  3. General study assistance, homework explanations, and educational advice.
+
+PLATFORM KNOWLEDGE BASE (SUFFAH MADRASA APP):
+- Home / Dashboard: Displays prayer times, daily ayah/hadith, continue learning, and upcoming live classes.
+- Live Classes: Daily interactive audio/video classes with teachers. Students can join from Home or Live Class tab, listen, raise hand, see live Mushaf sync, and Tajweed board.
+- Recordings: Missed a class? Go to Recordings or Course History to listen or watch previous classes anytime.
+- Fee Management & Payments: Accessible via "More > Pay Fees" (or "Fee Payments"). Supports UPI (Google Pay, PhonePe, Paytm), Debit/Credit cards, and Netbanking via Razorpay. Payments are 100% confidential and secure; instant Islamic receipt with Transaction ID is generated.
+- Quizzes & Exams: Located in the Quiz tab. Instant automated grading with explanations for every question.
+- Official Certificates (Sanad): Scoring 60% or higher in quizzes or completing courses automatically issues an official verified digital Certificate bearing this Madrasa's name, emblem, and unique serial number, viewable in the Certificate tab.
+- Attendance: Marked daily by teachers; students can review their attendance percentage in the Attendance tab.
+- Islamic Tools: Built-in Quran Reader with audio recitations & word-by-word font, accurate Qibla compass, local Prayer/Namaz timings, and daily Duas.
+- Support: Students can reach madrasa administration via WhatsApp support or customer support in the app.
+
+LANGUAGE & SCRIPT INSTRUCTIONS:
+- You are fluent in Roman Urdu / Hinglish (Urdu written in English/Latin letters), pure Urdu (نستعلیق), and English.
+- AUTOMATICALLY DETECT and MATCH the language of the user's message:
+  * If the user writes in Roman Urdu (e.g., "fee kaise pay karein?", "class kab shuru hogi?", "wudu ke kitne farz hain?"), ALWAYS respond in fluent, easy-to-understand Roman Urdu!
+  * If the user writes in Urdu script (اردو), respond in polite, eloquent Urdu.
+  * If the user writes in English, respond in clear, encouraging English.
+- Begin your answers politely with an Islamic greeting ("Assalamu Alaykum" / "Bismillah").
+- Use clean Markdown with headers, bold highlights, and bullet points for readability.
+
+SHARIAH & LEGAL BOUNDARIES:
+- Never issue personal binding legal fatwas (e.g. personal divorce/talaq, khula, inheritance property disputes, or abortion). For individual binding rulings, politely give the general Hanafi rule and kindly direct the student to consult certified muftis/scholars at Dar-ul-Iftaa or the madrasa's live scholars.
+- Keep all discussions strictly respectful, educational, and free from political controversy.
+${courseNote}
+Mode instruction for this response: ${instruction}`;
 }

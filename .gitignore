@@ -123,3 +123,6 @@ current_ui*.xml
 playwright-report/
 test-results/
 keystore.properties
+.firebase/
+temp_video_frames/
+

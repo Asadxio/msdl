@@ -20,7 +20,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_NAME } from '@/lib/tenantContext';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, getThemeColors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -153,11 +154,19 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
 
 export default function LoginScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ orgId?: string; orgName?: string }>();
+  const { activeOrg, switchOrganization } = useActiveOrganization();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
   const { signIn } = useAuth();
+
+  useEffect(() => {
+    if (searchParams.orgId) {
+      switchOrganization(searchParams.orgId);
+    }
+  }, [searchParams.orgId, switchOrganization]);
 
   // Field refs for focus chain (prevents autofill jump)
   const passwordRef = useRef<TextInput>(null);
@@ -238,13 +247,44 @@ export default function LoginScreen() {
             </View>
             <Text style={styles.bismillahHeader}>بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْم</Text>
             <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
-            <Text style={styles.institutionArabic}>مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</Text>
+            <Text style={[styles.institutionArabic, { color: isDarkMode ? '#34D399' : '#005F46' }]}>صُـفَّـة • بوابة المدارس الإسلامية</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
               Sign in to continue your sacred learning journey
             </Text>
           </FadeInView>
 
           {/* Premium Login Card */}
+          <FadeInView delay={40}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push('/select-madrasa')}
+              style={[
+                styles.campusSelectorCard,
+                {
+                  backgroundColor: isDarkMode ? '#132C23' : '#FFFFFF',
+                  borderColor: isDarkMode ? '#2E5043' : '#E2E8E5',
+                },
+              ]}
+              accessibilityLabel="Select Madrasa Campus"
+            >
+              <View style={styles.campusIconCircle}>
+                <Ionicons name="school" size={15} color="#FFFFFF" />
+              </View>
+              <View style={styles.campusInfo}>
+                <Text style={[styles.campusLabel, { color: colors.textMuted }]}>
+                  Selected Madrasa Campus:
+                </Text>
+                <Text style={[styles.campusName, { color: colors.text }]} numberOfLines={1}>
+                  {activeOrg?.name || DEFAULT_ORGANIZATION_NAME}
+                </Text>
+              </View>
+              <View style={styles.campusChangePill}>
+                <Text style={styles.campusChangeText}>Change</Text>
+                <Ionicons name="swap-horizontal" size={12} color={COLORS.primary} style={{ marginLeft: 3 }} />
+              </View>
+            </TouchableOpacity>
+          </FadeInView>
+
           <FadeInView delay={60}>
             <View style={[styles.formCard, { backgroundColor: isDarkMode ? '#102820' : '#FFFFFF', borderColor: colors.border }]}>
               
@@ -332,14 +372,14 @@ export default function LoginScreen() {
                   { 
                     backgroundColor: formIsValid 
                       ? (isDarkMode ? '#005F46' : '#005F46') 
-                      : (isDarkMode ? '#1B3B32' : '#85B5A8'),
+                      : (isDarkMode ? '#1B2E26' : '#E2E8E5'),
                     shadowColor: formIsValid ? '#005F46' : 'transparent',
                     shadowOffset: { width: 0, height: 6 },
                     shadowOpacity: formIsValid ? 0.35 : 0,
                     shadowRadius: 12,
                     elevation: formIsValid ? 5 : 0,
                   },
-                  !formIsValid && styles.btnDisabled
+                  !formIsValid && { opacity: 0.9 }
                 ]} 
                 onPress={() => {
                   try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
@@ -355,8 +395,8 @@ export default function LoginScreen() {
                   </View>
                 ) : (
                   <View style={styles.primaryBtnInnerRow}>
-                    <Text style={styles.primaryBtnText}>Sign In</Text>
-                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
+                    <Text style={[styles.primaryBtnText, { color: formIsValid ? '#FFFFFF' : (isDarkMode ? '#6B8E82' : '#64748B') }]}>Sign In</Text>
+                    <Ionicons name="arrow-forward" size={18} color={formIsValid ? '#FFFFFF' : (isDarkMode ? '#6B8E82' : '#64748B')} style={{ marginLeft: 8 }} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -381,8 +421,8 @@ export default function LoginScreen() {
           {/* Institutional Customer Onboarding Link */}
           <View style={[styles.footerRow, { marginTop: 4, marginBottom: 8 }]}>
             <Text style={[styles.footerText, { color: colors.textMuted, fontSize: 13 }]}>Setting up for your Madrasa? </Text>
-            <TouchableOpacity onPress={() => router.push('/onboarding/start-madrasa')} testID="start-madrasa-btn">
-              <Text style={[styles.footerLink, { color: isDarkMode ? '#34D399' : '#005F46', fontWeight: '700', fontSize: 13 }]}>Start a Madrasa</Text>
+            <TouchableOpacity onPress={() => router.push('/register-madrasa')} testID="start-madrasa-btn">
+              <Text style={[styles.footerLink, { color: isDarkMode ? '#34D399' : '#005F46', fontWeight: '700', fontSize: 13 }]}>Register Madrasa</Text>
             </TouchableOpacity>
           </View>
           
@@ -398,7 +438,8 @@ export default function LoginScreen() {
             onPress={async () => {
               try { void Haptics.selectionAsync(); } catch {}
               const phone = '916366919122';
-              const text = 'Salam. I am interested in Madrasa Tus Salikat Lil Banat. I need assistance signing in.';
+              const orgName = activeOrg?.name || DEFAULT_ORGANIZATION_NAME;
+              const text = `Salam. I need assistance signing in to ${orgName} on Suffah.`;
               const webUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
               const directUrl = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
               try {
@@ -504,6 +545,58 @@ const styles = StyleSheet.create({
     textAlign: 'center', 
     lineHeight: 19,
     paddingHorizontal: 16,
+  },
+  campusSelectorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  campusIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  campusInfo: {
+    flex: 1,
+  },
+  campusLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  campusName: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  campusChangePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9F5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#C2E5D9',
+  },
+  campusChangeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   formCard: {
     width: '100%',

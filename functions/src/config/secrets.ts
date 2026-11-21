@@ -93,11 +93,11 @@ export const SELF_HOSTED_WHATSAPP_API_KEY = defineOptionalSecret('SELF_HOSTED_WH
  *   firebase functions:secrets:set SMTP_PASS
  *   firebase functions:secrets:set SMTP_FROM
  */
-export const SMTP_HOST = defineSecret('SMTP_HOST');
-export const SMTP_PORT = defineSecret('SMTP_PORT');
-export const SMTP_USER = defineSecret('SMTP_USER');
-export const SMTP_PASS = defineSecret('SMTP_PASS');
-export const SMTP_FROM = defineSecret('SMTP_FROM');
+export const SMTP_HOST = defineOptionalSecret('SMTP_HOST');
+export const SMTP_PORT = defineOptionalSecret('SMTP_PORT');
+export const SMTP_USER = defineOptionalSecret('SMTP_USER');
+export const SMTP_PASS = defineOptionalSecret('SMTP_PASS');
+export const SMTP_FROM = defineOptionalSecret('SMTP_FROM');
 
 /**
  * Server-side key for HMAC-SHA256 verification code hashing and email rate-limit identifier derivation.
@@ -105,7 +105,7 @@ export const SMTP_FROM = defineSecret('SMTP_FROM');
  * Managed in Google Cloud Secret Manager:
  *   firebase functions:secrets:set PRIVACY_VERIFICATION_SECRET
  */
-export const PRIVACY_VERIFICATION_SECRET = defineSecret('PRIVACY_VERIFICATION_SECRET');
+export const PRIVACY_VERIFICATION_SECRET = defineOptionalSecret('PRIVACY_VERIFICATION_SECRET');
 
 /**
  * Unused placeholder: Resend API Key.

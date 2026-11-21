@@ -158,7 +158,7 @@ export function ForceUpdateModal({ status, onRefresh }: ForceUpdateModalProps) {
             </TouchableOpacity>
 
             <Text style={styles.footerNote}>
-              Madrasatu-s-Salikat Lil Banat • Official Play Store Release
+              Suffah • Official Play Store Release
             </Text>
           </View>
         </View>

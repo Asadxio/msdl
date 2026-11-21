@@ -29,8 +29,8 @@ export async function initMediaNotificationChannel(): Promise<void> {
     await Notifications.setNotificationChannelAsync(MEDIA_NOTIFICATION_CHANNEL_ID, {
       name: 'Audio & Quran Playback',
       description: 'Controls and metadata for active Quran and Madrasa audio playback',
-      importance: Notifications.AndroidImportance.LOW, // Silent so it does not beep on every new verse
-      sound: undefined,
+      importance: Notifications.AndroidImportance.LOW, // Silent so it does not beep or vibrate
+      sound: null,
       enableVibrate: false,
       showBadge: false,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,

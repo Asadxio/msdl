@@ -32,7 +32,7 @@ export default function CommunityGuidelinesScreen() {
       {/* 2. Zero-Tolerance for Harassment & Bullying */}
       <Text style={styles.sectionHeading}>2. Anti-Harassment & Safe Haven for Sisters</Text>
       <Text style={styles.bodyText}>
-        We enforce a strict zero-tolerance policy against cyberbullying, offensive speech, trolling, mocking recitations, unwanted private contact, or intimidation. Madrasatu-s-Salikat Lil Banat is a sanctuary of sacred knowledge for female learners.
+        We enforce a strict zero-tolerance policy against cyberbullying, offensive speech, trolling, mocking recitations, unwanted private contact, or intimidation. Suffah is a sanctuary of sacred knowledge for female learners.
       </Text>
 
       {/* 3. Live Purdah Respect & Non-Intrusion */}

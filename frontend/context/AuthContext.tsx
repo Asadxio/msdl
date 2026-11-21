@@ -24,6 +24,7 @@ import { logger } from '@/lib/logger';
 import { startupLog } from '@/lib/startup';
 import { normalizeRole, type AppRole, type OnboardingRole } from '@/lib/roles';
 import { isOwnerEmail, isFounderEmail } from '@/lib/founderPolicy';
+import { getActiveOrganizationIdSync, setActiveOrganizationId, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 import {
   markSignupCompleted,
   markVerificationEmailSent,
@@ -82,6 +83,7 @@ type AuthContextType = {
       guardian_phone?: string;
       phone?: string;
       whatsapp_consent?: boolean;
+      organization_id?: string;
     }
   ) => Promise<string | null>;
   signOut: () => Promise<void>;
@@ -208,6 +210,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(nextProfile);
         setProfileIssue(issue);
         setProfileOffline(false);
+        const orgIdToSync = nextProfile?.organization_id || DEFAULT_ORGANIZATION_ID;
+        void setActiveOrganizationId(orgIdToSync).catch(() => {});
         await AsyncStorage.setItem(getProfileCacheKey(uid), JSON.stringify(nextProfile)).catch(() => {});
       } else {
         if (isSigningUpRef.current) {
@@ -620,6 +624,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       guardian_phone?: string;
       phone?: string;
       whatsapp_consent?: boolean;
+      organization_id?: string;
     }
   ): Promise<string | null> => {
     // Role protection - only student or teacher allowed
@@ -646,21 +651,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isSigningUpRef.current = true;
     try {
       let referrerId: string | null = null;
-      const normalizedCode = (referralCode || '').trim().toUpperCase();
-      if (normalizedCode) {
-        debugLog('[SIGNUP_DEBUG] Checking referral code:', normalizedCode);
-        try {
-          const refSnap = await getDocs(query(collection(db, 'users'), where('referral_code', '==', normalizedCode), limit(1)));
-          referrerId = refSnap.empty ? null : refSnap.docs[0].id;
-          debugLog('[SIGNUP_DEBUG] Referral check success, referrerId:', referrerId);
-        } catch (refErr: any) {
-          debugError('[SIGNUP_DEBUG] Referral check failed. Code:', refErr?.code, 'Msg:', refErr?.message);
-        }
-      }
 
       debugLog('[SIGNUP_DEBUG] Attempting createUserWithEmailAndPassword for:', safeEmail);
       const cred = await withTimeout(createUserWithEmailAndPassword(auth, safeEmail, normalizedPassword));
       debugLog('[SIGNUP_DEBUG] createUserWithEmailAndPassword SUCCESS, uid:', cred.user.uid);
+
+      const targetOrgId = (
+        complianceData?.organization_id ||
+        getActiveOrganizationIdSync() ||
+        DEFAULT_ORGANIZATION_ID
+      ).trim();
 
       // Write users/{uid} document immediately to establish authoritative profile before any background listeners
       debugLog('[SIGNUP_DEBUG] Attempting immediate write to users/', cred.user.uid);
@@ -671,6 +671,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: (cred.user.email || safeEmail).trim().toLowerCase(),
             role: safeRole,
             status: 'pending',
+            organization_id: targetOrgId,
             referral_code: generateReferralCode(name),
             referred_by: referrerId,
             referral_count: 0,
@@ -691,12 +692,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Establish synchronous authoritative profile state immediately so navigation guards
         // have full access without an unnecessary network round-trip.
+        void setActiveOrganizationId(targetOrgId).catch(() => {});
+
         const initialProfile: UserProfile = {
           uid: cred.user.uid,
           name: safeName,
           email: safeEmail,
           role: safeRole,
           status: 'pending',
+          organization_id: targetOrgId,
         };
         setProfile(initialProfile);
         setProfileOffline(false);
@@ -779,44 +783,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         debugError('[SIGNUP_DEBUG] Non-fatal public_profiles write warning:', pubErr);
       }
 
-      if (referrerId) {
-        debugLog('[SIGNUP_DEBUG] Recording referral attribution:', referrerId);
-        try {
-          const recordId = 'ref_' + cred.user.uid;
-          const nameParts = safeName.split(/\s+/);
-          const maskedName = (nameParts[0] || 'طالبہ') + ' (محفوظ برائے پردہ)';
-          await setDoc(doc(db, 'referral_records', recordId), {
-            id: recordId,
-            referrer_uid: referrerId,
-            referee_uid: cred.user.uid,
-            referee_name: maskedName,
-            referral_code: normalizedCode,
-            status: 'joined',
-            created_at: serverTimestamp(),
-          });
 
-          // Send congratulations notification
-          const notifRef = doc(collection(db, 'notifications'));
-          const notifMessage = 'ماشاءاللہ! آپ کی دعوت سے ایک نئی بہن نے مدرسہ جوائن کر لیا ہے۔ اللہ تعالیٰ اس نیکی کو آپ کے لیے صدقہ جاریہ بنائے۔';
-          await setDoc(notifRef, {
-            title: '🌸 صدقہ جاریہ کی مبارکباد (New Sister Joined)',
-            message: notifMessage,
-            body: notifMessage,
-            user_id: referrerId,
-            recipient_id: referrerId,
-            actor_id: cred.user.uid,
-            event: 'referral_joined',
-            category: 'referral',
-            channel: 'announcements',
-            route: '/referral',
-            read: {},
-            created_at: serverTimestamp(),
-          });
-          debugLog('[SIGNUP_DEBUG] Successfully updated referrer & recorded referral:', referrerId);
-        } catch (refUpErr: any) {
-          debugError('[SIGNUP_DEBUG] FAILED update to referrer. Code:', refUpErr?.code, 'Message:', refUpErr?.message);
-        }
-      }
       void markSignupCompleted(cred.user.uid);
       void dispatchWelcomeNotification(cred.user.uid, safeName).catch((err) => {
         debugError('[SIGNUP_DEBUG] Welcome notification dispatch failed:', err);

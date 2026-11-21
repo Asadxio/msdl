@@ -19,10 +19,12 @@ import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
 import { FATAWA_CATEGORIES, FatawaQuestion } from '@/lib/fatawa';
 import { isFatwaBookmarked, toggleFatwaBookmark } from '@/lib/fatawaBookmarks';
 import { goBackOrReplace } from '@/lib/navigation';
+import { useActiveOrganization } from '@/lib/tenantContext';
 
 export default function FatawaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const { activeOrg } = useActiveOrganization();
   const router = useRouter();
 
   const [question, setQuestion] = useState<FatawaQuestion | null>(null);
@@ -59,7 +61,7 @@ export default function FatawaDetailScreen() {
   const handleCopyFatwa = async () => {
     if (!question) return;
     const textToCopy =
-      'Dar-ul-Iftaa — Madrasatu-s-Salikat Lil Banat\n\n' +
+      'Dar-ul-Iftaa — ' + (activeOrg?.name || 'Suffah') + '\n\n' +
       'Title: ' + question.title + '\n' +
       'Question: ' + question.question + '\n\n' +
       'Answer: ' + (question.answer || 'Under Review') + '\n\n' +
@@ -75,12 +77,12 @@ export default function FatawaDetailScreen() {
   const handleShareFatwa = async () => {
     if (!question) return;
     const shareMessage =
-      'Dar-ul-Iftaa — Madrasatu-s-Salikat Lil Banat\n\n' +
+      'Dar-ul-Iftaa — ' + (activeOrg?.name || 'Suffah') + '\n\n' +
       'Topic: ' + question.title + '\n' +
       'Question: ' + question.question + '\n\n' +
       'Answer: ' + (question.answer || 'Under Review') + '\n\n' +
       'Reference: ' + (question.reference_kitab || 'Fiqh Reference') + '\n\n' +
-      'Wallahu Ta\'ala A\'lam bi-s-Sawab\nMadrasatu-s-Salikat Lil Banat App';
+      'Wallahu Ta\'ala A\'lam bi-s-Sawab\n' + (activeOrg?.name || 'Suffah Portal');
     try {
       await Share.share({
         message: shareMessage,

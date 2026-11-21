@@ -20,7 +20,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_NAME } from '@/lib/tenantContext';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, getThemeColors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -179,6 +180,8 @@ const PremiumInput = React.forwardRef<TextInput, PremiumInputProps>(function Pre
 
 export default function SignupScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ orgId?: string; orgName?: string }>();
+  const { activeOrg, switchOrganization } = useActiveOrganization();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
@@ -192,7 +195,6 @@ export default function SignupScreen() {
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
-  const referralRef = useRef<TextInput>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -201,7 +203,6 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const role: OnboardingRole = 'student';
-  const [referralCode, setReferralCode] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [whatsappConsent, setWhatsappConsent] = useState(true);
 
@@ -403,6 +404,7 @@ export default function SignupScreen() {
         age_bracket: ageCategory === 'minor' ? 'under_18' : '18_plus',
         phone: cleanedMobile ? `+91${cleanedMobile}` : '',
         whatsapp_consent: Boolean(whatsappConsent),
+        organization_id: activeOrg?.id,
         ...(ageCategory === 'minor'
           ? {
               guardian_name: guardianName.trim(),
@@ -416,7 +418,7 @@ export default function SignupScreen() {
         email.trim().toLowerCase(),
         password,
         role,
-        referralCode.trim(),
+        '',
         complianceData
       );
       if (err) {
@@ -470,10 +472,41 @@ export default function SignupScreen() {
             
             <Text style={styles.bismillahHeader}>بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْم</Text>
             <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Create Account</Text>
-            <Text style={styles.institutionArabic}>مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</Text>
+            <Text style={[styles.institutionArabic, { color: isDarkMode ? '#34D399' : '#005F46' }]}>صُـفَّـة • بوابة المدارس الإسلامية</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              Begin your sacred learning journey at Madrasa Tus Salikat Lil Banat
+              Begin your sacred learning journey with your Madrasa
             </Text>
+          </FadeInView>
+
+          <FadeInView delay={40}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push('/select-madrasa')}
+              style={[
+                styles.campusSelectorCard,
+                {
+                  backgroundColor: isDarkMode ? '#132C23' : '#FFFFFF',
+                  borderColor: isDarkMode ? '#2E5043' : '#E2E8E5',
+                },
+              ]}
+              accessibilityLabel="Select Madrasa Campus"
+            >
+              <View style={styles.campusIconCircle}>
+                <Ionicons name="school" size={15} color="#FFFFFF" />
+              </View>
+              <View style={styles.campusInfo}>
+                <Text style={[styles.campusLabel, { color: colors.textMuted }]}>
+                  Enrolling for Madrasa Campus:
+                </Text>
+                <Text style={[styles.campusName, { color: colors.text }]} numberOfLines={1}>
+                  {activeOrg?.name || DEFAULT_ORGANIZATION_NAME}
+                </Text>
+              </View>
+              <View style={styles.campusChangePill}>
+                <Text style={styles.campusChangeText}>Change</Text>
+                <Ionicons name="swap-horizontal" size={12} color={COLORS.primary} style={{ marginLeft: 3 }} />
+              </View>
+            </TouchableOpacity>
           </FadeInView>
 
           <FadeInView delay={60}>
@@ -775,7 +808,7 @@ export default function SignupScreen() {
                           />
                         </Pressable>
                         <Text style={[styles.consentLabel, { color: colors.textMain }]}>
-                          I am the parent/guardian or have parental consent for this student to enroll at Madrasatu-s-Salikat Lil Banat.
+                          I am the parent/guardian or have parental consent for this student to enroll at {activeOrg?.name || DEFAULT_ORGANIZATION_NAME}.
                         </Text>
                       </View>
                     </View>
@@ -783,22 +816,7 @@ export default function SignupScreen() {
                 </View>
               )}
 
-              {/* 7. Referral Code (Optional) */}
-              <PremiumInput
-                label="Referral Code"
-                leftIcon="gift-outline"
-                placeholder="Enter referral code (if any)"
-                value={referralCode}
-                onChangeText={setReferralCode}
-                disabled={loading}
-                autoCapitalize="characters"
-                testID="signup-referral-input"
-              />
-              <Text style={[styles.helperText, { color: colors.textMuted }]}>
-                Leave empty if you don&apos;t have a referral code.
-              </Text>
-
-              {/* 8. Required Consent checkbox */}
+              {/* Required Consent checkbox */}
               <View style={styles.consentRow}>
                 <Pressable
                   onPress={() => !loading && setTermsAccepted(v => !v)}
@@ -907,6 +925,14 @@ export default function SignupScreen() {
               <Text style={[styles.footerLink, { color: isDarkMode ? '#10B981' : '#005F46' }]}>Sign In</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Institutional Customer Onboarding Link */}
+          <View style={[styles.footerRow, { marginTop: 4, marginBottom: 8 }]}>
+            <Text style={[styles.footerText, { color: colors.textMuted, fontSize: 13 }]}>Setting up for your Madrasa? </Text>
+            <TouchableOpacity onPress={() => router.push('/register-madrasa')} testID="start-madrasa-btn">
+              <Text style={[styles.footerLink, { color: isDarkMode ? '#34D399' : '#005F46', fontWeight: '700', fontSize: 13 }]}>Register Madrasa</Text>
+            </TouchableOpacity>
+          </View>
           
           <TouchableOpacity
             style={[
@@ -920,7 +946,8 @@ export default function SignupScreen() {
             onPress={async () => {
               try { void Haptics.selectionAsync(); } catch {}
               const phone = '916366919122';
-              const text = 'Salam. I am interested in Madrasa Tus Salikat Lil Banat. I would like assistance with registration.';
+              const orgName = activeOrg?.name || DEFAULT_ORGANIZATION_NAME;
+              const text = `Salam. I need assistance with registration for ${orgName} on Suffah.`;
               const webUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
               const directUrl = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
               try {
@@ -1051,6 +1078,58 @@ const styles = StyleSheet.create({
     textAlign: 'center', 
     lineHeight: 19,
     paddingHorizontal: 16,
+  },
+  campusSelectorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  campusIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  campusInfo: {
+    flex: 1,
+  },
+  campusLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  campusName: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  campusChangePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9F5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#C2E5D9',
+  },
+  campusChangeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   formCard: {
     width: '100%',

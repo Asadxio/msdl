@@ -19,14 +19,14 @@ export default function TermsScreen() {
       <View style={styles.highlightBanner}>
         <Ionicons name="book" size={20} color="#005F46" />
         <Text style={styles.highlightText}>
-          By enrolling in Madrasatu-s-Salikat Lil Banat, students, parents, and teachers pledge to uphold Islamic values, academic integrity, and mutual respect.
+          By enrolling on Suffah, students, parents, and teachers pledge to uphold Islamic values, academic integrity, and mutual respect.
         </Text>
       </View>
 
       {/* 1. Platform Purpose */}
       <Text style={styles.sectionHeading}>1. Educational Purpose & Islamic Framework</Text>
       <Text style={styles.bodyText}>
-        Madrasatu-s-Salikat Lil Banat provides authentic Islamic education, Quran recitation with Tajweed, Islamic jurisprudence (Fiqh), Seerah, and Hadith studies. All curriculum materials, live audio lectures, and interactive resources are curated according to the Quran and authentic Sunnah.
+        Suffah provides authentic Islamic education, Quran recitation with Tajweed, Islamic jurisprudence (Fiqh), Seerah, and Hadith studies across affiliated Madrasas. All curriculum materials, live audio lectures, and interactive resources are curated according to the Quran and authentic Sunnah.
       </Text>
 
       {/* 2. Account Eligibility & Responsibilities */}
@@ -56,7 +56,7 @@ export default function TermsScreen() {
       {/* 6. Intellectual Property & Dars Materials */}
       <Text style={styles.sectionHeading}>6. Intellectual Property & Course Materials</Text>
       <Text style={styles.bodyText}>
-        All Islamic study guides, audio lectures, Tajweed rulebooks, and Dars notes provided in the Library are the property of Madrasatu-s-Salikat Lil Banat. Materials are licensed strictly for personal educational use and may not be sold or redistributed.
+        All Islamic study guides, audio lectures, Tajweed rulebooks, and Dars notes provided in the Library are the property of member Madrasas and Suffah. Materials are licensed strictly for personal educational use and may not be sold or redistributed.
       </Text>
 
       {/* 7. Suspension & Termination */}

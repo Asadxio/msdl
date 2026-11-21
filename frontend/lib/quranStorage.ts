@@ -320,3 +320,64 @@ export async function loadDarsPlaybackPosition(lessonId: string): Promise<{ posi
     return null;
   }
 }
+
+// ─── Offline Quran Text & Storage Diagnostics ──────────────────────────────────
+/**
+ * Check if a Surah text is cached in local storage or bundled in STARTER_SURAHS
+ */
+export async function isSurahTextCached(surahNumber: number): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(QURAN_CACHE_PREFIX + surahNumber);
+    if (raw) return true;
+    const bundled = [1, 108, 109, 110, 112, 113, 114];
+    return bundled.includes(surahNumber);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns list of all Surahs cached in local storage
+ */
+export async function getCachedSurahsList(): Promise<number[]> {
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const cacheKeys = allKeys.filter((k) => k.startsWith(QURAN_CACHE_PREFIX));
+    const cachedNums = cacheKeys
+      .map((k) => parseInt(k.replace(QURAN_CACHE_PREFIX, ''), 10))
+      .filter((n) => !isNaN(n));
+    const bundled = [1, 108, 109, 110, 112, 113, 114];
+    const combined = Array.from(new Set([...cachedNums, ...bundled]));
+    combined.sort((a, b) => a - b);
+    return combined;
+  } catch {
+    return [1, 108, 109, 110, 112, 113, 114];
+  }
+}
+
+/**
+ * Aggregates overall offline Quran storage metrics (Text + Audio)
+ */
+export async function getOfflineQuranStats(): Promise<{
+  cachedTextCount: number;
+  downloadedAudioCount: number;
+  totalAudioMb: number;
+}> {
+  try {
+    const cachedList = await getCachedSurahsList();
+    const rawAudio = await AsyncStorage.getItem('@msdl_downloaded_surahs_index');
+    const audioList: any[] = rawAudio ? JSON.parse(rawAudio) : [];
+    const totalAudioMb = Array.isArray(audioList)
+      ? Number(audioList.reduce((sum, item) => sum + (item.sizeMb || 0), 0).toFixed(1))
+      : 0;
+
+    return {
+      cachedTextCount: cachedList.length,
+      downloadedAudioCount: Array.isArray(audioList) ? audioList.length : 0,
+      totalAudioMb,
+    };
+  } catch {
+    return { cachedTextCount: 0, downloadedAudioCount: 0, totalAudioMb: 0 };
+  }
+}
+

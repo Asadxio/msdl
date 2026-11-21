@@ -13,10 +13,10 @@ if (!(Test-Path "X:\")) {
     subst X: "C:\Users\xioas\.gemini\antigravity\scratch\msdl"
 }
 
-$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot"
+$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.21.21-hotspot"
 if (!(Test-Path $env:JAVA_HOME)) {
-    # Fallback to OpenJDK 21 if JDK 17 is in a different directory
-    $possibleJdks = Get-ChildItem "C:\Program Files\Microsoft" -Filter "jdk*" -ErrorAction SilentlyContinue
+    # Fallback to detected JDK 17
+    $possibleJdks = Get-ChildItem "C:\Program Files\Microsoft" -Filter "jdk-17*" -ErrorAction SilentlyContinue
     if ($possibleJdks) {
         $env:JAVA_HOME = $possibleJdks[0].FullName
     }

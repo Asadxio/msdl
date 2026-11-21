@@ -50,6 +50,8 @@ export interface TutorContext {
   lessonTitle?: string;
   language?: TutorLanguage;
   mode?: TutorMode;
+  organizationId?: string;
+  madrasaName?: string;
 }
 
 export const SUGGESTED_STUDY_PROMPTS: SuggestedPrompt[] = [
@@ -707,12 +709,13 @@ export async function askAiSabaqAssistant(
       .map((m) => ({ sender: m.sender, text: m.text }));
 
     const result = await callAskAITutor({
-      question:     cleanQ,
-      history:      historyPayload,
+      question:        cleanQ,
+      history:         historyPayload,
       language,
-      mode:         mode as TutorMode,
-      lessonTitle:  context.lessonTitle,
-      courseTitle:  context.courseTitle,
+      mode:            mode as TutorMode,
+      lessonTitle:     context.lessonTitle,
+      courseTitle:     context.courseTitle,
+      organization_id: context.organizationId,
     });
     return { text: result.text, mode: result.mode as TutorMode, language: result.language as TutorLanguage };
   } catch (err) {
@@ -819,7 +822,98 @@ function _offlineFallbackResponse(
     };
   }
 
-  // 4. Dynamic Contextual Educational Answer (fallback / general tutor guidance)
+  // 4. Platform & App Navigation Offline Answers
+  const madrasaName = context.madrasaName || 'Suffah Digital Madrasa';
+
+  if (lower.includes('fee') || lower.includes('fees') || lower.includes('pay') || lower.includes('payment') || lower.includes('rupaye') || lower.includes('paise')) {
+    return {
+      text:
+        `**Assalamu Alaykum! Fee Payments & Management Guidance:**\n\n` +
+        `• **Fee kaise pay karein?**\n` +
+        `  1. App ke neeche **More** tab par tap karein.\n` +
+        `  2. **Pay Fees** (Fee Payments) option par click karein.\n` +
+        `  3. Apna pending fee amount select karein aur Pay now par tap karein.\n` +
+        `  4. UPI (Google Pay, PhonePe, Paytm), Debit/Credit Card ya Netbanking se asani se payment complete karein.\n\n` +
+        `🔒 **Privacy Guarantee:** Tamam payments 100% private aur safe rehti hain. Payment hone ke foran baad aapko verified Islamic Receipt transaction ID ke saath mil jati hai.`,
+      mode: 'tutor',
+      language,
+    };
+  }
+
+  if (lower.includes('live') || lower.includes('class') || lower.includes('lecture') || lower.includes('recording') || lower.includes('join')) {
+    return {
+      text:
+        `**Assalamu Alaykum! Live Classes & Recordings Information:**\n\n` +
+        `• **Live Class kaise join karein?**\n` +
+        `  - Jab ustaad class shuru kareinge, aapko Home screen par **Live Class Banner** dikhai dega.\n` +
+        `  - Aap direct **Join Class** par tap karke interactive audio room me shamil ho sakte hain.\n` +
+        `  - Class me aap sawal puchne ke liye Hand Raise kar sakte hain aur screen par Live Quran/Mushaf aur Tajweed Board sync dekh sakte hain.\n\n` +
+        `🎙️ **Recordings:** Agar koi class miss ho jaye, to aap **Recordings** ya Course History me ja kar kabhi bhi pichli classes sun sakte hain.`,
+      mode: 'tutor',
+      language,
+    };
+  }
+
+  if (lower.includes('attendance') || lower.includes('haziri') || lower.includes('absent') || lower.includes('present')) {
+    return {
+      text:
+        `**Assalamu Alaykum! Attendance (Haziri) Details:**\n\n` +
+        `• Aapki attendance live class me shamil hone par ustaad ki taraf se daily mark ki jati hai.\n` +
+        `• Aap kisi bhi waqt neeche **Attendance** tab par tap karke apna haaziri percentage, total classes aur status check kar sakte hain.`,
+      mode: 'tutor',
+      language,
+    };
+  }
+
+  if (lower.includes('quiz') || lower.includes('certificate') || lower.includes('sanad') || lower.includes('result') || lower.includes('exam')) {
+    return {
+      text:
+        `**Assalamu Alaykum! Quizzes & Official Certificates (Sanad):**\n\n` +
+        `• **Quizzes:** Neeche **Quiz** tab par jayein. Wahan mukhtalif mazameen (Quran, Tajweed, Fiqh, Hadith, Seerah) ke tests maujood hain.\n` +
+        `• **Automated Grading:** Har sawal ke foran baad sahi jawab aur tafseeli wazahat milti hai.\n` +
+        `• **Official Certificate (Sanad):** Agar aap quiz me **60% ya zyada** number hasil karte hain, to aapko madrasa ki taraf se verified Digital Certificate (Sanad) mil jata hai, jise aap **Certificate** tab me dekh sakte hain aur WhatsApp par share kar sakte hain!`,
+      mode: 'tutor',
+      language,
+    };
+  }
+
+  if (lower.includes('madrasa') || lower.includes('platform') || lower.includes('app') || lower.includes('suffah') || lower.includes('kya hai') || lower.includes('who are you')) {
+    return {
+      text:
+        `**Assalamu Alaykum! Khush Aamdeed!**\n\n` +
+        `Main **${madrasaName}** ka official 24/7 AI Sabaq Assistant hoon.\n\n` +
+        `• **Ye platform kis cheez ka hai?**\n` +
+        `  Ye ek complete digital madrasa platform hai jahan khawateen aur bachon ke liye Quran Majeed, Tajweed, Fiqh-e-Hanafi, Hadith, Seerat aur Arabi zuban ke online courses karwaye jate hain.\n` +
+        `• **Aap yahan kya kya kar sakte hain?**\n` +
+        `  1. Live interactive classes lena aur recordings sunna.\n` +
+        `  2. Quran Reader aur Tajweed makharij ka muta'ala karna.\n` +
+        `  3. Quizzes de kar verified Sanad/Certificates hasil karna.\n` +
+        `  4. Apni daily attendance aur fee payments manage karna.\n` +
+        `  5. Mujh se kisi bhi waqt sabaq ya deeni masle par sawal puchna!\n\n` +
+        `Aap ko kis cheez ke bare me mazeed maloomat chahiye?`,
+      mode: 'tutor',
+      language,
+    };
+  }
+
+  // 5. Dynamic Contextual Educational Answer (fallback / general tutor guidance)
+  const isRomanUrdu = /\b(kya|hai|hain|kaise|karo|batao|karna|chahiye|kab|kahan|kyun|mujhe|aap|meri|hum|sabaq)\b/i.test(cleanQ);
+
+  if (isRomanUrdu) {
+    return {
+      text:
+        `**Assalamu Alaykum wa Rahmatullahi wa Barakatuh!**\n\n` +
+        `Aap ke sawal: **"${cleanQ}"** ke bare me:\n\n` +
+        `Dini uloom me fahme-deen hasil karne ke liye asoolon ko samajhna aur asbaaq ko bar bar dohrana behad zaroori hai.\n\n` +
+        `💡 **Behtar Rehnumai ke liye:**\n` +
+        `• Aap is topic par **Quiz Me** mode select karke apna imtehan le sakte hain.\n` +
+        `• Ya **Summary** select karke mukhtasar khulasa dekh sakte hain.\n` +
+        `• Agar kisi specific masle ya course ke bare me sawal hai, to thoda mazeed wazahat ke saath likhein, main foran poori madad karunga!`,
+      mode,
+      language: 'ur',
+    };
+  }
+
   if (language === 'en') {
     const courseContextNote = context.lessonTitle
       ? `\n\n📚 **Regarding your current lesson:** *"${context.lessonTitle}"* (${context.courseTitle || 'Madrasa Course'})`
@@ -828,14 +922,14 @@ function _offlineFallbackResponse(
     return {
       text:
         `**Assalamu Alaykum wa Rahmatullahi wa Barakatuh, Dear Student!**\n\n` +
-        `Regarding your sabaq question: **"${cleanQ}"**${courseContextNote}\n\n` +
-        `Here is the academic guidance to help you master this concept:\n\n` +
-        `1. **Core Concept:** In the study of sacred knowledge, every rule is grounded in classical texts (such as *Nur al-Idah*, *Quduri*, or classical Tajweed treatises).\n` +
+        `Regarding your inquiry: **"${cleanQ}"**${courseContextNote}\n\n` +
+        `Here is the educational guidance to help you master this concept:\n\n` +
+        `1. **Core Concept:** In sacred knowledge, every principle is grounded in classical texts (such as *Nur al-Idah*, *Quduri*, or foundational Tajweed treatises).\n` +
         `2. **Method of Study:**\n` +
-        `   • Repeat the original Arabic definition 3 times aloud to memorize with proper articulation.\n` +
-        `   • Take notes of the exceptions (*Istithna*) and conditions (*Shuroot*).\n` +
-        `   • Listen to the teacher's explanation in your course audio recording.\n\n` +
-        `💡 *Tip: You can switch to **Quiz Me** mode to test yourself on this concept or tap **Vocabulary** to examine the Arabic roots!*`,
+        `   • Review the teacher's lesson explanation in your course audio recordings.\n` +
+        `   • Repeat key terms and definitions aloud for retention.\n` +
+        `   • Test yourself using our interactive Quiz mode.\n\n` +
+        `💡 *Tip: Feel free to ask more specific questions about Wudu, Salah, Tajweed rules, or app features anytime!*`,
       mode,
       language,
     };
@@ -857,12 +951,15 @@ function _offlineFallbackResponse(
 }
 
 // ─── Chat History Persistence ───────────────────────────────────────────────
-export const STORAGE_KEY_AI_CHAT = '@mslb_ai_chat_history_v1';
+export function getChatStorageKey(orgId?: string): string {
+  return `@mslb_ai_chat_history_${orgId || 'default'}`;
+}
 
-export async function loadSavedAiChat(): Promise<ChatMessage[]> {
+export async function loadSavedAiChat(orgId?: string): Promise<ChatMessage[]> {
   try {
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    const raw = await AsyncStorage.getItem(STORAGE_KEY_AI_CHAT);
+    const key = getChatStorageKey(orgId);
+    const raw = await AsyncStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -872,21 +969,23 @@ export async function loadSavedAiChat(): Promise<ChatMessage[]> {
   }
 }
 
-export async function saveAiChat(messages: ChatMessage[]): Promise<void> {
+export async function saveAiChat(messages: ChatMessage[], orgId?: string): Promise<void> {
   try {
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const key = getChatStorageKey(orgId);
     // Persist up to the latest 50 messages to keep storage light and fast
     const slice = messages.slice(-50);
-    await AsyncStorage.setItem(STORAGE_KEY_AI_CHAT, JSON.stringify(slice));
+    await AsyncStorage.setItem(key, JSON.stringify(slice));
   } catch (err) {
     console.warn('[AiAssistant] Failed to save chat history:', err);
   }
 }
 
-export async function clearSavedAiChat(): Promise<void> {
+export async function clearSavedAiChat(orgId?: string): Promise<void> {
   try {
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    await AsyncStorage.removeItem(STORAGE_KEY_AI_CHAT);
+    const key = getChatStorageKey(orgId);
+    await AsyncStorage.removeItem(key);
   } catch (err) {
     console.warn('[AiAssistant] Failed to clear chat history:', err);
   }

@@ -31,8 +31,8 @@ export const FullScreenLoader = React.memo(function FullScreenLoader({ label = '
           />
         </View>
       </View>
-      <Text allowFontScaling style={styles.splashArabicTitle}>مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</Text>
-      <Text allowFontScaling style={styles.splashEnglishSubtitle}>MADRASA TUS SALIKAT LIL BANAT</Text>
+      <Text allowFontScaling style={styles.splashArabicTitle}>صُـفَّـة</Text>
+      <Text allowFontScaling style={styles.splashEnglishSubtitle}>SUFFAH • DIGITAL MADRASA</Text>
       <View style={styles.splashSpinnerRow}>
         <ActivityIndicator size="small" color={COLORS.primary} />
         <Text allowFontScaling style={styles.busyText}>{label}</Text>

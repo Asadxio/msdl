@@ -1,0 +1,24 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="islamicStar" width="100" height="100" patternUnits="userSpaceOnUse">
+      <g stroke="#C6A15B" stroke-width="0.8" fill="none" opacity="0.45">
+        <!-- 8-Point Star Center -->
+        <polygon points="50,20 58,35 75,35 62,46 68,62 50,52 32,62 38,46 25,35 42,35" />
+        <polygon points="50,15 60,32 80,32 65,45 71,65 50,54 29,65 35,45 20,32 40,32" />
+        <!-- Interlocking Octagram and Arabesque Lines -->
+        <rect x="30" y="30" width="40" height="40" transform="rotate(45 50 50)" />
+        <rect x="30" y="30" width="40" height="40" />
+        <!-- Corner Extensions -->
+        <line x1="0" y1="0" x2="30" y2="30" />
+        <line x1="100" y1="0" x2="70" y2="30" />
+        <line x1="100" y1="100" x2="70" y2="70" />
+        <line x1="0" y1="100" x2="30" y2="70" />
+        <line x1="50" y1="0" x2="50" y2="20" />
+        <line x1="50" y1="80" x2="50" y2="100" />
+        <line x1="0" y1="50" x2="20" y2="50" />
+        <line x1="80" y1="50" x2="100" y2="50" />
+      </g>
+    </pattern>
+  </defs>
+  <rect width="200" height="200" fill="url(#islamicStar)" />
+</svg>

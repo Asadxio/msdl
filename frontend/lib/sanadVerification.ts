@@ -18,6 +18,8 @@ export interface VerifiedSanad {
   gradeLabel?: string;
   scorePercentage?: number;
   issuingAuthority: string;
+  organizationName?: string;
+  organizationId?: string;
   verified: boolean;
   issuedAtTimestamp?: number;
 }
@@ -54,7 +56,9 @@ export async function verifySanadById(rawCertificateId: string): Promise<Verifie
         hijriDate: data.hijri_date || '1448ھ',
         gradeLabel: data.grade_label || 'ممتاز (Distinction)',
         scorePercentage: data.percentage || data.score || 100,
-        issuingAuthority: 'مدرسۃ السالکات للبنات — شعبۂ امتحانات و اسناد',
+        issuingAuthority: data.issuing_authority || data.organization_name || 'شعبۂ امتحانات و اسناد',
+        organizationName: data.organization_name || data.institution_name,
+        organizationId: data.organization_id,
         verified: true,
       };
     }
@@ -77,7 +81,9 @@ export async function verifySanadById(rawCertificateId: string): Promise<Verifie
         hijriDate: data.hijri_date || '1448ھ',
         gradeLabel: data.grade_label || 'ممتاز (Distinction)',
         scorePercentage: data.percentage || data.score || 100,
-        issuingAuthority: 'مدرسۃ السالکات للبنات — شعبۂ امتحانات و اسناد',
+        issuingAuthority: data.issuing_authority || data.organization_name || 'شعبۂ امتحانات و اسناد',
+        organizationName: data.organization_name || data.institution_name,
+        organizationId: data.organization_id,
         verified: true,
       };
     }

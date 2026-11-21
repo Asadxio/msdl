@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { useActiveOrganization } from '@/lib/tenantContext';
 import {
   exportAndShareReceipt,
   shareReceiptToWhatsApp,
@@ -30,6 +31,7 @@ export const IslamicReceiptModal: React.FC<IslamicReceiptModalProps> = ({
   onClose,
 }) => {
   const [exporting, setExporting] = useState(false);
+  const { activeOrg } = useActiveOrganization();
 
   if (!receipt) return null;
 
@@ -66,7 +68,7 @@ export const IslamicReceiptModal: React.FC<IslamicReceiptModalProps> = ({
               </View>
               <View>
                 <Text style={styles.headerTitle}>Official Fee Receipt</Text>
-                <Text style={styles.headerSub}>Madrasatu-s-Salikat Lil Banat</Text>
+                <Text style={styles.headerSub}>{activeOrg?.name || 'Suffah Digital Madrasa'}</Text>
               </View>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -80,7 +82,9 @@ export const IslamicReceiptModal: React.FC<IslamicReceiptModalProps> = ({
               {/* Islamic Calligraphy Top */}
               <View style={styles.paperHeader}>
                 <Text style={styles.bismillahText}>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</Text>
-                <Text style={styles.madrasaNameText}>مدرسۃ السالکات للبنات</Text>
+                <Text style={styles.madrasaNameText}>
+                  {activeOrg?.name_arabic || (activeOrg?.slug === 'mslb' || !activeOrg ? 'مدرسۃ السالکات للبنات' : activeOrg.name)}
+                </Text>
                 <Text style={styles.voucherBadgeText}>VERIFIED ELECTRONIC RECEIPT</Text>
               </View>
 
@@ -146,11 +150,11 @@ export const IslamicReceiptModal: React.FC<IslamicReceiptModalProps> = ({
               {/* Seal Footer */}
               <View style={styles.paperFooter}>
                 <View>
-                  <Text style={styles.footerBrand}>Madrasatu-s-Salikat</Text>
+                  <Text style={styles.footerBrand}>{activeOrg?.name || 'Suffah'}</Text>
                   <Text style={styles.footerNote}>Authorized Electronic Voucher</Text>
                 </View>
                 <View style={styles.sealCircle}>
-                  <Text style={styles.sealText}>MSLB{'\n'}SEAL</Text>
+                  <Text style={styles.sealText}>{activeOrg?.slug ? activeOrg.slug.toUpperCase() : 'SUFFAH'}{'\n'}SEAL</Text>
                 </View>
               </View>
             </View>

@@ -106,7 +106,7 @@ export function AppLockModal({ visible, onUnlock }: AppLockModalProps) {
     if (isLockedOut()) return;
 
     const res = await authenticateWithBiometrics(
-      'Scan your fingerprint to unlock Madrasatu-s-Salikat'
+      'Scan your fingerprint to unlock Suffah'
     );
     if (res.success) {
       setPin('');
@@ -179,7 +179,7 @@ export function AppLockModal({ visible, onUnlock }: AppLockModalProps) {
           <View style={styles.logoBadge}>
             <Ionicons name="shield-checkmark" size={36} color={COLORS.primary} />
           </View>
-          <Text style={styles.title}>Madrasatu-s-Salikat</Text>
+          <Text style={styles.title}>Suffah</Text>
           <Text style={styles.subtitle}>Protected for Your Privacy & Purdah</Text>
         </View>
 

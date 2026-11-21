@@ -4,6 +4,7 @@ import {
   Platform,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -71,7 +72,7 @@ export default function OnboardingEntryScreen() {
   const completeOnboarding = useCallback(async () => {
     await markOnboardingEntryComplete();
     markEntryCompleteInSession();
-    router.replace(user ? '/' : '/auth/login');
+    router.replace(user ? '/' : '/select-madrasa');
   }, [markEntryCompleteInSession, router, user]);
 
   useEffect(() => {
@@ -117,7 +118,7 @@ export default function OnboardingEntryScreen() {
     hapticComplete();
     completeOnboarding().catch(() => {
       markEntryCompleteInSession();
-      router.replace(user ? '/' : '/auth/login');
+      router.replace(user ? '/' : '/select-madrasa');
     });
   }, [completeOnboarding, hapticComplete, markEntryCompleteInSession, router, user]);
 
@@ -246,40 +247,44 @@ export default function OnboardingEntryScreen() {
 
         {/* Typography Group */}
         <Animated.View style={[styles.copy, textGroupStyle]}>
-          <Text style={styles.arabicName}>مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</Text>
-          <Text style={styles.englishName}>MADRASA TUS SALIKAT LIL BANAT</Text>
+          <Text style={styles.arabicName}>صُـفَّـة • جامع المدارس الإسلامية</Text>
+          <Text style={styles.englishName}>SUFFAH • DIGITAL MADRASA</Text>
           
           {/* Animated Gold Divider */}
           <Animated.View style={[styles.divider, dividerStyle]} />
           
-          <Text style={styles.subtitle}>Where Sacred Knowledge Meets Noble Character</Text>
-          <Text style={styles.secondarySubtitle}>Nurturing Faith, Knowledge & Adab</Text>
+          <Text style={styles.subtitle}>Universal Learning Platform for Islamic Institutions</Text>
+          <Text style={styles.secondarySubtitle}>Nurturing Faith, Sacred Knowledge & Noble Adab</Text>
         </Animated.View>
 
         {/* Intuitive CTA with Tap + Swipe Up */}
-        <GestureDetector gesture={composedGesture}>
-          <Animated.View 
-            style={[styles.swipeZone, { bottom: insets.bottom + 28 }, handleContainerStyle]} 
+        <GestureDetector gesture={panGesture}>
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={triggerFinish}
             testID="goto-begin-journey-btn"
             accessibilityRole="button"
             accessibilityLabel="Begin your journey. Tap or swipe up to enter"
+            style={[styles.swipeZone, { bottom: insets.bottom + 28 }]}
           >
-            {/* Pulsing guidance indicator above pill */}
-            <View style={styles.hintIndicator}>
-              <Ionicons name="chevron-up" size={18} color="#D4AF37" />
-              <Text style={styles.hintText}>Swipe up or tap to enter</Text>
-            </View>
-
-            <Animated.View style={[styles.swipePill, handlePillStyle]}>
-              <View style={styles.swipeGlow} />
-              <Text style={styles.swipeArabic}>ابدئي رحلتكِ</Text>
-              <View style={styles.swipeEnglishRow}>
-                <Ionicons name="sparkles" size={12} color="#D4AF37" style={{ marginRight: 6 }} />
-                <Text style={styles.swipeEnglish}>BEGIN YOUR JOURNEY</Text>
-                <Ionicons name="arrow-up" size={12} color="#D4AF37" style={{ marginLeft: 6 }} />
+            <Animated.View style={handleContainerStyle}>
+              {/* Pulsing guidance indicator above pill */}
+              <View style={styles.hintIndicator}>
+                <Ionicons name="chevron-up" size={18} color="#D4AF37" />
+                <Text style={styles.hintText}>Swipe up or tap to enter</Text>
               </View>
+
+              <Animated.View style={[styles.swipePill, handlePillStyle]}>
+                <View style={styles.swipeGlow} />
+                <Text style={styles.swipeArabic}>ابدئي رحلتكِ</Text>
+                <View style={styles.swipeEnglishRow}>
+                  <Ionicons name="sparkles" size={12} color="#D4AF37" style={{ marginRight: 6 }} />
+                  <Text style={styles.swipeEnglish}>BEGIN YOUR JOURNEY</Text>
+                  <Ionicons name="arrow-up" size={12} color="#D4AF37" style={{ marginLeft: 6 }} />
+                </View>
+              </Animated.View>
             </Animated.View>
-          </Animated.View>
+          </TouchableOpacity>
         </GestureDetector>
 
       </View>
@@ -381,10 +386,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 24,
     elevation: 6,
+    overflow: 'hidden',
   },
   logoImage: {
-    width: '100%',
-    height: '100%',
+    width: 178,
+    height: 178,
   },
   logoMonogramOverlay: {
     ...StyleSheet.absoluteFillObject,

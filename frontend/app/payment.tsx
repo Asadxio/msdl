@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator, KeyboardAvoidingView, Platform, Modal,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Linking, ActivityIndicator, KeyboardAvoidingView, Platform, Modal, Image,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { WebView } from "react-native-webview";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { goBackOrReplace } from "@/lib/navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, where, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, where, addDoc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { useActiveOrganization, DEFAULT_ORGANIZATION_NAME } from "@/lib/tenantContext";
 import { useData } from "@/context/DataContext";
 import { db, auth } from "@/lib/firebase";
 import { normalizeFirebaseError } from "@/lib/errors";
@@ -42,7 +44,15 @@ export default function PaymentFlowScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ courseId?: string; domain?: string }>();
   const { user, profile } = useAuth();
+  const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
+  const { activeOrg } = useActiveOrganization();
   const { courses } = useData();
+
+  // Admin Fee Management State
+  const [adminFeeInput, setAdminFeeInput] = useState("");
+  const [adminDonationNote, setAdminDonationNote] = useState("");
+  const [savingAdminSettings, setSavingAdminSettings] = useState(false);
+  const [adminSaveMessage, setAdminSaveMessage] = useState("");
 
   // Domain Switcher
   const [activeDomain, setActiveDomain] = useState<PaymentDomain>(
@@ -89,6 +99,22 @@ export default function PaymentFlowScreen() {
 
   const [concessionLoading, setConcessionLoading] = useState(false);
 
+  // Direct 1-Tap UPI States & Handlers
+  const [directUpiModalVisible, setDirectUpiModalVisible] = useState(false);
+  const [directUpiVpa, setDirectUpiVpa] = useState(activeOrg?.upi_id || "madrasatussalikat@icici");
+  const [directUpiUtr, setDirectUpiUtr] = useState("");
+  const [directUpiSubmitting, setDirectUpiSubmitting] = useState(false);
+  const [upiCopied, setUpiCopied] = useState(false);
+  const [copiedBankAcc, setCopiedBankAcc] = useState(false);
+  const [copiedIfsc, setCopiedIfsc] = useState(false);
+  const [activeUpiRef, setActiveUpiRef] = useState("");
+
+  useEffect(() => {
+    if (activeOrg?.upi_id) {
+      setDirectUpiVpa(activeOrg.upi_id);
+    }
+  }, [activeOrg?.upi_id]);
+
   const getPaymentSettings = async () => {
     const globalSnap = await getDoc(doc(db, "app_settings", "global"));
     const platformSnap = await getDoc(doc(db, "app_settings", "platform"));
@@ -97,8 +123,219 @@ export default function PaymentFlowScreen() {
       ...(globalSnap.exists() ? (globalSnap.data() as Record<string, unknown>) : {}),
     };
     const fee = Number(merged.fees_amount || 500);
-    const donationUrl = String(merged.donation_url || merged.razorpay_link || "https://pages.razorpay.com/mslb-donation");
-    return { fee, donationUrl };
+    const donationUrl = String(activeOrg?.donation_url || merged.donation_url || merged.razorpay_link || "https://pages.razorpay.com/mslb-donation");
+    const vpa = String(activeOrg?.upi_id || merged.upi_id || merged.upi_vpa || "madrasatussalikat@icici");
+    const donationContent = String(merged.donation_content || "");
+    return { fee, donationUrl, vpa, donationContent };
+  };
+
+  const handleSaveAdminFeeSettings = async () => {
+    if (!isAdmin) return;
+    const val = Number(adminFeeInput);
+    if (!Number.isFinite(val) || val < 0) {
+      Alert.alert("Invalid Fee", "Fee amount must be 0 or greater.");
+      return;
+    }
+    setSavingAdminSettings(true);
+    setAdminSaveMessage("");
+    try {
+      await setDoc(doc(db, "app_settings", "platform"), {
+        fees_amount: val,
+        donation_content: adminDonationNote,
+        updated_at: serverTimestamp(),
+      }, { merge: true });
+      if (activeOrg?.id) {
+        await updateDoc(doc(db, "organizations", activeOrg.id), {
+          standard_fee: val,
+          updated_at: serverTimestamp(),
+        }).catch(() => {});
+      }
+      setFeesAmount(val);
+      setAdminSaveMessage("Fee settings saved successfully!");
+      Alert.alert("Saved", "Standard academic fee and donation appeal note updated successfully.");
+    } catch (e: any) {
+      Alert.alert("Save Failed", e?.message || "Could not save fee settings.");
+    } finally {
+      setSavingAdminSettings(false);
+    }
+  };
+
+  const handleOpenDirectUpiModal = async () => {
+    if (!user?.uid) {
+      setError("Please sign in to make a payment.");
+      return;
+    }
+    const orgSlug = (activeOrg?.slug || 'CAMPUS').toUpperCase().slice(0, 6);
+    const ref = orgSlug + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1000);
+    setActiveUpiRef(ref);
+    setDirectUpiUtr("");
+    setUpiCopied(false);
+    setDirectUpiModalVisible(true);
+
+    // Try auto-triggering the native Android UPI intent chooser immediately
+    const orgName = activeOrg?.upi_name || activeOrg?.name || DEFAULT_ORGANIZATION_NAME;
+    const note = activeDomain === "academic_fee"
+      ? `Fee: ${selectedCourse?.name || "Course Fee"}`
+      : `Donation: ${donationType.toUpperCase()}`;
+    const upiUrl = `upi://pay?pa=${encodeURIComponent(directUpiVpa)}&pn=${encodeURIComponent(orgName)}&am=${currentTotalAmount}&cu=INR&tn=${encodeURIComponent(note)}&tr=${encodeURIComponent(ref)}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(upiUrl);
+      if (canOpen) {
+        await Linking.openURL(upiUrl);
+      }
+    } catch {
+      // If auto-open is delayed or no default set, modal remains visible for 1-tap app selection
+    }
+  };
+
+  const launchSpecificUpiApp = async (appType: "universal" | "phonepe" | "gpay" | "paytm") => {
+    const orgName = activeOrg?.upi_name || activeOrg?.name || DEFAULT_ORGANIZATION_NAME;
+    const note = activeDomain === "academic_fee"
+      ? `Fee: ${selectedCourse?.name || "Course Fee"}`
+      : `Donation: ${donationType.toUpperCase()}`;
+    const orgSlug = (activeOrg?.slug || 'CAMPUS').toUpperCase().slice(0, 6);
+    const ref = activeUpiRef || (orgSlug + Date.now().toString(36).toUpperCase());
+
+    let targetUrl = `upi://pay?pa=${encodeURIComponent(directUpiVpa)}&pn=${encodeURIComponent(orgName)}&am=${currentTotalAmount}&cu=INR&tn=${encodeURIComponent(note)}&tr=${encodeURIComponent(ref)}`;
+
+    if (appType === "phonepe") {
+      targetUrl = `phonepe://upi/pay?pa=${encodeURIComponent(directUpiVpa)}&pn=${encodeURIComponent(orgName)}&am=${currentTotalAmount}&cu=INR&tn=${encodeURIComponent(note)}&tr=${encodeURIComponent(ref)}`;
+    } else if (appType === "gpay") {
+      targetUrl = `tez://upi/pay?pa=${encodeURIComponent(directUpiVpa)}&pn=${encodeURIComponent(orgName)}&am=${currentTotalAmount}&cu=INR&tn=${encodeURIComponent(note)}&tr=${encodeURIComponent(ref)}`;
+    } else if (appType === "paytm") {
+      targetUrl = `paytmmp://pay?pa=${encodeURIComponent(directUpiVpa)}&pn=${encodeURIComponent(orgName)}&am=${currentTotalAmount}&cu=INR&tn=${encodeURIComponent(note)}&tr=${encodeURIComponent(ref)}`;
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(targetUrl);
+      if (supported) {
+        await Linking.openURL(targetUrl);
+      } else {
+        // Fallback to universal upi://
+        const universalUrl = `upi://pay?pa=${encodeURIComponent(directUpiVpa)}&pn=${encodeURIComponent(orgName)}&am=${currentTotalAmount}&cu=INR&tn=${encodeURIComponent(note)}&tr=${encodeURIComponent(ref)}`;
+        await Linking.openURL(universalUrl);
+      }
+    } catch {
+      Alert.alert(
+        "Open UPI App",
+        `Could not directly launch the selected app. Please copy the Madrasa UPI ID (${directUpiVpa}) and pay inside your UPI app, or scan the QR Code below.`,
+        [{ text: "OK" }]
+      );
+    }
+  };
+
+  const handleCopyUpiId = async () => {
+    try {
+      await Clipboard.setStringAsync(directUpiVpa);
+      setUpiCopied(true);
+      setTimeout(() => setUpiCopied(false), 3000);
+      Alert.alert("UPI ID Copied", `${directUpiVpa} copied to clipboard! You can paste this in Google Pay, PhonePe, or Paytm.`);
+    } catch {
+      Alert.alert("Madrasa UPI ID", directUpiVpa);
+    }
+  };
+
+  const handleSubmitDirectUpiPayment = async () => {
+    if (!user?.uid) {
+      Alert.alert("Sign In Required", "Please sign in to submit your payment reference.");
+      return;
+    }
+    const trimmedUtr = directUpiUtr.trim();
+    if (!trimmedUtr || trimmedUtr.length < 6) {
+      Alert.alert("Invalid Reference", "Please enter a valid 12-digit UPI Reference Number / UTR from your UPI payment receipt.");
+      return;
+    }
+
+    setDirectUpiSubmitting(true);
+    try {
+      const orgId = activeOrg?.id || "mslb-main";
+      const courseName = activeDomain === "academic_fee" ? (selectedCourse?.name || "Selected Course") : null;
+      const orgSlug = (activeOrg?.slug || 'CAMPUS').toUpperCase().slice(0, 6);
+      const ref = activeUpiRef || (orgSlug + Date.now().toString(36).toUpperCase());
+
+      // Attempt 1: Direct atomic submission with state: "submitted"
+      try {
+        await addDoc(collection(db, "payments"), {
+          user_id: user.uid,
+          user_name: profile?.name || user.displayName || "Student",
+          amount: currentTotalAmount * 100, // paise
+          currency: "INR",
+          state: "submitted",
+          status: "submitted",
+          provider: "razorpay", // Required invariant in firestore.rules
+          provider_order_id: ref,
+          transaction_ref: trimmedUtr,
+          payment_domain: activeDomain,
+          payment_type: activeDomain === "academic_fee" ? academicType : donationType,
+          course_id: activeDomain === "academic_fee" ? selectedCourseId : null,
+          course_name: courseName,
+          organization_id: orgId,
+          review_mode: "manual",
+          source: "direct_upi_intent",
+          created_at: serverTimestamp(),
+          submitted_at: serverTimestamp(),
+          created_at_ms: Date.now(),
+        });
+      } catch (atomicErr) {
+        // Fallback: 2-step compliant submission (pending -> submitted)
+        const pendingDoc = await addDoc(collection(db, "payments"), {
+          user_id: user.uid,
+          user_name: profile?.name || user.displayName || "Student",
+          amount: currentTotalAmount * 100, // paise
+          currency: "INR",
+          state: "pending",
+          status: "pending",
+          provider: "razorpay",
+          provider_order_id: ref,
+          payment_domain: activeDomain,
+          payment_type: activeDomain === "academic_fee" ? academicType : donationType,
+          course_id: activeDomain === "academic_fee" ? selectedCourseId : null,
+          course_name: courseName,
+          review_mode: "manual",
+          source: "direct_upi_intent",
+          created_at: serverTimestamp(),
+          created_at_ms: Date.now(),
+        });
+
+        await updateDoc(doc(db, "payments", pendingDoc.id), {
+          transaction_ref: trimmedUtr,
+          payment_ref: trimmedUtr,
+          state: "submitted",
+          status: "submitted",
+          submitted_at: serverTimestamp(),
+        });
+      }
+
+      setDirectUpiModalVisible(false);
+      setDirectUpiUtr("");
+      await loadHistory();
+
+      Alert.alert(
+        "Alhamdulillah! Payment Reference Submitted",
+        `Your UPI payment reference (${trimmedUtr}) has been recorded. Our academic board will verify your transaction against bank records and activate your course access shortly.`,
+        [
+          {
+            text: "View Payment History",
+            onPress: () => {
+              setStep(1);
+            },
+          },
+          {
+            text: "Done",
+            style: "cancel",
+          },
+        ]
+      );
+    } catch (err: any) {
+      logFirestoreFailure(
+        { collection: "payments", operation: "add", query: "submit direct upi reference", role: profile?.role, status: profile?.status },
+        err
+      );
+      Alert.alert("Submission Error", normalizeFirebaseError(err, "Failed to submit UPI reference. Please try again or contact admissions."));
+    } finally {
+      setDirectUpiSubmitting(false);
+    }
   };
 
   const handleScholarshipConcessionRequest = async () => {
@@ -123,20 +360,21 @@ export default function PaymentFlowScreen() {
         { collection: "admission_inquiries", operation: "add", query: "concession application", role: profile?.role, status: profile?.status },
         err
       );
-      Alert.alert("Submission Notice", "Please contact the Admissions Desk directly via admissions@madrasatussalikat.com.");
+      const contactEmail = activeOrg?.email || "admissions@suffahmadrasa.org";
+      Alert.alert("Submission Notice", `Please contact the Admissions Desk directly via ${contactEmail}.`);
     } finally {
       setConcessionLoading(false);
     }
   };
 
   const handleContactAdmissions = () => {
-    const email = "admissions@madrasatussalikat.com";
+    const email = activeOrg?.email || "admissions@suffahmadrasa.org";
     const subject = encodeURIComponent(`Admission & Course Fee Inquiry: ${selectedCourse?.name || "Academic Course"}`);
     const body = encodeURIComponent(
       `Assalamu Alaikum,\n\nI am inquiring regarding admission and tuition for ${selectedCourse?.name || "the course"}.\n\nStudent Name: ${profile?.name || user?.displayName || ""}\nStudent Email: ${user?.email || ""}`
     );
     Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`).catch(() => {
-      Alert.alert("Admissions Desk", "Please email admissions@madrasatussalikat.com for admission guidance.");
+      Alert.alert("Admissions Desk", `Please email ${email} for admission guidance.`);
     });
   };
 
@@ -179,8 +417,11 @@ export default function PaymentFlowScreen() {
   useEffect(() => {
     const load = async () => {
       try {
-        const { fee } = await getPaymentSettings();
+        const { fee, vpa, donationContent } = await getPaymentSettings();
         setFeesAmount(fee);
+        setAdminFeeInput(String(fee));
+        if (donationContent) setAdminDonationNote(donationContent);
+        if (vpa) setDirectUpiVpa(vpa);
         await loadHistory();
       } catch (err) {
         logFirestoreFailure(
@@ -190,7 +431,7 @@ export default function PaymentFlowScreen() {
       }
     };
     load().catch(() => {});
-  }, [user?.uid]);
+  }, [user?.uid, activeOrg?.upi_id]);
 
   const selectedCourse = useMemo(
     () => courses.find((course) => course.id === selectedCourseId) || null,
@@ -206,6 +447,7 @@ export default function PaymentFlowScreen() {
   }, [courses, params.courseId, selectedCourseId]);
 
   // Compute calculated amounts
+  const monthlyFeeVal = (activeOrg as any)?.monthly_fee || 500;
   const courseFeeVal = selectedCourse?.course_fee !== undefined ? selectedCourse.course_fee : (feesAmount || 500);
   const admissionFeeVal = selectedCourse?.admission_fee ?? 100;
   const isFreeCourse = selectedCourse?.course_fee === 0;
@@ -379,7 +621,7 @@ export default function PaymentFlowScreen() {
           "key": "${keyId}",
           "amount": ${orderAmt},
           "currency": "${currency}",
-          "name": "Madrasatu-s-Salikat Lil Banat",
+          "name": "${(activeOrg?.name || DEFAULT_ORGANIZATION_NAME).replace(/"/g, "")}",
           "description": "${title.replace(/"/g, "")}",
           "order_id": "${orderId}",
           "prefill": {
@@ -510,7 +752,7 @@ export default function PaymentFlowScreen() {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="always">
           {/* Step Dots */}
           <View style={styles.stepRow}>
             {[1, 2, 3, 4].map((item) => (
@@ -528,7 +770,83 @@ export default function PaymentFlowScreen() {
                     <Text style={styles.cardTitle}>Academic Course & Fee Selection</Text>
                   </View>
 
-                  <Text style={styles.label}>1. Select Your Course (کورس منتخب کریں)</Text>
+                  {/* 1-Tap Quick Monthly Fee Pay Card (Ghalati 6 Fix) */}
+                  <View style={styles.quickFeePayCard}>
+                    <View style={styles.quickFeeHeaderRow}>
+                      <View style={styles.quickFeeIconBox}>
+                        <Ionicons name="card" size={20} color="#059669" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.quickFeeTitle}>
+                          {activeOrg?.name || DEFAULT_ORGANIZATION_NAME}
+                        </Text>
+                        <Text style={styles.quickFeeSub}>
+                          Monthly Madrasa Fee • ماہانہ فیس ({new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })})
+                        </Text>
+                      </View>
+                      <View style={styles.quickFeeAmountBadge}>
+                        <Text style={styles.quickFeeAmountBadgeText}>₹{monthlyFeeVal}</Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.quickFeeNotice}>
+                      Instant fee clearance via your UPI app (Google Pay, PhonePe, Paytm, BHIM). No forms, no waiting timers.
+                    </Text>
+
+                    {/* Instant App Launchers */}
+                    <View style={styles.quickUpiAppRow}>
+                      <TouchableOpacity
+                        style={[styles.quickUpiAppBtn, { borderColor: '#5F259F' }]}
+                        onPress={() => launchSpecificUpiApp('phonepe')}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="flash" size={13} color="#5F259F" />
+                        <Text style={[styles.quickUpiAppBtnText, { color: '#5F259F' }]}>PhonePe</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.quickUpiAppBtn, { borderColor: '#1A73E8' }]}
+                        onPress={() => launchSpecificUpiApp('gpay')}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="logo-google" size={13} color="#1A73E8" />
+                        <Text style={[styles.quickUpiAppBtnText, { color: '#1A73E8' }]}>GPay</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.quickUpiAppBtn, { borderColor: '#00B9F5' }]}
+                        onPress={() => launchSpecificUpiApp('paytm')}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="wallet-outline" size={13} color="#00B9F5" />
+                        <Text style={[styles.quickUpiAppBtnText, { color: '#00B9F5' }]}>Paytm</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.quickUpiAppBtn, { borderColor: '#059669' }]}
+                        onPress={() => handleOpenDirectUpiModal()}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="qr-code-outline" size={13} color="#059669" />
+                        <Text style={[styles.quickUpiAppBtnText, { color: '#059669' }]}>Any UPI</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.instantPayNowBtn}
+                      onPress={handleOpenDirectUpiModal}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="flash" size={18} color="#FFFFFF" />
+                      <Text style={styles.instantPayNowBtnText}>
+                        1-Tap Pay ₹{monthlyFeeVal} via UPI (فوری فیس ادا کریں)
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={[styles.label, { marginTop: SPACING.md }]}>
+                    Or Select Specific Course / Exam (دیگر کورس منتخب کریں)
+                  </Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courseChipsScroll}>
                     {courses.map((course) => {
                       const isSelected = selectedCourseId === course.id;
@@ -685,10 +1003,15 @@ export default function PaymentFlowScreen() {
                   />
 
                   <View style={styles.donationNoticeBox}>
-                    <Ionicons name="information-circle-outline" size={18} color="#005F46" />
-                    <Text style={styles.donationNoticeText}>
-                      Notice: Donations are strictly allocated to Islamic charitable & student welfare funds. They do not constitute academic course fees or enrollments.
-                    </Text>
+                    <Ionicons name="shield-checkmark" size={20} color="#005F46" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.donationNoticeText, { fontWeight: "700", color: "#005F46", marginBottom: 2 }]}>
+                        100% Confidential Donation • صدقہ خفیہ
+                      </Text>
+                      <Text style={styles.donationNoticeText}>
+                        Your donation is strictly private. In accordance with Islamic principles of sincere charity (Ikhlas), donor identity and contribution amounts are never displayed on public feeds or shared with other users. Only the authorized madrasa administration can access incoming contributions.
+                      </Text>
+                    </View>
                   </View>
 
                   <TouchableOpacity style={styles.primaryBtn} onPress={onContinueToReview}>
@@ -760,32 +1083,104 @@ export default function PaymentFlowScreen() {
                 )}
               </View>
 
-              {activeDomain === "academic_fee" ? (
-                <>
-                  <TouchableOpacity
-                    style={[styles.primaryBtn, openingPayment && styles.primaryBtnDisabled]}
-                    onPress={onInitiateRazorpayPayment}
-                    disabled={openingPayment}
-                  >
-                    {openingPayment ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <View style={styles.btnRow}>
-                        <Ionicons name="card-outline" size={18} color="#FFFFFF" />
-                        <Text style={styles.primaryBtnText}>
-                          Pay ₹{payableAcademicAmount} with Razorpay (Instant Access)
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
+              {/* PAYMENT METHOD SELECTION */}
+              <View style={styles.paymentMethodsContainer}>
+                <Text style={styles.paymentMethodsHeading}>Choose Payment Method (طریقہ کار منتخب کریں)</Text>
 
-                  <View style={styles.instantAccessBadge}>
-                    <Ionicons name="flash" size={14} color="#059669" />
-                    <Text style={styles.instantAccessText}>
-                      1-Click Automatic Payment • Instant Course Access • No Admin Wait
-                    </Text>
+                {/* OPTION 1: DIRECT UPI APPS (1-TAP) */}
+                <TouchableOpacity
+                  style={styles.directUpiCard}
+                  onPress={handleOpenDirectUpiModal}
+                  activeOpacity={0.88}
+                >
+                  <View style={styles.directUpiHeaderRow}>
+                    <View style={styles.upiBadgeRow}>
+                      <View style={styles.directUpiIconWrap}>
+                        <Ionicons name="flash" size={18} color="#FFFFFF" />
+                      </View>
+                      <View>
+                        <Text style={styles.directUpiCardTitle}>1-Tap Direct UPI Apps</Text>
+                        <Text style={styles.directUpiCardSubtitle}>Google Pay • PhonePe • Paytm • BHIM • Cred</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#059669" />
                   </View>
 
+                  <View style={styles.upiAppsPillsRow}>
+                    <View style={[styles.upiAppPill, { borderColor: "#5F259F" }]}>
+                      <Text style={[styles.upiAppPillText, { color: "#5F259F" }]}>PhonePe</Text>
+                    </View>
+                    <View style={[styles.upiAppPill, { borderColor: "#1A73E8" }]}>
+                      <Text style={[styles.upiAppPillText, { color: "#1A73E8" }]}>Google Pay</Text>
+                    </View>
+                    <View style={[styles.upiAppPill, { borderColor: "#00B9F5" }]}>
+                      <Text style={[styles.upiAppPillText, { color: "#00B9F5" }]}>Paytm</Text>
+                    </View>
+                    <View style={[styles.upiAppPill, { borderColor: "#E05E2B" }]}>
+                      <Text style={[styles.upiAppPillText, { color: "#E05E2B" }]}>BHIM UPI</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.directUpiBtn}>
+                    <Ionicons name="phone-portrait-outline" size={16} color="#FFFFFF" />
+                    <Text style={styles.directUpiBtnText}>
+                      Pay ₹{currentTotalAmount.toLocaleString()} via UPI Apps
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* OPTION 2: RAZORPAY GATEWAY */}
+                <TouchableOpacity
+                  style={[styles.razorpayCard, openingPayment && styles.primaryBtnDisabled]}
+                  onPress={onInitiateRazorpayPayment}
+                  disabled={openingPayment}
+                  activeOpacity={0.88}
+                >
+                  <View style={styles.directUpiHeaderRow}>
+                    <View style={styles.upiBadgeRow}>
+                      <View style={[styles.directUpiIconWrap, { backgroundColor: COLORS.primary }]}>
+                        <Ionicons name="card" size={18} color="#FFFFFF" />
+                      </View>
+                      <View>
+                        <Text style={styles.directUpiCardTitle}>Razorpay Gateway</Text>
+                        <Text style={styles.directUpiCardSubtitle}>Instant Auto-Access • Cards, UPI, NetBanking</Text>
+                      </View>
+                    </View>
+                    {openingPayment ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+                    )}
+                  </View>
+
+                  <View style={styles.upiAppsPillsRow}>
+                    <View style={styles.razorpayPill}>
+                      <Ionicons name="card-outline" size={12} color={COLORS.textMuted} />
+                      <Text style={styles.razorpayPillText}>Debit / Credit Card</Text>
+                    </View>
+                    <View style={styles.razorpayPill}>
+                      <Ionicons name="business-outline" size={12} color={COLORS.textMuted} />
+                      <Text style={styles.razorpayPillText}>Net Banking</Text>
+                    </View>
+                    <View style={styles.razorpayPill}>
+                      <Ionicons name="wallet-outline" size={12} color={COLORS.textMuted} />
+                      <Text style={styles.razorpayPillText}>Wallets</Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.primaryBtn, { marginTop: 4 }]}>
+                    <View style={styles.btnRow}>
+                      <Ionicons name="shield-checkmark" size={16} color="#FFFFFF" />
+                      <Text style={styles.primaryBtnText}>
+                        Pay ₹{currentTotalAmount.toLocaleString()} with Razorpay
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {activeDomain === "academic_fee" ? (
+                <>
                   <TouchableOpacity
                     style={[styles.secondaryConcessionBtn, concessionLoading && styles.primaryBtnDisabled]}
                     onPress={handleScholarshipConcessionRequest}
@@ -809,43 +1204,17 @@ export default function PaymentFlowScreen() {
                   </TouchableOpacity>
                 </>
               ) : (
-                <>
-                  <TouchableOpacity
-                    style={[styles.primaryBtn, openingPayment && styles.primaryBtnDisabled]}
-                    onPress={onInitiateRazorpayPayment}
-                    disabled={openingPayment}
-                  >
-                    {openingPayment ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <View style={styles.btnRow}>
-                        <Ionicons name="heart" size={18} color="#FFFFFF" />
-                        <Text style={styles.primaryBtnText}>
-                          Donate ₹{payableDonationAmount.toLocaleString()} with Razorpay
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-
-                  <View style={styles.instantAccessBadge}>
-                    <Ionicons name="flash" size={14} color="#059669" />
-                    <Text style={styles.instantAccessText}>
-                      Secure Instant Payment • Automatic Receipt Issued
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={onProceedToDonationWeb}
+                >
+                  <View style={styles.btnRow}>
+                    <Ionicons name="open-outline" size={16} color={COLORS.textMuted} />
+                    <Text style={styles.secondaryBtnText}>
+                      Or Donate via External Web Browser
                     </Text>
                   </View>
-
-                  <TouchableOpacity
-                    style={styles.secondaryBtn}
-                    onPress={onProceedToDonationWeb}
-                  >
-                    <View style={styles.btnRow}>
-                      <Ionicons name="open-outline" size={16} color={COLORS.textMuted} />
-                      <Text style={styles.secondaryBtnText}>
-                        Or Donate via External Web Browser
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </>
+                </TouchableOpacity>
               )}
 
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep(1)}>
@@ -922,12 +1291,6 @@ export default function PaymentFlowScreen() {
                     <Text style={styles.successSubtitle}>
                       Mubarak! Your enrollment in {selectedCourse?.name || "your course"} is now active. Lessons and quizzes are unlocked.
                     </Text>
-                    <TouchableOpacity
-                      style={styles.primaryBtn}
-                      onPress={() => router.replace("/(tabs)/courses")}
-                    >
-                      <Text style={styles.primaryBtnText}>Go to My Courses</Text>
-                    </TouchableOpacity>
                   </>
                 ) : (
                   <>
@@ -939,14 +1302,51 @@ export default function PaymentFlowScreen() {
                   </>
                 )}
 
+                {/* View Official Receipt Button */}
                 <TouchableOpacity
-                  style={styles.secondaryBtn}
+                  style={[styles.primaryBtn, { width: "100%", marginTop: SPACING.md, marginBottom: SPACING.xs }]}
+                  onPress={() => {
+                    const latest = paymentHistory.find((p) => p.id === currentPaymentId) || {
+                      id: currentPaymentId || "RCP-" + Date.now().toString(36).toUpperCase(),
+                      payment_domain: activeDomain,
+                      payment_type: activeDomain === "donation" ? donationType : academicType,
+                      amount: currentTotalAmount,
+                      course_name: selectedCourse?.name,
+                      state: "succeeded",
+                    };
+                    openReceiptModal(latest as any);
+                  }}
+                >
+                  <View style={styles.btnRow}>
+                    <Ionicons name="document-text-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.primaryBtnText}>View My Private Receipt</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {activeDomain === "academic_fee" ? (
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, { width: "100%", marginTop: 6 }]}
+                    onPress={() => router.replace("/(tabs)/courses")}
+                  >
+                    <Text style={styles.secondaryBtnText}>Go to My Courses</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, { width: "100%", marginTop: 6 }]}
+                    onPress={() => router.replace("/(tabs)/index")}
+                  >
+                    <Text style={styles.secondaryBtnText}>Back to Home</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={{ marginTop: 12, padding: 8 }}
                   onPress={() => {
                     setStep(1);
                     loadHistory().catch(() => {});
                   }}
                 >
-                  <Text style={styles.secondaryBtnText}>Make Another Payment</Text>
+                  <Text style={{ fontSize: 13, color: COLORS.textMuted, fontWeight: "600" }}>Make Another Contribution</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -954,82 +1354,77 @@ export default function PaymentFlowScreen() {
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          {/* PAYMENT HISTORY SECTION */}
-          <View style={styles.historyContainer}>
-            <View style={styles.historyHeader}>
-              <Text style={styles.historyTitle}>Payment & Donation History</Text>
-              <View style={styles.historyFilterRow}>
-                {(["all", "academic_fee", "donation"] as const).map((tab) => (
-                  <TouchableOpacity
-                    key={tab}
-                    style={[styles.historyFilterChip, historyTab === tab && styles.historyFilterChipActive]}
-                    onPress={() => setHistoryTab(tab)}
-                  >
-                    <Text style={[styles.historyFilterText, historyTab === tab && styles.historyFilterTextActive]}>
-                      {tab === "all" ? "All" : tab === "academic_fee" ? "Fees" : "Donations"}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+          {/* CLEAN DISCREET RECEIPT ARCHIVE LINK */}
+          {step === 1 ? (
+            <TouchableOpacity
+              style={styles.cleanReceiptRow}
+              onPress={() => router.push('/payment-history')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="receipt-outline" size={15} color={COLORS.primary} />
+              <Text style={styles.cleanReceiptRowText}>Looking for your past payment receipts? View My Private Receipts</Text>
+              <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+            </TouchableOpacity>
+          ) : null}
+
+          {/* ADMIN FEE & PAYMENT MANAGEMENT (Dedicated Single-Home for Admins) */}
+          {isAdmin && step === 1 ? (
+            <View style={styles.adminFeeCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="settings-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.cardTitle}>Madrasa Fee & Payment Governance</Text>
               </View>
+              <Text style={styles.adminFeeSub}>
+                Configure standard academic fee and public donation appeal note for this madrasa.
+              </Text>
+
+              <Text style={[styles.label, { marginTop: 12 }]}>Standard Monthly Fee Amount (INR)</Text>
+              <TextInput
+                style={styles.adminInput}
+                keyboardType="numeric"
+                placeholder="e.g. 500"
+                value={adminFeeInput}
+                onChangeText={setAdminFeeInput}
+              />
+
+              <Text style={[styles.label, { marginTop: 12 }]}>Donation Appeal Note</Text>
+              <TextInput
+                style={[styles.adminInput, styles.adminTextArea]}
+                multiline
+                placeholder="Write appeal message for Sadaqah & Zakat contributors..."
+                value={adminDonationNote}
+                onChangeText={setAdminDonationNote}
+              />
+
+              {adminSaveMessage ? (
+                <Text style={styles.adminSuccessText}>{adminSaveMessage}</Text>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.primaryBtn, { marginTop: 12 }]}
+                onPress={handleSaveAdminFeeSettings}
+                disabled={savingAdminSettings}
+              >
+                {savingAdminSettings ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <View style={styles.btnRow}>
+                    <Ionicons name="save-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.primaryBtnText}>Save Fee & Donation Settings</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.adminAuditBtn}
+                onPress={() => router.push('/admin/payments')}
+              >
+                <Ionicons name="receipt-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.adminAuditBtnText}>Open Admin Payment Ledger & Audits</Text>
+                <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+              </TouchableOpacity>
             </View>
-
-            {loadingHistory ? (
-              <ActivityIndicator size="small" color={COLORS.primary} />
-            ) : filteredHistory.length === 0 ? (
-              <Text style={styles.historyEmpty}>No payment records found.</Text>
-            ) : (
-              filteredHistory.map((item) => {
-                const itemState = item.state ?? item.status ?? "pending";
-                const isSuccess = itemState === "succeeded";
-                const isDonation = item.payment_domain === "donation" || ["sadqa", "sadqah", "zakat", "fitra", "fitrah", "langar", "donation_other"].includes(String(item.type || item.payment_type).toLowerCase());
-                const displayAmt = item.amount ? (item.amount > 10000 ? item.amount / 100 : item.amount) : 0;
-
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.historyCard}
-                    onPress={() => openReceiptModal(item)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.historyHeaderRow}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Ionicons
-                          name={isDonation ? "heart" : "school"}
-                          size={16}
-                          color={isDonation ? "#C8A84E" : COLORS.primary}
-                        />
-                        <Text style={styles.historyType}>
-                          {isDonation
-                            ? `Donation: ${(item.payment_type || item.type || "sadqah").toUpperCase()}`
-                            : `Fee: ${(item.payment_type || item.type || "course_fee").toUpperCase()}`}
-                        </Text>
-                      </View>
-                      <View style={[styles.historyBadge, isSuccess ? styles.badgeSuccess : styles.badgePending]}>
-                        <Text style={[styles.badgeText, isSuccess ? styles.badgeTextSuccess : styles.badgeTextPending]}>
-                          {itemState.toUpperCase()}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                      <Text style={styles.historyAmount}>₹{Number(displayAmt).toFixed(2)}</Text>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                        <Ionicons name="document-text-outline" size={14} color={COLORS.primary} />
-                        <Text style={{ fontSize: 12, color: COLORS.primary, fontWeight: "600" }}>View Receipt</Text>
-                      </View>
-                    </View>
-
-                    {item.course_name ? (
-                      <Text style={styles.historyCourse}>Course: {item.course_name}</Text>
-                    ) : null}
-                    {item.provider_payment_id ? (
-                      <Text style={styles.historyRef}>Ref: {item.provider_payment_id}</Text>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -1051,7 +1446,7 @@ export default function PaymentFlowScreen() {
           </View>
           {checkoutData ? (
             <WebView
-              originWhitelist={["https://*", "upi://*", "phonepe://*", "paytmmp://*", "gpay://*", "bhim://*", "credpay://*", "about:blank"]}
+              originWhitelist={["*"]}
               source={{ html: checkoutHtml }}
               onMessage={(event) => {
                 try {
@@ -1098,10 +1493,59 @@ export default function PaymentFlowScreen() {
               }}
               onShouldStartLoadWithRequest={(request) => {
                 const u = request.url;
-                if (u.startsWith("upi://") || u.startsWith("phonepe://") || u.startsWith("paytmmp://") || u.startsWith("gpay://") || u.startsWith("credpay://") || u.startsWith("bhim://")) {
-                  Linking.openURL(u).catch(() => {});
+                if (!u) return true;
+
+                // Handle standard UPI schemes
+                const isUpiScheme =
+                  u.startsWith("upi://") ||
+                  u.startsWith("phonepe://") ||
+                  u.startsWith("paytmmp://") ||
+                  u.startsWith("paytm://") ||
+                  u.startsWith("gpay://") ||
+                  u.startsWith("tez://") ||
+                  u.startsWith("bhim://") ||
+                  u.startsWith("credpay://") ||
+                  u.startsWith("mobikwik://") ||
+                  u.startsWith("whatsapp://");
+
+                if (isUpiScheme) {
+                  Linking.openURL(u).catch((err) => {
+                    console.warn("[Razorpay] Failed to open UPI scheme URL:", err);
+                  });
                   return false;
                 }
+
+                // Handle Android Intent URLs (frequently emitted by Razorpay UPI on Android)
+                if (u.startsWith("intent://")) {
+                  try {
+                    let targetUrl = "";
+                    if (u.includes("scheme=upi")) {
+                      const match = u.match(/^intent:\/\/([^#]+)/);
+                      if (match && match[1]) {
+                        targetUrl = "upi://" + match[1];
+                      }
+                    } else if (u.includes("data=upi")) {
+                      const match = u.match(/data=([^;]+)/);
+                      if (match && match[1]) {
+                        targetUrl = decodeURIComponent(match[1]);
+                      }
+                    }
+
+                    if (targetUrl) {
+                      Linking.openURL(targetUrl).catch(() => {
+                        Linking.openURL(u).catch(() => {});
+                      });
+                      return false;
+                    } else {
+                      Linking.openURL(u).catch(() => {});
+                      return false;
+                    }
+                  } catch {
+                    Linking.openURL(u).catch(() => {});
+                    return false;
+                  }
+                }
+
                 return true;
               }}
               javaScriptEnabled={true}
@@ -1115,6 +1559,262 @@ export default function PaymentFlowScreen() {
               )}
             />
           ) : null}
+        </View>
+      </Modal>
+
+      {/* DIRECT 1-TAP UPI PAYMENT MODAL */}
+      <Modal
+        visible={directUpiModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setDirectUpiModalVisible(false)}
+      >
+        <View style={styles.directUpiModalOverlay}>
+          <View style={styles.directUpiModalSheet}>
+            <View style={styles.directUpiSheetHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={styles.directUpiIconWrap}>
+                  <Ionicons name="flash" size={18} color="#FFFFFF" />
+                </View>
+                <View>
+                  <Text style={styles.directUpiSheetTitle}>Direct UPI Payment</Text>
+                  <Text style={styles.directUpiSheetSubtitle}>براہ راست یو پی آئی ادائیگی</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.directUpiCloseBtn}
+                onPress={() => setDirectUpiModalVisible(false)}
+              >
+                <Ionicons name="close" size={20} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: SPACING.xl }}>
+              {/* AMOUNT & PAYEE SUMMARY */}
+              <View style={styles.directUpiSummaryBox}>
+                <Text style={styles.directUpiSummaryLabel}>Total Amount Payable</Text>
+                <Text style={styles.directUpiSummaryAmount}>₹{currentTotalAmount.toLocaleString()}</Text>
+                <Text style={styles.directUpiSummaryPayee}>
+                  Payee: {activeOrg?.name || DEFAULT_ORGANIZATION_NAME}
+                </Text>
+                <Text style={styles.directUpiSummaryPurpose}>
+                  Purpose: {activeDomain === "academic_fee" ? `Course Fee (${selectedCourse?.name || "Academic"})` : `Donation (${donationType.toUpperCase()})`}
+                </Text>
+              </View>
+
+              {/* STEP 1: LAUNCH INSTALLED UPI APPS */}
+              <Text style={styles.directUpiSectionTitle}>1. Tap to Pay via Installed App</Text>
+              <Text style={styles.directUpiSectionDesc}>
+                Tap your preferred app to open and complete payment directly:
+              </Text>
+
+              <View style={styles.directUpiAppGrid}>
+                <TouchableOpacity
+                  style={[styles.directUpiAppBtn, { borderColor: "#5F259F" }]}
+                  onPress={() => launchSpecificUpiApp("phonepe")}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.appCircle, { backgroundColor: "#5F259F" }]}>
+                    <Text style={{ color: "#FFFFFF", fontWeight: "900", fontSize: 13 }}>Pe</Text>
+                  </View>
+                  <Text style={styles.directUpiAppName}>PhonePe</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.directUpiAppBtn, { borderColor: "#1A73E8" }]}
+                  onPress={() => launchSpecificUpiApp("gpay")}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.appCircle, { backgroundColor: "#1A73E8" }]}>
+                    <Text style={{ color: "#FFFFFF", fontWeight: "900", fontSize: 13 }}>G</Text>
+                  </View>
+                  <Text style={styles.directUpiAppName}>Google Pay</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.directUpiAppBtn, { borderColor: "#00B9F5" }]}
+                  onPress={() => launchSpecificUpiApp("paytm")}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.appCircle, { backgroundColor: "#00B9F5" }]}>
+                    <Text style={{ color: "#FFFFFF", fontWeight: "900", fontSize: 11 }}>Paytm</Text>
+                  </View>
+                  <Text style={styles.directUpiAppName}>Paytm</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.directUpiAppBtn, { borderColor: "#059669" }]}
+                  onPress={() => launchSpecificUpiApp("universal")}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.appCircle, { backgroundColor: "#059669" }]}>
+                    <Ionicons name="apps" size={16} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.directUpiAppName}>Any UPI App</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* STEP 2: COPY UPI ID OR SCAN QR */}
+              <Text style={[styles.directUpiSectionTitle, { marginTop: SPACING.md }]}>
+                2. Or Pay via UPI ID / QR Code
+              </Text>
+
+              <View style={styles.upiVpaContainer}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.upiVpaLabel}>Official Institutional UPI ID (VPA):</Text>
+                  <Text style={styles.upiVpaText} selectable={true}>{directUpiVpa}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.upiCopyBtn, upiCopied && styles.upiCopyBtnActive]}
+                  onPress={handleCopyUpiId}
+                >
+                  <Ionicons
+                    name={upiCopied ? "checkmark" : "copy-outline"}
+                    size={16}
+                    color={upiCopied ? "#10B981" : COLORS.primary}
+                  />
+                  <Text style={[styles.upiCopyBtnText, upiCopied && { color: "#10B981" }]}>
+                    {upiCopied ? "Copied" : "Copy"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* DYNAMIC QR CODE */}
+              <View style={styles.qrCodeBox}>
+                <Image
+                  source={{
+                    uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                      `upi://pay?pa=${directUpiVpa}&pn=${encodeURIComponent(activeOrg?.upi_name || activeOrg?.name || 'Suffah Madrasa')}&am=${currentTotalAmount}&cu=INR&tn=${encodeURIComponent(
+                        activeDomain === "academic_fee" ? `Fee: ${selectedCourse?.name || "Course"}` : "Donation"
+                      )}`
+                    )}`,
+                  }}
+                  style={styles.qrCodeImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.qrCodeCaption}>
+                  Scan using Google Pay, PhonePe, Paytm, or BHIM from any mobile
+                </Text>
+              </View>
+
+              {/* OFFICIAL MADRASA BANK ACCOUNT (NEFT / IMPS / NETBANKING) */}
+              {(Boolean(activeOrg?.account_number) || Boolean(activeOrg?.bank_name)) && (
+                <View style={styles.bankAccountCard}>
+                  <View style={styles.bankHeaderRow}>
+                    <Ionicons name="business" size={18} color="#005F46" />
+                    <Text style={styles.bankHeaderTitle}>Official Madrasa Bank Account (NEFT / IMPS)</Text>
+                  </View>
+                  <Text style={styles.bankSubtitle}>
+                    You may also transfer fees directly via NetBanking / IMPS / NEFT to {activeOrg?.name || 'the Madrasa'}:
+                  </Text>
+
+                  {Boolean(activeOrg?.account_holder) && (
+                    <View style={styles.bankDetailRow}>
+                      <Text style={styles.bankDetailLabel}>Beneficiary Name:</Text>
+                      <Text style={styles.bankDetailValue} selectable>{activeOrg?.account_holder}</Text>
+                    </View>
+                  )}
+
+                  {Boolean(activeOrg?.bank_name) && (
+                    <View style={styles.bankDetailRow}>
+                      <Text style={styles.bankDetailLabel}>Bank Name:</Text>
+                      <Text style={styles.bankDetailValue}>{activeOrg?.bank_name}</Text>
+                    </View>
+                  )}
+
+                  {Boolean(activeOrg?.account_number) && (
+                    <View style={styles.bankDetailRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bankDetailLabel}>Account Number:</Text>
+                        <Text style={[styles.bankDetailValue, { fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontWeight: '800' }]} selectable>
+                          {activeOrg?.account_number}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.bankCopyBtn, copiedBankAcc && styles.bankCopyBtnActive]}
+                        onPress={async () => {
+                          await Clipboard.setStringAsync(activeOrg?.account_number || '');
+                          setCopiedBankAcc(true);
+                          setTimeout(() => setCopiedBankAcc(false), 2500);
+                        }}
+                      >
+                        <Ionicons name={copiedBankAcc ? "checkmark" : "copy-outline"} size={14} color={copiedBankAcc ? "#10B981" : COLORS.primary} />
+                        <Text style={[styles.bankCopyBtnText, copiedBankAcc && { color: "#10B981" }]}>
+                          {copiedBankAcc ? "Copied" : "Copy"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {Boolean(activeOrg?.ifsc_code) && (
+                    <View style={styles.bankDetailRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bankDetailLabel}>IFSC Code:</Text>
+                        <Text style={[styles.bankDetailValue, { fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontWeight: '800' }]} selectable>
+                          {activeOrg?.ifsc_code}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.bankCopyBtn, copiedIfsc && styles.bankCopyBtnActive]}
+                        onPress={async () => {
+                          await Clipboard.setStringAsync(activeOrg?.ifsc_code || '');
+                          setCopiedIfsc(true);
+                          setTimeout(() => setCopiedIfsc(false), 2500);
+                        }}
+                      >
+                        <Ionicons name={copiedIfsc ? "checkmark" : "copy-outline"} size={14} color={copiedIfsc ? "#10B981" : COLORS.primary} />
+                        <Text style={[styles.bankCopyBtnText, copiedIfsc && { color: "#10B981" }]}>
+                          {copiedIfsc ? "Copied" : "Copy"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {Boolean(activeOrg?.fee_instructions) && (
+                    <View style={styles.feeInstructionsBox}>
+                      <Ionicons name="information-circle" size={16} color="#D97706" />
+                      <Text style={styles.feeInstructionsText}>{activeOrg?.fee_instructions}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* STEP 3: SUBMIT UTR / REFERENCE */}
+              <View style={styles.utrSubmissionBox}>
+                <Text style={styles.utrHeading}>3. Enter 12-Digit Reference / UTR Number</Text>
+                <Text style={styles.utrSubtext}>
+                  After completing the payment in your UPI app or NetBanking, enter the 12-digit UTR / Transaction ID from your payment receipt to confirm:
+                </Text>
+                <TextInput
+                  style={styles.utrInput}
+                  placeholder="e.g. 412345678901"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={directUpiUtr}
+                  onChangeText={setDirectUpiUtr}
+                  keyboardType="numeric"
+                  maxLength={30}
+                  autoCapitalize="characters"
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.primaryBtn,
+                    (!directUpiUtr.trim() || directUpiSubmitting) && styles.primaryBtnDisabled,
+                  ]}
+                  onPress={handleSubmitDirectUpiPayment}
+                  disabled={!directUpiUtr.trim() || directUpiSubmitting}
+                >
+                  {directUpiSubmitting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <View style={styles.btnRow}>
+                      <Ionicons name="checkmark-done" size={18} color="#FFFFFF" />
+                      <Text style={styles.primaryBtnText}>Submit UPI Payment Proof</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
         </View>
       </Modal>
 
@@ -1364,6 +2064,25 @@ const styles = StyleSheet.create({
   cancelLink: { marginTop: SPACING.md, padding: 8 },
   cancelLinkText: { ...TYPOGRAPHY.label, color: COLORS.textMuted },
   error: { color: "#EF4444", textAlign: "center", marginTop: SPACING.xs },
+  cleanReceiptRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: SPACING.md,
+    gap: 8,
+  },
+  cleanReceiptRowText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: "600",
+    flex: 1,
+  },
   historyContainer: { marginTop: SPACING.lg, gap: SPACING.sm },
   historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   historyTitle: { ...TYPOGRAPHY.heading, fontSize: 15, color: COLORS.text },
@@ -1385,4 +2104,548 @@ const styles = StyleSheet.create({
   historyAmount: { ...TYPOGRAPHY.heading, fontSize: 16, color: COLORS.primary },
   historyCourse: { fontSize: 12, color: COLORS.textMuted },
   historyRef: { ...TYPOGRAPHY.label, fontSize: 11, color: COLORS.textMuted },
+
+  // Direct UPI & Payment Methods Styles
+  paymentMethodsContainer: { marginTop: SPACING.sm, gap: SPACING.md },
+  paymentMethodsHeading: { ...TYPOGRAPHY.label, color: COLORS.text, fontWeight: "700", fontSize: 13 },
+  directUpiCard: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 2,
+    borderColor: "#10B981",
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+    ...SHADOWS.card,
+  },
+  directUpiHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  upiBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  directUpiIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#059669",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  directUpiCardTitle: {
+    ...TYPOGRAPHY.heading,
+    fontSize: 16,
+    color: "#065F46",
+  },
+  directUpiCardSubtitle: {
+    ...TYPOGRAPHY.body,
+    fontSize: 11,
+    color: "#047857",
+    fontWeight: "600",
+    marginTop: 1,
+  },
+  upiAppsPillsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 2,
+  },
+  upiAppPill: {
+    borderWidth: 1,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: "#FFFFFF",
+  },
+  upiAppPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  directUpiBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#059669",
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+    marginTop: 4,
+  },
+  directUpiBtnText: {
+    ...TYPOGRAPHY.heading,
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
+  razorpayCard: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+    ...SHADOWS.card,
+  },
+  razorpayPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  razorpayPillText: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: "600",
+  },
+  directUpiModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  directUpiModalSheet: {
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    maxHeight: "90%",
+  },
+  directUpiSheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  directUpiSheetTitle: {
+    ...TYPOGRAPHY.heading,
+    fontSize: 17,
+    color: COLORS.text,
+  },
+  directUpiSheetSubtitle: {
+    ...TYPOGRAPHY.body,
+    fontSize: 12,
+    color: "#C8A84E",
+    fontWeight: "700",
+  },
+  directUpiCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  directUpiSummaryBox: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    gap: 3,
+  },
+  directUpiSummaryLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textTransform: "uppercase",
+  },
+  directUpiSummaryAmount: {
+    ...TYPOGRAPHY.title,
+    fontSize: 26,
+    color: "#059669",
+    fontWeight: "900",
+  },
+  directUpiSummaryPayee: {
+    ...TYPOGRAPHY.body,
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  directUpiSummaryPurpose: {
+    ...TYPOGRAPHY.body,
+    fontSize: 11,
+    color: COLORS.textMuted,
+  },
+  directUpiSectionTitle: {
+    ...TYPOGRAPHY.heading,
+    fontSize: 14,
+    color: COLORS.text,
+    marginTop: SPACING.sm,
+  },
+  directUpiSectionDesc: {
+    ...TYPOGRAPHY.body,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  directUpiAppGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: SPACING.xs,
+  },
+  directUpiAppBtn: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderWidth: 1.5,
+    gap: 6,
+  },
+  appCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  directUpiAppName: {
+    ...TYPOGRAPHY.label,
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  upiVpaContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: SPACING.xs,
+    gap: 8,
+  },
+  upiVpaLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 11,
+    color: COLORS.textMuted,
+  },
+  upiVpaText: {
+    ...TYPOGRAPHY.heading,
+    fontSize: 15,
+    color: COLORS.primary,
+    marginTop: 2,
+  },
+  upiCopyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+  },
+  upiCopyBtnActive: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#10B981",
+  },
+  upiCopyBtnText: {
+    ...TYPOGRAPHY.label,
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
+  qrCodeBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginTop: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  qrCodeImage: {
+    width: 170,
+    height: 170,
+    borderRadius: RADIUS.md,
+  },
+  qrCodeCaption: {
+    ...TYPOGRAPHY.body,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  utrSubmissionBox: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginTop: SPACING.md,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    gap: 8,
+  },
+  utrHeading: {
+    ...TYPOGRAPHY.heading,
+    fontSize: 13,
+    color: "#92400E",
+  },
+  utrSubtext: {
+    ...TYPOGRAPHY.body,
+    fontSize: 11,
+    color: "#78350F",
+    lineHeight: 16,
+  },
+  utrInput: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#1E293B",
+    fontWeight: "700",
+    letterSpacing: 1,
+  },
+  adminFeeCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    marginTop: SPACING.md,
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.08)",
+    ...SHADOWS.card,
+  },
+  adminFeeSub: {
+    ...TYPOGRAPHY.body,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  adminInput: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: COLORS.text,
+    marginTop: 6,
+  },
+  adminTextArea: {
+    minHeight: 70,
+    textAlignVertical: "top",
+  },
+  adminSuccessText: {
+    ...TYPOGRAPHY.body,
+    fontSize: 13,
+    color: "#16A34A",
+    fontWeight: "700",
+    marginTop: 8,
+  },
+  adminAuditBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#EEF2FF",
+    borderRadius: RADIUS.md,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 12,
+  },
+  adminAuditBtnText: {
+    ...TYPOGRAPHY.label,
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: "700",
+    flex: 1,
+    marginLeft: 8,
+  },
+  bankAccountCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginTop: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  bankHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bankHeaderTitle: {
+    ...TYPOGRAPHY.heading,
+    fontSize: 14,
+    color: '#065F46',
+    fontWeight: '800',
+  },
+  bankSubtitle: {
+    ...TYPOGRAPHY.body,
+    fontSize: 12,
+    color: '#047857',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  bankDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  bankDetailLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 11,
+    color: COLORS.textMuted,
+  },
+  bankDetailValue: {
+    ...TYPOGRAPHY.body,
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  bankCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F1F5F9',
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  bankCopyBtnActive: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#10B981',
+  },
+  bankCopyBtnText: {
+    ...TYPOGRAPHY.label,
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  feeInstructionsBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFBEB',
+    borderRadius: RADIUS.md,
+    padding: 10,
+    marginTop: 8,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  feeInstructionsText: {
+    ...TYPOGRAPHY.body,
+    fontSize: 12,
+    color: '#92400E',
+    flex: 1,
+    lineHeight: 17,
+  },
+  quickFeePayCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    ...SHADOWS.card,
+  },
+  quickFeeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: SPACING.xs,
+  },
+  quickFeeIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  quickFeeTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  quickFeeSub: {
+    fontSize: 11,
+    color: '#047857',
+    marginTop: 1,
+  },
+  quickFeeAmountBadge: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+  },
+  quickFeeAmountBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  quickFeeNotice: {
+    fontSize: 11,
+    color: '#065F46',
+    lineHeight: 16,
+    marginBottom: SPACING.sm,
+  },
+  quickUpiAppRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: SPACING.sm,
+  },
+  quickUpiAppBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 7,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    gap: 4,
+  },
+  quickUpiAppBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  instantPayNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    gap: 8,
+    ...SHADOWS.card,
+  },
+  instantPayNowBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
 });

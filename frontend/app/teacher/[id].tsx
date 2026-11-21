@@ -16,12 +16,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY, getTeacherAvatar, getCourseImage } from '@/constants/theme';
 import { useData, Course, CourseSubject } from '@/context/DataContext';
 import { normalizeGoogleDriveFileUrl } from '@/lib/links';
+import { useActiveOrganization } from '@/lib/tenantContext';
 
 export default function TeacherDetailScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { activeOrg } = useActiveOrganization();
   const { courses, teachers, loading } = useData();
 
   const teacher = useMemo(() => {
@@ -197,7 +199,7 @@ export default function TeacherDetailScreen() {
           <Ionicons name="arrow-back" size={20} color={COLORS.textMain} />
         </TouchableOpacity>
         <View style={styles.topBarTitleCenter}>
-          <Text style={styles.topBarInstitution}>مدرسۃ السالکات للبنات</Text>
+          <Text style={styles.topBarInstitution}>{activeOrg?.name_arabic || (teacher as any)?.organization_name || activeOrg?.name || 'مدرسۃ السالکات للبنات'}</Text>
           <Text style={styles.topBarTitle}>Faculty Profile</Text>
         </View>
         <TouchableOpacity
@@ -238,7 +240,7 @@ export default function TeacherDetailScreen() {
           <View style={styles.titleBadge}>
             <Ionicons name="school" size={13} color={COLORS.goldText} />
             <Text style={styles.titleBadgeText}>
-              {teacher.title || 'Ustaadha • Madrasatu-s-Salikat Faculty'}
+              {teacher.title || (activeOrg?.name ? `Ustaadha • ${activeOrg.name} Faculty` : 'Ustaadha • Madrasa Faculty')}
             </Text>
           </View>
 
@@ -395,7 +397,7 @@ export default function TeacherDetailScreen() {
           <Text style={styles.bioText}>
             {teacher.bio
               ? teacher.bio
-              : 'Dedicated faculty member at Madrasatu-s-Salikat Lil Banat, committed to nurturing students with authentic Islamic scholarship, Tajweed perfection, and moral tarbiyah.'}
+              : `Dedicated faculty member at ${activeOrg?.name || 'the Madrasa'}, committed to nurturing students with authentic Islamic scholarship, Tajweed perfection, and moral tarbiyah.`}
           </Text>
 
           {languagesList.length > 0 ? (

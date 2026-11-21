@@ -27,6 +27,7 @@ import {
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { useData, Book } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveOrganization } from '@/lib/tenantContext';
 import { collection, getDocs, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { EmptyState, FeedbackBanner, ScalePressable, SkeletonCard } from '@/components/ui';
@@ -172,7 +173,14 @@ export default function LibraryScreen() {
   const router = useRouter();
   const { books, booksLoading, deleteBook, refetchBooks, error } = useData();
   const { profile } = useAuth();
+  const { activeOrgId, activeOrg } = useActiveOrganization();
   const isAdmin = profile?.role === 'admin';
+
+  useEffect(() => {
+    if (refetchBooks && activeOrgId) {
+      refetchBooks(activeOrgId).catch(() => {});
+    }
+  }, [activeOrgId, refetchBooks]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<string>('all'); // 'all' | 'popular' | 'recommended' | categoryId
   const [search, setSearch] = useState('');
@@ -387,6 +395,24 @@ export default function LibraryScreen() {
           </View>
         </View>
       </View>
+
+      {/* Institution Context Banner */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ECFDF5',
+        borderBottomWidth: 1,
+        borderBottomColor: '#D1FAE5',
+        paddingHorizontal: SPACING.md,
+        paddingVertical: 7,
+        gap: 6,
+      }}>
+        <Ionicons name="library" size={14} color="#059669" />
+        <Text style={{ fontSize: 12, fontWeight: '700', color: '#065F46', flex: 1 }} numberOfLines={1}>
+          Kutub-Khana: {activeOrg?.name || 'Madrasa Library'}
+        </Text>
+      </View>
+
       {feedback ? (
         <View style={styles.feedbackWrap}>
           <FeedbackBanner type={feedback.type} message={feedback.text} />
@@ -447,7 +473,7 @@ export default function LibraryScreen() {
       {error ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={refetchBooks}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => { refetchBooks(activeOrgId); }}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
         </View>
       ) : null}
 

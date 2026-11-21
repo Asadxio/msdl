@@ -34,6 +34,7 @@ import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { goBackOrReplace } from '@/lib/navigation';
 import { clearQuizCounts } from '@/lib/lmsHardening';
+import { useActiveOrganization } from '@/lib/tenantContext';
 
 interface QuizDoc {
   id: string;
@@ -43,12 +44,15 @@ interface QuizDoc {
   category: string;
   explanation?: string;
   difficulty?: string;
+  organization_id?: string;
 }
 
 export default function AdminManageQuizzesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
+  const { activeOrg } = useActiveOrganization();
+  const activeOrgId = activeOrg?.id || 'mslb-main';
   const allowed = hasPermission(profile, 'admin.academics.manage') || profile?.role === 'super_admin' || profile?.role === 'admin';
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -68,18 +72,28 @@ export default function AdminManageQuizzesScreen() {
   const fetchQuestions = useCallback(async () => {
     setLoading(true);
     try {
-      let q = collection(db, 'quizzes');
+      const q = collection(db, 'quizzes');
       let snap;
-      if (selectedCategory && selectedCategory !== 'all') {
-        const qRef = query(q, where('category', '==', selectedCategory));
+      if (activeOrgId !== 'mslb-main') {
+        const qRef = selectedCategory && selectedCategory !== 'all'
+          ? query(q, where('organization_id', '==', activeOrgId), where('category', '==', selectedCategory))
+          : query(q, where('organization_id', '==', activeOrgId));
         snap = await getDocs(qRef);
       } else {
-        snap = await getDocs(q);
+        const qRef = selectedCategory && selectedCategory !== 'all'
+          ? query(q, where('category', '==', selectedCategory))
+          : q;
+        snap = await getDocs(qRef);
       }
 
       const list: QuizDoc[] = [];
       snap.forEach((d) => {
         const data = d.data();
+        const docOrg = data.organization_id;
+        // For mslb-main, exclude docs explicitly owned by other tenants
+        if (activeOrgId === 'mslb-main' && docOrg && docOrg !== 'mslb-main') {
+          return;
+        }
         list.push({
           id: d.id,
           question: data.question || '',
@@ -88,6 +102,7 @@ export default function AdminManageQuizzesScreen() {
           category: data.category || 'General',
           explanation: data.explanation || '',
           difficulty: data.difficulty || 'easy',
+          organization_id: data.organization_id || 'mslb-main',
         });
       });
       setQuestions(list);
@@ -97,7 +112,7 @@ export default function AdminManageQuizzesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, activeOrgId]);
 
   useEffect(() => {
     fetchQuestions();
@@ -206,6 +221,7 @@ export default function AdminManageQuizzesScreen() {
         options: cleanOpts,
         correct_answer: editCorrect.trim(),
         category: editCategory.trim() || 'General',
+        organization_id: activeOrgId,
         explanation: editExplanation.trim(),
         updated_at: serverTimestamp(),
       });
@@ -336,6 +352,24 @@ export default function AdminManageQuizzesScreen() {
         >
           <Ionicons name="sparkles" size={16} color="#002E23" />
         </TouchableOpacity>
+      </View>
+
+      {/* Institution Context Banner */}
+      <View style={styles.institutionBanner}>
+        <View style={styles.institutionIconCircle}>
+          <Ionicons name="school" size={18} color="#005F46" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.institutionName} numberOfLines={1}>
+            {activeOrg?.name || 'Madrasatu-s-Salikat Lil Banat'}
+          </Text>
+          <Text style={styles.institutionSub}>
+            Quizzes & Assessments Scoped to this Madrasa
+          </Text>
+        </View>
+        <View style={styles.institutionBadge}>
+          <Text style={styles.institutionBadgeText}>Active Madrasa</Text>
+        </View>
       </View>
 
       {/* Search Input */}
@@ -892,5 +926,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  institutionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#DCFCE7',
+    gap: 12,
+  },
+  institutionIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  institutionName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  institutionSub: {
+    fontSize: 11,
+    color: '#047857',
+    marginTop: 1,
+  },
+  institutionBadge: {
+    backgroundColor: '#005F46',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  institutionBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
   },
 });

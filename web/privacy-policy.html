@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Privacy Policy | Madarsa Tus Salikat Lil Banat</title>
+  <title>Privacy Policy | Suffah: Digital Madrasa Portal</title>
   <style>
-    :root { --green:#0F5132; --gold:#D4AF37; --bg:#F7F6EF; --card:#FFFFFF; --text:#1F2937; --muted:#6B7280; --border:#E5E7EB; }
+    :root { --green:#005F46; --gold:#C8A84E; --bg:#F8F6F0; --card:#FFFFFF; --text:#1F2937; --muted:#6B7280; --border:#E5E7EB; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; }
     main { width: min(900px, calc(100% - 32px)); margin: 0 auto; padding: 36px 0; }
-    article { background: var(--card); border: 1px solid var(--border); border-radius: 22px; padding: clamp(20px, 4vw, 36px); box-shadow: 0 12px 32px rgba(15, 81, 50, 0.12); }
+    article { background: var(--card); border: 1px solid var(--border); border-radius: 22px; padding: clamp(20px, 4vw, 36px); box-shadow: 0 12px 32px rgba(0, 95, 70, 0.12); }
     h1, h2 { color: var(--green); line-height: 1.2; }
     h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); }
     h2 { margin-top: 28px; }
@@ -20,45 +20,57 @@
   </style>
 </head>
 <body>
+  <div style="background:#FFFFFF; border-bottom:1px solid #E5E7EB; padding:14px 20px;">
+    <div style="max-width:900px; margin:0 auto; display:flex; align-items:center; justify-content:space-between;">
+      <a href="index.html" style="text-decoration:none; display:flex; align-items:center; gap:8px; font-weight:800; color:#005F46; font-size:1.15rem;">
+        <span>🕌</span>
+        <span>Suffah • صُـفَّة</span>
+      </a>
+      <a href="index.html" style="text-decoration:none; color:#005F46; font-size:0.9rem; font-weight:700;">← Back to Home</a>
+    </div>
+  </div>
   <main>
     <article>
       <h1>Privacy Policy</h1>
       <div class="accent" aria-hidden="true"></div>
       <p class="muted">Effective date: May 31, 2026</p>
-      <p>Madarsa Tus Salikat Lil Banat provides Islamic learning services through mobile apps, live classes, chat, assignments, payments, donations, notifications, and admin support tools.</p>
+      <p>Suffah: Digital Madrasa Portal (&ldquo;Suffah&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;) provides multi-tenant Islamic educational software for member madrasas, students, parents, and teachers through mobile apps, live audio classes, chat, assignments, payments, and administrative support tools.</p>
 
       <h2>Data We Collect</h2>
       <ul>
-        <li><strong>Profile and authentication data:</strong> name, email address, role, account approval status, email verification status, avatar/profile photo, referral details, Firebase identifiers, and login metadata.</li>
+        <li><strong>Profile and authentication data:</strong> name, email address, role, affiliated madrasa organization ID, account approval status, email verification status, avatar/profile photo, referral details, Firebase identifiers, and login metadata.</li>
         <li><strong>Learning data:</strong> course enrollments, progress, assignments, submissions, teacher feedback, quiz/class activity, and attendance records.</li>
-        <li><strong>Chat, status, and media:</strong> messages, read receipts, comments, reactions, status posts, images, videos, audio, documents, file names, file sizes, and moderation evidence.</li>
-        <li><strong>Live classes:</strong> class metadata, participant lists, Agora channel/session identifiers, microphone/camera state, reconnect details, attendance duration, and recording metadata when recording is enabled.</li>
-        <li><strong>Payments and donations:</strong> payment type, amount, submitted reference numbers, review status, admin notes, reconciliation/audit data, and entitlement/enrollment updates. Do not submit card numbers or bank passwords in app text fields.</li>
+        <li><strong>Chat, status, and media:</strong> messages, read receipts, comments, reactions, status posts, images, documents, and moderation evidence.</li>
+        <li><strong>Live audio classes:</strong> class metadata, participant lists, Agora audio session identifiers, microphone state, reconnect details, attendance duration, and audio recording metadata when recording is enabled by the teacher. In accordance with strict Islamic modesty (Purdah), video camera feeds are disabled.</li>
+        <li><strong>Payments and donations:</strong> payment type, amount, submitted reference numbers, review status, admin notes, reconciliation/audit data, and enrollment updates. Do not submit card numbers or bank passwords in app text fields.</li>
         <li><strong>Notifications:</strong> Expo/Firebase push tokens, notification preferences, delivery metadata, and reminder history.</li>
         <li><strong>Location (on-device only):</strong> Approximate and precise location is accessed only when using the Qibla Compass Finder and local prayer times calculator. Coordinates are processed ephemerally on your device and cached locally to compute compass heading toward the Kaaba (Makkah). We do not collect background location, track your movement, or share your coordinates with advertising networks or remote servers.</li>
-        <li><strong>Security and analytics:</strong> device/app diagnostics, operational logs, security events, duplicate-upload checks, abuse-prevention events, and performance/error telemetry.</li>
+        <li><strong>Security and analytics:</strong> device/app diagnostics, operational logs, security events, abuse-prevention events, and error telemetry.</li>
       </ul>
 
       <h2>How We Use Data</h2>
-      <p>We use data to create and approve accounts, deliver courses, run live classes, manage assignments, send notifications, verify manual payments and donations, provide support, protect students, moderate content, prevent fraud/abuse, and comply with legal, safety, accounting, or dispute obligations.</p>
+      <p>We use data to create and approve accounts, authenticate members to their specific madrasa campus, deliver courses, run live audio classes, manage assignments, send notifications, verify manual payments and donations, provide support, protect students, moderate content, prevent fraud/abuse, and comply with legal, safety, accounting, or dispute obligations.</p>
+
+      <h2>Tenant Data Isolation</h2>
+      <p>Every member madrasa operates in an isolated environment. Student records, fee books, and academic grades belonging to one madrasa cannot be viewed or accessed by administrators or teachers of another madrasa.</p>
 
       <h2>Third-Party Processors</h2>
-      <p>We use trusted service providers to operate the app, including Firebase for authentication, Firestore, storage, and messaging; Railway/FastAPI backend hosting; Agora for live audio/video and recording services; Razorpay/payment references where applicable; Expo/push notification services; and related storage or infrastructure providers.</p>
+      <p>We use trusted service providers to operate the app, including Google Firebase for authentication, Firestore database, storage, and messaging; Agora for real-time live audio communications; Razorpay for fee vouchers where applicable; and Expo for push notification delivery.</p>
 
       <h2>Sharing</h2>
-      <p>We do not sell personal data. We share data only as needed for app operations, support, legal compliance, safety review, payment/donation reconciliation, or with authorized madrasa administrators and teachers according to their roles.</p>
+      <p>We do not sell personal data. We share data only as needed for app operations, support, legal compliance, safety review, payment/donation reconciliation, or with authorized administrators and teachers of your specific madrasa according to their verified roles.</p>
 
       <h2>Retention</h2>
       <p>We keep data while your account is active or while needed for education, safety, legal, audit, payment, dispute, or accounting purposes. Some records may be deleted, anonymized, or retained where required by law or safety obligations.</p>
 
       <h2>Account Deletion and User Rights</h2>
-      <p>You may request account deletion or data export in the app through Settings → Data & Privacy, or by using our public account deletion form: <a href="account-deletion.html">Account Deletion Request</a>.</p>
+      <p>You may request account deletion or data export in the app through Settings &rarr; Data &amp; Privacy, or by using our public account deletion form: <a href="account-deletion.html">Account Deletion Request</a>.</p>
 
       <h2>Children and Student Safety</h2>
-      <p>This is an education platform. Students should use the app only with appropriate family/guardian and madrasa supervision where required. We use moderation and admin review tools to support a safe learning environment.</p>
+      <p>Suffah is an educational sanctuary. Students should use the app only with appropriate family/guardian and madrasa supervision. We enforce strict moderation and Purdah codes of conduct to guarantee a secure, modest learning environment.</p>
 
       <h2>Contact</h2>
-      <p>For privacy, deletion, payment, donation, or safety questions, contact: <a href="mailto:madrastussalikatlilbanat@gmail.com">madrastussalikatlilbanat@gmail.com</a>.</p>
+      <p>For inquiries, support, or data privacy requests, contact us at <a href="mailto:support@suffahportal.com">support@suffahportal.com</a>.</p>
     </article>
   </main>
 </body>

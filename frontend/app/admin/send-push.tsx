@@ -98,7 +98,7 @@ export default function AdminSendPushScreen() {
   const { profile } = useAuth();
   const isAdmin = hasPermission(profile, 'admin.notifications.send');
   const { courses, teachers } = useData();
-  const { activeOrgId, isDefaultOrg } = useActiveOrganization();
+  const { activeOrgId, isDefaultOrg, activeOrg } = useActiveOrganization();
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -146,19 +146,28 @@ export default function AdminSendPushScreen() {
   useEffect(() => {
     const loadStats = async () => {
       try {
+        const tenantOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
         const col = collection(db, 'users');
         const statsQuery = isDefaultOrg
           ? query(col, limitQ(300))
-          : query(col, where('organization_id', '==', activeOrgId || DEFAULT_ORGANIZATION_ID), limitQ(300));
+          : query(col, where('organization_id', '==', tenantOrg), limitQ(300));
         const uSnap = await getDocs(statsQuery);
-        setTotalUsersCount(uSnap.size);
+        let userCount = 0;
         let tokens = 0;
         uSnap.forEach((d) => {
           const dt = d.data();
-          if (Array.isArray(dt.expo_push_tokens) && dt.expo_push_tokens.length > 0) {
-            tokens += dt.expo_push_tokens.length;
+          const userOrg = dt.organization_id || DEFAULT_ORGANIZATION_ID;
+          if (userOrg === tenantOrg || (isDefaultOrg && !dt.organization_id)) {
+            userCount += 1;
+            if (Array.isArray(dt.expo_push_tokens) && dt.expo_push_tokens.length > 0) {
+              tokens += dt.expo_push_tokens.length;
+            }
+            if (Array.isArray(dt.fcm_tokens) && dt.fcm_tokens.length > 0) {
+              tokens += dt.fcm_tokens.length;
+            }
           }
         });
+        setTotalUsersCount(userCount);
         setTotalDevicesCount(tokens);
       } catch {
         // non-fatal
@@ -171,16 +180,19 @@ export default function AdminSendPushScreen() {
     return searchResults.filter((item) => selectedIds.includes(item.id));
   }, [searchResults, selectedIds]);
 
-  // Load notification history
+  // Load notification history (strictly scoped to active madrasa)
   const fetchHistory = useCallback(async () => {
     setLoadingHistory(true);
     try {
+      const tenantOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
       const notifCol = collection(db, 'notifications');
-      const q = query(notifCol, orderBy('created_at', 'desc'), limitQ(15));
+      const q = query(notifCol, orderBy('created_at', 'desc'), limitQ(30));
       const snap = await getDocs(q);
       const rows: SentNotificationItem[] = [];
       snap.forEach((docSnap) => {
         const data = docSnap.data();
+        const notifOrg = data.organization_id || DEFAULT_ORGANIZATION_ID;
+        if (notifOrg !== tenantOrg && profile?.role !== 'super_admin') return;
         if (data.channel === 'announcements' || data.channel === 'live_classes' || data.user_id === 'all' || !data.category) {
           rows.push({
             id: docSnap.id,
@@ -197,7 +209,7 @@ export default function AdminSendPushScreen() {
     } finally {
       setLoadingHistory(false);
     }
-  }, []);
+  }, [activeOrgId, profile?.role]);
 
   useEffect(() => {
     void fetchHistory();
@@ -249,9 +261,10 @@ export default function AdminSendPushScreen() {
   const targetDescription = useMemo(() => {
     switch (targetMode) {
       case 'all': {
-        const uText = totalUsersCount !== null ? `(${totalUsersCount} students & users)` : '';
+        const orgName = activeOrg?.name || 'this madrasa';
+        const uText = totalUsersCount !== null ? `(${totalUsersCount} students & staff)` : '';
         const dText = totalDevicesCount !== null && totalDevicesCount > 0 ? ` • ${totalDevicesCount} phone(s) connected` : '';
-        return `Universal Broadcast: Will deliver to ALL registered accounts ${uText}${dText}.`;
+        return `Madrasa Broadcast: Will deliver push notification strictly to all students & staff of ${orgName} ${uText}${dText}.`;
       }
       case 'class': {
         const c = courses.find((item) => item.id === selectedCourseId);
@@ -264,7 +277,7 @@ export default function AdminSendPushScreen() {
         return `Targeting ${customCount} individually selected user(s).`;
       }
     }
-  }, [targetMode, selectedCourseId, courses, teachers, selectedIds.length, userIdsText, totalUsersCount, totalDevicesCount]);
+  }, [targetMode, selectedCourseId, courses, teachers, selectedIds.length, userIdsText, totalUsersCount, totalDevicesCount, activeOrg]);
 
   // Handle open WhatsApp batch modal
   const handleOpenWhatsAppModal = async () => {
@@ -345,19 +358,9 @@ export default function AdminSendPushScreen() {
       const isSuperAdmin = profile?.role === 'super_admin';
 
       if (targetMode === 'all') {
-        if (isDefaultOrg && isSuperAdmin) {
-          // Global platform broadcast authority
-          isSendToAll = true;
-        } else {
-          // Institution-scoped broadcast: strictly resolve users of activeOrgId
-          const orgUsersQ = query(
-            collection(db, 'users'),
-            where('organization_id', '==', tenantOrgId)
-          );
-          const orgUserDocs = await getDocs(orgUsersQ);
-          targetUserIds = orgUserDocs.docs.map((d) => d.id).filter(Boolean);
-          isSendToAll = false;
-        }
+        // Madrasa-scoped broadcast: will deliver push notification strictly to students of this madrasa
+        isSendToAll = true;
+        targetUserIds = [];
       } else if (targetMode === 'class' && selectedCourseId) {
         const enrolledQ = query(
           collection(db, 'enrollments'),
@@ -367,12 +370,17 @@ export default function AdminSendPushScreen() {
         const enrolledDocs = await getDocs(enrolledQ);
         targetUserIds = enrolledDocs.docs.map((d) => d.data().user_id).filter(Boolean);
       } else if (targetMode === 'teachers') {
-        const tenantFilter = !isDefaultOrg && activeOrgId
-          ? [where('organization_id', '==', activeOrgId)]
-          : [];
-        const teachersQ = query(collection(db, 'users'), where('role', '==', 'teacher'), ...tenantFilter);
+        const teachersQ = !isDefaultOrg && activeOrgId
+          ? query(collection(db, 'users'), where('role', '==', 'teacher'), where('organization_id', '==', activeOrgId))
+          : query(collection(db, 'users'), where('role', '==', 'teacher'));
         const teacherDocs = await getDocs(teachersQ);
-        targetUserIds = teacherDocs.docs.map((d) => d.id);
+        targetUserIds = teacherDocs.docs
+          .filter((d) => {
+            const dt = d.data();
+            const uOrg = dt.organization_id || DEFAULT_ORGANIZATION_ID;
+            return uOrg === tenantOrgId || isSuperAdmin;
+          })
+          .map((d) => d.id);
       } else if (targetMode === 'custom') {
         const pastedIds = userIdsText.split(/[,\n\s]+/).filter(Boolean);
         targetUserIds = Array.from(new Set([...selectedIds, ...pastedIds]));
@@ -447,7 +455,7 @@ export default function AdminSendPushScreen() {
   return (
     <View style={styles.mainContainer}>
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/(tabs)/profile')}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => goBackOrReplace(router, '/more')}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
@@ -476,6 +484,20 @@ export default function AdminSendPushScreen() {
             </Text>
           </View>
         )}
+
+        {/* Institution Badge Banner */}
+        <View style={styles.institutionBanner}>
+          <View style={styles.institutionIconWrap}>
+            <Ionicons name="business" size={18} color={COLORS.primary} />
+          </View>
+          <View style={{ marginLeft: 10, flex: 1 }}>
+            <Text style={styles.institutionBannerLabel}>Broadcasting For Madrasa:</Text>
+            <Text style={styles.institutionBannerTitle}>{activeOrg?.name || 'Madrasatu-s-Salikat Lil Banat'}</Text>
+          </View>
+          <View style={styles.institutionPill}>
+            <Text style={styles.institutionPillText}>Madrasa Broadcast</Text>
+          </View>
+        </View>
 
         {/* 1. Target Audience */}
         <View style={styles.sectionCard}>
@@ -541,7 +563,13 @@ export default function AdminSendPushScreen() {
             <View style={styles.subSection}>
               <Text style={styles.subLabel}>Select Course / Class:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courseScroll}>
-                {courses.map((course) => {
+                {courses
+                  .filter((c) => {
+                    const cOrg = c.organization_id || DEFAULT_ORGANIZATION_ID;
+                    const currentOrg = activeOrgId || DEFAULT_ORGANIZATION_ID;
+                    return cOrg === currentOrg || isDefaultOrg;
+                  })
+                  .map((course) => {
                   const isSelected = selectedCourseId === course.id;
                   return (
                     <TouchableOpacity
@@ -796,9 +824,9 @@ export default function AdminSendPushScreen() {
             <View style={styles.pushBannerCard}>
               <View style={styles.pushBannerTopRow}>
                 <View style={styles.pushAppIcon}>
-                  <Text style={styles.pushAppIconText}>M</Text>
+                  <Text style={styles.pushAppIconText}>{activeOrg?.name ? activeOrg.name.charAt(0).toUpperCase() : 'S'}</Text>
                 </View>
-                <Text style={styles.pushAppName}>Madrasatu-s-Salikat</Text>
+                <Text style={styles.pushAppName}>{activeOrg?.name || 'Suffah'}</Text>
                 <Text style={styles.pushAppTime}>now</Text>
               </View>
               <Text style={styles.pushBannerTitle}>{title.trim() || 'Notification Title'}</Text>
@@ -1693,6 +1721,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: COLORS.primary,
+  },
+  institutionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    ...SHADOWS.card,
+  },
+  institutionIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  institutionBannerLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065F46',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  institutionBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#064E3B',
+    marginTop: 2,
+  },
+  institutionPill: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  institutionPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
 

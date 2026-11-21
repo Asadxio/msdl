@@ -5,8 +5,8 @@ import * as path from 'path';
 
 describe('Student Dashboard Redesign Verification', () => {
   describe('Quick Access Inventory Preservation', () => {
-    it('contains all 18 mandatory services without any omission', () => {
-      expect(ALL_QUICK_ACCESS_SERVICES).toHaveLength(18);
+    it('contains all 17 mandatory services without any omission and no referral rewards', () => {
+      expect(ALL_QUICK_ACCESS_SERVICES).toHaveLength(17);
 
       const serviceNames = ALL_QUICK_ACCESS_SERVICES.map((s) => s.name);
       expect(serviceNames).toContain('Quran Karim');
@@ -15,7 +15,7 @@ describe('Student Dashboard Redesign Verification', () => {
       expect(serviceNames).toContain('AI Sabaq Tutor');
       expect(serviceNames).toContain('Flashcards');
       expect(serviceNames).toContain('Dar-ul-Iftaa');
-      expect(serviceNames).toContain('Referral Rewards');
+      expect(serviceNames).not.toContain('Referral Rewards');
       expect(serviceNames).toContain('Smart Tasbeeh');
       expect(serviceNames).toContain('Sanad / Cert');
       expect(serviceNames).toContain('Pay Fees');

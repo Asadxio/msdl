@@ -56,10 +56,14 @@ export async function createRoleNotificationAsAdmin(
   if (!title || !message || safeRoles.length === 0) return false;
   try {
     const uniqueRoles = Array.from(new Set(safeRoles));
+    const targetOrg = profile?.organization_id || 'mslb-main';
+    const isSuper = profile?.role === 'super_admin';
+    const orgFilter = isSuper ? [] : [where('organization_id', '==', targetOrg)];
     const roleSnapshots = await Promise.all(uniqueRoles.map(async (role) => getDocs(query(
       collection(db, 'users'),
       where('role', '==', role),
       where('status', '==', 'approved'),
+      ...orgFilter
     ))));
     const userIds = roleSnapshots.flatMap((snap) => snap.docs.map((d) => d.id)).filter(Boolean);
     const dedupedUserIds = Array.from(new Set(userIds));
@@ -82,7 +86,7 @@ export async function createRoleNotificationAsAdmin(
 }
 
 export async function createRoleNotification(
-  payload: NotificationPayload & { roles: ('student' | 'teacher')[]; category?: string }
+  payload: NotificationPayload & { roles: ('student' | 'teacher')[]; category?: string; organization_id?: string }
 ): Promise<boolean> {
   const title = payload.title.trim();
   const message = payload.message.trim();
@@ -90,10 +94,13 @@ export async function createRoleNotification(
   if (!title || !message || safeRoles.length === 0) return false;
   try {
     const uniqueRoles = Array.from(new Set(safeRoles));
+    const targetOrg = payload.organization_id || 'mslb-main';
+    const orgFilter = [where('organization_id', '==', targetOrg)];
     const roleSnapshots = await Promise.all(uniqueRoles.map(async (role) => getDocs(query(
       collection(db, 'users'),
       where('role', '==', role),
       where('status', '==', 'approved'),
+      ...orgFilter
     ))));
     const userIds = roleSnapshots.flatMap((snap) => snap.docs.map((d) => d.id)).filter(Boolean);
     const dedupedUserIds = Array.from(new Set(userIds));
@@ -120,14 +127,16 @@ export async function createRoleNotification(
  */
 export async function dispatchWelcomeNotification(
   userId: string,
-  studentName?: string
+  studentName?: string,
+  madrasaName?: string
 ): Promise<boolean> {
   const safeUid = String(userId || '').trim();
   if (!safeUid) return false;
 
+  const orgName = madrasaName || 'Madrasa';
   const displayName = String(studentName || '').trim() || 'طالبہ';
-  const title = '🌸 مدرسۃ السالکات میں خوش آمدید (Welcome!)';
-  const body = `السلام علیکم ${displayName}! مدرسۃ السالکات میں آپ کا خیر مقدم ہے۔ (Welcome to Madrasatu-s-Salikat! Your learning journey begins today. Explore your courses & lessons.)`;
+  const title = `🌸 ${orgName} میں خوش آمدید (Welcome!)`;
+  const body = `السلام علیکم ${displayName}! ${orgName} میں آپ کا خیر مقدم ہے۔ (Welcome to ${orgName}! Your learning journey begins today. Explore your courses & lessons.)`;
 
   try {
     await dispatchNotification({

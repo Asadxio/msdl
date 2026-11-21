@@ -18,12 +18,13 @@ import type { TutorLanguage, TutorMode, ChatMessage } from '@/lib/aiAssistant';
 // ─── Types (matching server callable contracts) ───────────────────────────────
 
 export interface AskAITutorRequest {
-  question:     string;
-  history?:     { sender: 'user' | 'assistant'; text: string }[];
-  language?:    TutorLanguage;
-  mode?:        TutorMode;
-  lessonTitle?: string;
-  courseTitle?: string;
+  question:         string;
+  history?:         { sender: 'user' | 'assistant'; text: string }[];
+  language?:        TutorLanguage;
+  mode?:            TutorMode;
+  lessonTitle?:     string;
+  courseTitle?:     string;
+  organization_id?: string;
 }
 
 export interface AskAITutorResponse {

@@ -233,7 +233,7 @@ export function AdminTeacherProfileModal({
           .filter(Boolean),
         bio: bio.trim(),
         photo_url: photoUrl.trim(),
-        organization_id: initialTeacher?.organization_id || 'mslb-main',
+        organization_id: initialTeacher?.organization_id || adminProfile?.organization_id || 'mslb-main',
         assigned_courses: Array.isArray(initialTeacher?.assigned_courses)
           ? initialTeacher.assigned_courses
           : [],

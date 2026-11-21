@@ -85,7 +85,7 @@ export default function ForgotPasswordScreen() {
             </View>
             <Text style={styles.bismillahHeader}>بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْم</Text>
             <Text style={[styles.title, { color: colors.text }]}>Reset Password</Text>
-            <Text style={styles.institutionArabic}>مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</Text>
+            <Text style={[styles.institutionArabic, { color: isDarkMode ? '#34D399' : '#005F46' }]}>صُـفَّـة • بوابة المدارس الإسلامية</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
               Enter your registered email to receive an official recovery link.
             </Text>

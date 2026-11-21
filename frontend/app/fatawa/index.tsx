@@ -26,11 +26,13 @@ import {
   subscribeToPublicFatawa,
 } from '@/lib/fatawa';
 import { goBackOrReplace } from '@/lib/navigation';
+import { useActiveOrganization } from '@/lib/tenantContext';
 
 export default function DarUlIftaaScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { activeOrgId, activeOrg } = useActiveOrganization();
 
   const isTeacherOrAdmin =
     profile?.role === 'teacher' ||
@@ -51,27 +53,35 @@ export default function DarUlIftaaScreen() {
   const [askQuestion, setAskQuestion] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Subscribe to questions
+  // Subscribe to questions scoped by active organization
   useEffect(() => {
     if (!user?.uid) return;
     setLoading(true);
-    const unsubMy = subscribeToMyQuestions(user.uid, (data) => {
-      setMyQuestions(data);
-      setLoading(false);
-    });
+    const unsubMy = subscribeToMyQuestions(
+      user.uid,
+      (data) => {
+        setMyQuestions(data);
+        setLoading(false);
+      },
+      activeOrgId
+    );
 
     return () => unsubMy();
-  }, [user?.uid]);
+  }, [user?.uid, activeOrgId]);
 
   useEffect(() => {
     setLoading(true);
-    const unsubPub = subscribeToPublicFatawa(selectedCategory, (data) => {
-      setPublicFatawa(data);
-      setLoading(false);
-    });
+    const unsubPub = subscribeToPublicFatawa(
+      selectedCategory,
+      (data) => {
+        setPublicFatawa(data);
+        setLoading(false);
+      },
+      activeOrgId
+    );
 
     return () => unsubPub();
-  }, [selectedCategory]);
+  }, [selectedCategory, activeOrgId]);
 
   const handleAskSubmit = async () => {
     if (!user?.uid) {
@@ -92,6 +102,8 @@ export default function DarUlIftaaScreen() {
       await askFatawaQuestion({
         userId: user.uid,
         userName: profile?.name || 'Taliba',
+        organizationId: activeOrgId,
+        institutionName: activeOrg?.name,
         category: askCategory,
         title: askTitle,
         question: askQuestion,
@@ -102,7 +114,7 @@ export default function DarUlIftaaScreen() {
       setModalVisible(false);
       Alert.alert(
         'Question Submitted',
-        'Your question has been received by Dar-ul-Iftaa. Certified scholars will provide guidance shortly.'
+        `Your question has been received by Dar-ul-Iftaa of ${activeOrg?.name || 'the Madrasa'}. Certified scholars will provide guidance shortly.`
       );
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Could not submit your question.');
@@ -163,6 +175,23 @@ export default function DarUlIftaaScreen() {
         ) : (
           <View style={{ width: 40 }} />
         )}
+      </View>
+
+      {/* Institution Context Banner */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ECFDF5',
+        borderBottomWidth: 1,
+        borderBottomColor: '#D1FAE5',
+        paddingHorizontal: SPACING.md,
+        paddingVertical: 7,
+        gap: 6,
+      }}>
+        <Ionicons name="business" size={14} color="#059669" />
+        <Text style={{ fontSize: 12, fontWeight: '700', color: '#065F46', flex: 1 }} numberOfLines={1}>
+          Dar-ul-Iftaa: {activeOrg?.name || 'Madrasa Dar-ul-Iftaa'}
+        </Text>
       </View>
 
       {/* Purdah Banner */}

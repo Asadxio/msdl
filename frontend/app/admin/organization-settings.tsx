@@ -31,7 +31,9 @@ export default function OrganizationSettingsScreen() {
   const { activeOrgId, activeOrg, loading: orgLoading } = useActiveOrganization();
 
   const [name, setName] = useState('');
+  const [nameArabic, setNameArabic] = useState('');
   const [tagline, setTagline] = useState('');
+  const [aboutMadrasa, setAboutMadrasa] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -42,6 +44,19 @@ export default function OrganizationSettingsScreen() {
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [primaryColor, setPrimaryColor] = useState('#005F46');
   const [secondaryColor, setSecondaryColor] = useState('#C8A84E');
+  const [upiId, setUpiId] = useState('');
+  const [upiName, setUpiName] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+  const [accountHolder, setAccountHolder] = useState('');
+  const [feeInstructions, setFeeInstructions] = useState('');
+  const [website, setWebsite] = useState('');
+  const [whatsappChannel, setWhatsappChannel] = useState('');
+  const [whatsappContact, setWhatsappContact] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [youtubeLink, setYoutubeLink] = useState('');
+  const [telegramLink, setTelegramLink] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
@@ -49,7 +64,9 @@ export default function OrganizationSettingsScreen() {
   useEffect(() => {
     if (activeOrg) {
       setName(activeOrg.name || '');
+      setNameArabic(activeOrg.name_arabic || '');
       setTagline(activeOrg.tagline || '');
+      setAboutMadrasa(activeOrg.about_madrasa || '');
       setLogoUrl(activeOrg.logo_url || '');
       setPhone(activeOrg.phone || '');
       setEmail(activeOrg.email || '');
@@ -60,6 +77,19 @@ export default function OrganizationSettingsScreen() {
       setTimezone(activeOrg.timezone || 'Asia/Kolkata');
       setPrimaryColor(activeOrg.primary_color || '#005F46');
       setSecondaryColor(activeOrg.secondary_color || '#C8A84E');
+      setUpiId(activeOrg.upi_id || '');
+      setUpiName(activeOrg.upi_name || '');
+      setBankName(activeOrg.bank_name || '');
+      setAccountNumber(activeOrg.account_number || '');
+      setIfscCode(activeOrg.ifsc_code || '');
+      setAccountHolder(activeOrg.account_holder || '');
+      setFeeInstructions(activeOrg.fee_instructions || '');
+      setWebsite(activeOrg.website || '');
+      setWhatsappChannel(activeOrg.whatsapp_channel || '');
+      setWhatsappContact(activeOrg.whatsapp_contact || '');
+      setInstagram(activeOrg.instagram || '');
+      setYoutubeLink(activeOrg.youtube_link || '');
+      setTelegramLink(activeOrg.telegram_link || '');
     }
   }, [activeOrg]);
 
@@ -71,7 +101,9 @@ export default function OrganizationSettingsScreen() {
 
     const orgData = {
       name: name.trim(),
+      name_arabic: nameArabic.trim(),
       tagline: tagline.trim(),
+      about_madrasa: aboutMadrasa.trim(),
       logo_url: logoUrl.trim(),
       phone: phone.trim(),
       email: email.trim(),
@@ -82,6 +114,19 @@ export default function OrganizationSettingsScreen() {
       timezone: timezone.trim(),
       primary_color: primaryColor.trim(),
       secondary_color: secondaryColor.trim(),
+      upi_id: upiId.trim(),
+      upi_name: upiName.trim() || name.trim(),
+      bank_name: bankName.trim(),
+      account_number: accountNumber.trim(),
+      ifsc_code: ifscCode.trim().toUpperCase(),
+      account_holder: accountHolder.trim(),
+      fee_instructions: feeInstructions.trim(),
+      website: website.trim(),
+      whatsapp_channel: whatsappChannel.trim(),
+      whatsapp_contact: whatsappContact.trim(),
+      instagram: instagram.trim(),
+      youtube_link: youtubeLink.trim(),
+      telegram_link: telegramLink.trim(),
       updated_at: serverTimestamp(),
     };
 
@@ -146,7 +191,7 @@ export default function OrganizationSettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="always">
         {/* Status Card */}
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
@@ -203,6 +248,14 @@ export default function OrganizationSettingsScreen() {
             placeholder="Official Name of Madrasa"
           />
 
+          <Text style={styles.fieldLabel}>Arabic Calligraphy Title (For Sanad & Receipts)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={nameArabic}
+            onChangeText={setNameArabic}
+            placeholder="e.g. جامعة نور القرآن"
+          />
+
           <Text style={styles.fieldLabel}>Motto / Tagline</Text>
           <TextInput
             style={styles.textInput}
@@ -220,7 +273,22 @@ export default function OrganizationSettingsScreen() {
             autoCapitalize="none"
           />
 
-          <Text style={styles.sectionTitle}>Official Contact & Location</Text>
+          <Text style={styles.fieldLabel}>About Our Madrasa (تفصیل و تعارف)</Text>
+          <Text style={[styles.fieldLabel, { marginBottom: 6, fontSize: 12, color: COLORS.textMuted }]}>
+            Write the official description, mission, and background of your madrasa. This will be shown to your students and visitors.
+          </Text>
+          <TextInput
+            style={[styles.textInput, { height: 110, textAlignVertical: 'top' }]}
+            value={aboutMadrasa}
+            onChangeText={setAboutMadrasa}
+            placeholder="Write the introduction, mission, courses, and background of your madrasa..."
+            multiline
+          />
+
+          <Text style={styles.sectionTitle}>Official Contact & Help Desk</Text>
+          <Text style={[styles.fieldLabel, { marginBottom: 6, fontSize: 12, color: COLORS.textMuted }]}>
+            This Phone and Email will be displayed to your students and parents in App Settings -&gt; Support.
+          </Text>
 
           <View style={styles.row}>
             <View style={{ flex: 1, marginRight: 8 }}>
@@ -298,6 +366,138 @@ export default function OrganizationSettingsScreen() {
             </View>
           </View>
 
+          <Text style={styles.sectionTitle}>Institutional Fee Collection (Direct UPI & Bank)</Text>
+          <Text style={[styles.fieldLabel, { marginBottom: 6, fontSize: 12, color: COLORS.textMuted }]}>
+            Students enrolled in your madrasa will pay course fees and donations directly to this UPI ID or Official Bank Account.
+          </Text>
+
+          <Text style={styles.fieldLabel}>Institutional UPI ID (VPA)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={upiId}
+            onChangeText={setUpiId}
+            placeholder="e.g. yourmadrasa@icici or 9876543210@upi"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <Text style={styles.fieldLabel}>UPI Payee Name (as registered in Bank / UPI)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={upiName}
+            onChangeText={setUpiName}
+            placeholder={name || 'Madrasa Official Name'}
+          />
+
+          <Text style={styles.fieldLabel}>Bank Name</Text>
+          <TextInput
+            style={styles.textInput}
+            value={bankName}
+            onChangeText={setBankName}
+            placeholder="e.g. State Bank of India, HDFC Bank, ICICI Bank"
+          />
+
+          <Text style={styles.fieldLabel}>Account Holder / Beneficiary Name</Text>
+          <TextInput
+            style={styles.textInput}
+            value={accountHolder}
+            onChangeText={setAccountHolder}
+            placeholder={name || 'Official Account Holder Name'}
+          />
+
+          <Text style={styles.fieldLabel}>Bank Account Number</Text>
+          <TextInput
+            style={styles.textInput}
+            value={accountNumber}
+            onChangeText={setAccountNumber}
+            placeholder="e.g. 50100234567890"
+            keyboardType="numeric"
+          />
+
+          <Text style={styles.fieldLabel}>Bank IFSC Code</Text>
+          <TextInput
+            style={styles.textInput}
+            value={ifscCode}
+            onChangeText={(txt) => setIfscCode(txt.toUpperCase())}
+            placeholder="e.g. SBIN0001234 or HDFC0001234"
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+
+          <Text style={styles.fieldLabel}>Fee Payment Instructions / Notes</Text>
+          <TextInput
+            style={[styles.textInput, { height: 70, textAlignVertical: 'top' }]}
+            value={feeInstructions}
+            onChangeText={setFeeInstructions}
+            placeholder="e.g. Fee Jama karne ke baad screenshot UTR number ke sath upload karein."
+            multiline
+          />
+
+          {/* Official Social & Support Channels */}
+          <Text style={styles.sectionTitle}>Official Social & Support Channels</Text>
+          <Text style={[styles.fieldLabel, { marginBottom: 6, fontSize: 12, color: COLORS.textMuted }]}>
+            Configure your madrasa's dedicated WhatsApp channel, direct support chat, YouTube, Instagram, and Telegram for your students and parents.
+          </Text>
+
+          <Text style={styles.fieldLabel}>WhatsApp Channel Link</Text>
+          <TextInput
+            style={styles.textInput}
+            value={whatsappChannel}
+            onChangeText={setWhatsappChannel}
+            placeholder="https://whatsapp.com/channel/..."
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
+          <Text style={styles.fieldLabel}>Direct WhatsApp Support (Number or wa.me Link)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={whatsappContact}
+            onChangeText={setWhatsappContact}
+            placeholder="e.g. +91 9876543210 or https://wa.me/..."
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.fieldLabel}>Madrasa Official Website</Text>
+          <TextInput
+            style={styles.textInput}
+            value={website}
+            onChangeText={setWebsite}
+            placeholder="https://yourmadrasa.org"
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
+          <Text style={styles.fieldLabel}>Instagram Profile Link</Text>
+          <TextInput
+            style={styles.textInput}
+            value={instagram}
+            onChangeText={setInstagram}
+            placeholder="https://instagram.com/yourmadrasa"
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
+          <Text style={styles.fieldLabel}>YouTube Channel Link</Text>
+          <TextInput
+            style={styles.textInput}
+            value={youtubeLink}
+            onChangeText={setYoutubeLink}
+            placeholder="https://youtube.com/@yourmadrasa"
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
+          <Text style={styles.fieldLabel}>Telegram Channel / Group Link</Text>
+          <TextInput
+            style={styles.textInput}
+            value={telegramLink}
+            onChangeText={setTelegramLink}
+            placeholder="https://t.me/yourmadrasa"
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
           {/* Submit */}
           <TouchableOpacity
             style={styles.saveBtn}
@@ -323,7 +523,7 @@ export default function OrganizationSettingsScreen() {
           <Ionicons name="help-buoy-outline" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
           <View style={{ flex: 1 }}>
             <Text style={styles.supportBannerTitle}>Need Assistance?</Text>
-            <Text style={styles.supportBannerSubtitle}>Contact MSLB Onboarding Team on WhatsApp</Text>
+            <Text style={styles.supportBannerSubtitle}>Contact Platform Onboarding Team on WhatsApp</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
         </TouchableOpacity>

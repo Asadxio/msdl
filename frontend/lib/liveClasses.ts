@@ -32,6 +32,7 @@ export type RecitationQueueItem = {
 
 export type LiveClass = {
   id: string;
+  organization_id?: string;
   course_id: string;
   lesson_id?: string;
   teacher_id: string;
@@ -80,13 +81,29 @@ export function normalizeLiveClass(id: string, data: any): LiveClass {
 export async function canCurrentUserJoinLiveClass(liveClass: LiveClass, profile: UserProfile | null): Promise<boolean> {
   const uid = auth.currentUser?.uid;
   if (!uid || !profile) return false;
-  if (profile.role === 'admin') return true;
-  if (profile.role === 'teacher') return liveClass.teacher_id === uid;
-  const enrollmentId = getEnrollmentDocId(uid, liveClass.course_id);
+
+  const status = String(profile.status || '').toLowerCase().trim();
+  if (status === 'suspended' || status === 'rejected' || status === 'pending') {
+    return false;
+  }
+
+  const role = String(profile.role || '').toLowerCase().trim();
+  if (profile.role === 'admin' || role === 'admin' || role === 'super_admin') {
+    return true;
+  }
+
+  if (role === 'teacher' || role === 'assistant_teacher') {
+    return liveClass.teacher_id === uid || Boolean(liveClass.course_id);
+  }
+
+  const courseId = String(liveClass.course_id || '').trim();
+  if (!courseId) return false;
+
+  const enrollmentId = getEnrollmentDocId(uid, courseId);
   if (!enrollmentId || enrollmentId === ENROLLMENT_DOC_ID_SEPARATOR) return false;
   const enrollmentSnap = await getDoc(doc(db, 'enrollments', enrollmentId)).catch(() => null);
-  if (enrollmentSnap?.exists()) return isActiveEnrollmentForUserCourse(enrollmentSnap.data(), uid, liveClass.course_id);
-  return profile.role === 'student' && allowsLegacyCourseAccessWhenEnrollmentMissing((liveClass as any).enrollment_source);
+  if (enrollmentSnap?.exists()) return isActiveEnrollmentForUserCourse(enrollmentSnap.data(), uid, courseId);
+  return role === 'student' && allowsLegacyCourseAccessWhenEnrollmentMissing((liveClass as any).enrollment_source);
 }
 
 export async function startLiveClass(input: LiveClassCreateInput): Promise<string> {
@@ -381,4 +398,184 @@ export function subscribeLiveClasses(courseId: string, onUpdate: (classes: LiveC
     const classes = snapshot.docs.map((d) => normalizeLiveClass(d.id, d.data()));
     onUpdate(classes);
   });
+}
+
+
+// ?? Phase 3: Scoped Live Class Query Engine ?????????????????????????????????
+
+export type LiveClassListItem = {
+  id: string;
+  title: string;
+  teacher_name: string;
+  status: 'scheduled' | 'live' | 'ended';
+  class_time?: string;
+  time?: string;
+  course_id?: string;
+  organization_id?: string;
+};
+
+export interface ScopedLiveClassesOptions {
+  userUid?: string;
+  profile?: UserProfile | null;
+  enrolledCourseIds?: string[];
+  assignedCourseIds?: string[];
+  organizationId?: string;
+  isDefaultOrg?: boolean;
+}
+
+export interface ScopedQueryPlan {
+  type: 'empty' | 'admin' | 'teacher' | 'student';
+  queries: any[];
+  reason?: string;
+}
+
+export function buildScopedLiveClassQueries(options: ScopedLiveClassesOptions): ScopedQueryPlan {
+  const { userUid, profile, enrolledCourseIds = [], assignedCourseIds = [], organizationId, isDefaultOrg = true } = options;
+
+  if (!userUid || !profile) {
+    return { type: 'empty', queries: [], reason: 'Unauthenticated' };
+  }
+
+  const status = String(profile.status || '').toLowerCase().trim();
+  if (status === 'suspended' || status === 'rejected' || status === 'pending') {
+    return { type: 'empty', queries: [], reason: `User account is ${status}` };
+  }
+
+  const role = String(profile.role || '').toLowerCase().trim();
+
+  // ?? 1. Admins & Super Admins: Institutional listing ??
+  if (role === 'admin' || role === 'super_admin') {
+    const baseCol = collection(db, 'live_classes');
+    const q = (!isDefaultOrg && organizationId)
+      ? query(baseCol, where('organization_id', '==', organizationId), orderBy('status', 'asc'))
+      : query(baseCol, orderBy('status', 'asc'));
+    return { type: 'admin', queries: [q] };
+  }
+
+  // ?? 2. Teachers: Own hosted classes + assigned courses ??
+  if (role === 'teacher' || role === 'assistant_teacher') {
+    const queries: any[] = [];
+    const baseCol = collection(db, 'live_classes');
+
+    // Query 1: Classes hosted by this teacher
+    const hostQ = (!isDefaultOrg && organizationId)
+      ? query(baseCol, where('organization_id', '==', organizationId), where('teacher_id', '==', userUid))
+      : query(baseCol, where('teacher_id', '==', userUid));
+    queries.push(hostQ);
+
+    // Query 2: Classes for assigned courses (chunked <= 25)
+    const validAssigned = Array.from(new Set(assignedCourseIds.map((c) => String(c || '').trim()).filter(Boolean)));
+    const CHUNK_SIZE = 25;
+    for (let i = 0; i < validAssigned.length; i += CHUNK_SIZE) {
+      const chunk = validAssigned.slice(i, i + CHUNK_SIZE);
+      const courseQ = (!isDefaultOrg && organizationId)
+        ? query(baseCol, where('organization_id', '==', organizationId), where('course_id', 'in', chunk))
+        : query(baseCol, where('course_id', 'in', chunk));
+      queries.push(courseQ);
+    }
+
+    return { type: 'teacher', queries };
+  }
+
+  // ?? 3. Students: ONLY actively enrolled courses ??
+  if (role === 'student') {
+    const validEnrolled = Array.from(new Set(enrolledCourseIds.map((c) => String(c || '').trim()).filter(Boolean)));
+    // If student has 0 active enrollments, NEVER execute an open query!
+    if (validEnrolled.length === 0) {
+      return { type: 'empty', queries: [], reason: 'No active course enrollments' };
+    }
+
+    const queries: any[] = [];
+    const baseCol = collection(db, 'live_classes');
+    const CHUNK_SIZE = 25;
+    for (let i = 0; i < validEnrolled.length; i += CHUNK_SIZE) {
+      const chunk = validEnrolled.slice(i, i + CHUNK_SIZE);
+      const courseQ = (!isDefaultOrg && organizationId)
+        ? query(baseCol, where('organization_id', '==', organizationId), where('course_id', 'in', chunk))
+        : query(baseCol, where('course_id', 'in', chunk));
+      queries.push(courseQ);
+    }
+
+    return { type: 'student', queries };
+  }
+
+  // Unknown or untrusted role
+  return { type: 'empty', queries: [], reason: `Unrecognized role: ${role}` };
+}
+
+export function subscribeScopedLiveClasses(
+  options: ScopedLiveClassesOptions,
+  onUpdate: (classes: LiveClassListItem[]) => void,
+  onError?: (error: any) => void
+): Unsubscribe {
+  const plan = buildScopedLiveClassQueries(options);
+
+  if (plan.type === 'empty' || plan.queries.length === 0) {
+    onUpdate([]);
+    return () => {};
+  }
+
+  const queryResults = new Map<number, LiveClassListItem[]>();
+  const unsubs: Unsubscribe[] = [];
+
+  const emitMerged = () => {
+    const itemsMap = new Map<string, LiveClassListItem>();
+    for (const list of queryResults.values()) {
+      for (const item of list) {
+        if (item.status !== 'ended') {
+          itemsMap.set(item.id, item);
+        }
+      }
+    }
+
+    const merged = Array.from(itemsMap.values());
+    merged.sort((a, b) => {
+      if (a.status !== b.status) {
+        if (a.status === 'live') return -1;
+        if (b.status === 'live') return 1;
+      }
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    });
+
+    onUpdate(merged);
+  };
+
+  plan.queries.forEach((q, idx) => {
+    try {
+      const unsub = onSnapshot(
+        q,
+        (snapshot: any) => {
+          const list: LiveClassListItem[] = [];
+          snapshot.forEach((docSnap: any) => {
+            const data = docSnap.data();
+            list.push({
+              id: docSnap.id,
+              title: data.title || 'Untitled Class',
+              teacher_name: data.teacher_name || 'Unknown Teacher',
+              status: data.status || 'scheduled',
+              class_time: data.class_time || data.time || 'TBD',
+              course_id: data.course_id || '',
+              organization_id: data.organization_id || '',
+            });
+          });
+          queryResults.set(idx, list);
+          emitMerged();
+        },
+        (err: any) => {
+          if (onError) onError(err);
+        }
+      );
+      unsubs.push(unsub);
+    } catch (err) {
+      if (onError) onError(err);
+    }
+  });
+
+  return () => {
+    unsubs.forEach((u) => {
+      try {
+        u();
+      } catch {}
+    });
+  };
 }

@@ -337,9 +337,9 @@ export function generateCertificateHtml(cert: QuizCertificateData, themeKey: Cer
       <div class="corner-ornament bottom-right"></div>
 
       <div class="bismillah">بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم</div>
-      <img src="${MSLB_LOGO_BASE64}" class="logo-img" alt="MSLB Crest" />
-      <h1 class="madrasa-title">Madrasatu-s-Salikat Lil Banat</h1>
-      <div class="madrasa-arabic">مدرسۃ السالکات للبنات</div>
+      <img src="${cert.logoUrl || MSLB_LOGO_BASE64}" class="logo-img" alt="Crest" />
+      <h1 class="madrasa-title">${cert.institutionName || 'Madrasatu-s-Salikat Lil Banat'}</h1>
+      <div class="madrasa-arabic">${cert.institutionArabic || (cert.institutionName ? cert.institutionName : 'مدرسۃ السالکات للبنات')}</div>
 
       <div class="cert-type">Certificate of Academic Excellence</div>
       <div class="presented-text">This is proudly awarded to</div>
@@ -364,7 +364,7 @@ export function generateCertificateHtml(cert: QuizCertificateData, themeKey: Cer
 
         <div class="seal-col">
           <div class="seal">
-            <span>★ MSLB ★</span>
+            <span>★ ${cert.institutionSeal || 'OFFICIAL'} ★</span>
             <span>OFFICIAL</span>
             <span>SEAL</span>
           </div>
@@ -375,7 +375,7 @@ export function generateCertificateHtml(cert: QuizCertificateData, themeKey: Cer
         <div class="sign-col">
           <div class="sign-line"></div>
           <div class="sign-title">Academic Directorate</div>
-          <div>Madrasatu-s-Salikat</div>
+          <div>${cert.institutionName || 'Madrasatu-s-Salikat'}</div>
         </div>
       </div>
     </div>
@@ -430,10 +430,10 @@ export function generateCertificateSvg(cert: QuizCertificateData, themeKey: Cert
 
   <!-- Madrasa Title English & Arabic -->
   <text x="400" y="242" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="20" font-weight="900" letter-spacing="1.5" fill="${theme.primaryColor}">
-    MADRASATU-S-SALIKAT LIL BANAT
+    ${(cert.institutionName || 'MADRASATU-S-SALIKAT LIL BANAT').toUpperCase()}
   </text>
   <text x="400" y="268" text-anchor="middle" font-family="Traditional Arabic, Scheherazade, Amiri, serif" font-size="18" font-weight="bold" fill="${theme.secondaryColor}">
-    مدرسۃ السالکات للبنات
+    ${cert.institutionArabic || (cert.institutionName ? cert.institutionName : 'مدرسۃ السالکات للبنات')}
   </text>
 
   <!-- Certificate Ribbon Header -->
@@ -482,7 +482,7 @@ export function generateCertificateSvg(cert: QuizCertificateData, themeKey: Cert
   <!-- Footer Center: Official Seal & QR Code -->
   <circle cx="400" cy="740" r="38" fill="none" stroke="${theme.secondaryColor}" stroke-width="2.5" stroke-dasharray="4,2"/>
   <circle cx="400" cy="740" r="33" fill="none" stroke="${theme.secondaryColor}" stroke-width="1.2"/>
-  <text x="400" y="730" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" font-weight="900" fill="${theme.secondaryColor}">★ MSLB ★</text>
+  <text x="400" y="730" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" font-weight="900" fill="${theme.secondaryColor}">★ ${cert.institutionSeal || 'OFFICIAL'} ★</text>
   <text x="400" y="743" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" font-weight="900" fill="${theme.secondaryColor}">OFFICIAL</text>
   <text x="400" y="756" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" font-weight="900" fill="${theme.secondaryColor}">SEAL</text>
   
@@ -492,7 +492,7 @@ export function generateCertificateSvg(cert: QuizCertificateData, themeKey: Cert
   <!-- Footer Right: Signature Directorate -->
   <line x1="570" y1="770" x2="710" y2="770" stroke="#94A3B8" stroke-width="1.5" />
   <text x="640" y="790" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="13" font-weight="bold" fill="${theme.primaryColor}">Academic Directorate</text>
-  <text x="640" y="810" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="11" fill="#64748B">Madrasatu-s-Salikat</text>
+  <text x="640" y="810" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="11" fill="#64748B">${cert.institutionName || 'Madrasatu-s-Salikat'}</text>
   <text x="640" y="828" text-anchor="middle" font-family="-apple-system, Roboto, sans-serif" font-size="10" fill="#059669">✓ Officially Verified</text>
 </svg>`;
 }
@@ -504,7 +504,7 @@ export function generateCertificateSvg(cert: QuizCertificateData, themeKey: Cert
 export async function shareCertificateImageFile(cert: QuizCertificateData, themeKey: CertificateThemeKey = 'emerald'): Promise<void> {
   const svg = generateCertificateSvg(cert, themeKey);
   const cleanId = cert.certificateId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `MSLB_Sanad_${cleanId}.svg`;
+  const fileName = `${(cert.institutionSeal || 'SANAD')}_Sanad_${cleanId}.svg`;
 
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined') {
@@ -531,7 +531,7 @@ export async function shareCertificateImageFile(cert: QuizCertificateData, theme
     } else {
       await Share.share({
         title: `Official Sanad - ${cert.studentName}`,
-        message: `Madrasatu-s-Salikat Lil Banat Official Sanad Certificate for ${cert.studentName}\nVerify: ${getSanadVerificationUrl(cert.certificateId)}`,
+        message: `${cert.institutionName || 'Madrasatu-s-Salikat Lil Banat'} Official Sanad Certificate for ${cert.studentName}\nVerify: ${getSanadVerificationUrl(cert.certificateId)}`,
       });
     }
   } catch (err: unknown) {
@@ -546,7 +546,7 @@ export async function shareCertificateToWhatsApp(cert: QuizCertificateData): Pro
   const verifyUrl = getSanadVerificationUrl(cert.certificateId);
   const shareText = `🌸 *الحمد لله رب العالمين!*
 
-ہماری بیٹی *${cert.studentName}* نے *مدرسۃ السالکات للبنات* کے شعبہ تعلیم میں شاندار کامیابی حاصل کر کے باضابطہ سند (Official Sanad) حاصل کی ہے۔
+ہماری طالبہ / بیٹی *${cert.studentName}* نے *${cert.institutionArabic || cert.institutionName || 'مدرسۃ السالکات للبنات'}* کے شعبہ تعلیم میں شاندار کامیابی حاصل کر کے باضابطہ سند (Official Sanad) حاصل کی ہے۔
 
 📜 *کورس / مضمون:* ${cert.quizCategory}
 📊 *حاصل کردہ نمبر:* *${cert.score} / ${cert.totalQuestions}* (${cert.percentage}%)
@@ -557,7 +557,7 @@ export async function shareCertificateToWhatsApp(cert: QuizCertificateData): Pro
 🔗 *سند کی آن لائن تصدیق (Live Sanad Verification):*
 ${verifyUrl}
 
-_مدرسۃ السالکات للبنات (Madrasatu-s-Salikat Lil Banat)_
+_${cert.institutionArabic || cert.institutionName || 'مدرسۃ السالکات للبنات'}_
 _Nurturing Knowledge & Faith_`;
 
   const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
@@ -623,7 +623,7 @@ export async function shareCertificatePngFile(cert: QuizCertificateData, themeKe
     } else {
       await Share.share({
         title: `Official Sanad - ${cert.studentName}`,
-        message: `Madrasatu-s-Salikat Lil Banat Official Sanad Certificate for ${cert.studentName}\nVerify: ${getSanadVerificationUrl(cert.certificateId)}`,
+        message: `${cert.institutionName || 'Madrasatu-s-Salikat Lil Banat'} Official Sanad Certificate for ${cert.studentName}\nVerify: ${getSanadVerificationUrl(cert.certificateId)}`,
       });
     }
   } catch (err: unknown) {

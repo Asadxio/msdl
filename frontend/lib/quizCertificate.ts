@@ -14,6 +14,10 @@ export interface QuizCertificateData {
   issueDateHijri: string;
   gradeLabel: string;
   createdAtMs: number;
+  institutionName?: string;
+  institutionArabic?: string;
+  institutionSeal?: string;
+  logoUrl?: string;
 }
 
 const HIJRI_MONTHS: Record<string, string> = {
@@ -49,12 +53,13 @@ export function formatGregorianDate(date: Date = new Date()): string {
   });
 }
 
-export function generateCertificateSerialId(userId: string, category: string): string {
+export function generateCertificateSerialId(userId: string, category: string, orgPrefix?: string): string {
   const cleanCat = category.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'GEN';
+  const prefix = (orgPrefix || 'MSLB').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase() || 'MSLB';
   const year = new Date().getFullYear();
   const randomSalt = Math.random().toString(36).slice(2, 6).toUpperCase();
   const userPrefix = (userId || 'USR').slice(-3).toUpperCase();
-  return `MSLB-QZ-${year}-${cleanCat}-${userPrefix}${randomSalt}`;
+  return `${prefix}-QZ-${year}-${cleanCat}-${userPrefix}${randomSalt}`;
 }
 
 export function getGradeLabel(percentage: number): string {
@@ -62,6 +67,13 @@ export function getGradeLabel(percentage: number): string {
   if (percentage >= 80) return 'Excellent (Jayyid Jiddan - جيد جدا)';
   if (percentage >= 70) return 'Very Good (Jayyid - جيد)';
   return 'Pass (Maqbool - مقبول)';
+}
+
+export interface SaveQuizCertificateOptions {
+  organizationId?: string;
+  institutionName?: string;
+  institutionArabic?: string;
+  orgSlug?: string;
 }
 
 /**
@@ -73,13 +85,17 @@ export async function saveQuizCertificate(
   quizCategory: string,
   score: number,
   totalQuestions: number,
+  options?: SaveQuizCertificateOptions
 ): Promise<QuizCertificateData> {
   const percentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
-  const certificateId = generateCertificateSerialId(userId, quizCategory);
+  const certificateId = generateCertificateSerialId(userId, quizCategory, options?.orgSlug);
   const now = new Date();
   const issueDateGregorian = formatGregorianDate(now);
   const issueDateHijri = formatHijriDate(now);
   const gradeLabel = getGradeLabel(percentage);
+  const orgId = options?.organizationId || 'mslb-main';
+  const instName = options?.institutionName || 'Madrasatu-s-Salikat Lil Banat';
+  const instArabic = options?.institutionArabic || 'مدرسۃ السالکات للبنات';
 
   const certData: QuizCertificateData = {
     certificateId,
@@ -93,6 +109,8 @@ export async function saveQuizCertificate(
     issueDateHijri,
     gradeLabel,
     createdAtMs: Date.now(),
+    institutionName: instName,
+    institutionArabic: instArabic,
   };
 
   try {
@@ -107,6 +125,9 @@ export async function saveQuizCertificate(
       total_questions: totalQuestions,
       percentage,
       grade_label: gradeLabel,
+      organization_id: orgId,
+      institution_name: instName,
+      institution_arabic: instArabic,
       completion_date: issueDateGregorian,
       hijri_date: issueDateHijri,
       created_at: serverTimestamp(),

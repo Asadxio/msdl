@@ -318,13 +318,13 @@ async function runAll() {
   });
 
   test('ADM56-10: live_classes listener filters by organization_id for custom tenants', () => {
-    const liveIndexSrc = fs.readFileSync(
-      path.resolve(__dirname, '../../frontend/app/live-class/index.tsx'),
+    const liveLibSrc = fs.readFileSync(
+      path.resolve(__dirname, '../../frontend/lib/liveClasses.ts'),
       'utf8'
     );
     assert.ok(
-      liveIndexSrc.includes("where('organization_id', '==', activeOrgId)"),
-      "live-class/index.tsx must query by organization_id for non-default tenants"
+      liveLibSrc.includes("where('organization_id', '==', organizationId)"),
+      "liveClasses.ts must query by organization_id for non-default tenants"
     );
   });
 
@@ -341,13 +341,13 @@ async function runAll() {
   });
 
   test('ADM56-20: default tenant (mslb-main) retains global view for legacy backward compatibility', () => {
-    const liveIndexSrc = fs.readFileSync(
-      path.resolve(__dirname, '../../frontend/app/live-class/index.tsx'),
+    const liveLibSrc = fs.readFileSync(
+      path.resolve(__dirname, '../../frontend/lib/liveClasses.ts'),
       'utf8'
     );
     assert.ok(
-      liveIndexSrc.includes("(!isDefaultOrg && activeOrgId)"),
-      "live-class/index.tsx must branch between scoped query and legacy global query"
+      liveLibSrc.includes("(!isDefaultOrg && organizationId)"),
+      "liveClasses.ts must branch between scoped query and legacy global query"
     );
   });
 

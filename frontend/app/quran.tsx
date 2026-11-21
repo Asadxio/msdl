@@ -14,10 +14,12 @@ import { QURAN_SURAHS, searchSurahs, TOTAL_AYAT, TOTAL_PARAHS, SurahMeta } from 
 import {
   loadLastRead, loadKhatamProgress, loadHifzProgress, loadBookmarks,
   toggleParahHifz, KhatamProgress, HifzProgress, QuranBookmark,
+  getCachedSurahsList,
 } from "@/lib/quranStorage";
-import { getDailyAyat } from "@/lib/quranApi";
+import { getDailyAyat, preCacheJuzAmma } from "@/lib/quranApi";
 import { getAllDownloadedSurahs, DownloadedSurahMeta } from "@/lib/quranAudioDownloader";
 import type { DailyAyatCache } from "@/lib/quranStorage";
+import { Alert } from "react-native";
 
 type ActiveTab = 'surahs' | 'reader' | 'khatam' | 'hifz' | 'daily';
 
@@ -34,20 +36,45 @@ export default function QuranScreen() {
   const [dailyAyat, setDailyAyat] = useState<DailyAyatCache | null>(null);
   const [loadingDailyAyat, setLoadingDailyAyat] = useState(false);
   const [downloadedSurahIds, setDownloadedSurahIds] = useState<Set<number>>(new Set());
+  const [cachedTextSurahIds, setCachedTextSurahIds] = useState<Set<number>>(new Set());
+  const [cachingJuzAmma, setCachingJuzAmma] = useState(false);
+  const [juzAmmaProgress, setJuzAmmaProgress] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
     const init = async () => {
-      const [lr, kt, hf, bms, dl] = await Promise.all([
-        loadLastRead(), loadKhatamProgress(), loadHifzProgress(), loadBookmarks(), getAllDownloadedSurahs()
+      const [lr, kt, hf, bms, dl, cachedList] = await Promise.all([
+        loadLastRead(), loadKhatamProgress(), loadHifzProgress(), loadBookmarks(), getAllDownloadedSurahs(), getCachedSurahsList()
       ]);
       setLastRead(lr);
       setKhatam(kt);
       setHifz(hf);
       setBookmarks(bms);
       setDownloadedSurahIds(new Set(dl.map((d) => d.surahNumber)));
+      setCachedTextSurahIds(new Set(cachedList));
     };
     init();
   }, []);
+
+  const handleDownloadJuzAmma = async () => {
+    if (cachingJuzAmma) return;
+    setCachingJuzAmma(true);
+    try {
+      const count = await preCacheJuzAmma((done, total) => {
+        setJuzAmmaProgress({ done, total });
+      });
+      const refreshed = await getCachedSurahsList();
+      setCachedTextSurahIds(new Set(refreshed));
+      Alert.alert(
+        'Juz Amma Saved (پارہ 30 محفوظ ہو گیا)',
+        `All ${count} Surahs of Juz 30 (Surahs 78 to 114) have been cached on your device. You can now read and revise them completely offline!`
+      );
+    } catch (err: any) {
+      Alert.alert('Download Error', err?.message || 'Failed to cache Juz Amma');
+    } finally {
+      setCachingJuzAmma(false);
+      setJuzAmmaProgress(null);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'daily' && !dailyAyat) {
@@ -92,7 +119,7 @@ export default function QuranScreen() {
         <View style={styles.surahMetaRow}>
           <Text style={styles.surahAyatCount}>{item.totalAyat} Verses • Para {item.parah}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {downloadedSurahIds.has(item.number) && (
+            {(downloadedSurahIds.has(item.number) || cachedTextSurahIds.has(item.number)) && (
               <View style={[styles.typeBadge, { backgroundColor: '#E8F5EE' }]}>
                 <Ionicons name="cloud-done" size={10} color="#059669" />
                 <Text style={[styles.typeBadgeText, { color: '#059669', fontSize: 10, marginLeft: 2 }]}>Offline</Text>
@@ -188,6 +215,34 @@ export default function QuranScreen() {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* 1-Tap Offline Hifz & Juz Amma Pack */}
+          {!searchQuery && (
+            <View style={styles.offlinePackBanner}>
+              <View style={styles.offlinePackIconBox}>
+                <Ionicons name="cloud-download-outline" size={18} color="#005F46" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.offlinePackTitle}>Juz Amma Offline Pack (پارہ 30 مکمل)</Text>
+                <Text style={styles.offlinePackSub}>
+                  {cachingJuzAmma && juzAmmaProgress
+                    ? `Caching: ${juzAmmaProgress.done}/${juzAmmaProgress.total} Surahs...`
+                    : '1-Tap: Save all 37 Surahs of Juz 30 for offline Hifz'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.offlinePackBtn, cachingJuzAmma && { opacity: 0.6 }]}
+                onPress={handleDownloadJuzAmma}
+                disabled={cachingJuzAmma}
+              >
+                {cachingJuzAmma ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.offlinePackBtnText}>محفوظ کریں</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
           <FlatList
             data={filteredSurahs}
             keyExtractor={(item) => item.number.toString()}
@@ -574,5 +629,49 @@ const styles = StyleSheet.create({
     color: '#005F46',
     fontWeight: '600',
     marginTop: 2,
+  },
+  offlinePackBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: SPACING.md,
+    marginBottom: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: RADIUS.lg,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    gap: 10,
+  },
+  offlinePackIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offlinePackTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  offlinePackSub: {
+    fontSize: 10.5,
+    color: '#047857',
+    marginTop: 1,
+  },
+  offlinePackBtn: {
+    backgroundColor: '#005F46',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
+  },
+  offlinePackBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

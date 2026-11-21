@@ -78,7 +78,7 @@ export async function checkBiometricCapabilities(): Promise<BiometricCapabilitie
  * Triggers native system biometric prompt (Fingerprint / Face ID)
  */
 export async function authenticateWithBiometrics(
-  promptMessage = 'Verify your identity to unlock Madrasatu-s-Salikat'
+  promptMessage = 'Verify your identity to unlock Madrasa Portal'
 ): Promise<{ success: boolean; error?: string }> {
   if (!LocalAuth) {
     return { success: false, error: 'Biometric hardware unavailable' };

@@ -127,6 +127,8 @@ export type Book = {
   pdf_url: string;
   category: string;
   category_id?: string;
+  organization_id?: string;
+  institution_name?: string;
   deleted?: boolean;
 };
 
@@ -221,7 +223,7 @@ type DataContextType = {
   hasMoreLessonsByModule: Record<string, boolean>;
   hasMoreAssignmentsByLesson: Record<string, boolean>;
   refetch: () => void;
-  refetchBooks: () => Promise<boolean>;
+  refetchBooks: (orgId?: string) => Promise<boolean>;
   refetchLearning: () => Promise<void>;
   fetchCourseModules: (courseId: string) => Promise<void>;
   fetchMoreCourseModules: (courseId: string) => Promise<void>;
@@ -262,6 +264,7 @@ type DataContextType = {
     category: string,
     category_id?: string,
     description?: string,
+    organization_id?: string,
   ) => Promise<boolean>;
   deleteBook: (bookId: string) => Promise<boolean>;
 };
@@ -512,14 +515,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [user?.uid],
   );
 
-  const fetchBooks = useCallback(async (): Promise<boolean> => {
+  const fetchBooks = useCallback(async (orgId?: string): Promise<boolean> => {
     setBooksLoading(true);
     try {
-      const booksSnap = await withTimeout(getDocs(collection(db, 'library')));
+      const activeOrgId = orgId || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID;
+      const booksQuery = activeOrgId === DEFAULT_ORGANIZATION_ID
+        ? collection(db, 'library')
+        : query(collection(db, 'library'), where('organization_id', '==', activeOrgId));
+
+      const booksSnap = await withTimeout(getDocs(booksQuery));
       const booksData: Book[] = [];
       booksSnap.forEach((doc) => {
         const data = doc.data();
         if (data.deleted) return;
+        const itemOrg = data.organization_id || DEFAULT_ORGANIZATION_ID;
+
+        // Multi-tenant check: if active org is default, only show default/legacy unassigned books
+        if (activeOrgId === DEFAULT_ORGANIZATION_ID) {
+          if (data.organization_id && data.organization_id !== DEFAULT_ORGANIZATION_ID) {
+            return;
+          }
+        } else {
+          if (itemOrg !== activeOrgId) {
+            return;
+          }
+        }
+
         booksData.push({
           id: doc.id,
           title: data.title || '',
@@ -528,6 +549,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           pdf_url: data.file_url || data.pdf_url || data.pdfUrl || '',
           category: data.category || '',
           category_id: data.category_id || '',
+          organization_id: itemOrg,
+          institution_name: data.institution_name,
         });
       });
       setBooks(booksData);
@@ -997,6 +1020,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     category: string,
     category_id?: string,
     description?: string,
+    organization_id?: string,
   ): Promise<boolean> => {
     if (!isUserAdmin) {
       logger.warn('Unauthorized: only admin can add books');
@@ -1007,6 +1031,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
     try {
+      const activeOrgId = organization_id || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID;
       await withTimeout(addDoc(collection(db, 'library'), {
         title: title.trim(),
         description: String(description || '').trim(),
@@ -1015,9 +1040,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         pdf_url: file_url.trim(),
         category: category.trim(),
         category_id: category_id || '',
+        organization_id: activeOrgId,
         created_at: serverTimestamp(),
       }));
-      await fetchBooks();
+      await fetchBooks(activeOrgId);
       return true;
     } catch (err: any) {
       logger.warn('Failed to add book:', normalizeFirebaseError(err, 'Failed to add book'));

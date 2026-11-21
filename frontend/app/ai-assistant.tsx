@@ -38,6 +38,7 @@ import {
   SavedSabaqNote,
 } from '@/lib/sabaqNotesStorage';
 import { goBackOrReplace } from '@/lib/navigation';
+import { useActiveOrganization } from '@/lib/tenantContext';
 
 export default function AiAssistantScreen() {
   const insets = useSafeAreaInsets();
@@ -45,6 +46,9 @@ export default function AiAssistantScreen() {
   const params = useLocalSearchParams<{ courseTitle?: string; lessonTitle?: string }>();
   const scrollViewRef = useRef<ScrollView>(null);
   const { getResumeLearning } = useData();
+  const { activeOrg } = useActiveOrganization();
+  const activeOrgId = activeOrg?.id;
+  const madrasaName = activeOrg?.name || 'Madrasatu-s-Salikat Lil Banat';
 
   // 8.3 Context from active course: auto-detect if not explicitly provided in params
   const resume = getResumeLearning();
@@ -65,7 +69,7 @@ export default function AiAssistantScreen() {
   const recordingInstanceRef = useRef<Audio.Recording | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Initial welcome message reflecting active language
+  // Initial welcome message reflecting active madrasa and language
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome_msg',
@@ -73,18 +77,18 @@ export default function AiAssistantScreen() {
       language: 'en',
       text:
         '**Bismillahir-Rahmanir-Rahim**\n\n' +
-        'Assalamu Alaykum, Dear Student! Welcome to your **24/7 Advanced AI Sabaq Tutor**.\n\n' +
-        'I can assist you with in-depth concept explanations, Quranic vocabulary breakdowns, interactive quizzes, and quick revision summaries for your Madrasa curriculum.\n\n' +
+        `Assalamu Alaykum, Dear Student! Welcome to the official 24/7 AI Assistant for **${madrasaName}**.\n\n` +
+        'I can assist you with in-depth concept explanations, Quranic vocabulary breakdowns, fee payment guidance, live class instructions, interactive quizzes, and revision summaries.\n\n' +
         '*(Note: For binding personal Shariah legal rulings/fatwas, please consult our certified live scholars at Dar-ul-Iftaa).*',
       timestamp: Date.now(),
     },
   ]);
 
-  // 8.1 Chat history persistence: load saved messages on mount
+  // 8.1 Chat history persistence: load saved messages on mount (scoped by madrasa)
   useEffect(() => {
     let alive = true;
     (async () => {
-      const saved = await loadSavedAiChat();
+      const saved = await loadSavedAiChat(activeOrgId);
       if (alive && saved && saved.length > 0) {
         setMessages(saved);
         const last = saved[saved.length - 1];
@@ -96,14 +100,14 @@ export default function AiAssistantScreen() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [activeOrgId]);
 
-  // Save messages to AsyncStorage whenever they update
+  // Save messages to AsyncStorage whenever they update (scoped by madrasa)
   useEffect(() => {
     if (messages.length > 0) {
-      void saveAiChat(messages);
+      void saveAiChat(messages, activeOrgId);
     }
-  }, [messages]);
+  }, [messages, activeOrgId]);
 
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -231,12 +235,12 @@ export default function AiAssistantScreen() {
           text:
             nextLang === 'en'
               ? '**Bismillahir-Rahmanir-Rahim**\n\n' +
-                'Assalamu Alaykum, Dear Student! Welcome to your **24/7 Advanced AI Sabaq Tutor**.\n\n' +
-                'I can assist you with concept explanations, Quranic vocabulary breakdowns, interactive quizzes, and revision summaries.\n\n' +
+                `Assalamu Alaykum, Dear Student! Welcome to the official 24/7 AI Assistant for **${madrasaName}**.\n\n` +
+                'I can assist you with concept explanations, Quranic vocabulary breakdowns, fee payment guidance, live class instructions, interactive quizzes, and revision summaries.\n\n' +
                 '*(Note: For personal Shariah legal rulings/fatwas, please consult our certified live scholars at Dar-ul-Iftaa).*'
               : 'بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم\n\n' +
-                'السلام علیکم محترم طالبہ! میں آپ کی **24/7 جدید AI سبق استاد (AI Study Companion)** ہوں۔\n\n' +
-                'آپ مجھ سے اپنے اسباق، قرآنی الفاظ کے معانی، تجوید کے قواعد، فقہی مسائل، یا امتحانی خلاصہ جات پوچھ سکتی ہیں۔\n\n' +
+                `السلام علیکم محترم طالبہ! میں **${madrasaName}** کی سرکاری 24/7 AI استاذہ (AI Study Companion) ہوں۔\n\n` +
+                'آپ مجھ سے اپنے اسباق، لائیو کلاسز، فیس ادائیگی، تجوید و فقہ کے مسائل، یا امتحانی خلاصہ جات پوچھ سکتی ہیں۔\n\n' +
                 '*(نوٹ: مخصوص شرعی فتووں کے لیے دار الافتاء کے ذریعے استاذہ سے رجوع فرمائیں)*',
           timestamp: Date.now(),
         },
@@ -267,6 +271,8 @@ export default function AiAssistantScreen() {
         mode: selectedMode,
         courseTitle: activeCourseTitle,
         lessonTitle: activeLessonTitle,
+        organizationId: activeOrgId,
+        madrasaName: madrasaName,
       });
 
       const assistantMsg: ChatMessage = {
@@ -354,7 +360,7 @@ export default function AiAssistantScreen() {
           text: language === 'en' ? 'Clear' : 'صاف کریں',
           style: 'destructive',
           onPress: async () => {
-            await clearSavedAiChat();
+            await clearSavedAiChat(activeOrgId);
             setMessages([
               {
                 id: 'welcome_msg_reset',
@@ -362,8 +368,8 @@ export default function AiAssistantScreen() {
                 language,
                 text:
                   language === 'en'
-                    ? 'Session reset. What topic or lesson would you like to study?'
-                    : 'السلام علیکم! نیا تعلیمی سیشن شروع ہو چکا ہے۔ آپ کیا سمجھنا چاہتی ہیں؟',
+                    ? `Session reset. What topic or lesson in ${madrasaName} would you like to study?`
+                    : `السلام علیکم! نیا تعلیمی سیشن شروع ہو چکا ہے۔ آپ ${madrasaName} کے نصاب میں کیا سمجھنا چاہتی ہیں؟`,
                 timestamp: Date.now(),
               },
             ]);
@@ -396,11 +402,15 @@ export default function AiAssistantScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.arabicHeader}>AI SABAQ TUTOR & COMPANION</Text>
+          <Text style={styles.arabicHeader} numberOfLines={1}>
+            {activeOrg?.name ? activeOrg.name.toUpperCase() : 'AI SABAQ TUTOR & COMPANION'}
+          </Text>
           <View style={styles.statusRow}>
             <View style={styles.onlineDot} />
-            <Text style={styles.headerSubtitle}>
-              {language === 'en' ? 'AI Sabaq Tutor (English & Urdu)' : '24/7 AI Sabaq Assistant'}
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {activeOrg?.name
+                ? `${language === 'en' ? 'AI Assistant' : 'AI استاذہ'} • ${language === 'en' ? 'Online' : 'آن لائن'}`
+                : (language === 'en' ? 'AI Sabaq Tutor (English & Urdu)' : '24/7 AI Sabaq Assistant')}
             </Text>
           </View>
         </View>

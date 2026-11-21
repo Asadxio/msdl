@@ -417,11 +417,12 @@ function _staticQuizFallback(
   return generated;
 }
 
-export async function publishGeneratedQuiz(questions: GeneratedQuestion[]): Promise<{ count: number }> {
+export async function publishGeneratedQuiz(questions: GeneratedQuestion[], organizationId?: string): Promise<{ count: number }> {
   if (!questions || questions.length === 0) return { count: 0 };
 
   const quizCol = collection(db, 'quizzes');
   const CHUNK_SIZE = 100;
+  const targetOrg = organizationId || 'mslb-main';
 
   for (let i = 0; i < questions.length; i += CHUNK_SIZE) {
     const chunk = questions.slice(i, i + CHUNK_SIZE);
@@ -434,6 +435,7 @@ export async function publishGeneratedQuiz(questions: GeneratedQuestion[]): Prom
         options: q.options,
         correct_answer: q.correct_answer,
         category: q.category,
+        organization_id: targetOrg,
         explanation: q.explanation || '',
         created_at: serverTimestamp(),
         is_ai_generated: true,
@@ -452,9 +454,9 @@ export async function publishGeneratedQuiz(questions: GeneratedQuestion[]): Prom
   return { count: questions.length };
 }
 
-export function formatQuizAsPrintableExam(questions: GeneratedQuestion[], title: string): string {
+export function formatQuizAsPrintableExam(questions: GeneratedQuestion[], title: string, institutionName?: string): string {
   let output = 'بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم\n';
-  output += '📜 *Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات) — Examination Paper*\n';
+  output += `📜 *${institutionName || 'Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات)'} — Examination Paper*\n`;
   output += '📚 *Subject / Category:* ' + (title || 'Islamic Quiz') + '\n';
   output += '⏱️ *Total Questions:* ' + questions.length + '\n';
   output += '══════════════════════════════════════\n\n';

@@ -79,7 +79,7 @@ export function evaluateVersionRequirements(
       type: 'maintenance',
       message:
         config.maintenance_message_en ||
-        'Madrasatu-s-Salikat is currently undergoing scheduled maintenance. Please check back shortly.',
+        'The portal is currently undergoing scheduled maintenance. Please check back shortly.',
     };
   }
 
@@ -95,7 +95,7 @@ export function evaluateVersionRequirements(
       title: config.force_update_title_en || 'App Update Required',
       message:
         config.force_update_message_en ||
-        'A critical update is required to continue using Madrasatu-s-Salikat safely. Please update to the latest version on Google Play.',
+        'A critical update is required to continue using the application safely. Please update to the latest version on Google Play.',
       updateUrl,
       minVersion: config.min_version,
     };
@@ -109,7 +109,7 @@ export function evaluateVersionRequirements(
     return {
       type: 'soft_update',
       title: 'New Update Available',
-      message: `A new version (${config.latest_version}) of Madrasatu-s-Salikat is available with improvements and fixes.`,
+      message: `A new version (${config.latest_version}) is available with improvements and fixes.`,
       updateUrl,
       latestVersion: config.latest_version,
     };

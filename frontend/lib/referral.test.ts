@@ -1,3 +1,12 @@
+jest.mock('@/lib/firebase', () => ({
+  auth: { currentUser: { uid: 'test_uid' } },
+  db: {},
+}));
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn().mockResolvedValue(null),
+  setItem: jest.fn().mockResolvedValue(undefined),
+}));
+
 import {
   generateReferralCode,
   getSadqahTier,

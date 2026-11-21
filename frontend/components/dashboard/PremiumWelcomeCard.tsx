@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { UserProfile } from '@/context/AuthContext';
+import { useActiveOrganization } from '@/lib/tenantContext';
 
 export const OFFICIAL_SENDER_NUMBER = '+916366919122';
 export const OFFICIAL_HELPLINE_URL = 'https://wa.me/916366919122';
@@ -32,6 +33,7 @@ export function PremiumWelcomeCard({
 }: PremiumWelcomeCardProps) {
   const [dismissed, setDismissed] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(1));
+  const { activeOrg } = useActiveOrganization();
 
   const uid = profile?.uid || '';
   const studentName = profile?.name?.trim() || 'طالبہ';
@@ -68,7 +70,7 @@ export function PremiumWelcomeCard({
   };
 
   const handleWhatsAppContact = async () => {
-    const prefilledText = `Assalamu Alaikum, main ${studentName} hoon. Maine Madrasatu-s-Salikat Lil Banat mein registration kiya hai.`;
+    const prefilledText = `Assalamu Alaikum, main ${studentName} hoon. Maine ${activeOrg?.name || 'Madrasa'} mein registration kiya hai.`;
     const encodedText = encodeURIComponent(prefilledText);
     const waUrl = `${OFFICIAL_HELPLINE_URL}?text=${encodedText}`;
 
@@ -128,12 +130,12 @@ export function PremiumWelcomeCard({
 
         {/* Dynamic Student Greeting */}
         <View style={styles.greetingContainer}>
-          <Text style={styles.welcomeEyebrow}>KHAIR MAQDAM • WELCOME TO MSLB</Text>
+          <Text style={styles.welcomeEyebrow}>KHAIR MAQDAM • WELCOME TO {activeOrg?.name ? activeOrg.name.toUpperCase() : 'SUFFAH'}</Text>
           <Text style={styles.studentNameTitle} numberOfLines={1}>
             Welcome, {studentName} 🌸
           </Text>
           <Text style={styles.introParagraph}>
-            Madrasatu-s-Salikat Lil Banat mein aapka dilli khair-maqdam hai! Aapka admission registration kamyabi ke saath receive ho gaya hai.
+            {activeOrg?.name || 'Madrasa'} mein aapka dilli khair-maqdam hai! Aapka admission registration kamyabi ke saath receive ho gaya hai.
           </Text>
         </View>
 
@@ -234,7 +236,7 @@ export function PremiumWelcomeCard({
 
         {/* Disclaimer Note */}
         <Text style={styles.disclaimerText}>
-          Rabta: {OFFICIAL_SENDER_NUMBER} • Jamia Darul Uloom Madrasatu-s-Salikat Lil Banat
+          Rabta: {activeOrg?.phone || OFFICIAL_SENDER_NUMBER} • {activeOrg?.name || 'Suffah Digital Madrasa'}
         </Text>
       </View>
     </Animated.View>

@@ -29,7 +29,7 @@ export function SpiritualMomentsRow({ dua, hadith }: SpiritualMomentsRowProps) {
   const [selectedMoment, setSelectedMoment] = useState<ModalContent | null>(null);
 
   const handleShare = async (item: ModalContent) => {
-    const msg = `✨ ${item.title} — Madrasatu-s-Salikat Lil Banat ✨\n\n${item.arabic}\n\n"${item.translation}"\n— ${item.reference}\n\n🕌 Madrasatu-s-Salikat Lil Banat`;
+    const msg = `✨ ${item.title} — Suffah ✨\n\n${item.arabic}\n\n"${item.translation}"\n— ${item.reference}\n\n🕌 Suffah • Digital Madrasa Portal`;
     try {
       await Share.share({ message: msg, title: item.title });
     } catch {

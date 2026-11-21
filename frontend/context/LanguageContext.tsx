@@ -252,38 +252,34 @@ export interface LanguageOption {
   code: Language;
   name: string;
   nativeName: string;
-  flag: string;
-  subtitle: string;
+  flag?: string;
+  subtitle?: string;
 }
 
 export const LANGUAGE_OPTIONS: LanguageOption[] = [
   {
     code: 'ur',
     name: 'Urdu',
-    nativeName: 'اردو (نستعلیق)',
-    flag: '🇵🇰',
-    subtitle: 'دینی علوم، قرآن و فقہ اردو نستعلیق میں',
+    nativeName: 'اردو',
+    subtitle: 'اردو',
   },
   {
     code: 'roman_ur',
     name: 'Roman Urdu',
     nativeName: 'Roman Urdu',
-    flag: '📝',
-    subtitle: 'Aasan Roman Urdu me sabaq aur masail',
+    subtitle: 'Roman Urdu',
   },
   {
     code: 'en',
     name: 'English',
     nativeName: 'English',
-    flag: '🇬🇧',
-    subtitle: 'Full English interface',
+    subtitle: 'English',
   },
   {
     code: 'ar',
     name: 'Arabic',
     nativeName: 'العربية',
-    flag: '🇸🇦',
-    subtitle: 'الواجهة باللغة العربية الفصحى',
+    subtitle: 'العربية',
   },
 ];
 

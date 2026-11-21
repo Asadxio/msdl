@@ -14,7 +14,7 @@ import { useTutorial } from '@/context/TutorialContext';
 import { useTheme } from '@/context/ThemeContext';
 import { getNotificationPreferences, updateNotificationPreferences, type NotificationChannel } from '@/lib/notificationCenter';
 import Constants from 'expo-constants';
-import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL, MADRASA_WEBSITE_DISPLAY } from '@/lib/links';
+import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL, MADRASA_WEBSITE_DISPLAY, normalizeWhatsAppUrl } from '@/lib/links';
 import AdminHealthDashboard from '@/components/AdminHealthDashboard';
 import { useLanguage, type Language } from '@/context/LanguageContext';
 import { LanguageSwitcherSheet } from '@/components/LanguageSwitcherSheet';
@@ -56,6 +56,7 @@ import {
   APP_LOCK_PIN_KEY,
   type BiometricCapabilities,
 } from '@/lib/appLock';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_NAME } from '@/lib/tenantContext';
 
 const NOTIFICATION_PREF_KEY = 'settings_notifications_enabled';
 const LARGE_TEXT_PREF_KEY = 'settings_large_text';
@@ -109,6 +110,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { activeOrg } = useActiveOrganization();
   const { setShowTutorial, setCurrentStep } = useTutorial();
   const { language, setLanguage, languageName } = useLanguage();
   const { setThemeMode, setFontSizeScale } = useTheme();
@@ -331,7 +333,7 @@ export default function SettingsScreen() {
       if (res.success) {
         setBiometricEnabled(true);
         await AsyncStorage.setItem(APP_LOCK_BIOMETRIC_KEY, 'true');
-        Alert.alert('Biometric Unlock Enabled', 'You can now unlock Madrasatu-s-Salikat using your fingerprint.');
+        Alert.alert('Biometric Unlock Enabled', 'You can now unlock Suffah using your fingerprint.');
       } else {
         Alert.alert('Verification Failed', 'Biometric could not be verified. Unlock was not enabled.');
       }
@@ -490,7 +492,7 @@ export default function SettingsScreen() {
         if (finalStatus === 'granted') {
           await Notifications.scheduleNotificationAsync({
             content: {
-              title: 'Madrasatu-s-Salikat Lil Banat 🔔',
+              title: 'Suffah Notification 🔔',
               body: 'Test notification delivered successfully with sound & vibration!',
               data: { type: 'test_notification' },
               sound: 'default',
@@ -548,6 +550,30 @@ export default function SettingsScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
+        {/* Connected Campus / Active Madrasa Banner */}
+        <View style={styles.campusCard}>
+          <View style={styles.campusCardLeft}>
+            <View style={styles.campusIconCircle}>
+              <Ionicons name="business" size={18} color={COLORS.primary} />
+            </View>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.campusEyebrow}>CONNECTED CAMPUS / ادارہ</Text>
+              <Text style={styles.campusTitle} numberOfLines={1}>{activeOrg?.name || DEFAULT_ORGANIZATION_NAME}</Text>
+              <Text style={styles.campusSub} numberOfLines={1}>
+                {[activeOrg?.city, activeOrg?.state, activeOrg?.country].filter(Boolean).join(', ') || 'Global Digital Madrasa'}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.switchCampusPill}
+            onPress={() => router.push('/select-madrasa')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="swap-horizontal" size={14} color={COLORS.primary} style={{ marginRight: 4 }} />
+            <Text style={styles.switchCampusPillText}>Switch</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Faculty Access Banner */}
         <TouchableOpacity
           style={styles.facultyBanner}
@@ -604,19 +630,8 @@ export default function SettingsScreen() {
           </View>
         </SettingsSection>
 
-        {/* Section 2: Appearance & Language */}
-        <SettingsSection title="Appearance & Language" icon="color-palette-outline" defaultOpen={false}>
-          <TouchableOpacity style={styles.linkRow} onPress={() => setLangModalVisible(true)}>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="globe-outline" size={20} color={COLORS.primary} />
-              <View>
-                <Text style={styles.linkText}>App Language</Text>
-                <Text style={styles.linkSubtext}>{languageName}</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-          </TouchableOpacity>
-
+        {/* Section 2: Appearance & Display */}
+        <SettingsSection title="Appearance & Display" icon="color-palette-outline" defaultOpen={false}>
           <TouchableOpacity style={styles.linkRow} onPress={() => setThemeModalVisible(true)}>
             <View style={styles.linkRowLeft}>
               <Ionicons name="moon-outline" size={20} color={COLORS.primary} />
@@ -1057,43 +1072,149 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         {/* Section 7: Support */}
-        <SettingsSection title="Support" icon="help-buoy-outline" defaultOpen={false}>
-          <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL(WHATSAPP_HELP_URL)}>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="logo-whatsapp" size={20} color="#16A34A" />
-              <Text style={styles.linkText}>WhatsApp Support</Text>
-            </View>
-            <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL('mailto:madrastussalikatlilbanat@gmail.com?subject=MSDL%20App%20Support')}>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="mail-outline" size={20} color="#0369A1" />
-              <Text style={styles.linkText}>Email Support</Text>
-            </View>
-            <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.linkRow} onPress={() => setBugModalVisible(true)}>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="bug-outline" size={20} color="#EF4444" />
-              <Text style={styles.linkText}>Report a Bug (तकनीकी समस्या)</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.linkRow} onPress={() => setFeatureModalVisible(true)}>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="bulb-outline" size={20} color="#F59E0B" />
-              <Text style={styles.linkText}>Suggest a Feature (सुझाव भेजें)</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.linkRow} onPress={() => setFaqModalVisible(true)}>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="chatbubbles-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.linkText}>FAQ (अक्सर पूछे जाने वाले सवाल)</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-          </TouchableOpacity>
-        </SettingsSection>
+        {(() => {
+          const supportLabels = {
+            ur: {
+              sectionTitle: 'مدد و رہنمائی (Support)',
+              headerSub: 'مدرسہ ہیلپ ڈیسک و ایڈمن سپورٹ',
+              whatsapp: 'واٹس ایپ سپورٹ',
+              whatsappSub: activeOrg?.whatsapp_contact ? activeOrg.whatsapp_contact : (activeOrg?.phone ? activeOrg.phone : 'مدرسہ ایڈمن سے رابطہ'),
+              email: 'ای میل سپورٹ',
+              emailSub: activeOrg?.email || 'support@suffahportal.com',
+              bug: 'تکنیکی مسئلہ رپورٹ کریں',
+              bugSub: 'ایپ میں کسی خرابی کی اطلاع دیں',
+              feature: 'نئی تجویز پیش کریں',
+              featureSub: 'تعلیمی فیچرز اور بہتری کے مشورے',
+              faq: 'عام سوالات و جوابات (FAQ)',
+              faqSub: 'ایپ کے استعمال سے متعلق رہنمائی',
+            },
+            ar: {
+              sectionTitle: 'الدعم والمساعدة (Support)',
+              headerSub: 'مكتب مساعدة إدارة المدرسة',
+              whatsapp: 'الدعم عبر واتساب',
+              whatsappSub: activeOrg?.whatsapp_contact ? activeOrg.whatsapp_contact : (activeOrg?.phone ? activeOrg.phone : 'تواصل مع إدارة مدرستك'),
+              email: 'الدعم عبر البريد الإلكتروني',
+              emailSub: activeOrg?.email || 'support@suffahportal.com',
+              bug: 'الإبلاغ عن مشكلة فنية',
+              bugSub: 'أرسل تفاصيل أي خطأ فني',
+              feature: 'اقتراح ميزة جديدة',
+              featureSub: 'شاركنا أفكارك لتطوير المنصة',
+              faq: 'الأسئلة الشائعة (FAQ)',
+              faqSub: 'إجابات على الأسئلة الشائعة',
+            },
+            roman_ur: {
+              sectionTitle: 'Support & Help Desk',
+              headerSub: 'Madrasa Help Desk & Admin Support',
+              whatsapp: 'WhatsApp Support',
+              whatsappSub: activeOrg?.whatsapp_contact ? activeOrg.whatsapp_contact : (activeOrg?.phone ? activeOrg.phone : 'Madrasa Admin se direct rabta karein'),
+              email: 'Email Support',
+              emailSub: activeOrg?.email || 'support@suffahportal.com',
+              bug: 'Report a Bug',
+              bugSub: 'Kharabi ya technical issue report karein',
+              feature: 'Suggest a Feature',
+              featureSub: 'Nayi tajweez ya feature idea share karein',
+              faq: 'FAQ & Help Guide',
+              faqSub: 'Aam sawalat aur aasan jawabaat',
+            },
+            en: {
+              sectionTitle: 'Support & Help Desk',
+              headerSub: 'Official Help Desk & Admin Support',
+              whatsapp: 'WhatsApp Support',
+              whatsappSub: activeOrg?.whatsapp_contact ? activeOrg.whatsapp_contact : (activeOrg?.phone ? activeOrg.phone : 'Chat with your madrasa administration'),
+              email: 'Email Support',
+              emailSub: activeOrg?.email || 'support@suffahportal.com',
+              bug: 'Report a Technical Issue',
+              bugSub: 'Found an error or bug? Let our team know',
+              feature: 'Suggest a Feature',
+              featureSub: 'Share ideas to improve your learning portal',
+              faq: 'Frequently Asked Questions (FAQ)',
+              faqSub: 'Quick answers to common questions & setup',
+            },
+          };
+          const curSupport = supportLabels[language as keyof typeof supportLabels] || supportLabels.en;
+
+          return (
+            <SettingsSection title={curSupport.sectionTitle} icon="help-buoy-outline" defaultOpen={false}>
+              {/* Active Madrasa Support Info Card */}
+              <View style={styles.madrasaSupportCard}>
+                <View style={styles.madrasaSupportIconCircle}>
+                  <Ionicons name="school" size={20} color={COLORS.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.madrasaSupportTitle}>{activeOrg?.name || 'Suffah Digital Madrasa'}</Text>
+                  <Text style={styles.madrasaSupportSub}>{curSupport.headerSub}</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => {
+                  const targetUrl = (activeOrg?.whatsapp_contact ? normalizeWhatsAppUrl(activeOrg.whatsapp_contact) : null) || (activeOrg?.phone ? normalizeWhatsAppUrl(activeOrg.phone) : null) || WHATSAPP_HELP_URL;
+                  Linking.openURL(targetUrl);
+                }}
+              >
+                <View style={styles.linkRowLeft}>
+                  <Ionicons name="logo-whatsapp" size={20} color="#16A34A" />
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.linkText}>{curSupport.whatsapp}</Text>
+                    <Text style={styles.linkSubtext} numberOfLines={1}>{curSupport.whatsappSub}</Text>
+                  </View>
+                </View>
+                <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => {
+                  const supportEmail = activeOrg?.email || 'support@suffahportal.com';
+                  Linking.openURL(`mailto:${supportEmail}?subject=${encodeURIComponent(`Support Inquiry - ${activeOrg?.name || 'Suffah'}`)}`);
+                }}
+              >
+                <View style={styles.linkRowLeft}>
+                  <Ionicons name="mail-outline" size={20} color="#0369A1" />
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.linkText}>{curSupport.email}</Text>
+                    <Text style={styles.linkSubtext} numberOfLines={1}>{curSupport.emailSub}</Text>
+                  </View>
+                </View>
+                <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.linkRow} onPress={() => setBugModalVisible(true)}>
+                <View style={styles.linkRowLeft}>
+                  <Ionicons name="bug-outline" size={20} color="#EF4444" />
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.linkText}>{curSupport.bug}</Text>
+                    <Text style={styles.linkSubtext} numberOfLines={1}>{curSupport.bugSub}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.linkRow} onPress={() => setFeatureModalVisible(true)}>
+                <View style={styles.linkRowLeft}>
+                  <Ionicons name="bulb-outline" size={20} color="#F59E0B" />
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.linkText}>{curSupport.feature}</Text>
+                    <Text style={styles.linkSubtext} numberOfLines={1}>{curSupport.featureSub}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.linkRow} onPress={() => setFaqModalVisible(true)}>
+                <View style={styles.linkRowLeft}>
+                  <Ionicons name="chatbubbles-outline" size={20} color={COLORS.primary} />
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.linkText}>{curSupport.faq}</Text>
+                    <Text style={styles.linkSubtext} numberOfLines={1}>{curSupport.faqSub}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </SettingsSection>
+          );
+        })()}
 
         {/* Section: Admin Diagnostics (Admin Only) */}
         {isAdminUser && (
@@ -1128,25 +1249,14 @@ export default function SettingsScreen() {
           </SettingsSection>
         )}
 
-        {/* Section 8: About */}
-        <SettingsSection title="About" icon="information-circle-outline" defaultOpen={false}>
-          <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL(MADRASA_WEBSITE_URL)}>
-            <View style={styles.linkRowLeft}>
-              <Ionicons name="globe-outline" size={20} color="#0FA958" />
-              <View>
-                <Text style={styles.linkText}>Official Website</Text>
-                <Text style={styles.linkSubtext}>{MADRASA_WEBSITE_DISPLAY}</Text>
-              </View>
-            </View>
-            <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
-          </TouchableOpacity>
-
+        {/* Section 8: App Information & Legal */}
+        <SettingsSection title="App Information & Legal" icon="information-circle-outline" defaultOpen={false}>
           <TouchableOpacity style={styles.linkRow} onPress={openGooglePlayStore}>
             <View style={styles.linkRowLeft}>
               <Ionicons name="star" size={20} color="#F59E0B" />
               <View>
-                <Text style={styles.linkText}>Rate MSLB on Google Play ⭐</Text>
-                <Text style={styles.linkSubtext}>Help more sisters find authentic Islamic education</Text>
+                <Text style={styles.linkText}>Rate App on Google Play ⭐</Text>
+                <Text style={styles.linkSubtext}>Support authentic Islamic education worldwide</Text>
               </View>
             </View>
             <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
@@ -1161,7 +1271,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
 
           <View style={styles.aboutCard}>
-            <Text style={styles.aboutTitle}>Madrasa Tus Salikat Lil Banat</Text>
+            <Text style={styles.aboutTitle}>Suffah: Digital Madrasa Portal</Text>
             <Text style={styles.aboutText}>App Version: {Constants.expoConfig?.version || '1.0.0'}</Text>
             <Text style={styles.aboutText}>Build Number: {Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || '1'}</Text>
             <View style={styles.aboutDivider} />
@@ -1602,6 +1712,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  madrasaSupportCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    gap: 12,
+  },
+  madrasaSupportIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  madrasaSupportTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  madrasaSupportSub: {
+    fontSize: 12,
+    color: '#047857',
+    marginTop: 2,
+  },
+
   aboutCard: {
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
@@ -1771,5 +1911,62 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.textMain,
     marginTop: 2,
+  },
+  campusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  campusCardLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  campusIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  campusEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.primary,
+    letterSpacing: 0.8,
+  },
+  campusTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginTop: 1,
+  },
+  campusSub: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
+  switchCampusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+  },
+  switchCampusPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
 });

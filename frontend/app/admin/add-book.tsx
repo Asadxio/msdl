@@ -21,12 +21,15 @@ import { useData } from '@/context/DataContext';
 import {
   collection, addDoc, serverTimestamp, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/rbac';
 import { isValidHttpsUrl, normalizeGoogleDriveFileUrl } from '@/lib/links';
 import { withTimeout } from '@/lib/errors';
 import { isFounderEmail } from '@/lib/founderPolicy';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 const INITIAL_BOOKS = [
   {
@@ -56,6 +59,7 @@ export default function AddBookScreen() {
   const insets = useSafeAreaInsets();
   const { books, addBook, refetchBooks } = useData();
   const { profile } = useAuth();
+  const { activeOrgId, activeOrg } = useActiveOrganization();
   const isAdmin = isFounderEmail(profile?.email) || profile?.founder === true || hasPermission(profile, 'admin.academics.manage');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -69,6 +73,59 @@ export default function AddBookScreen() {
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [formError, setFormError] = useState('');
   const [focusedField, setFocusedField] = useState<'title' | 'description' | 'pdfUrl' | 'newCategory' | 'editCategory' | null>(null);
+
+  // Ghalati 8 Fix: Native phone PDF file picker + direct Firebase Storage upload
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState('');
+  const [uploadProgress, setUploadProgress] = useState('');
+
+  const handlePickAndUploadPdf = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const file = result.assets[0];
+      const fileName = file.name || 'Madrasa_Book.pdf';
+      setSelectedFileName(fileName);
+
+      // Auto-populate Title if empty
+      if (!title.trim()) {
+        const suggestedTitle = fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        setTitle(suggestedTitle);
+      }
+
+      setUploadingPdf(true);
+      setUploadProgress('Uploading PDF to Madrasa Cloud Storage...');
+
+      const orgId = activeOrgId || DEFAULT_ORGANIZATION_ID;
+      const cleanName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const uniqueFileName = `${Date.now()}_${cleanName}`;
+      const path = `organizations/${orgId}/library/${uniqueFileName}`;
+      const sRef = storageRef(storage, path);
+
+      // Fetch blob from local URI
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+
+      await uploadBytes(sRef, blob, { contentType: 'application/pdf' });
+      const downloadUrl = await getDownloadURL(sRef);
+
+      setPdfUrl(downloadUrl);
+      Alert.alert('PDF Ready', `"${fileName}" has been successfully uploaded and attached.`);
+    } catch (err: any) {
+      console.error('[AddBook] Failed to upload PDF:', err);
+      Alert.alert('Upload Error', err?.message || 'Could not upload PDF file. You can still paste a link manually.');
+    } finally {
+      setUploadingPdf(false);
+      setUploadProgress('');
+    }
+  };
 
   useEffect(() => {
     if (profile && !isAdmin) {
@@ -118,7 +175,14 @@ export default function AddBookScreen() {
         categoryId = newCatRef.id;
         setCategory(newCatRef.id);
       }
-      const success = await addBook(title.trim(), normalizedPdfUrl, categoryName, categoryId, description.trim());
+      const success = await addBook(
+        title.trim(),
+        normalizedPdfUrl,
+        categoryName,
+        categoryId,
+        description.trim(),
+        activeOrgId
+      );
       if (success) {
         Alert.alert('Success', 'Book added successfully', [
           { text: 'OK', onPress: () => { setTitle(''); setDescription(''); setPdfUrl(''); setCategory(''); setNewCategory(''); } },
@@ -148,6 +212,7 @@ export default function AddBookScreen() {
           await withTimeout(
             addDoc(collection(db, 'library'), {
               ...book,
+              organization_id: activeOrgId,
               created_at: serverTimestamp(),
             }),
             10000,
@@ -245,7 +310,24 @@ export default function AddBookScreen() {
           <View style={{ width: 42 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        {/* Institution Context Banner */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: '#ECFDF5',
+          borderBottomWidth: 1,
+          borderBottomColor: '#D1FAE5',
+          paddingHorizontal: SPACING.md,
+          paddingVertical: 7,
+          gap: 6,
+        }}>
+          <Ionicons name="business" size={14} color="#059669" />
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#065F46', flex: 1 }} numberOfLines={1}>
+            Adding Book for: {activeOrg?.name || 'Madrasa'}
+          </Text>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="always">
           {/* Seed Initial Books */}
           <TouchableOpacity
             style={styles.seedBtn}
@@ -300,9 +382,40 @@ export default function AddBookScreen() {
             />
           </View>
 
-          {/* PDF URL */}
+          {/* PDF File Picker & URL (Ghalati 8 Fix) */}
           <View style={styles.field}>
-            <Text style={styles.label}>File URL (HTTP/HTTPS / Google Drive)</Text>
+            <Text style={styles.label}>Book PDF File (کتاب کی پی ڈی ایف فائل)</Text>
+
+            {/* Native 1-Tap Document Picker Button */}
+            <TouchableOpacity
+              style={[styles.pdfPickerBtn, uploadingPdf && { opacity: 0.7 }]}
+              onPress={handlePickAndUploadPdf}
+              disabled={uploadingPdf}
+              activeOpacity={0.85}
+              testID="pick-pdf-btn"
+            >
+              {uploadingPdf ? (
+                <>
+                  <ActivityIndicator size="small" color="#059669" />
+                  <Text style={styles.pdfPickerBtnText}>Uploading PDF from phone...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="document-attach" size={20} color="#059669" />
+                  <Text style={styles.pdfPickerBtnText}>
+                    {selectedFileName ? `Attached: ${selectedFileName}` : 'Select PDF from Phone (فون سے فائل چنیں)'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {uploadProgress ? (
+              <Text style={styles.uploadProgressText}>{uploadProgress}</Text>
+            ) : null}
+
+            <Text style={[styles.label, { marginTop: 8, fontSize: 11, color: COLORS.textMuted }]}>
+              Or enter Google Drive / Storage URL manually:
+            </Text>
             <TextInput
               style={[styles.input, focusedField === 'pdfUrl' && styles.inputFocused]}
               placeholder="https://... or http://..."
@@ -456,4 +569,28 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   errorText: { fontSize: 12, color: COLORS.error, fontWeight: '600', marginTop: -6 },
   infoText: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
+  pdfPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#059669',
+    borderRadius: RADIUS.lg,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    gap: 8,
+  },
+  pdfPickerBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  uploadProgressText: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '600',
+    marginTop: 4,
+  },
 });

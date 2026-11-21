@@ -12,11 +12,11 @@ interface DailyWisdomCardProps {
 
 export function DailyWisdomCard({ arabic, translation, reference }: DailyWisdomCardProps) {
   const handleShareWhatsApp = async () => {
-    const msg = `✨ Daily Wisdom — Madrasatu-s-Salikat Lil Banat ✨\n\n${arabic}\n\n"${translation}"\n— ${reference}\n\n🕌 Madrasatu-s-Salikat Lil Banat • Islamic Learning Hub`;
+    const msg = `✨ Daily Wisdom — Suffah ✨\n\n${arabic}\n\n"${translation}"\n— ${reference}\n\n🕌 Suffah • Digital Madrasa Portal`;
     try {
       await Share.share({
         message: msg,
-        title: 'Daily Wisdom — Madrasatu-s-Salikat',
+        title: 'Daily Wisdom — Suffah',
       });
     } catch {
       const encoded = encodeURIComponent(msg);

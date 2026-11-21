@@ -1,0 +1,2668 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Suffah | صُفَّة — World's Digital Madrasa SaaS Platform & Purdah Learning Sanctuary</title>
+  <meta name="description" content="Suffah (صُفَّة) is the premier global cloud SaaS platform for Islamic seminaries, Darul Ulooms & Maktabs. Strict Purdah audio classrooms, multi-tenant academic management, direct institutional UPI fee routing, and QR-verified digital Sanad certification." />
+  <meta name="google-site-verification" content="M4oRZv-xIpbtOF2ljZ_id3zgZMfJuk9Yrakt2lxqq7Y" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="canonical" href="https://suffah.nooreharam.com/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green-darkest: #042F24;
+      --green-dark: #064E3B;
+      --green-primary: #005F46;
+      --green-accent: #059669;
+      --green-light: #10B981;
+      --green-soft: #ECFDF5;
+      --green-tint: #D1FAE5;
+      --gold-primary: #C8A84E;
+      --gold-light: #FDE68A;
+      --gold-soft: #FEF3C7;
+      --gold-glow: rgba(200, 168, 78, 0.35);
+      --bg-cream: #F8F6F0;
+      --bg-warm: #FAF9F5;
+      --card-bg: #FFFFFF;
+      --text-main: #111827;
+      --text-muted: #4B5563;
+      --text-light: #6B7280;
+      --border: #E5E7EB;
+      --border-gold: rgba(200, 168, 78, 0.4);
+      --shadow-sm: 0 4px 12px rgba(0, 95, 70, 0.05);
+      --shadow-md: 0 12px 28px rgba(0, 95, 70, 0.09);
+      --shadow-lg: 0 20px 48px rgba(0, 95, 70, 0.15);
+      --radius-sm: 12px;
+      --radius-md: 18px;
+      --radius-lg: 26px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background: var(--bg-cream);
+      color: var(--text-main);
+      line-height: 1.65;
+      overflow-x: hidden;
+    }
+
+    /* ─── Navigation Bar ─── */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(229, 231, 235, 0.9);
+      padding: 12px 24px;
+      transition: all 0.2s ease;
+    }
+    .nav-container {
+      width: min(1220px, 100%);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+    .brand-emblem {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--green-dark) 0%, var(--green-primary) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 4px 12px rgba(0, 95, 70, 0.25);
+      border: 1.5px solid var(--gold-primary);
+      flex-shrink: 0;
+    }
+    .brand-text-wrap {
+      display: flex;
+      flex-direction: column;
+    }
+    .brand-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--green-dark);
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+    .brand-sub {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--gold-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-main);
+      text-decoration: none;
+      font-size: 0.92rem;
+      font-weight: 600;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover {
+      color: var(--green-primary);
+    }
+    .nav-cta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .mobile-menu-btn {
+      display: none;
+      background: transparent;
+      border: none;
+      font-size: 26px;
+      cursor: pointer;
+      color: var(--green-dark);
+      padding: 4px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: none;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--green-primary) 0%, #004D38 100%);
+      color: #FFFFFF;
+      box-shadow: 0 4px 14px rgba(0, 95, 70, 0.28);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 95, 70, 0.38);
+      background: linear-gradient(135deg, #007A58 0%, var(--green-primary) 100%);
+    }
+    .btn-gold {
+      background: linear-gradient(135deg, #C8A84E 0%, #B89235 100%);
+      color: #042F24;
+      box-shadow: 0 4px 14px rgba(200, 168, 78, 0.3);
+      font-weight: 800;
+    }
+    .btn-gold:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 22px rgba(200, 168, 78, 0.45);
+    }
+    .btn-outline {
+      border: 1.5px solid var(--border);
+      color: var(--text-main);
+      background: #FFFFFF;
+    }
+    .btn-outline:hover {
+      border-color: var(--green-primary);
+      color: var(--green-primary);
+      background: var(--green-soft);
+    }
+
+    /* Mobile Drawer */
+    .mobile-drawer {
+      display: none;
+      position: fixed;
+      top: 68px;
+      left: 0;
+      right: 0;
+      background: #FFFFFF;
+      border-bottom: 2px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      padding: 20px 24px;
+      z-index: 999;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .mobile-drawer.active {
+      display: flex;
+    }
+    .mobile-drawer a {
+      text-decoration: none;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main);
+      padding: 8px 0;
+      border-bottom: 1px solid #F3F4F6;
+    }
+
+    /* ─── Hero Section ─── */
+    .hero {
+      background: linear-gradient(145deg, var(--green-darkest) 0%, var(--green-dark) 55%, var(--green-primary) 100%);
+      color: #FFFFFF;
+      padding: 80px 20px 100px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      border-bottom: 5px solid var(--gold-primary);
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      top: -160px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(200, 168, 78, 0.18) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-content {
+      width: min(1000px, 100%);
+      margin: 0 auto;
+      position: relative;
+      z-index: 2;
+    }
+    .bismillah-text {
+      font-family: 'Amiri', serif;
+      font-size: clamp(1.3rem, 3.5vw, 1.7rem);
+      color: var(--gold-light);
+      margin-bottom: 12px;
+      letter-spacing: 0.04em;
+    }
+    .arabic-hero-title {
+      font-family: 'Amiri', serif;
+      font-size: clamp(2.4rem, 6.5vw, 4.4rem);
+      color: #FFFFFF;
+      direction: rtl;
+      margin-bottom: 10px;
+      line-height: 1.15;
+      text-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+    }
+    .arabic-hero-title span {
+      color: #FDE68A;
+    }
+    .eng-hero-title {
+      font-size: clamp(1.6rem, 4vw, 2.7rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 16px;
+      color: #FFFFFF;
+    }
+    .hero-tagline {
+      font-size: clamp(1.02rem, 2.3vw, 1.25rem);
+      color: #D1FAE5;
+      max-width: 840px;
+      margin: 0 auto 34px;
+      line-height: 1.65;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: center;
+      margin-bottom: 36px;
+    }
+    .hero-actions .btn {
+      padding: 14px 28px;
+      font-size: 1.02rem;
+    }
+    .badge-bar {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+    .badge {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(200, 168, 78, 0.55);
+      padding: 7px 16px;
+      border-radius: 999px;
+      font-size: 0.86rem;
+      font-weight: 600;
+      color: #FFFFFF;
+      backdrop-filter: blur(6px);
+    }
+
+    /* ─── Metric Counter Bar ─── */
+    .metrics-section {
+      width: min(1160px, calc(100% - 32px));
+      margin: -45px auto 55px;
+      position: relative;
+      z-index: 10;
+    }
+    .metrics-grid {
+      background: var(--card-bg);
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      padding: 26px 20px;
+      box-shadow: var(--shadow-lg);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 16px;
+      text-align: center;
+    }
+    .metric-card {
+      padding: 10px;
+      border-right: 1px solid var(--border);
+    }
+    .metric-card:last-child {
+      border-right: none;
+    }
+    .metric-number {
+      font-size: clamp(1.8rem, 3.8vw, 2.3rem);
+      font-weight: 800;
+      color: var(--green-primary);
+      margin-bottom: 4px;
+      line-height: 1.1;
+    }
+    .metric-label {
+      font-size: 0.86rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    /* ─── Section Shared Styles ─── */
+    .section-wrap {
+      width: min(1160px, calc(100% - 32px));
+      margin: 0 auto 80px;
+    }
+    .section-header {
+      text-align: center;
+      max-width: 760px;
+      margin: 0 auto 46px;
+    }
+    .section-eyebrow {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: var(--gold-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 3.8vw, 2.4rem);
+      font-weight: 800;
+      color: var(--green-dark);
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      margin-bottom: 12px;
+    }
+    .section-desc {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ─── Live Sanad Quick Verification Widget ─── */
+    .sanad-lookup-card {
+      background: linear-gradient(135deg, #FFFFFF 0%, #FAF8F2 100%);
+      border: 2px solid var(--gold-primary);
+      border-radius: 24px;
+      padding: clamp(26px, 4vw, 38px);
+      box-shadow: var(--shadow-md);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 28px;
+      align-items: center;
+    }
+    @media (min-width: 860px) {
+      .sanad-lookup-card {
+        grid-template-columns: 1.1fr 0.9fr;
+      }
+    }
+    .lookup-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--gold-soft);
+      color: #92400E;
+      font-size: 0.82rem;
+      font-weight: 800;
+      padding: 5px 12px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+    .lookup-title {
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 800;
+      color: var(--green-dark);
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+    .lookup-box-form {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .lookup-input {
+      flex: 1;
+      min-width: 240px;
+      padding: 13px 16px;
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      font-family: monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      outline: none;
+    }
+    .lookup-input:focus {
+      border-color: var(--green-primary);
+    }
+    .lookup-badge-sample {
+      margin-top: 10px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .sample-link {
+      color: var(--green-primary);
+      text-decoration: underline;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .sanad-specimen {
+      background: #FFFFFF;
+      border: 2px double var(--gold-primary);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: var(--shadow-sm);
+      text-align: center;
+    }
+    .specimen-ar {
+      font-family: 'Amiri', serif;
+      font-size: 1.5rem;
+      color: var(--green-dark);
+      direction: rtl;
+    }
+    .specimen-seal {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--gold-soft);
+      border: 1.5px solid var(--gold-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 10px auto;
+      font-size: 20px;
+    }
+
+    /* ─── Multi-Tenant Global Madaris Directory Preview ─── */
+    .campus-filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 30px;
+    }
+    .filter-btn {
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: #FFFFFF;
+      color: var(--text-main);
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn.active, .filter-btn:hover {
+      background: var(--green-primary);
+      color: #FFFFFF;
+      border-color: var(--green-primary);
+    }
+    .campus-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+    .campus-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .campus-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+      border-color: #86EFAC;
+    }
+    .campus-card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .campus-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--green-soft);
+      border: 1px solid #A7F3D0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .campus-name-ar {
+      font-family: 'Amiri', serif;
+      font-size: 1.25rem;
+      color: var(--green-dark);
+      direction: rtl;
+      line-height: 1.2;
+    }
+    .campus-name-en {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.25;
+    }
+    .campus-meta {
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .campus-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 18px;
+      flex: 1;
+    }
+    .campus-badge {
+      background: var(--bg-cream);
+      border: 1px solid #E5E7EB;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--green-dark);
+    }
+    .campus-footer-info {
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    /* ─── 4-Step Mudir Onboarding Roadmap ─── */
+    .steps-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 22px;
+    }
+    .step-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px 22px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+    }
+    .step-num {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--gold-primary) 0%, #B89235 100%);
+      color: #042F24;
+      font-size: 1.2rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+      box-shadow: 0 4px 10px rgba(200, 168, 78, 0.3);
+    }
+    .step-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--green-dark);
+      margin-bottom: 8px;
+    }
+    .step-desc {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    /* ─── 3 Audience Pillars Grid ─── */
+    .pillar-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 26px;
+    }
+    .pillar-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 34px 28px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.25s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .pillar-card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-lg);
+      border-color: #A7F3D0;
+    }
+    .pillar-icon-box {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: var(--green-soft);
+      border: 1px solid #A7F3D0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      margin-bottom: 20px;
+    }
+    .pillar-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--green-dark);
+      margin-bottom: 10px;
+    }
+    .pillar-desc {
+      font-size: 0.94rem;
+      color: var(--text-muted);
+      margin-bottom: 22px;
+      flex: 1;
+    }
+    .feature-checklist {
+      list-style: none;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+    .feature-checklist li {
+      padding: 7px 0;
+      font-size: 0.9rem;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .feature-checklist li::before {
+      content: "✓";
+      color: var(--green-primary);
+      font-weight: 800;
+      background: #D1FAE5;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      flex-shrink: 0;
+    }
+
+    /* ─── Purdah Comparison Table & Live Classroom Deep Dive ─── */
+    .purdah-banner {
+      background: linear-gradient(135deg, #02261D 0%, #064E3B 100%);
+      color: #FFFFFF;
+      border-radius: 28px;
+      padding: clamp(32px, 5vw, 56px);
+      box-shadow: var(--shadow-lg);
+      border: 2px solid var(--gold-primary);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 36px;
+      align-items: center;
+    }
+    @media (min-width: 900px) {
+      .purdah-banner {
+        grid-template-columns: 1.2fr 0.8fr;
+      }
+    }
+    .purdah-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(200, 168, 78, 0.2);
+      border: 1px solid var(--gold-primary);
+      color: #FDE68A;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .purdah-heading {
+      font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+      font-weight: 800;
+      color: #FFFFFF;
+      line-height: 1.25;
+      margin-bottom: 16px;
+    }
+    .purdah-heading span {
+      color: #FDE68A;
+    }
+    .purdah-text {
+      font-size: 1.02rem;
+      color: #D1FAE5;
+      line-height: 1.65;
+      margin-bottom: 26px;
+    }
+    .purdah-card-box {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 20px;
+      padding: 24px;
+      backdrop-filter: blur(10px);
+    }
+    .purdah-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .purdah-item:last-child { margin-bottom: 0; }
+    .purdah-item-icon {
+      font-size: 1.3rem;
+      background: rgba(200, 168, 78, 0.25);
+      border-radius: 10px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .purdah-item h4 {
+      font-size: 1.02rem;
+      color: #FDE68A;
+      margin-bottom: 2px;
+    }
+    .purdah-item p {
+      font-size: 0.88rem;
+      color: #E2E8F0;
+      line-height: 1.45;
+    }
+
+    /* Comparison Table */
+    .compare-wrap {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow-x: auto;
+      margin-top: 36px;
+      box-shadow: var(--shadow-sm);
+    }
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.92rem;
+    }
+    .compare-table th, .compare-table td {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .compare-table th {
+      background: var(--bg-cream);
+      font-weight: 800;
+      color: var(--green-dark);
+    }
+    .compare-table tr:last-child td {
+      border-bottom: none;
+    }
+    .feature-tag-safe {
+      color: #065F46;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .feature-tag-risk {
+      color: #991B1B;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ─── Flagship Madrasa Showcase ─── */
+    .flagship-section {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: clamp(32px, 5vw, 56px);
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+    .flagship-inner {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+      align-items: center;
+    }
+    @media (min-width: 850px) {
+      .flagship-inner {
+        grid-template-columns: 1.3fr 0.9fr;
+      }
+    }
+    .flagship-tag {
+      display: inline-block;
+      background: #FEF3C7;
+      color: #92400E;
+      font-weight: 800;
+      font-size: 0.82rem;
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+      border: 1px solid #FDE68A;
+    }
+    .flagship-title-ar {
+      font-family: 'Amiri', serif;
+      font-size: 2.2rem;
+      color: var(--green-primary);
+      margin-bottom: 6px;
+      direction: rtl;
+    }
+    .flagship-title {
+      font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+      font-weight: 800;
+      color: var(--green-dark);
+      margin-bottom: 16px;
+    }
+    .flagship-desc {
+      font-size: 1rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+      margin-bottom: 24px;
+    }
+    .flagship-stats {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .flagship-stat-item {
+      border-left: 3px solid var(--gold-primary);
+      padding-left: 12px;
+    }
+    .flagship-stat-num {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--green-primary);
+    }
+    .flagship-stat-lbl {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .flagship-box-art {
+      background: linear-gradient(135deg, var(--green-soft) 0%, #DCFCE7 100%);
+      border: 2px dashed #86EFAC;
+      border-radius: 20px;
+      padding: 30px;
+      text-align: center;
+    }
+    .flagship-quote {
+      font-family: 'Amiri', serif;
+      font-size: 1.35rem;
+      color: var(--green-dark);
+      line-height: 1.7;
+      margin-bottom: 12px;
+      direction: rtl;
+    }
+    .flagship-ref {
+      font-size: 0.85rem;
+      color: var(--green-primary);
+      font-weight: 700;
+    }
+
+    /* ─── FAQ Accordion ─── */
+    .faq-list {
+      max-width: 840px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .faq-item {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px 26px;
+      box-shadow: var(--shadow-sm);
+    }
+    .faq-question {
+      font-size: 1.12rem;
+      font-weight: 700;
+      color: var(--green-dark);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .faq-question::before {
+      content: "❓";
+      font-size: 1rem;
+    }
+    .faq-answer {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      padding-left: 28px;
+    }
+
+    /* ─── Ready to Launch CTA Banner ─── */
+    .cta-banner {
+      background: linear-gradient(135deg, var(--green-darkest) 0%, var(--green-dark) 100%);
+      border-radius: 28px;
+      color: #FFFFFF;
+      padding: 60px 24px;
+      text-align: center;
+      border: 2px solid var(--gold-primary);
+      box-shadow: var(--shadow-lg);
+      position: relative;
+    }
+    .cta-banner h2 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 800;
+      margin-bottom: 14px;
+      color: #FFFFFF;
+    }
+    .cta-banner h2 span { color: #FDE68A; }
+    .cta-banner p {
+      font-size: 1.1rem;
+      color: #D1FAE5;
+      max-width: 680px;
+      margin: 0 auto 32px;
+    }
+    .cta-banner-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: center;
+    }
+
+    /* ─── Footer ─── */
+    footer {
+      background: #FFFFFF;
+      border-top: 1px solid var(--border);
+      padding: 55px 20px 40px;
+      font-size: 0.92rem;
+      color: var(--text-muted);
+    }
+    .footer-container {
+      width: min(1160px, 100%);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .footer-brand span {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--green-dark);
+    }
+    .footer-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+    .footer-nav a {
+      color: var(--text-main);
+      text-decoration: none;
+      font-weight: 600;
+      transition: color 0.15s;
+    }
+    .footer-nav a:hover {
+      color: var(--green-primary);
+      text-decoration: underline;
+    }
+    .footer-legal-copy {
+      font-size: 0.85rem;
+      color: var(--text-light);
+      margin-top: 12px;
+    }
+    .app-id-tag {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: #9CA3AF;
+      font-family: monospace;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 900px) {
+      .navbar { padding: 12px 18px; }
+      .nav-links { display: none; }
+      .mobile-menu-btn { display: block; }
+      .hero { padding: 60px 16px 80px; }
+      .metric-card { border-right: none; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+      .metric-card:last-child { border-bottom: none; }
+    }
+
+    /* ─── Why Suffah Comparison Table ─── */
+    .comparison-container {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      overflow-x: auto;
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--border);
+    }
+    .comparison-table {
+      width: 100%;
+      min-width: 800px;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.94rem;
+    }
+    .comparison-table th {
+      padding: 22px 20px;
+      font-weight: 800;
+      border-bottom: 2px solid var(--border);
+      background: #F9FAFB;
+    }
+    .comparison-table th.col-feature { width: 25%; color: var(--text-main); font-size: 1rem; }
+    .comparison-table th.col-free { width: 23%; color: #DC2626; background: #FEF2F2; text-align: center; }
+    .comparison-table th.col-zoom { width: 23%; color: #D97706; background: #FFFBEB; text-align: center; }
+    .comparison-table th.col-suffah { width: 29%; color: var(--green-dark); background: var(--green-soft); border-left: 2.5px solid var(--green-primary); text-align: center; font-size: 1.05rem; }
+    .comparison-table td {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      line-height: 1.5;
+    }
+    .comparison-table tr:hover td {
+      background: #FAFAFA;
+    }
+    .comparison-table tr:last-child td { border-bottom: none; }
+    .comparison-table td.col-suffah {
+      background: rgba(236, 253, 245, 0.45);
+      border-left: 2.5px solid var(--green-primary);
+      font-weight: 500;
+    }
+    .badge-danger {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #B91C1C;
+      font-weight: 700;
+      font-size: 0.88rem;
+      margin-bottom: 4px;
+    }
+    .badge-warn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #B45309;
+      font-weight: 700;
+      font-size: 0.88rem;
+      margin-bottom: 4px;
+    }
+    .badge-success {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--green-dark);
+      font-weight: 800;
+      font-size: 0.94rem;
+      margin-bottom: 4px;
+    }
+    .comp-detail {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* ─── Pricing Section ─── */
+    .billing-toggle-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 38px;
+    }
+    .billing-toggle-btn {
+      padding: 9px 22px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: #FFFFFF;
+      font-weight: 700;
+      font-size: 0.92rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--text-muted);
+    }
+    .billing-toggle-btn.active {
+      background: var(--green-dark);
+      color: #FFFFFF;
+      border-color: var(--green-dark);
+      box-shadow: 0 4px 14px rgba(4, 47, 36, 0.22);
+    }
+    .save-badge {
+      background: #FEF3C7;
+      color: #92400E;
+      font-size: 0.76rem;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1px solid #FCD34D;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 22px;
+      width: min(1200px, 100%);
+      margin: 0 auto;
+    }
+    @media (max-width: 1080px) {
+      .pricing-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .pricing-grid { grid-template-columns: 1fr; }
+    }
+
+    .pricing-card {
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      border: 1.5px solid var(--border);
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .pricing-card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-lg);
+    }
+    .pricing-card.popular {
+      border: 2.5px solid var(--gold-primary);
+      box-shadow: 0 16px 36px rgba(200, 168, 78, 0.22);
+      background: linear-gradient(180deg, #FFFFFF 0%, #FAF8F2 100%);
+    }
+    .popular-ribbon {
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, var(--gold-primary) 0%, #D4AF37 100%);
+      color: #042F24;
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 4px 16px;
+      border-radius: 999px;
+      box-shadow: 0 4px 10px rgba(200, 168, 78, 0.4);
+      white-space: nowrap;
+    }
+    .plan-name {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--green-dark);
+      margin-bottom: 6px;
+    }
+    .plan-desc {
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      min-height: 42px;
+      margin-bottom: 18px;
+      line-height: 1.45;
+    }
+    .plan-price-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+    .plan-currency {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--green-dark);
+    }
+    .plan-amount {
+      font-size: 2.35rem;
+      font-weight: 800;
+      color: var(--green-dark);
+      line-height: 1;
+    }
+    .plan-cycle {
+      font-size: 0.88rem;
+      color: var(--text-light);
+      font-weight: 600;
+    }
+    .plan-effective {
+      font-size: 0.8rem;
+      color: var(--green-accent);
+      font-weight: 700;
+      margin-bottom: 20px;
+      min-height: 18px;
+    }
+    .plan-features {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 0.88rem;
+      color: var(--text-main);
+      flex-grow: 1;
+    }
+    .plan-features li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      line-height: 1.4;
+    }
+    .plan-features li .check-icon {
+      color: var(--green-accent);
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      margin-top: -1px;
+    }
+    .plan-cta {
+      width: 100%;
+      text-align: center;
+      padding: 13px 18px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    /* ─── ROI Calculator Section ─── */
+    .calculator-card {
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+      padding: 38px 36px;
+      width: min(980px, 100%);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 36px;
+      align-items: center;
+    }
+    @media (max-width: 820px) {
+      .calculator-card { grid-template-columns: 1fr; padding: 26px 20px; }
+    }
+    .calc-slider-group {
+      margin-bottom: 24px;
+    }
+    .calc-slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .calc-slider-label {
+      font-weight: 700;
+      color: var(--text-main);
+      font-size: 0.95rem;
+    }
+    .calc-slider-val {
+      font-weight: 800;
+      color: var(--green-primary);
+      font-size: 1.15rem;
+    }
+    .calc-slider {
+      width: 100%;
+      height: 8px;
+      border-radius: 5px;
+      background: #E5E7EB;
+      outline: none;
+      accent-color: var(--green-primary);
+      cursor: pointer;
+    }
+    .calc-results-box {
+      background: linear-gradient(135deg, var(--green-darkest) 0%, var(--green-dark) 100%);
+      border-radius: var(--radius-md);
+      padding: 28px 24px;
+      color: #FFFFFF;
+      border: 1.5px solid var(--gold-primary);
+      box-shadow: var(--shadow-md);
+    }
+    .calc-result-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      font-size: 0.92rem;
+      color: #D1FAE5;
+    }
+    .calc-result-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.2);
+      margin: 16px 0;
+    }
+    .calc-net-title {
+      font-size: 0.88rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #FDE68A;
+      font-weight: 700;
+    }
+    .calc-net-amount {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: #FDE68A;
+      margin: 4px 0 10px;
+      line-height: 1.1;
+    }
+    .calc-net-sub {
+      font-size: 0.82rem;
+      color: #A7F3D0;
+      line-height: 1.45;
+    }
+
+    /* ─── Demo / Madrasa Registration Modal ─── */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(4, 47, 36, 0.72);
+      backdrop-filter: blur(6px);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-content-wrap {
+      background: #FFFFFF;
+      width: min(540px, 100%);
+      max-height: 90vh;
+      overflow-y: auto;
+      border-radius: var(--radius-lg);
+      padding: 34px 30px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+      position: relative;
+      border: 1.5px solid var(--gold-primary);
+      animation: modalFadeIn 0.22s ease-out;
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .modal-close-btn {
+      position: absolute;
+      top: 18px;
+      right: 20px;
+      background: transparent;
+      border: none;
+      font-size: 26px;
+      cursor: pointer;
+      color: var(--text-light);
+      line-height: 1;
+    }
+    .modal-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--green-dark);
+      margin-bottom: 6px;
+    }
+    .modal-sub {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 22px;
+      line-height: 1.45;
+    }
+    .form-field {
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    .form-field label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+    .form-field input, .form-field select, .form-field textarea {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.92rem;
+      outline: none;
+      transition: border-color 0.2s;
+      background: #FFFFFF;
+    }
+    .form-field input:focus, .form-field select:focus, .form-field textarea:focus {
+      border-color: var(--green-primary);
+      box-shadow: 0 0 0 3px rgba(0, 95, 70, 0.12);
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Top Sticky Navigation -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="/" class="brand-group">
+        <div class="brand-emblem">🕌</div>
+        <div class="brand-text-wrap">
+          <span class="brand-title">Suffah • صُـفَّـة</span>
+          <span class="brand-sub">World Digital Madrasa Portal</span>
+        </div>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#why-suffah">Why Suffah?</a></li>
+        <li><a href="#pricing">Pricing Plans</a></li>
+        <li><a href="#roi-calc">ROI Calculator</a></li>
+        <li><a href="#mudir-guide">How It Works</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#purdah">Purdah Standard</a></li>
+        <li><a href="#directory">Campuses</a></li>
+        <li><a href="#sanad-check">Verify Sanad</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+
+      <div class="nav-cta">
+        <button onclick="openDemoModal()" class="btn btn-gold" style="border:none; cursor:pointer;">🏛️ Register Madrasa</button>
+        <a href="#download" class="btn btn-outline" style="border-color:var(--green-primary); color:var(--green-primary);">📱 Get App</a>
+        <button id="menu-toggle" class="mobile-menu-btn" aria-label="Open Navigation Menu">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mobile Drawer Menu -->
+  <nav id="mobile-drawer" class="mobile-drawer">
+    <a href="#why-suffah" onclick="closeDrawer()">⚔️ Why Free Tools Fail vs Suffah</a>
+    <a href="#pricing" onclick="closeDrawer()">💰 Affordable Madrasa Plans</a>
+    <a href="#roi-calc" onclick="closeDrawer()">🧮 Fee Recovery Calculator</a>
+    <a href="#mudir-guide" onclick="closeDrawer()">🚀 How to Launch in 3 Mins</a>
+    <a href="#features" onclick="closeDrawer()">⚡ Features &amp; Tools</a>
+    <a href="#purdah" onclick="closeDrawer()">🛡️ Strict Purdah Standards</a>
+    <a href="#directory" onclick="closeDrawer()">🏛️ Global Madrasa Directory</a>
+    <a href="#sanad-check" onclick="closeDrawer()">📜 Verify Sanad Certificate</a>
+    <a href="#faq" onclick="closeDrawer()">❓ Frequently Asked Questions</a>
+    <a href="javascript:void(0)" onclick="closeDrawer(); openDemoModal();" style="color:var(--gold-primary); font-weight:800;">🏛️ Register Your Madrasa</a>
+    <a href="#download" onclick="closeDrawer()" style="color:var(--green-primary); font-weight:800;">📥 Download APK</a>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="bismillah-text">بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْم</div>
+      <div class="arabic-hero-title">صُـفَّـة • <span>بوابة المدارس الإسلامية</span></div>
+      <h1 class="eng-hero-title">The Complete Cloud Operating System for Islamic Seminaries</h1>
+      <p class="hero-tagline">
+        Suffah empowers every Madrasa, Darul Uloom, and Maktab worldwide with an independent private digital campus — featuring strict Purdah-compliant live audio classrooms, direct institutional UPI fee routing, and tamper-proof QR-verified digital Sanad diplomas.
+      </p>
+
+      <div class="hero-actions" id="download">
+        <a href="./suffah-release-v50.apk" class="btn btn-gold" download title="Direct Android APK Download (Build 50)">
+          📥 Download Android App (APK v1.0.13 • 218 MB)
+        </a>
+        <a href="#mudir-guide" class="btn btn-outline" style="border-color:#FDE68A; color:#FFFFFF; background:rgba(255,255,255,0.12);">
+          🏛️ Launch Your Madrasa in 3 Mins
+        </a>
+        <a href="#sanad-check" class="btn btn-outline" style="border-color:#A7F3D0; color:#FFFFFF; background:rgba(255,255,255,0.08);">
+          📜 Verify a Sanad
+        </a>
+      </div>
+
+      <div class="badge-bar">
+        <span class="badge">🕌 Multi-Tenant Digital Madrasa SaaS</span>
+        <span class="badge">🎙️ 100% Zero-Camera Purdah Audio Classrooms</span>
+        <span class="badge">💳 Direct Institutional UPI Fee Routing</span>
+        <span class="badge">📜 QR-Verified Digital Sanad Certification</span>
+        <span class="badge">🔒 Bank-Grade Student & Tenant Data Isolation</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Metric Counter Bar -->
+  <div class="metrics-section">
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-number">100%</div>
+        <div class="metric-label">Strict Purdah & Zero-Camera Audio Classrooms</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-number">Direct UPI</div>
+        <div class="metric-label">0% Commission — Fees Route Straight to Madrasa Bank</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-number">&lt;200ms</div>
+        <div class="metric-label">Crystal-Clear Voice Dars via Agora SD-RTN</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-number">Instant QR</div>
+        <div class="metric-label">Public Sanad Verification & Digital Seals</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Head-to-Head Comparison: Why WhatsApp / Zoom Fail Madaris vs Suffah -->
+  <section class="section-wrap" id="why-suffah">
+    <div class="section-header">
+      <div class="section-eyebrow">The Real Comparison</div>
+      <h2 class="section-title">Why Free Tools (WhatsApp &amp; Zoom) Cost Your Madrasa Thousands</h2>
+      <p class="section-desc">
+        Many madaris try running online classes using free WhatsApp groups or 40-minute Zoom links. Here is why switching to Suffah immediately elevates your student discipline, protects purdah modesty, and increases fee recovery by 30%+.
+      </p>
+    </div>
+
+    <div class="comparison-container">
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th class="col-feature">Key Requirement</th>
+            <th class="col-free">❌ WhatsApp Groups</th>
+            <th class="col-zoom">⚠️ Free Zoom / Google Meet</th>
+            <th class="col-suffah">🕌 Suffah Digital Madrasa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <strong>Purdah &amp; Modesty Protection</strong><br>
+              <span class="comp-detail">Zero-risk female &amp; children modesty sanctuary</span>
+            </td>
+            <td>
+              <span class="badge-danger">⚠️ High Modesty Risk</span><br>
+              <span class="comp-detail">Student phone numbers &amp; profile pictures are exposed to all group members. Anyone can direct message.</span>
+            </td>
+            <td>
+              <span class="badge-warn">⚠️ Accidental Camera Leaks</span><br>
+              <span class="comp-detail">One wrong tap turns on webcams. Zero Purdah guarantee; not built for Islamic modesty.</span>
+            </td>
+            <td class="col-suffah">
+              <span class="badge-success">✅ 100% Guaranteed Purdah</span><br>
+              <span class="comp-detail">Camera permissions permanently removed at code level. No camera exists in the app. Pure audio sanctuary with strict identity isolation.</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td>
+              <strong>Class Duration &amp; Stability</strong><br>
+              <span class="comp-detail">Continuous uninterrupted Islamic lectures</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ No Live Interactive Dars</span><br>
+              <span class="comp-detail">Only disorganized 1-minute voice notes. Impossible to conduct a live interactive group recitation.</span>
+            </td>
+            <td>
+              <span class="badge-warn">⚠️ 40-Minute Hard Cutoff</span><br>
+              <span class="comp-detail">Call drops automatically every 40 mins. Ustaza and students waste 10 minutes reconnecting.</span>
+            </td>
+            <td class="col-suffah">
+              <span class="badge-success">✅ Unlimited HD Voice Streaming</span><br>
+              <span class="comp-detail">Zero time limits. Continuous, crystal-clear 128 kbps low-latency audio engineered on global SD-RTN infrastructure.</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td>
+              <strong>Live Quran &amp; Tajweed Synchronization</strong><br>
+              <span class="comp-detail">Teaching Tajweed with visual Mushaf alignment</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ Blind Recitation</span><br>
+              <span class="comp-detail">Teacher says "page 42, 5th ayah" and half the students are looking at the wrong line.</span>
+            </td>
+            <td>
+              <span class="badge-warn">⚠️ Heavy Screen Lag</span><br>
+              <span class="comp-detail">Screen sharing is pixelated on mobile data, consumes 500MB+ per hour, and has high delay.</span>
+            </td>
+            <td class="col-suffah">
+              <span class="badge-success">✅ Real-Time Synchronized Mushaf</span><br>
+              <span class="comp-detail">Teacher turns page or highlights Makharij with digital Tajweed pen &mdash; all student screens sync instantly in &lt;100ms.</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td>
+              <strong>Hifz Sabaq, Sabqi &amp; Manzil Ledger</strong><br>
+              <span class="comp-detail">Daily memorization tracking and accountability</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ Lost in Chat Chaos</span><br>
+              <span class="comp-detail">50 voice clips bury each other. No record of what student read yesterday or last month.</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ Zero Academic Ledger</span><br>
+              <span class="comp-detail">Meeting ends and all data vanishes. Teacher forced to manually write in paper diaries.</span>
+            </td>
+            <td class="col-suffah">
+              <span class="badge-success">✅ 1-Tap Daily Hifz Register</span><br>
+              <span class="comp-detail">Teacher logs Sabaq lines, Sabqi juz, and Manzil rating in 5 seconds. Parents receive live progress alerts on their phone.</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td>
+              <strong>Tuition Fee Collection &amp; Badges</strong><br>
+              <span class="comp-detail">Financial sustainability &amp; cashflow</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ 30%+ Unpaid Fee Leakage</span><br>
+              <span class="comp-detail">Mudir feels awkward asking repeatedly. Parents forget, causing massive monthly losses for the madrasa.</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ No Fee Infrastructure</span><br>
+              <span class="comp-detail">No payment routing or tracking whatsoever.</span>
+            </td>
+            <td class="col-suffah">
+              <span class="badge-success">✅ Automated Reminders + Direct UPI</span><br>
+              <span class="comp-detail">App displays discreet Fee Due badges. Dynamic UPI link pays 100% straight into Madrasa's own bank account with 0% commission!</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td>
+              <strong>Digital Sanad &amp; Annual Results</strong><br>
+              <span class="comp-detail">Credential credibility &amp; graduation</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ Easily Forged Images</span><br>
+              <span class="comp-detail">No verification. Certificates can be faked or tampered by anyone.</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ Not Available</span><br>
+              <span class="comp-detail">No examination or certification system.</span>
+            </td>
+            <td class="col-suffah">
+              <span class="badge-success">✅ Cryptographic QR-Verified Sanad</span><br>
+              <span class="comp-detail">1-click issuance of official Sanad diplomas and result cards. Public verification portal with immutable serial records.</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td>
+              <strong>Institutional Branding &amp; Dignity</strong><br>
+              <span class="comp-detail">Madrasa's prestige &amp; permanent heritage</span>
+            </td>
+            <td>
+              <span class="badge-danger">❌ Informal &amp; Cluttered</span><br>
+              <span class="comp-detail">Just another chat group amidst family memes and social notifications.</span>
+            </td>
+            <td>
+              <span class="badge-warn">⚠️ Third-Party Commercial Tool</span><br>
+              <span class="comp-detail">Shows corporate branding, upselling popups, and non-Islamic meeting UI.</span>
+            </td>
+            <td class="col-suffah">
+              <span class="badge-success">✅ Your Own Dedicated Digital Campus</span><br>
+              <span class="comp-detail">Custom madrasa logo, independent student directory, Islamic notifications (Taharat &amp; Adhan), and Mudir control panel.</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Interactive ROI & Savings Calculator -->
+  <section class="section-wrap" id="roi-calc">
+    <div class="section-header">
+      <div class="section-eyebrow">Calculated Barakah</div>
+      <h2 class="section-title">See How Suffah Pays for Itself in Month 1</h2>
+      <p class="section-desc">
+        Madaris switching from WhatsApp/manual registers recover an average of 20% to 35% in unpaid tuition fees within 30 days &mdash; more than covering the platform subscription!
+      </p>
+    </div>
+
+    <div class="calculator-card">
+      <div>
+        <div class="calc-slider-group">
+          <div class="calc-slider-header">
+            <span class="calc-slider-label">Total Enrolled Students:</span>
+            <span class="calc-slider-val" id="calc-student-label">100 Students</span>
+          </div>
+          <input
+            type="range"
+            min="20"
+            max="1000"
+            step="10"
+            value="100"
+            class="calc-slider"
+            id="calc-students"
+            oninput="updateRoiCalc()"
+          />
+        </div>
+
+        <div class="calc-slider-group">
+          <div class="calc-slider-header">
+            <span class="calc-slider-label">Average Monthly Fee per Student:</span>
+            <span class="calc-slider-val" id="calc-fee-label">₹800 / mo</span>
+          </div>
+          <input
+            type="range"
+            min="200"
+            max="3000"
+            step="50"
+            value="800"
+            class="calc-slider"
+            id="calc-fee"
+            oninput="updateRoiCalc()"
+          />
+        </div>
+
+        <p style="font-size:0.86rem; color:var(--text-muted); line-height:1.5;">
+          💡 <em>Did you know?</em> Traditional madaris lose ~20% of their annual tuition revenue because parents forget to pay informal WhatsApp requests. Suffah's in-app fee badges and 1-tap direct UPI reminders recover this lost revenue seamlessly.
+        </p>
+      </div>
+
+      <div class="calc-results-box">
+        <div class="calc-result-row">
+          <span>Monthly Tuition Volume:</span>
+          <strong id="calc-monthly-volume">₹80,000</strong>
+        </div>
+        <div class="calc-result-row">
+          <span>Fee Lost in WhatsApp Leakage (~20%):</span>
+          <strong id="calc-lost-leakage" style="color:#FCA5A5;">- ₹16,000</strong>
+        </div>
+        <div class="calc-result-row">
+          <span>Suffah Software Investment:</span>
+          <strong id="calc-suffah-cost">- ₹799</strong>
+        </div>
+        
+        <div class="calc-result-divider"></div>
+
+        <div class="calc-net-title">Net Monthly Madrasa Surplus:</div>
+        <div class="calc-net-amount" id="calc-net-recovered">+ ₹15,201 / mo</div>
+        <p class="calc-net-sub" id="calc-net-subtext">
+          Just <strong>1 single recovered student fee</strong> pays for your entire Suffah subscription. Everything else is pure financial stability for your asatizah and madrasa!
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Madrasa Transparent Pricing Plans -->
+  <section class="section-wrap" id="pricing">
+    <div class="section-header">
+      <div class="section-eyebrow">Affordable &amp; Transparent Plans</div>
+      <h2 class="section-title">Built with Khidmat &amp; Barakah at Heart</h2>
+      <p class="section-desc">
+        Zero hidden fees. Zero per-student transaction cuts. Direct institutional UPI routing means 100% of your tuition fees go straight into your madrasa's bank account.
+      </p>
+    </div>
+
+    <!-- Monthly / Annual Toggle -->
+    <div class="billing-toggle-container">
+      <button class="billing-toggle-btn active" id="btn-billing-monthly" onclick="toggleBilling('monthly')">
+        Monthly Billing
+      </button>
+      <button class="billing-toggle-btn" id="btn-billing-annual" onclick="toggleBilling('annual')">
+        Annual Billing
+      </button>
+      <span class="save-badge">🎁 2 Months Free (Save 20%)</span>
+    </div>
+
+    <div class="pricing-grid">
+      <!-- Plan 0: Barakah Free -->
+      <div class="pricing-card">
+        <div class="plan-name">Barakah Free</div>
+        <p class="plan-desc">For small village maktabs, independent ustazas &amp; testing the platform.</p>
+        <div class="plan-price-wrap">
+          <span class="plan-currency">₹</span>
+          <span class="plan-amount">0</span>
+          <span class="plan-cycle">/ forever</span>
+        </div>
+        <div class="plan-effective">100% Free Forever &bull; No Card Required</div>
+        <ul class="plan-features">
+          <li><span class="check-icon">✓</span> Up to <strong>25 Students</strong></li>
+          <li><span class="check-icon">✓</span> <strong>1 Teacher / Ustaza</strong></li>
+          <li><span class="check-icon">✓</span> Unlimited Live Purdah Audio Dars</li>
+          <li><span class="check-icon">✓</span> Live Mushaf Page Synchronization</li>
+          <li><span class="check-icon">✓</span> Basic Attendance Tracking</li>
+          <li><span class="check-icon">✓</span> Direct Institutional UPI (0% Cut)</li>
+          <li><span class="check-icon">✓</span> Community Helpdesk</li>
+        </ul>
+        <button onclick="openDemoModal('Barakah Free (₹0)')" class="plan-cta btn-outline" style="border-color:var(--green-primary); color:var(--green-primary);">
+          Start Free Forever
+        </button>
+      </div>
+
+      <!-- Plan 1: Maktab Starter -->
+      <div class="pricing-card">
+        <div class="plan-name">Maktab Starter</div>
+        <p class="plan-desc">For neighborhood Quran academies &amp; growing maktabs.</p>
+        <div class="plan-price-wrap">
+          <span class="plan-currency">₹</span>
+          <span class="plan-amount" id="price-maktab">799</span>
+          <span class="plan-cycle" id="cycle-maktab">/ month</span>
+        </div>
+        <div class="plan-effective" id="eff-maktab">Just ~₹8 per student / month (less than ₹27/day!)</div>
+        <ul class="plan-features">
+          <li><span class="check-icon">✓</span> Up to <strong>100 Students</strong></li>
+          <li><span class="check-icon">✓</span> Up to <strong>5 Teachers</strong></li>
+          <li><span class="check-icon">✓</span> Everything in Barakah Free +</li>
+          <li><span class="check-icon">✓</span> <strong>Daily Hifz Sabaq &amp; Sabqi Ledger</strong></li>
+          <li><span class="check-icon">✓</span> <strong>Automated Fee Due Reminders</strong></li>
+          <li><span class="check-icon">✓</span> Tajweed Pen &amp; Makharij Pointer</li>
+          <li><span class="check-icon">✓</span> Monthly PDF Attendance Sheets</li>
+          <li><span class="check-icon">✓</span> WhatsApp Priority Support</li>
+        </ul>
+        <button onclick="openDemoModal('Maktab Starter (₹799)')" class="plan-cta btn-primary">
+          Choose Maktab Plan
+        </button>
+      </div>
+
+      <!-- Plan 2: Jamiya Standard (Popular) -->
+      <div class="pricing-card popular">
+        <div class="popular-ribbon">⭐ Most Popular for Madaris</div>
+        <div class="plan-name">Jamiya Standard</div>
+        <p class="plan-desc">For established Islamic seminaries, banat madaris &amp; Darul Ulooms.</p>
+        <div class="plan-price-wrap">
+          <span class="plan-currency">₹</span>
+          <span class="plan-amount" id="price-jamiya">1,999</span>
+          <span class="plan-cycle" id="cycle-jamiya">/ month</span>
+        </div>
+        <div class="plan-effective" id="eff-jamiya">Pays for itself with 2 recovered student fees!</div>
+        <ul class="plan-features">
+          <li><span class="check-icon">✓</span> Up to <strong>350 Students</strong></li>
+          <li><span class="check-icon">✓</span> Up to <strong>15 Teachers</strong></li>
+          <li><span class="check-icon">✓</span> Everything in Maktab Starter +</li>
+          <li><span class="check-icon">✓</span> <strong>Cryptographic QR Digital Sanads</strong></li>
+          <li><span class="check-icon">✓</span> <strong>Annual Result Cards Generator</strong></li>
+          <li><span class="check-icon">✓</span> 1-Click Curriculum Template Import</li>
+          <li><span class="check-icon">✓</span> Mudir Administrative Master Panel</li>
+          <li><span class="check-icon">✓</span> Dedicated Phone &amp; Onboarding Guide</li>
+        </ul>
+        <button onclick="openDemoModal('Jamiya Standard (₹1,999)')" class="plan-cta btn-gold">
+          Launch Jamiya Campus
+        </button>
+      </div>
+
+      <!-- Plan 3: Darul Uloom Enterprise -->
+      <div class="pricing-card">
+        <div class="plan-name">Darul Uloom Enterprise</div>
+        <p class="plan-desc">For multi-branch institutions, central boards &amp; global virtual academies.</p>
+        <div class="plan-price-wrap">
+          <span class="plan-currency">₹</span>
+          <span class="plan-amount" id="price-darululoom">3,999</span>
+          <span class="plan-cycle" id="cycle-darululoom">/ month</span>
+        </div>
+        <div class="plan-effective" id="eff-darululoom">Unlimited scale with custom institutional branding</div>
+        <ul class="plan-features">
+          <li><span class="check-icon">✓</span> <strong>Unlimited Students</strong></li>
+          <li><span class="check-icon">✓</span> <strong>Unlimited Teachers &amp; Mudirs</strong></li>
+          <li><span class="check-icon">✓</span> Everything in Jamiya Standard +</li>
+          <li><span class="check-icon">✓</span> <strong>Multi-Branch (Markaz + Shaakhein)</strong></li>
+          <li><span class="check-icon">✓</span> Custom Madrasa Branding &amp; Watermarks</li>
+          <li><span class="check-icon">✓</span> Bulk Student Excel/CSV Import</li>
+          <li><span class="check-icon">✓</span> Custom Grading &amp; Syllabus Templates</li>
+          <li><span class="check-icon">✓</span> Dedicated 24/7 Priority Manager</li>
+        </ul>
+        <button onclick="openDemoModal('Darul Uloom Enterprise (₹3,999)')" class="plan-cta btn-outline" style="border-color:var(--green-dark); color:var(--green-dark);">
+          Contact for Enterprise
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Quick Sanad Verification Box -->
+  <section class="section-wrap" id="sanad-check">
+    <div class="sanad-lookup-card">
+      <div>
+        <span class="lookup-tag">📜 Instant Certificate Verification</span>
+        <h2 class="lookup-title">Verify Official Sanad & Ijazah Credentials</h2>
+        <p style="color:var(--text-muted); font-size:0.96rem; line-height:1.6;">
+          Every certificate issued through the Suffah ecosystem is cryptographically sealed and permanently verifiable. Employers, parents, and academic boards can verify authentic graduation records in real-time.
+        </p>
+
+        <form class="lookup-box-form" onsubmit="handleQuickLookup(event)">
+          <input
+            id="quick-cert-input"
+            class="lookup-input"
+            type="text"
+            placeholder="Enter Serial (e.g. SANAD-2026-...)"
+            required
+            autocomplete="off"
+          />
+          <button type="submit" class="btn btn-primary">🔍 Check Authenticity</button>
+        </form>
+
+        <p class="lookup-badge-sample">
+          Try a demo verification: <span class="sample-link" onclick="fillSampleCert()">SANAD-DEMO-2026</span> or <a href="verify-sanad.html" style="color:var(--green-primary); font-weight:700;">open full verification portal &rarr;</a>
+        </p>
+      </div>
+
+      <div class="sanad-specimen">
+        <div class="specimen-ar">سَنَدُ التَّخَرُّجِ وَالإِجَازَةِ</div>
+        <div class="specimen-seal">★</div>
+        <div style="font-weight:800; color:var(--green-dark); font-size:1.05rem;">Authenticated Digital Sanad</div>
+        <p style="font-size:0.82rem; color:var(--text-muted); margin-top:4px;">
+          Includes student distinction, academic board seal, Hijri completion date, and tamper-proof verification URL.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Multi-Tenant Global Madrasa Directory Preview -->
+  <section class="section-wrap" id="directory">
+    <div class="section-header">
+      <div class="section-eyebrow">Universal Islamic SaaS</div>
+      <h2 class="section-title">One Platform. Hundreds of Independent Campuses.</h2>
+      <p class="section-desc">
+        Suffah is not limited to a single institution. Any Madrasa worldwide gets their own customized digital campus with dedicated student logins, direct UPI payments, and independent curriculum management.
+      </p>
+    </div>
+
+    <div class="campus-filter-bar">
+      <button class="filter-btn active" onclick="filterCampuses('all', this)">All Institutions</button>
+      <button class="filter-btn" onclick="filterCampuses('girls', this)">Girls Seminaries (بنات)</button>
+      <button class="filter-btn" onclick="filterCampuses('dars', this)">Dars-e-Nizami (Aalima)</button>
+      <button class="filter-btn" onclick="filterCampuses('hifz', this)">Hifz & Tajweed Academies</button>
+      <button class="filter-btn" onclick="filterCampuses('global', this)">International Online</button>
+    </div>
+
+    <div class="campus-grid" id="campus-list">
+      <!-- Campus 1: Flagship MSLB -->
+      <div class="campus-card" data-category="girls dars hifz">
+        <div class="campus-card-header">
+          <div class="campus-icon">🕌</div>
+          <div>
+            <div class="campus-name-ar">مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</div>
+            <div class="campus-name-en">Madrasatu-s-Salikat Lil Banat</div>
+          </div>
+        </div>
+        <div class="campus-meta">📍 Founding Flagship Campus • Global Talibaat</div>
+        <div class="campus-badges">
+          <span class="campus-badge">5-Year Aalima Course</span>
+          <span class="campus-badge">Hifz-ul-Quran</span>
+          <span class="campus-badge">Purdah Audio Dars</span>
+          <span class="campus-badge">500+ Talibaat</span>
+        </div>
+        <div class="campus-footer-info">
+          <span style="color:var(--green-primary); font-weight:800;">✓ Active Dedicated Campus</span>
+          <span>Org ID: mslb-main</span>
+        </div>
+      </div>
+
+      <!-- Campus 2: Jamia Noor -->
+      <div class="campus-card" data-category="dars">
+        <div class="campus-card-header">
+          <div class="campus-icon">🏛️</div>
+          <div>
+            <div class="campus-name-ar">جَامِعَةُ النُّورِ الإِسْلَامِيَّة</div>
+            <div class="campus-name-en">Jamia Noor Islamic Seminary</div>
+          </div>
+        </div>
+        <div class="campus-meta">📍 Lucknow / Hyderabad • Classical Studies</div>
+        <div class="campus-badges">
+          <span class="campus-badge">Dars-e-Nizami</span>
+          <span class="campus-badge">Arabic Grammar & Nahw</span>
+          <span class="campus-badge">Fiqh & Hadith</span>
+        </div>
+        <div class="campus-footer-info">
+          <span style="color:var(--green-primary); font-weight:800;">✓ Direct UPI Verified</span>
+          <span>Org ID: jamia-noor</span>
+        </div>
+      </div>
+
+      <!-- Campus 3: Suffah International Academy -->
+      <div class="campus-card" data-category="hifz global">
+        <div class="campus-card-header">
+          <div class="campus-icon">📖</div>
+          <div>
+            <div class="campus-name-ar">أَكَادِيمِيَّةُ الصُّفَّةِ الْعَالَمِيَّة</div>
+            <div class="campus-name-en">Suffah International Quran Academy</div>
+          </div>
+        </div>
+        <div class="campus-meta">📍 London & Dubai • UK/UAE Students</div>
+        <div class="campus-badges">
+          <span class="campus-badge">1-on-1 Tajweed</span>
+          <span class="campus-badge">Noorani Qaida</span>
+          <span class="campus-badge">Audio Recordings Archive</span>
+        </div>
+        <div class="campus-footer-info">
+          <span style="color:var(--green-primary); font-weight:800;">✓ Multi-Currency Billing</span>
+          <span>Org ID: suffah-global</span>
+        </div>
+      </div>
+
+      <!-- Campus 4: Darul Huda Seminary -->
+      <div class="campus-card" data-category="girls dars">
+        <div class="campus-card-header">
+          <div class="campus-icon">🌸</div>
+          <div>
+            <div class="campus-name-ar">دَارُ الْهُدَى لِلتَّعْلِيمِ الإِسْلَامِيّ</div>
+            <div class="campus-name-en">Darul Huda Islamic Institute</div>
+          </div>
+        </div>
+        <div class="campus-meta">📍 Gujarat / Mumbai • Female Islamic Studies</div>
+        <div class="campus-badges">
+          <span class="campus-badge">Short Islamic Courses</span>
+          <span class="campus-badge">Taharat & Fiqh</span>
+          <span class="campus-badge">Daily Masnoon Duas</span>
+        </div>
+        <div class="campus-footer-info">
+          <span style="color:var(--green-primary); font-weight:800;">✓ Isolated Database</span>
+          <span>Org ID: darul-huda</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4-Step Mudir Onboarding Roadmap -->
+  <section class="section-wrap" id="mudir-guide">
+    <div class="section-header">
+      <div class="section-eyebrow">For Mudirs & Principals</div>
+      <h2 class="section-title">Launch Your Digital Madrasa in 4 Steps</h2>
+      <p class="section-desc">
+        No technical expertise required. Bring your existing physical seminary or online academy to mobile in minutes.
+      </p>
+    </div>
+
+    <div class="steps-container">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h3 class="step-title">Register Seminary</h3>
+        <p class="step-desc">
+          Open the Suffah mobile app, tap &ldquo;Register Madrasa&rdquo;, and provide your institution name in English and Arabic calligraphy, slug, and location.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h3 class="step-title">Link Direct UPI VPA</h3>
+        <p class="step-desc">
+          Enter your official institutional UPI ID (e.g. <code>madrasa@sbi</code>). 100% of student fee payments deposit straight to your bank account with zero platform cut.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h3 class="step-title">Invite Teachers via Codes</h3>
+        <p class="step-desc">
+          Generate single-use cryptographic access codes for your faculty. Teachers link directly to your campus with appropriate teaching permissions.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <h3 class="step-title">Teach in Purdah & Certify</h3>
+        <p class="step-desc">
+          Run high-fidelity audio classes, conduct automated quizzes, mark attendance, and issue QR-verified digital Asnad bearing your institutional seal.
+        </p>
+      </div>
+    </div>
+
+    <div style="text-align:center; margin-top:36px;">
+      <a href="#download" class="btn btn-gold" style="font-size:1.05rem; padding:14px 32px;">
+        📱 Download Suffah App to Register Madrasa
+      </a>
+    </div>
+  </section>
+
+  <!-- 3 Audience Solutions Grid -->
+  <section class="section-wrap" id="features">
+    <div class="section-header">
+      <div class="section-eyebrow">Complete Islamic Ecosystem</div>
+      <h2 class="section-title">Tailored for Mudirs, Teachers & Students</h2>
+      <p class="section-desc">
+        Every institution on Suffah receives an independent, private digital campus while benefiting from global high-performance infrastructure.
+      </p>
+    </div>
+
+    <div class="pillar-grid">
+      <!-- 1. For Madrasa Owners & Mudirs -->
+      <div class="pillar-card">
+        <div class="pillar-icon-box">🏛️</div>
+        <h3 class="pillar-title">For Madrasas & Mudirs</h3>
+        <p class="pillar-desc">
+          Manage your entire seminary with an institutional admin suite tailored to traditional Islamic governance and accountability.
+        </p>
+        <ul class="feature-checklist">
+          <li>Automated student admissions & enrollments</li>
+          <li>Authorized fee receipts & donation ledgers</li>
+          <li>Direct UPI bank deposits with zero gateway cut</li>
+          <li>Faculty assignments & timetable oversight</li>
+          <li>Official digital Sanad issuance & seal</li>
+        </ul>
+      </div>
+
+      <!-- 2. For Teachers & Ustaadhaat -->
+      <div class="pillar-card">
+        <div class="pillar-icon-box">🎙️</div>
+        <h3 class="pillar-title">For Teachers & Ustaadhaat</h3>
+        <p class="pillar-desc">
+          Conduct live interactive lessons with dignity and ease. Teach Tajweed, Fiqh, and Dars-e-Nizami using dedicated scholarly tools.
+        </p>
+        <ul class="feature-checklist">
+          <li>1-Click Live Audio Dars with Agora voice engine</li>
+          <li>Interactive Tilawat queue for student recitations</li>
+          <li>Automatic offline audio recording archive</li>
+          <li>Student attendance logs & progress tracking</li>
+          <li>Quiz creation & automated grading</li>
+        </ul>
+      </div>
+
+      <!-- 3. For Students & Parents -->
+      <div class="pillar-card">
+        <div class="pillar-icon-box">🌸</div>
+        <h3 class="pillar-title">For Students & Parents</h3>
+        <p class="pillar-desc">
+          A secure Islamic learning sanctuary. Access authentic scholarship from home while upholding sacred principles of modesty and Purdah.
+        </p>
+        <ul class="feature-checklist">
+          <li>Absolute camera privacy (audio-only classrooms)</li>
+          <li>Offline Mushaf recitation with Tajweed</li>
+          <li>Accurate local Namaz alarms & Qibla compass</li>
+          <li>Masnoon Duas, Hadith & Daily Wisdom</li>
+          <li>Parental consent verification for minors</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Purdah Live Classroom Deep Dive -->
+  <section class="section-wrap" id="purdah">
+    <div class="purdah-banner">
+      <div>
+        <div class="purdah-badge">🛡️ Strict Modesty Guarantee</div>
+        <h2 class="purdah-heading">Engineered for <span>Sacred Purdah</span> & Dignified Learning</h2>
+        <p class="purdah-text">
+          Unlike generic video conference apps (Zoom, Google Meet) which carry severe risks of accidental video exposure or intrusion, Suffah was purpose-built from the ground up under strict Islamic modesty ethics.
+        </p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <a href="#download" class="btn btn-gold">📱 Experience the App</a>
+          <a href="privacy-policy.html" class="btn btn-outline" style="border-color:#A7F3D0; color:#FFFFFF; background:transparent;">Read Privacy Policy</a>
+        </div>
+      </div>
+
+      <div class="purdah-card-box">
+        <div class="purdah-item">
+          <div class="purdah-item-icon">🚫</div>
+          <div>
+            <h4>Zero Video Camera Feed</h4>
+            <p>Video camera capture is completely omitted from the codebase and permissions. Only pure scholarly audio and shared learning materials are transmitted.</p>
+          </div>
+        </div>
+        <div class="purdah-item">
+          <div class="purdah-item-icon">🎙️</div>
+          <div>
+            <h4>Moderated Recitation Turns</h4>
+            <p>Students recite one by one through an orderly mic-request queue managed by the Ustaadha, preventing microphone chaos.</p>
+          </div>
+        </div>
+        <div class="purdah-item">
+          <div class="purdah-item-icon">🔐</div>
+          <div>
+            <h4>Private Contact Shield</h4>
+            <p>Female student telephone numbers and private contact details are never exposed to classmates or unauthorized parties.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="compare-wrap">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Feature / Consideration</th>
+            <th style="color:var(--green-primary);">Suffah Purdah Classroom</th>
+            <th style="color:#6B7280;">Generic Video Tools (Zoom, Teams, Meet)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Camera / Video Stream</strong></td>
+            <td><span class="feature-tag-safe">🛡️ 100% Zero Camera in Codebase</span></td>
+            <td><span class="feature-tag-risk">⚠️ Accidental Camera Switch-On Risk</span></td>
+          </tr>
+          <tr>
+            <td><strong>Student Phone Number Privacy</strong></td>
+            <td><span class="feature-tag-safe">🛡️ Completely Masked & Shielded</span></td>
+            <td><span class="feature-tag-risk">⚠️ Visible to Other Participants</span></td>
+          </tr>
+          <tr>
+            <td><strong>Recitation & Mic Control</strong></td>
+            <td><span class="feature-tag-safe">✓ Islamic Tilawat Turn-Taking Queue</span></td>
+            <td><span class="feature-tag-risk">⚠️ Unruly Unmutes & Cross-talk</span></td>
+          </tr>
+          <tr>
+            <td><strong>Data Privacy & Ad Tracking</strong></td>
+            <td><span class="feature-tag-safe">✓ Zero Ads, Zero Data Selling</span></td>
+            <td><span class="feature-tag-risk">⚠️ Behavioral Ad Retargeting</span></td>
+          </tr>
+          <tr>
+            <td><strong>Academic Accreditation</strong></td>
+            <td><span class="feature-tag-safe">✓ QR-Verified Asnad & Transcripts</span></td>
+            <td><span class="feature-tag-risk">⚠️ No Islamic Academic Record System</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Flagship Campus Showcase -->
+  <section class="section-wrap" id="flagship">
+    <div class="flagship-section">
+      <div class="flagship-inner">
+        <div>
+          <span class="flagship-tag">🏛️ Featured Founding Institution</span>
+          <div class="flagship-title-ar">مَدْرَسَةُ السَّالِكَاتِ لِلْبَنَات</div>
+          <h2 class="flagship-title">Madrasatu-s-Salikat Lil Banat</h2>
+          <p class="flagship-desc">
+            Suffah is honored to host <strong>Madrasatu-s-Salikat Lil Banat (MSLB)</strong> as its founding flagship campus. Dedicated to female Islamic scholarship, Hifz-ul-Quran, Tajweed mastery, and the full Dars-e-Nizami (Aalima) curriculum, MSLB serves hundreds of female learners worldwide under the guidance of certified scholars.
+          </p>
+
+          <div class="flagship-stats">
+            <div class="flagship-stat-item">
+              <div class="flagship-stat-num">500+</div>
+              <div class="flagship-stat-lbl">Active Female Talibaat</div>
+            </div>
+            <div class="flagship-stat-item">
+              <div class="flagship-stat-num">Year 1–5</div>
+              <div class="flagship-stat-lbl">Dars-e-Nizami Curriculum</div>
+            </div>
+            <div class="flagship-stat-item">
+              <div class="flagship-stat-num">Global</div>
+              <div class="flagship-stat-lbl">Students in 8+ Countries</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flagship-box-art">
+          <div class="flagship-quote">
+            &ldquo;طَلَبُ الْعِلْمِ فَرِيضَةٌ عَلَى كُلِّ مُسْلِمٍ&rdquo;
+          </div>
+          <div class="flagship-ref">&ldquo;Seeking knowledge is an obligation upon every Muslim.&rdquo; — Sunan Ibn Majah</div>
+          <div style="margin-top:20px;">
+            <a href="https://mslb.nooreharam.com" target="_blank" rel="noopener" class="btn btn-primary" style="font-size:0.88rem;">
+              Visit Flagship Website ↗
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Frequently Asked Questions -->
+  <section class="section-wrap" id="faq">
+    <div class="section-header">
+      <div class="section-eyebrow">Clear Answers</div>
+      <h2 class="section-title">Frequently Asked Questions</h2>
+      <p class="section-desc">Everything you need to know about setting up or attending a Madrasa on Suffah.</p>
+    </div>
+
+    <div class="faq-list">
+      <div class="faq-item">
+        <h3 class="faq-question">Why should we switch from free WhatsApp / Zoom to Suffah?</h3>
+        <p class="faq-answer">
+          While WhatsApp and Zoom appear &ldquo;free&rdquo;, they actually cost madaris thousands in lost tuition fees, wasted teaching time, and severe modesty risks. On WhatsApp, ustazas lose track of daily Sabaq/Manzil, audio clips get lost, and ~20-30% of fees are never collected. Free Zoom cuts off abruptly every 40 minutes and carries the constant risk of accidental video/camera exposure for banat. Suffah provides a zero-camera purdah sanctuary, synchronized Mushaf pages, automated daily registers, and direct institutional UPI payment routing that recovers your lost fees in month 1.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">How does the 100% Free Forever &ldquo;Barakah Free&rdquo; Plan work?</h3>
+        <p class="faq-answer">
+          We believe in Khidmat-e-Deen. Any small village maktab, independent ustaza, or home Quran academy with up to 25 students can use Suffah completely free forever with zero expiration date and no credit card required. As your student enrollment grows, you can easily upgrade to the Maktab or Jamiya plan with one tap.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">Does Suffah take any percentage or commission from our student fees?</h3>
+        <p class="faq-answer">
+          <strong>0% Platform Commission.</strong> When parents pay student fees via UPI, 100% of the funds transfer directly from the parent&rsquo;s UPI app straight into your Madrasa&rsquo;s official bank account. Suffah never touches, holds, or deducts fees from your institution&rsquo;s money.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">How fast can our Madrasa get started?</h3>
+        <p class="faq-answer">
+          In less than 5 minutes! Simply click &ldquo;Register Madrasa&rdquo; on this website or in the Android app. Our setup team will configure your custom digital campus, issue your Mudir credentials, and help you add your teachers and students immediately.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">Can any Madrasa in the world register on Suffah?</h3>
+        <p class="faq-answer">
+          Yes! Any Islamic seminary, Darul Uloom, local maktab, or private online Quran academy across India, the UK, USA, UAE, Saudi Arabia, Pakistan, South Africa, or elsewhere can register directly through the app by clicking &ldquo;Register Madrasa&rdquo;. Each gets an isolated tenant environment with custom branding.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">How does direct institutional UPI fee collection work?</h3>
+        <p class="faq-answer">
+          When a Madrasa owner configures their institutional UPI VPA (e.g. <code>yourmadrasa@upi</code>), student fee payments and donor contributions generate dynamic UPI deep-links that route 100% of the funds straight into the seminary's bank account with 0% platform intermediary commission.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">Can students or teachers of one Madrasa see data from another?</h3>
+        <p class="faq-answer">
+          No. Suffah enforces bank-grade tenant data isolation through Google Cloud Firestore security rules. A Mudir, teacher, or student can only see records, batches, and chat channels belonging to their own registered Madrasa.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">How does Purdah protection work in live classes?</h3>
+        <p class="faq-answer">
+          Suffah disables video camera streaming entirely at the code and permission level. Classes are crystal-clear, audio-first sessions. Teachers can share digital Mushaf pages and Islamic texts, while students take turns reciting under complete modesty.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">How are authentic Sanad certificates verified?</h3>
+        <p class="faq-answer">
+          Every certificate issued through Suffah carries a unique serial number and cryptographic verification link. Anyone can enter the serial number on our public verification portal (<a href="verify-sanad.html" style="color:var(--green-primary); font-weight:700;">verify-sanad.html</a>) to verify authenticity, issuing madrasa, and grades.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3 class="faq-question">How can I install the app on Android?</h3>
+        <p class="faq-answer">
+          You can download the production APK directly from this website (<a href="./suffah-release-v50.apk" download style="color:var(--green-primary); font-weight:700;">suffah-release-v50.apk</a>) or install from the Google Play Store under package <code>com.madrasatussalikat.lilbanat</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final Call to Action -->
+  <section class="section-wrap">
+    <div class="cta-banner">
+      <h2>Bring Your Madrasa Into the <span>Digital Era</span></h2>
+      <p>
+        Join hundreds of educators and thousands of students on Suffah. Experience the world's gold standard in Purdah-compliant Islamic learning and digital seminary governance.
+      </p>
+      <div class="cta-banner-buttons">
+        <a href="./suffah-release-v50.apk" class="btn btn-gold" download>
+          📱 Download Android APK (Build 50)
+        </a>
+        <a href="#mudir-guide" class="btn btn-outline" style="border-color:#FFFFFF; color:#FFFFFF; background:transparent;">
+          🏛️ Launch Your Madrasa Campus
+        </a>
+        <a href="verify-sanad.html" class="btn btn-outline" style="border-color:#FDE68A; color:#FFFFFF; background:transparent;">
+          📜 Verify a Sanad
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Global Footer -->
+  <footer>
+    <div class="footer-container">
+      <div class="footer-brand">
+        <span style="font-size:24px;">🕌</span>
+        <span>Suffah • صُـفَّـة</span>
+      </div>
+
+      <div class="footer-nav">
+        <a href="#features">Features</a>
+        <a href="#purdah">Purdah Standard</a>
+        <a href="#directory">Madrasa Directory</a>
+        <a href="verify-sanad.html">Sanad Verification</a>
+        <a href="#flagship">Flagship MSLB</a>
+        <a href="privacy-policy.html">Privacy Policy</a>
+        <a href="account-deletion.html">Account Deletion</a>
+        <a href="mailto:support@suffahportal.com">Support Desk</a>
+      </div>
+
+      <p class="footer-legal-copy">
+        &copy; 2026 Suffah Digital Madrasa Platform. Dedicated to sacred knowledge, adab & modesty. All rights reserved.
+      </p>
+      <p class="app-id-tag">Official Android App Package: com.madrasatussalikat.lilbanat • Release v1.0.13 (Build 50)</p>
+    </div>
+  </footer>
+
+  <!-- Interactive JavaScript -->
+  <script>
+    // Mobile Drawer Toggle
+    const menuToggle = document.getElementById('menu-toggle');
+    const mobileDrawer = document.getElementById('mobile-drawer');
+
+    menuToggle.addEventListener('click', () => {
+      mobileDrawer.classList.toggle('active');
+    });
+
+    function closeDrawer() {
+      mobileDrawer.classList.remove('active');
+    }
+
+    // Quick Sanad Lookup Handler
+    function handleQuickLookup(e) {
+      e.preventDefault();
+      const input = document.getElementById('quick-cert-input');
+      const val = (input.value || '').trim();
+      if (!val) return;
+      window.location.href = `verify-sanad.html?id=${encodeURIComponent(val)}`;
+    }
+
+    function fillSampleCert() {
+      const input = document.getElementById('quick-cert-input');
+      input.value = 'SANAD-DEMO-2026';
+    }
+
+    // Campus Filter Handler
+    function filterCampuses(category, btn) {
+      // Toggle active button style
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const cards = document.querySelectorAll('.campus-card');
+      cards.forEach(card => {
+        const catData = card.getAttribute('data-category') || '';
+        if (category === 'all' || catData.includes(category)) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+  </script>
+
+  <!-- Madrasa Registration & Demo Walkthrough Modal -->
+  <div id="demo-modal" class="modal-overlay">
+    <div class="modal-content-wrap">
+      <button class="modal-close-btn" onclick="closeDemoModal()">&times;</button>
+      <div class="modal-title">🏛️ Register Your Madrasa Campus</div>
+      <p class="modal-sub">
+        Fill out this simple 1-minute form. Our setup team will configure your private digital campus and reach out on WhatsApp within 15 minutes!
+      </p>
+
+      <form id="madrasa-registration-form" onsubmit="submitMadrasaInquiry(event)">
+        <div class="form-field">
+          <label for="reg-madrasa-name">Madrasa / Seminary Name *</label>
+          <input type="text" id="reg-madrasa-name" required placeholder="e.g. Madrasa Noor-ul-Huda / Darul Uloom..." />
+        </div>
+
+        <div class="form-field">
+          <label for="reg-mudir-name">Mudir / Mohtamim / Admin Name *</label>
+          <input type="text" id="reg-mudir-name" required placeholder="e.g. Maulana Muhammad / Ustaza Fatima..." />
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-field">
+            <label for="reg-whatsapp">WhatsApp Number *</label>
+            <input type="tel" id="reg-whatsapp" required placeholder="+91 98765 43210" />
+          </div>
+          <div class="form-field">
+            <label for="reg-city">City &amp; Country *</label>
+            <input type="text" id="reg-city" required placeholder="e.g. Hyderabad, India" />
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-field">
+            <label for="reg-students">Approx. Student Count</label>
+            <select id="reg-students">
+              <option value="1-25">1 – 25 Students (Barakah Free)</option>
+              <option value="25-100" selected>25 – 100 Students (Maktab)</option>
+              <option value="100-350">100 – 350 Students (Jamiya)</option>
+              <option value="350+">350+ Students (Enterprise)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="reg-plan-select">Selected Plan</label>
+            <select id="reg-plan-select">
+              <option value="Barakah Free (₹0)">Barakah Free (₹0)</option>
+              <option value="Maktab Starter (₹799)">Maktab Starter (₹799/mo)</option>
+              <option value="Jamiya Standard (₹1,999)" selected>Jamiya Standard (₹1,999/mo)</option>
+              <option value="Darul Uloom Enterprise (₹3,999)">Darul Uloom Enterprise (₹3,999/mo)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="reg-notes">Special Requirements / Courses (Optional)</label>
+          <textarea id="reg-notes" rows="2" placeholder="e.g. Banat purdah Hifz classes, Alimah course, Dars-e-Nizami..."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-gold" style="width:100%; padding:14px; font-size:1rem; border:none; cursor:pointer; margin-top:6px;">
+          🚀 Submit &amp; Open Instant WhatsApp Setup
+        </button>
+      </form>
+      <div id="reg-success-msg" style="display:none; text-align:center; padding:20px 0;">
+        <div style="font-size:36px; margin-bottom:10px;">🎉</div>
+        <h3 style="color:var(--green-dark); margin-bottom:6px;">Jazakallahu Khair!</h3>
+        <p style="color:var(--text-muted); font-size:0.9rem;">Your madrasa registration request has been received. Redirecting to WhatsApp for instant 5-minute setup...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Billing Cycle Toggle Handler
+    let currentBillingCycle = 'monthly';
+
+    function toggleBilling(cycle) {
+      currentBillingCycle = cycle;
+      const btnMonthly = document.getElementById('btn-billing-monthly');
+      const btnAnnual = document.getElementById('btn-billing-annual');
+
+      const priceMaktab = document.getElementById('price-maktab');
+      const cycleMaktab = document.getElementById('cycle-maktab');
+      const effMaktab = document.getElementById('eff-maktab');
+
+      const priceJamiya = document.getElementById('price-jamiya');
+      const cycleJamiya = document.getElementById('cycle-jamiya');
+      const effJamiya = document.getElementById('eff-jamiya');
+
+      const priceDarul = document.getElementById('price-darululoom');
+      const cycleDarul = document.getElementById('cycle-darululoom');
+      const effDarul = document.getElementById('eff-darululoom');
+
+      if (cycle === 'annual') {
+        btnAnnual.classList.add('active');
+        btnMonthly.classList.remove('active');
+
+        // 20% discount (2 months free):
+        // Maktab: ₹7,990 / yr (~₹665/mo)
+        // Jamiya: ₹19,990 / yr (~₹1,665/mo)
+        // Darul Uloom: ₹39,990 / yr (~₹3,332/mo)
+        priceMaktab.textContent = '665';
+        cycleMaktab.textContent = '/ month (₹7,990/yr)';
+        effMaktab.textContent = 'Billed annually • Save ₹1,598 every year!';
+
+        priceJamiya.textContent = '1,665';
+        cycleJamiya.textContent = '/ month (₹19,990/yr)';
+        effJamiya.textContent = 'Billed annually • Save ₹3,998 every year!';
+
+        priceDarul.textContent = '3,332';
+        cycleDarul.textContent = '/ month (₹39,990/yr)';
+        effDarul.textContent = 'Billed annually • Save ₹7,998 every year!';
+      } else {
+        btnMonthly.classList.add('active');
+        btnAnnual.classList.remove('active');
+
+        priceMaktab.textContent = '799';
+        cycleMaktab.textContent = '/ month';
+        effMaktab.textContent = 'Just ~₹8 per student / month (less than ₹27/day!)';
+
+        priceJamiya.textContent = '1,999';
+        cycleJamiya.textContent = '/ month';
+        effJamiya.textContent = 'Pays for itself with 2 recovered student fees!';
+
+        priceDarul.textContent = '3,999';
+        cycleDarul.textContent = '/ month';
+        effDarul.textContent = 'Unlimited scale with custom institutional branding';
+      }
+      updateRoiCalc();
+    }
+
+    // Interactive ROI & Fee Recovery Calculator
+    function updateRoiCalc() {
+      const students = parseInt(document.getElementById('calc-students').value, 10);
+      const fee = parseInt(document.getElementById('calc-fee').value, 10);
+
+      document.getElementById('calc-student-label').textContent = `${students} Students`;
+      document.getElementById('calc-fee-label').textContent = `₹${fee.toLocaleString()} / mo`;
+
+      const monthlyVolume = students * fee;
+      const leakageLost = Math.round(monthlyVolume * 0.20); // ~20% uncollected on WhatsApp
+
+      let suffahCost = 799;
+      if (students <= 25) {
+        suffahCost = 0;
+      } else if (students <= 100) {
+        suffahCost = (currentBillingCycle === 'annual') ? 665 : 799;
+      } else if (students <= 350) {
+        suffahCost = (currentBillingCycle === 'annual') ? 1665 : 1999;
+      } else {
+        suffahCost = (currentBillingCycle === 'annual') ? 3332 : 3999;
+      }
+
+      const netBenefit = leakageLost - suffahCost;
+
+      document.getElementById('calc-monthly-volume').textContent = `₹${monthlyVolume.toLocaleString()}`;
+      document.getElementById('calc-lost-leakage').textContent = `- ₹${leakageLost.toLocaleString()}`;
+      document.getElementById('calc-suffah-cost').textContent = (suffahCost === 0) ? '₹0 (Free Tier)' : `- ₹${suffahCost.toLocaleString()}`;
+
+      if (netBenefit > 0) {
+        document.getElementById('calc-net-recovered').textContent = `+ ₹${netBenefit.toLocaleString()} / mo`;
+        document.getElementById('calc-net-recovered').style.color = '#FDE68A';
+      } else {
+        document.getElementById('calc-net-recovered').textContent = `₹${Math.abs(netBenefit).toLocaleString()} / mo`;
+      }
+    }
+
+    // Modal Handlers
+    function openDemoModal(preselectedPlan) {
+      if (preselectedPlan) {
+        const select = document.getElementById('reg-plan-select');
+        for (let i = 0; i < select.options.length; i++) {
+          if (select.options[i].value.includes(preselectedPlan) || preselectedPlan.includes(select.options[i].value)) {
+            select.selectedIndex = i;
+            break;
+          }
+        }
+      }
+      document.getElementById('demo-modal').classList.add('active');
+    }
+
+    function closeDemoModal() {
+      document.getElementById('demo-modal').classList.remove('active');
+    }
+
+    // Modal submit handler
+    function submitMadrasaInquiry(e) {
+      e.preventDefault();
+      const madrasaName = document.getElementById('reg-madrasa-name').value;
+      const mudirName = document.getElementById('reg-mudir-name').value;
+      const whatsapp = document.getElementById('reg-whatsapp').value;
+      const city = document.getElementById('reg-city').value;
+      const students = document.getElementById('reg-students').value;
+      const plan = document.getElementById('reg-plan-select').value;
+      const notes = document.getElementById('reg-notes').value || 'None';
+
+      const msg = `Assalamu Alaikum Suffah Team!%0A%0AI would like to register my Madrasa on Suffah:%0A• *Madrasa:* ${encodeURIComponent(madrasaName)}%0A• *Mudir/Contact:* ${encodeURIComponent(mudirName)}%0A• *WhatsApp:* ${encodeURIComponent(whatsapp)}%0A• *City/Location:* ${encodeURIComponent(city)}%0A• *Students:* ${encodeURIComponent(students)}%0A• *Plan Interested:* ${encodeURIComponent(plan)}%0A• *Notes:* ${encodeURIComponent(notes)}%0A%0APlease help us set up our digital campus.`;
+
+      document.getElementById('madrasa-registration-form').style.display = 'none';
+      document.getElementById('reg-success-msg').style.display = 'block';
+
+      // Open WhatsApp after brief delay
+      setTimeout(() => {
+        window.open(`https://wa.me/918459453272?text=${msg}`, '_blank');
+      }, 1200);
+    }
+
+    // Initialize calculator
+    document.addEventListener('DOMContentLoaded', () => {
+      updateRoiCalc();
+    });
+  </script>
+
+</body>
+</html>

@@ -13,7 +13,9 @@ import { db } from '@/lib/firebase';
 import { withTimeout } from '@/lib/errors';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { deduplicateAttendanceRecords } from '@/lib/attendanceDeduplication';
 import { Share, Platform } from 'react-native';
+import { getActiveOrganizationIdSync, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 
 export type ExportType = 'attendance' | 'quiz_marks';
 
@@ -29,17 +31,18 @@ function escapeCsvCell(val: string | number | null | undefined): string {
 /**
  * Fetch and generate 1-Click Attendance CSV Export
  */
-export async function generateAttendanceCsv(): Promise<string> {
+export async function generateAttendanceCsv(organizationId?: string): Promise<string> {
+  const targetOrgId = (organizationId || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID).trim();
   // 1. Fetch attendance records
   const attSnap = await withTimeout(
-    getDocs(query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(5000))),
+    getDocs(query(collection(db, 'attendance'), where('organization_id', '==', targetOrgId), orderBy('date', 'desc'), limit(5000))),
     15000,
     'Fetching attendance records timed out'
   );
 
   // 2. Fetch users map for accurate names & emails
   const usersSnap = await withTimeout(
-    getDocs(query(collection(db, 'users'), limit(3000))),
+    getDocs(query(collection(db, 'users'), where('organization_id', '==', targetOrgId), limit(3000))),
     15000,
     'Fetching users timed out'
   );
@@ -54,7 +57,7 @@ export async function generateAttendanceCsv(): Promise<string> {
 
   // 3. Fetch courses map for friendly names
   const coursesSnap = await withTimeout(
-    getDocs(collection(db, 'courses')),
+    getDocs(query(collection(db, 'courses'), where('organization_id', '==', targetOrgId), limit(1000))),
     10000,
     'Fetching courses timed out'
   );
@@ -75,9 +78,11 @@ export async function generateAttendanceCsv(): Promise<string> {
   ];
 
   const rows: string[] = [];
+  const rawAtt: any[] = [];
+  attSnap.forEach((docSnap) => rawAtt.push({ id: docSnap.id, ...docSnap.data() }));
+  const dedupedAtt = deduplicateAttendanceRecords(rawAtt);
 
-  attSnap.forEach((docSnap) => {
-    const d = docSnap.data();
+  dedupedAtt.forEach((d) => {
     const uInfo = userMap.get(d.user_id) || {
       name: d.user_name || 'Student',
       email: d.user_email || '',
@@ -115,11 +120,12 @@ export async function generateAttendanceCsv(): Promise<string> {
  * Fetch and generate 1-Click Quiz Marks & Examination Results CSV
  * 12.5: Supports optional courseId filter
  */
-export async function generateQuizMarksCsv(courseId?: string): Promise<string> {
+export async function generateQuizMarksCsv(courseId?: string, organizationId?: string): Promise<string> {
+  const targetOrgId = (organizationId || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID).trim();
   // 1. Fetch quiz_results (optionally filtered by course_id)
   const baseQuery = courseId
     ? query(collection(db, 'quiz_results'), where('course_id', '==', courseId), orderBy('created_at', 'desc'), limit(5000))
-    : query(collection(db, 'quiz_results'), orderBy('created_at', 'desc'), limit(5000));
+    : query(collection(db, 'quiz_results'), where('organization_id', '==', targetOrgId), orderBy('created_at', 'desc'), limit(5000));
 
   let quizSnap;
   try {
@@ -132,7 +138,7 @@ export async function generateQuizMarksCsv(courseId?: string): Promise<string> {
     // Fallback without orderBy in case of compound index requirement
     const fallbackQuery = courseId
       ? query(collection(db, 'quiz_results'), where('course_id', '==', courseId), limit(5000))
-      : query(collection(db, 'quiz_results'), limit(5000));
+      : query(collection(db, 'quiz_results'), where('organization_id', '==', targetOrgId), limit(5000));
     quizSnap = await withTimeout(
       getDocs(fallbackQuery),
       15000,
@@ -142,7 +148,7 @@ export async function generateQuizMarksCsv(courseId?: string): Promise<string> {
 
   // 2. Fetch users map
   const usersSnap = await withTimeout(
-    getDocs(query(collection(db, 'users'), limit(3000))),
+    getDocs(query(collection(db, 'users'), where('organization_id', '==', targetOrgId), limit(3000))),
     15000,
     'Fetching users timed out'
   );
@@ -222,9 +228,10 @@ export async function exportAdminCsvAndShare(
   type: 'attendance' | 'quiz_marks',
   courseId?: string,
   courseName?: string,
+  organizationId?: string,
 ): Promise<void> {
   const isAttendance = type === 'attendance';
-  const csvData = isAttendance ? await generateAttendanceCsv() : await generateQuizMarksCsv(courseId);
+  const csvData = isAttendance ? await generateAttendanceCsv(organizationId) : await generateQuizMarksCsv(courseId, organizationId);
 
   const timestamp = new Date().toISOString().slice(0, 10);
   const cleanCourse = courseName ? courseName.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
@@ -266,7 +273,7 @@ export async function exportAdminCsvAndShare(
   } else {
     await Share.share({
       title: dialogTitle,
-      message: `Madrasatu-s-Salikat Lil Banat Excel Report:\n${fileName}`,
+      message: `Madrasa Academic Report:\n${fileName}`,
     });
   }
 }

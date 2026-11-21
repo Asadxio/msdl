@@ -49,17 +49,37 @@ service cloud.firestore {
     }
 
     function isTenantAdmin(targetOrgId) {
-      return isSuperAdmin() || ((isVerified() && roleOf(request.auth.uid) == 'admin') && (
-        (targetOrgId != null && targetOrgId != '' && targetOrgId != 'mslb-main' && (
-          exists(/databases/$(database)/documents/organization_memberships/$(targetOrgId + '_' + request.auth.uid)) ||
-          exists(/databases/$(database)/documents/organization_memberships/$(targetOrgId + ':' + request.auth.uid))
-        )) ||
-        (targetOrgId == null || targetOrgId == '' || targetOrgId == 'mslb-main')
-      ));
+      return isSuperAdmin() || (
+        (isVerified() && roleOf(request.auth.uid) in ['admin', 'super_admin']) &&
+        (
+          // 1. Explicit membership doc in targetOrgId
+          (targetOrgId != null && targetOrgId != '' && (
+            exists(/databases/$(database)/documents/organization_memberships/$(targetOrgId + '_' + request.auth.uid)) ||
+            exists(/databases/$(database)/documents/organization_memberships/$(targetOrgId + ':' + request.auth.uid))
+          )) ||
+          // 2. Profile organization_id explicitly matches targetOrgId
+          (targetOrgId != null && targetOrgId != '' && userDoc(request.auth.uid).get('organization_id', 'mslb-main') == targetOrgId) ||
+          // 3. Fallback to mslb-main ONLY IF user does not belong to a different organization
+          ((targetOrgId == null || targetOrgId == '' || targetOrgId == 'mslb-main') &&
+           userDoc(request.auth.uid).get('organization_id', 'mslb-main') == 'mslb-main')
+        )
+      );
     }
 
     function isTeacherOrAdmin() {
       return isAdmin() || (isVerified() && roleOf(request.auth.uid) in ['teacher', 'assistant_teacher', 'moderator']);
+    }
+
+    function isMemberOfOrg(orgId) {
+      return isSuperAdmin()
+        || (orgId == 'mslb-main' && (!('organization_id' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).organization_id == 'mslb-main'))
+        || ('organization_id' in userDoc(request.auth.uid) && userDoc(request.auth.uid).organization_id == orgId)
+        || exists(/databases/$(database)/documents/organization_memberships/$(orgId + '_' + request.auth.uid))
+        || exists(/databases/$(database)/documents/organization_memberships/$(orgId + ':' + request.auth.uid));
+    }
+
+    function isTeacherOrAdminOfOrg(orgId) {
+      return isTenantAdmin(orgId) || (isTeacherOrAdmin() && isMemberOfOrg(orgId));
     }
 
 
@@ -139,7 +159,7 @@ service cloud.firestore {
       return isSelf(uid)
         && hasOnlyAllowedKeys(
           request.resource.data,
-          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone', 'whatsapp_consent', 'whatsapp_consent_at']
+          ['name', 'email', 'role', 'status', 'created_at', 'referral_code', 'referred_by', 'referral_count', 'last_login_at', 'is_minor', 'age_bracket', 'guardian_name', 'guardian_phone', 'phone', 'whatsapp_consent', 'whatsapp_consent_at', 'organization_id']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -159,6 +179,7 @@ service cloud.firestore {
         && (!('phone' in request.resource.data) || request.resource.data.phone is string)
         && (!('whatsapp_consent' in request.resource.data) || request.resource.data.whatsapp_consent is bool)
         && (!('whatsapp_consent_at' in request.resource.data) || request.resource.data.whatsapp_consent_at is timestamp)
+        && (!('organization_id' in request.resource.data) || request.resource.data.organization_id == null || (request.resource.data.organization_id is string && request.resource.data.organization_id.size() > 0))
         && ((request.resource.data.role in ['admin', 'super_admin']) ? isSuperAdmin() : true)
         && ((request.resource.data.role == 'assistant_teacher') ? roleOf(request.auth.uid) in ['admin', 'super_admin'] : true);
     }
@@ -500,14 +521,7 @@ service cloud.firestore {
 
     function canReadNotification() {
       return isSignedIn()
-        && (
-          !('organization_id' in resource.data)
-          || resource.data.organization_id == null
-          || resource.data.organization_id == ''
-          || resource.data.organization_id == 'mslb-main'
-          || isSuperAdmin()
-          || (('organization_id' in userDoc(request.auth.uid)) && userDoc(request.auth.uid).organization_id == resource.data.organization_id)
-        )
+        && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main'))
         && (
           resource.data.user_id == 'all'
           || resource.data.user_id == request.auth.uid
@@ -541,13 +555,13 @@ service cloud.firestore {
       //   - Cloud Function v2 Admin SDK schema (provider_order_id, course_id, course_name, receipt_id, source, created_at_ms, payment_domain, payment_type)
       // Admin SDK bypasses these rules, but the rule set must not reject the unified schema.
       // INVARIANTS that MUST always hold regardless of schema version:
-      //   user_id == auth.uid, state=pending, status=pending, provider=razorpay, amount>0
+      //   user_id == auth.uid, state in ['pending', 'submitted'], provider=razorpay, amount>0
       return isSignedIn()
         && hasOnlyAllowedKeys(
           request.resource.data,
           [
             // Core fields (both schemas)
-            'user_id', 'amount', 'state', 'status', 'provider', 'created_at', 'currency',
+            'user_id', 'amount', 'state', 'status', 'provider', 'created_at', 'currency', 'organization_id',
             // Legacy manual-payment fields
             'user_name', 'payment_ref', 'type', 'transaction_ref', 'review_mode', 'submitted_at',
             // Cloud Function v2 fields
@@ -558,12 +572,21 @@ service cloud.firestore {
         && request.resource.data.user_id == request.auth.uid
         // user_name is optional in CF v2 schema (Admin SDK sets it if available)
         && (!('user_name' in request.resource.data) || (request.resource.data.user_name is string && request.resource.data.user_name.size() > 0))
+        && (!('organization_id' in request.resource.data) || (request.resource.data.organization_id is string && request.resource.data.organization_id.size() > 0))
         && request.resource.data.amount is number
         && request.resource.data.amount > 0
         && request.resource.data.amount <= 100000000
-        // Security invariants: client can NEVER start in a non-pending state
-        && request.resource.data.state == 'pending'
-        && request.resource.data.status == 'pending'
+        // Security invariants: client can start in pending OR submitted (when transaction_ref is provided)
+        && (
+          (request.resource.data.state == 'pending' && request.resource.data.status == 'pending')
+          || (
+            request.resource.data.state == 'submitted'
+            && request.resource.data.status == 'submitted'
+            && ('transaction_ref' in request.resource.data)
+            && request.resource.data.transaction_ref is string
+            && request.resource.data.transaction_ref.size() >= 4
+          )
+        )
         && request.resource.data.provider == 'razorpay'
         && request.resource.data.currency == 'INR'
         // Domain: academic_fee | donation
@@ -634,7 +657,7 @@ service cloud.firestore {
     function isValidFeedbackCreate() {
       return hasOnlyAllowedKeys(
           request.resource.data,
-          ['user_id', 'user_name', 'message', 'rating', 'created_at']
+          ['user_id', 'user_name', 'message', 'rating', 'tag', 'organization_id', 'created_at']
         )
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.user_name is string
@@ -642,14 +665,17 @@ service cloud.firestore {
         && request.resource.data.message is string
         && request.resource.data.message.size() > 0
         && (!('rating' in request.resource.data) || request.resource.data.rating == null || (request.resource.data.rating is number && request.resource.data.rating >= 1 && request.resource.data.rating <= 5))
+        && (!('tag' in request.resource.data) || (request.resource.data.tag is string && request.resource.data.tag.size() <= 100))
+        && (!('organization_id' in request.resource.data) || (request.resource.data.organization_id is string && request.resource.data.organization_id.size() > 0))
         && request.resource.data.created_at is timestamp;
     }
 
     function isValidFeedbackUpdate() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['message', 'rating', 'updated_at'])
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['message', 'rating', 'tag', 'updated_at'])
         && request.resource.data.user_id == resource.data.user_id
         && (!('rating' in request.resource.data) || request.resource.data.rating == null || (request.resource.data.rating is number && request.resource.data.rating >= 1 && request.resource.data.rating <= 5))
         && (!('message' in request.resource.data) || (request.resource.data.message is string && request.resource.data.message.size() > 0))
+        && (!('tag' in request.resource.data) || (request.resource.data.tag is string && request.resource.data.tag.size() <= 100))
         && request.resource.data.updated_at is timestamp;
     }
 
@@ -957,8 +983,69 @@ service cloud.firestore {
         );
     }
 
+    function liveClassOrgId(data) {
+      return ('organization_id' in data) && data.organization_id is string && data.organization_id.size() > 0
+        ? data.organization_id
+        : 'mslb-main';
+    }
+
+    function isMemberOfLiveClassOrg(data) {
+      return isSuperAdmin()
+        || (liveClassOrgId(data) == 'mslb-main' && (!('organization_id' in userDoc(request.auth.uid)) || userDoc(request.auth.uid).organization_id == 'mslb-main'))
+        || ('organization_id' in userDoc(request.auth.uid) && userDoc(request.auth.uid).organization_id == liveClassOrgId(data))
+        || exists(/databases/$(database)/documents/organization_memberships/$(liveClassOrgId(data) + '_' + request.auth.uid))
+        || exists(/databases/$(database)/documents/organization_memberships/$(liveClassOrgId(data) + ':' + request.auth.uid));
+    }
+
+    function isTeacherAssignedToCourse(courseId) {
+      return courseId is string
+        && courseId.size() > 0
+        && (
+          (exists(/databases/$(database)/documents/courses/$(courseId))
+            && (
+              get(/databases/$(database)/documents/courses/$(courseId)).data.get('teacher_id', '') == request.auth.uid
+              || (
+                'assigned_teachers' in get(/databases/$(database)/documents/courses/$(courseId)).data
+                && request.auth.uid in get(/databases/$(database)/documents/courses/$(courseId)).data.assigned_teachers
+              )
+            )
+          )
+          || (
+            exists(/databases/$(database)/documents/teachers/$(request.auth.uid))
+            && (
+              (
+                'assigned_courses' in get(/databases/$(database)/documents/teachers/$(request.auth.uid)).data
+                && courseId in get(/databases/$(database)/documents/teachers/$(request.auth.uid)).data.assigned_courses
+              )
+              || (
+                'courses' in get(/databases/$(database)/documents/teachers/$(request.auth.uid)).data
+                && courseId in get(/databases/$(database)/documents/teachers/$(request.auth.uid)).data.courses
+              )
+            )
+          )
+        );
+    }
+
     function canReadLiveClassData(data) {
-      return isApprovedVerifiedUser();
+      return isApprovedVerifiedUser()
+        && isMemberOfLiveClassOrg(data)
+        && (
+          isTenantAdmin(liveClassOrgId(data))
+          || (
+            roleOf(request.auth.uid) in ['teacher', 'assistant_teacher']
+            && (
+              data.get('teacher_id', '') == request.auth.uid
+              || isTeacherAssignedToCourse(data.get('course_id', ''))
+            )
+          )
+          || (
+            roleOf(request.auth.uid) == 'student'
+            && (
+              ('course_id' in data && hasActiveEnrollmentForCourse(data.course_id))
+              || hasActiveEnrollmentForCourse(data.get('course_id', ''))
+            )
+          )
+        );
     }
 
     function isValidLiveClassWrite() {
@@ -1347,20 +1434,20 @@ service cloud.firestore {
 
     // users collection
     match /users/{uid} {
-      // Users can read their own profile; signed-in users can list users for app pickers/referrals.
-      allow get: if isAdmin() || isSelf(uid) || isTeacherOrAdmin();
-      allow list: if isAdmin() || isTeacherOrAdmin() || (isSignedIn() && request.query.limit <= 2);
+      allow get: if isSelf(uid) || isSuperAdmin() || (isTeacherOrAdmin() && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main')));
+      allow list: if isSuperAdmin() || (isSignedIn() && request.query.limit <= 2) || (isTeacherOrAdmin() && resource.data.organization_id is string && isTenantAdmin(resource.data.organization_id)) || (isTeacherOrAdmin() && resource.data.organization_id is string && isMemberOfOrg(resource.data.organization_id));
 
       // Self-signup profile creation.
       allow create: if isValidUserCreate(uid);
 
       // Admin can fully update users; users can update own push/profile/login metadata, safe name update, or auto-activate on email verification.
-      allow update: if (isAdmin() && isValidUserUpdateByAdmin())
+      allow update: if ((isAdmin() && isValidUserUpdateByAdmin())
         || isValidEmailVerifiedStudentActivation(uid)
         || isValidSelfUserMetadataUpdate(uid)
         || isValidStudentNameUpdate(uid)
         || isValidReferralCountIncrement()
-        || isValidPendingStudentProfileUpdate(uid);
+        || isValidPendingStudentProfileUpdate(uid))
+        && request.resource.data.get('organization_id', 'mslb-main') == resource.data.get('organization_id', 'mslb-main');
       allow delete: if isAdmin() && (!resource.data.get('founder', false) || isSuperAdmin());
     }
 
@@ -1431,15 +1518,9 @@ service cloud.firestore {
 
     // teachers collection
     match /teachers/{teacherId} {
-      allow read: if isSignedIn();
-      allow create: if isValidTeacherWrite() && (
-        isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) &&
-        (resource == null || resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main') || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')))
-      );
-      allow update: if (isValidTeacherWrite() && (
-        isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) &&
-        (resource == null || resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main') || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')))
-      )) || isValidTeacherSelfProfileUpdate(teacherId);
+      allow read: if isSuperAdmin() || isMemberOfOrg(resource.data.get('organization_id', 'mslb-main'));
+      allow create: if isValidTeacherWrite() && isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main'));
+      allow update: if (isValidTeacherWrite() && isTenantAdmin(resource.data.get('organization_id', 'mslb-main')) && request.resource.data.get('organization_id', 'mslb-main') == resource.data.get('organization_id', 'mslb-main')) || (isValidTeacherSelfProfileUpdate(teacherId) && request.resource.data.get('organization_id', 'mslb-main') == resource.data.get('organization_id', 'mslb-main'));
       allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
@@ -1482,18 +1563,18 @@ service cloud.firestore {
 
     // library collection
     match /library/{bookId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin() && isValidLibraryWrite();
-      allow delete: if isAdmin();
+      allow read: if resource.data.get('organization_id', 'mslb-main') == 'mslb-main' || isMemberOfOrg(resource.data.get('organization_id', 'mslb-main'));
+      allow create, update: if isSuperAdmin() || isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main'));
+      allow delete: if isSuperAdmin() || isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
 
     // attendance collection
     match /attendance/{attendanceId} {
-      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create: if isAdmin() || isValidAttendanceRecord();
-      allow update: if isAdmin() || (isValidAttendanceRecord() && isAttendanceRecordUnchangedOwner());
-      allow delete: if isAdmin();
+      allow read: if (isSignedIn() && resource.data.user_id == request.auth.uid) || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')) || (isApprovedTeacher() && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main')) && (isTeacherAssignedToCourse(resource.data.get('course_id', '')) || resource.data.get('marked_by_uid', '') == request.auth.uid));
+      allow create: if (isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) || (isApprovedTeacher() && isMemberOfOrg(request.resource.data.get('organization_id', 'mslb-main')) && (request.resource.data.marked_by_uid == request.auth.uid || isTeacherAssignedToCourse(request.resource.data.get('course_id', ''))))) && isValidAttendanceRecord();
+      allow update: if (isTenantAdmin(resource.data.get('organization_id', 'mslb-main')) || (isApprovedTeacher() && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main')) && isAttendanceRecordUnchangedOwner())) && isValidAttendanceRecord() && (resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main'));
+      allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
     // notifications collection
@@ -1617,12 +1698,11 @@ service cloud.firestore {
 
     // payments collection
     match /payments/{paymentId} {
-      allow get: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create: if isSignedIn() && isValidPaymentCreate();
-      allow update: if (isAdmin() && isValidPaymentUpdateByAdmin())
-        || (isSignedIn() && resource.data.user_id == request.auth.uid && isValidPaymentUpdateByOwner());
-      allow delete: if isAdmin();
+      allow get: if isSuperAdmin() || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')) || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow list: if isSuperAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid) || (resource.data.organization_id is string && isTenantAdmin(resource.data.organization_id));
+      allow create: if isSignedIn() && isValidPaymentCreate() && isMemberOfOrg(request.resource.data.get('organization_id', 'mslb-main'));
+      allow update: if (isTenantAdmin(resource.data.get('organization_id', 'mslb-main')) && isValidPaymentUpdateByAdmin() && request.resource.data.get('organization_id', 'mslb-main') == resource.data.get('organization_id', 'mslb-main')) || (isSignedIn() && resource.data.user_id == request.auth.uid && isValidPaymentUpdateByOwner() && request.resource.data.get('organization_id', 'mslb-main') == resource.data.get('organization_id', 'mslb-main'));
+      allow delete: if isSuperAdmin() || isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
 
@@ -1655,38 +1735,20 @@ service cloud.firestore {
     }
 
     match /quiz_results/{resultId} {
-      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
+      allow read: if (isSignedIn() && resource.data.user_id == request.auth.uid) || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')) || (isApprovedTeacher() && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main')));
       // SECURITY FIX (Phase 8): Students MUST NOT write quiz results directly to Firestore.
       // All quiz submissions must go through the submitQuiz Cloud Function,
       // which performs server-side grading and deduplication.
       allow create: if false;  // Server-only via Admin SDK
-      allow update: if isAdmin() || (
-        isTeacherOrAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacher_notes', 'feedback', 'reviewed_at', 'reviewed_by'])
-        && request.resource.data.score == resource.data.score
-        && request.resource.data.total == resource.data.total
-        && request.resource.data.percentage == resource.data.percentage
-        && request.resource.data.user_id == resource.data.user_id
-      );
-      allow delete: if isAdmin();
+      allow update: if (isTenantAdmin(resource.data.get('organization_id', 'mslb-main')) && request.resource.data.get('organization_id', 'mslb-main') == resource.data.get('organization_id', 'mslb-main')) || (isApprovedTeacher() && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main')) && request.resource.data.get('organization_id', 'mslb-main') == resource.data.get('organization_id', 'mslb-main') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacher_notes', 'feedback', 'reviewed_at', 'reviewed_by']) && request.resource.data.score == resource.data.score && request.resource.data.total == resource.data.total && request.resource.data.percentage == resource.data.percentage && request.resource.data.user_id == resource.data.user_id);
+      allow delete: if isSuperAdmin() || isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
     match /certificates/{certificateId} {
-      allow get: if isSignedIn() && (resource.data.user_id == request.auth.uid || isTeacherOrAdmin());
-      allow list: if isAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create: if isTeacherOrAdmin() || (
-        isSignedIn()
-        && request.resource.data.user_id == request.auth.uid
-        && request.resource.data.type == 'quiz_assessment'
-        && request.resource.data.percentage >= 60
-        && request.resource.data.score <= request.resource.data.total_questions
-        && hasOnlyAllowedKeys(request.resource.data, [
-             'certificate_id', 'user_id', 'user_name', 'course_name', 'type',
-             'quiz_category', 'score', 'total_questions', 'percentage',
-             'grade_label', 'completion_date', 'hijri_date', 'created_at'
-           ])
-      );
-      allow update, delete: if isAdmin();
+      allow get: if isSignedIn() && (resource.data.user_id == request.auth.uid || isTeacherOrAdminOfOrg(resource.data.get('organization_id', 'mslb-main')) || isSuperAdmin());
+      allow list: if isSuperAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid) || (resource.data.organization_id is string && isTenantAdmin(resource.data.organization_id));
+      allow create: if (isTeacherOrAdminOfOrg(request.resource.data.get('organization_id', 'mslb-main')) || (isSignedIn() && request.resource.data.user_id == request.auth.uid && isMemberOfOrg(request.resource.data.get('organization_id', 'mslb-main')) && request.resource.data.type == 'quiz_assessment' && request.resource.data.percentage >= 60 && request.resource.data.score <= request.resource.data.total_questions && hasOnlyAllowedKeys(request.resource.data, ['certificate_id', 'user_id', 'user_name', 'course_name', 'type', 'quiz_category', 'score', 'total_questions', 'percentage', 'grade_label', 'completion_date', 'hijri_date', 'created_at', 'organization_id', 'institution_name'])));
+      allow update, delete: if isSuperAdmin() || isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
     // Public certificate verification — minimal safe data only (no UID, email, phone, internal metadata)
@@ -1699,12 +1761,9 @@ service cloud.firestore {
 
 
     match /enrollments/{enrollmentId} {
-      allow read: if isTeacherOrAdmin() || (isSignedIn() && resource.data.user_id == request.auth.uid);
-      allow create, update: if isAdmin()
-        && request.resource.data.user_id is string
-        && request.resource.data.course_id is string
-        && enrollmentId == enrollmentDocId(request.resource.data.user_id, request.resource.data.course_id);
-      allow delete: if isAdmin();
+      allow read: if (isSignedIn() && resource.data.user_id == request.auth.uid) || isTenantAdmin(resource.data.get('organization_id', 'mslb-main')) || (isApprovedTeacher() && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main')));
+      allow create, update: if isTenantAdmin(request.resource.data.get('organization_id', 'mslb-main')) && request.resource.data.user_id is string && request.resource.data.course_id is string && enrollmentId == enrollmentDocId(request.resource.data.user_id, request.resource.data.course_id) && (resource == null || resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main'));
+      allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
     match /modules/{moduleId} {
@@ -1857,7 +1916,26 @@ service cloud.firestore {
     }
 
     match /live_classes/{classId} {
-      allow read: if canReadLiveClassData(resource.data);
+      allow get: if canReadLiveClassData(resource.data);
+      allow list: if isApprovedVerifiedUser()
+        && (
+          isAdmin()
+          || (
+            roleOf(request.auth.uid) in ['teacher', 'assistant_teacher']
+            && (
+              resource.data.teacher_id == request.auth.uid
+              || (
+                'course_id' in resource.data
+                && isTeacherAssignedToCourse(resource.data.course_id)
+              )
+            )
+          )
+          || (
+            roleOf(request.auth.uid) == 'student'
+            && 'course_id' in resource.data
+            && hasActiveEnrollmentForCourse(resource.data.course_id)
+          )
+        );
       allow create: if isTeacherOrAdmin()
         && isValidLiveClassWrite()
         && (isAdmin() || request.resource.data.teacher_id == request.auth.uid)
@@ -1947,8 +2025,10 @@ service cloud.firestore {
     match /feedback/{feedbackId} {
       allow read: if isApprovedVerifiedUser();
       allow create: if isApprovedVerifiedUser() && isValidFeedbackCreate();
-      allow update: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid && isValidFeedbackUpdate());
-      allow delete: if isAdmin() || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
+      allow update: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'))
+        || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid && isValidFeedbackUpdate());
+      allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'))
+        || (isApprovedVerifiedUser() && resource.data.user_id == request.auth.uid);
     }
 
     // editable app settings (fees/social links/profile about content/version control)
@@ -1959,8 +2039,8 @@ service cloud.firestore {
 
     // Phase 50: Multi-Tenant SaaS Organizations & Memberships
     match /organizations/{organizationId} {
-      // Any verified user can read active organization metadata (name, slug, logo)
-      allow read: if isApprovedVerifiedUser();
+      // Allow public directory read of active or trial organizations for directory listing & signup onboarding, or any verified user / super admin
+      allow read: if resource.data.status in ['active', 'trial'] || isApprovedVerifiedUser();
       // Only Super Admin can directly create, update, or archive organizations
       allow create, update, delete: if isSuperAdmin();
     }
@@ -2105,21 +2185,33 @@ service cloud.firestore {
     }
 
     match /fatawa_questions/{questionId} {
-      allow read: if (isSignedIn() && (
-        isTeacherOrAdmin() || 
-        resource.data.student_id == request.auth.uid || 
-        (resource.data.is_public == true && resource.data.status == 'answered')
-      ));
+      allow read: if isSignedIn() && (
+        isTeacherOrAdminOfOrg(resource.data.get('organization_id', 'mslb-main')) ||
+        resource.data.student_id == request.auth.uid ||
+        (resource.data.is_public == true && resource.data.status == 'answered' && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main')))
+      );
       allow create: if isSignedIn()
         && request.resource.data.student_id == request.auth.uid
         && request.resource.data.status == 'pending'
-        && (!('is_public' in request.resource.data) || request.resource.data.is_public == false);
-      allow update: if isTeacherOrAdmin()
+        && (!('is_public' in request.resource.data) || request.resource.data.is_public == false)
+        && isMemberOfOrg(request.resource.data.get('organization_id', 'mslb-main'));
+      allow update: if isTeacherOrAdminOfOrg(resource.data.get('organization_id', 'mslb-main'))
         || (isSignedIn()
           && resource.data.student_id == request.auth.uid
           && resource.data.status == 'pending'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['question', 'question_text', 'updated_at']));
-      allow delete: if isAdmin();
+      allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
+    }
+
+    match /sabaq_records/{recordId} {
+      allow read: if isSignedIn() && (
+        (resource.data.student_id == request.auth.uid && isMemberOfOrg(resource.data.get('organization_id', 'mslb-main'))) ||
+        isTeacherOrAdminOfOrg(resource.data.get('organization_id', 'mslb-main'))
+      );
+      allow create: if isTeacherOrAdminOfOrg(request.resource.data.get('organization_id', 'mslb-main'));
+      allow update: if isTeacherOrAdminOfOrg(resource.data.get('organization_id', 'mslb-main'))
+        && (resource.data.get('organization_id', 'mslb-main') == request.resource.data.get('organization_id', 'mslb-main'));
+      allow delete: if isTenantAdmin(resource.data.get('organization_id', 'mslb-main'));
     }
 
     match /telemetry_errors/{errorId} {

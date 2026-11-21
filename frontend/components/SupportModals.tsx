@@ -5,11 +5,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Constants from 'expo-constants';
 
-const SUPPORT_EMAIL = 'madrastussalikatlilbanat@gmail.com';
+const FALLBACK_SUPPORT_EMAIL = 'support@suffahportal.com';
 
 interface ModalProps {
   visible: boolean;
@@ -18,6 +19,11 @@ interface ModalProps {
 
 export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
   const { user, profile } = useAuth();
+  const { activeOrg, activeOrgId } = useActiveOrganization();
+  const targetOrgId = activeOrgId || activeOrg?.id || DEFAULT_ORGANIZATION_ID;
+  const madrasaName = activeOrg?.name || 'Suffah Digital Madrasa';
+  const madrasaEmail = activeOrg?.email || FALLBACK_SUPPORT_EMAIL;
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<'Crash / Freeze' | 'Video / Audio' | 'Login / Account' | 'UI / Display' | 'Other'>('Crash / Freeze');
@@ -34,6 +40,8 @@ export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
         userId: user?.uid || 'anonymous',
         userEmail: user?.email || profile?.email || 'not_provided',
         userName: profile?.name || 'Anonymous User',
+        organization_id: targetOrgId,
+        organization_name: madrasaName,
         title: title.trim(),
         description: description.trim(),
         category,
@@ -46,7 +54,7 @@ export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
       setTitle('');
       setDescription('');
       onClose();
-      Alert.alert('Report Submitted / رپورٹ موصول ہوئی', 'JazakAllah Khair! Your bug report has been forwarded to our technical team for resolution.');
+      Alert.alert('Report Submitted / رپورٹ موصول ہوئی', `JazakAllah Khair! Your technical report has been forwarded to the technical support desk for ${madrasaName}.`);
     } catch (err) {
       setLoading(false);
       console.warn('[BugReport] Firestore save error:', err);
@@ -62,9 +70,9 @@ export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
   };
 
   const handleSendEmail = () => {
-    const subject = encodeURIComponent(`Bug Report [${category}]: ${title || 'App Issue'}`);
-    const body = encodeURIComponent(`Description:\n${description}\n\n---\nUser: ${profile?.name || 'Student'}\nPlatform: ${Platform.OS}\nApp Version: ${Constants.expoConfig?.version || '1.0.0'}`);
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`);
+    const subject = encodeURIComponent(`[${madrasaName}] Bug Report [${category}]: ${title || 'App Issue'}`);
+    const body = encodeURIComponent(`Madrasa: ${madrasaName} (ID: ${targetOrgId})\nDescription:\n${description}\n\n---\nUser: ${profile?.name || 'Student'}\nPlatform: ${Platform.OS}\nApp Version: ${Constants.expoConfig?.version || '1.0.0'}`);
+    Linking.openURL(`mailto:${madrasaEmail}?subject=${subject}&body=${body}`);
   };
 
   return (
@@ -74,7 +82,7 @@ export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
           <View style={styles.header}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="bug" size={22} color="#EF4444" />
-              <Text style={styles.title}>Report a Bug / तकनीकी समस्या</Text>
+              <Text style={styles.title}>Report a Bug / تکنیکی مسئلہ</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={COLORS.textMain} />
@@ -82,7 +90,7 @@ export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
           </View>
 
           <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
-            <Text style={styles.subtitle}>Found an issue in the app? Let us know so we can fix it immediately.</Text>
+            <Text style={styles.subtitle}>Found an issue in {madrasaName}? Let us know so our support team can resolve it immediately.</Text>
 
             <Text style={styles.label}>Issue Category</Text>
             <View style={styles.categoryGrid}>
@@ -97,7 +105,7 @@ export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
               ))}
             </View>
 
-            <Text style={styles.label}>Issue Summary / शीर्षक</Text>
+            <Text style={styles.label}>Issue Summary / مسئلہ کا خلاصہ</Text>
             <TextInput
               style={styles.input}
               placeholder="e.g. Video player freezes after 5 minutes"
@@ -107,7 +115,7 @@ export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
               maxLength={100}
             />
 
-            <Text style={styles.label}>Detailed Explanation / विवरण</Text>
+            <Text style={styles.label}>Detailed Explanation / تفصیلات</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Describe what happened, what screen you were on, and how we can reproduce it..."
@@ -138,6 +146,11 @@ export const BugReportModal: React.FC<ModalProps> = ({ visible, onClose }) => {
 
 export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) => {
   const { user, profile } = useAuth();
+  const { activeOrg, activeOrgId } = useActiveOrganization();
+  const targetOrgId = activeOrgId || activeOrg?.id || DEFAULT_ORGANIZATION_ID;
+  const madrasaName = activeOrg?.name || 'Suffah Digital Madrasa';
+  const madrasaEmail = activeOrg?.email || FALLBACK_SUPPORT_EMAIL;
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<'New Islamic Tool' | 'Course Material' | 'UI / UX' | 'Other'>('New Islamic Tool');
@@ -154,6 +167,8 @@ export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) 
         userId: user?.uid || 'anonymous',
         userEmail: user?.email || profile?.email || 'not_provided',
         userName: profile?.name || 'Anonymous Student',
+        organization_id: targetOrgId,
+        organization_name: madrasaName,
         title: title.trim(),
         description: description.trim(),
         category,
@@ -164,7 +179,7 @@ export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) 
       setTitle('');
       setDescription('');
       onClose();
-      Alert.alert('Suggestion Saved / تجویز موصول ہوئی', 'JazakAllah Khair! We love new ideas and will review yours for upcoming releases.');
+      Alert.alert('Suggestion Saved / تجویز موصول ہوئی', `JazakAllah Khair! Your idea has been recorded for ${madrasaName} and platform updates.`);
     } catch (err) {
       setLoading(false);
       console.warn('[FeatureSuggest] Firestore save error:', err);
@@ -180,9 +195,9 @@ export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) 
   };
 
   const handleSendEmail = () => {
-    const subject = encodeURIComponent(`Feature Suggestion [${category}]: ${title || 'New Idea'}`);
-    const body = encodeURIComponent(`Suggestion:\n${description}\n\n---\nFrom: ${profile?.name || 'Student'}`);
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`);
+    const subject = encodeURIComponent(`[${madrasaName}] Feature Suggestion [${category}]: ${title || 'New Idea'}`);
+    const body = encodeURIComponent(`Madrasa: ${madrasaName} (ID: ${targetOrgId})\nSuggestion:\n${description}\n\n---\nFrom: ${profile?.name || 'Student'}`);
+    Linking.openURL(`mailto:${madrasaEmail}?subject=${subject}&body=${body}`);
   };
 
   return (
@@ -192,7 +207,7 @@ export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) 
           <View style={styles.header}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="bulb" size={22} color="#F59E0B" />
-              <Text style={styles.title}>Suggest a Feature / नए सुझाव</Text>
+              <Text style={styles.title}>Suggest a Feature / نئی تجویز</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={COLORS.textMain} />
@@ -200,7 +215,7 @@ export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) 
           </View>
 
           <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
-            <Text style={styles.subtitle}>Have an idea to make Madrasa Tus Salikat Lil Banat app even better? We are listening!</Text>
+            <Text style={styles.subtitle}>Have an idea to make {madrasaName} even better? We are listening!</Text>
 
             <Text style={styles.label}>Suggestion Category</Text>
             <View style={styles.categoryGrid}>
@@ -215,7 +230,7 @@ export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) 
               ))}
             </View>
 
-            <Text style={styles.label}>Feature Title / सुझाव का नाम</Text>
+            <Text style={styles.label}>Feature Title / عنوان</Text>
             <TextInput
               style={styles.input}
               placeholder="e.g. Add Daily Hadith reminder widget"
@@ -225,7 +240,7 @@ export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) 
               maxLength={100}
             />
 
-            <Text style={styles.label}>How will this help students? / लाभ व विवरण</Text>
+            <Text style={styles.label}>How will this help students? / فوائد اور تفصیلات</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Explain how you envision this feature working and why it would benefit Islamic students..."
@@ -254,47 +269,50 @@ export const FeatureSuggestModal: React.FC<ModalProps> = ({ visible, onClose }) 
   );
 };
 
-const FAQ_ITEMS = [
-  {
-    q: 'How do I join a Live Class? / Live Class me kaise join karein?',
-    a: 'When a class is live, a prominent active banner will appear on your Home screen and Courses tab. Tap "Join Now" to enter the interactive video classroom.'
-  },
-  {
-    q: 'Can I access course lessons offline? / Bina internet ke lessons dekh sakte hain?',
-    a: 'Yes! While viewing a course lesson, tap the Download icon next to any PDF book or audio recording. Once downloaded, you can access it anytime from the Library tab without internet connection.'
-  },
-  {
-    q: 'Why am I not receiving Prayer notifications? / Azan ki notification kyu nahi aa rahi?',
-    a: 'Please check two things: 1) Ensure notifications are permitted in your Android/iOS system settings for this app. 2) In App Settings -> Announcements, check that notifications are toggled ON.'
-  },
-  {
-    q: 'How do I use the Qibla Finder? / Qibla Finder kaise use karein?',
-    a: 'Go to More -> Applications -> Qibla Finder. You can switch between the interactive Google Camera AR overlay or the standard compass direction. Make sure GPS location access is granted.'
-  },
-  {
-    q: 'How can I change the app language? / App ki language kaise change karein?',
-    a: 'Go to Settings -> Language and choose between English, Urdu (اردو), or Arabic (العربية). Your choice is saved automatically.'
-  },
-  {
-    q: 'How do I reset my password? / Password bhool gaye toh kya karein?',
-    a: 'On the login screen, tap "Forgot Password" and enter your registered email. You will receive a secure password reset link within minutes.'
-  },
-  {
-    q: 'How do I check my Quiz scores and certificates? / Quiz results kahan dekhein?',
-    a: 'Go to More -> Progress & Analytics to see your detailed performance history, attendance record, and downloaded certificates.'
-  },
-  {
-    q: 'Who do I contact for payment or account approval issues?',
-    a: `You can reach out to our administration directly via WhatsApp Support in Settings or email us at ${SUPPORT_EMAIL}.`
-  }
-];
-
 export const FaqModal: React.FC<ModalProps> = ({ visible, onClose }) => {
+  const { activeOrg } = useActiveOrganization();
+  const madrasaName = activeOrg?.name || 'Suffah Digital Madrasa';
+  const madrasaEmail = activeOrg?.email || FALLBACK_SUPPORT_EMAIL;
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   const toggleExpand = (idx: number) => {
     setExpandedIndex(expandedIndex === idx ? null : idx);
   };
+
+  const faqItems = [
+    {
+      q: 'How do I join a Live Class? / Live Class me kaise join karein?',
+      a: 'When a class is live, a prominent active banner will appear on your Home screen and Courses tab. Tap "Join Now" to enter the interactive audio classroom.'
+    },
+    {
+      q: 'Can I access course lessons offline? / Bina internet ke lessons dekh sakte hain?',
+      a: 'Yes! While viewing a course lesson, tap the Download icon next to any PDF book or audio recording. Once downloaded, you can access it anytime from the Library tab without internet connection.'
+    },
+    {
+      q: 'Why am I not receiving Prayer notifications? / Azan ki notification kyu nahi aa rahi?',
+      a: 'Please check two things: 1) Ensure notifications are permitted in your phone system settings. 2) In App Settings -> Prayer Times, check that reminders are toggled ON.'
+    },
+    {
+      q: 'How do I use the Qibla Finder? / Qibla Finder kaise use karein?',
+      a: 'Go to More -> Applications -> Qibla Finder. You can view the compass direction pointing towards Makkah. Make sure GPS location access is granted.'
+    },
+    {
+      q: 'How can I change the app language? / App ki language kaise change karein?',
+      a: 'Go to Settings -> Language and choose between English, Urdu (اردو), Roman Urdu, or Arabic (العربية). Your choice is saved automatically.'
+    },
+    {
+      q: 'How do I reset my password? / Password bhool gaye toh kya karein?',
+      a: 'On the login screen, tap "Forgot Password" and enter your registered email. You will receive a secure password reset link within minutes.'
+    },
+    {
+      q: 'How do I check my Quiz scores and certificates? / Quiz results kahan dekhein?',
+      a: 'Go to More -> Progress & Analytics to see your detailed performance history, attendance record, and downloaded certificates.'
+    },
+    {
+      q: 'Who do I contact for payment or account approval issues? / Madarse se rabta kaise karein?',
+      a: `You can reach out to the ${madrasaName} administration directly via WhatsApp Support in Settings or email us at ${madrasaEmail}.`
+    }
+  ];
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -310,9 +328,9 @@ export const FaqModal: React.FC<ModalProps> = ({ visible, onClose }) => {
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          <Text style={styles.faqSubtitle}>Find quick answers to common questions about using the Madrasa Tus Salikat Lil Banat app / अक्सर पूछे जाने वाले सवाल:</Text>
+          <Text style={styles.faqSubtitle}>Find quick answers to common questions about using your madrasa portal / عام سوالات و جوابات:</Text>
 
-          {FAQ_ITEMS.map((item, idx) => {
+          {faqItems.map((item, idx) => {
             const isOpen = expandedIndex === idx;
             return (
               <TouchableOpacity
@@ -333,12 +351,12 @@ export const FaqModal: React.FC<ModalProps> = ({ visible, onClose }) => {
           <View style={styles.contactCard}>
             <Ionicons name="mail" size={28} color={COLORS.primary} style={{ marginBottom: 8 }} />
             <Text style={styles.contactTitle}>Still need assistance?</Text>
-            <Text style={styles.contactText}>Our administration team is always ready to help you with your studies and app setup.</Text>
+            <Text style={styles.contactText}>The administration team at {madrasaName} is always ready to help you with your studies and app setup.</Text>
             <TouchableOpacity
               style={styles.contactBtn}
-              onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=MSDL%20App%20Support%20Inquiry`)}
+              onPress={() => Linking.openURL(`mailto:${madrasaEmail}?subject=${encodeURIComponent(`Support Inquiry - ${madrasaName}`)}`)}
             >
-              <Text style={styles.contactBtnText}>Email: {SUPPORT_EMAIL}</Text>
+              <Text style={styles.contactBtnText}>Email: {madrasaEmail}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

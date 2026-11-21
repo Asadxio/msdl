@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { IslamicCertificateModal } from '@/components/IslamicCertificateModal';
 import { saveQuizCertificate, type QuizCertificateData } from '@/lib/quizCertificate';
 import { withTimeout } from '@/lib/errors';
+import { useActiveOrganization } from '@/lib/tenantContext';
 
 
 type QuizQuestion = {
@@ -66,6 +67,7 @@ export default function QuizScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ courseId?: string; course_id?: string; category?: string }>();
   const { user, profile } = useAuth();
+  const { activeOrg } = useActiveOrganization();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'assistant_teacher' || isAdmin;
   
@@ -117,11 +119,11 @@ export default function QuizScreen() {
 
       // 2️⃣ Cache miss — single Cloud Function call instead of 44 Firestore calls
       try {
-        const getCountsFn = httpsCallable<Record<string, never>, { counts: Record<string, number>; fetchedAt: number }>(
+        const getCountsFn = httpsCallable<{ organization_id?: string }, { counts: Record<string, number>; fetchedAt: number }>(
           functions,
           'getQuizCategoryCounts'
         );
-        const res = await getCountsFn({});
+        const res = await getCountsFn({ organization_id: activeOrg?.id || 'mslb-main' });
         const counts = res.data.counts ?? {};
         if (mounted) {
           setCategoryCounts(counts);
@@ -142,7 +144,7 @@ export default function QuizScreen() {
     };
     fetchCounts();
     return () => { mounted = false; };
-  }, []);
+  }, [activeOrg?.id]);
 
   // Fetch recent quiz score history for performance trend chart
   useEffect(() => {
@@ -156,8 +158,13 @@ export default function QuizScreen() {
       );
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const results: QuizAttemptHistory[] = [];
+        const currentOrg = activeOrg?.id || 'mslb-main';
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
+          const docOrg = data.organization_id || 'mslb-main';
+          if (docOrg !== currentOrg && profile?.role !== 'super_admin') {
+            return;
+          }
           const score = Number(data.score || 0);
           const total = Number(data.total || data.total_questions || 0);
           const pct = total > 0 ? Math.round((score / total) * 100) : 0;
@@ -184,7 +191,7 @@ export default function QuizScreen() {
     } catch (err) {
       console.warn('[QuizScreen] score history setup error:', err);
     }
-  }, [user?.uid]);
+  }, [user?.uid, activeOrg?.id, profile?.role]);
 
   const loadQuiz = useCallback(async (category: string) => {
     setLoading(true);
@@ -198,7 +205,7 @@ export default function QuizScreen() {
     
     try {
       const getQuizQuestionsFn = httpsCallable(functions, 'getQuizQuestions');
-      const res = await getQuizQuestionsFn({ category });
+      const res = await getQuizQuestionsFn({ category, organization_id: activeOrg?.id || 'mslb-main' });
       const data = res.data as { questions: QuizQuestion[] };
       const all: QuizQuestion[] = data.questions;
       
@@ -226,7 +233,7 @@ export default function QuizScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.uid, profile]);
+  }, [user?.uid, profile, activeOrg?.id]);
 
   const selectCategory = (cat: string) => {
     submissionLockRef.current = false;
@@ -278,8 +285,11 @@ export default function QuizScreen() {
     const studentName = profile?.name || user?.displayName || 'طالبہ';
     const categoryName = selectedCategory || 'دینی معلومات';
 
+    const institutionArabic = activeOrg?.name_arabic || activeOrg?.name || 'مدرسۃ السالکات للبنات';
+    const institutionEnglish = activeOrg?.name || 'Suffah Digital Madrasa';
+
     const text = 
-      `🎓 *مدرسۃ السالکات للبنات — کوئز رپورٹ*\n` +
+      `🎓 *${institutionArabic} — کوئز رپورٹ*\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `👤 *طالبہ:* ${studentName}\n` +
       `📚 *موضوع:* ${categoryName}\n` +
@@ -287,7 +297,7 @@ export default function QuizScreen() {
       `🎖️ *نتیجہ:* ${passed ? '✅ کامیاب (Passed)' : '🔄 مزید محنت کی ضرورت (Needs Practice)'}\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `✨ *علم نافع اور عمل صالح کی دعا کے ساتھ* ✨\n` +
-      `📱 مدرسۃ السالکات آن لائن پورٹل`;
+      `📱 ${institutionEnglish} آن لائن پورٹل`;
 
     const encodedText = encodeURIComponent(text);
     const whatsappUrl = `whatsapp://send?text=${encodedText}`;
@@ -360,6 +370,7 @@ export default function QuizScreen() {
               nonce: attemptDocId,
               course_id: String(params.courseId || params.course_id || '').trim() || undefined,
               student_name: profile?.name || user.displayName || undefined,
+              organization_id: activeOrg?.id || 'mslb-main',
             }),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_ERROR')), 30000))
           ]);
@@ -404,6 +415,12 @@ export default function QuizScreen() {
           selectedCategory || 'Islamic Assessment',
           serverResult.score,
           serverResult.total,
+          {
+            organizationId: activeOrg?.id || 'mslb-main',
+            institutionName: activeOrg?.name || 'Madrasatu-s-Salikat Lil Banat',
+            institutionArabic: activeOrg?.name_arabic || 'مدرسۃ السالکات للبنات',
+            orgSlug: activeOrg?.slug,
+          }
         ).then((cert) => {
           setGeneratedCert(cert);
           setCertModalVisible(true);
@@ -488,6 +505,7 @@ export default function QuizScreen() {
       options: normalized,
       correct_answer: correctAnswer.trim(),
       category: cleanCategory,
+      organization_id: activeOrg?.id || 'mslb-main',
       created_at: serverTimestamp(),
     };
 

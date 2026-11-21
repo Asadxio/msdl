@@ -59,17 +59,15 @@ test('P14-04: In-app Privacy Policy, Terms of Service, and Community Guidelines 
 // PART 2: MANIFEST & PERMISSION ACCOUNTING
 // ============================================================
 
-test('P14-05: All 15 Android permissions are explicitly documented with legitimate usage', () => {
+test('P14-05: All Android permissions are explicitly documented and verified under Purdah mode', () => {
   const appJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'frontend/app.json'), 'utf8'));
   const perms = appJson.expo.android.permissions;
-  assert.strictEqual(perms.length, 15, 'Exactly 15 permissions declared in app.json');
+  assert.strictEqual(perms.length, 13, 'Exactly 13 permissions declared in app.json');
   
   const required = [
     'android.permission.INTERNET',
     'android.permission.POST_NOTIFICATIONS',
-    'android.permission.CAMERA',
     'android.permission.READ_MEDIA_IMAGES',
-    'android.permission.READ_MEDIA_VIDEO',
     'android.permission.READ_EXTERNAL_STORAGE',
     'android.permission.ACCESS_COARSE_LOCATION',
     'android.permission.ACCESS_FINE_LOCATION',
@@ -78,8 +76,8 @@ test('P14-05: All 15 Android permissions are explicitly documented with legitima
     'android.permission.BLUETOOTH_CONNECT',
     'android.permission.FOREGROUND_SERVICE',
     'android.permission.FOREGROUND_SERVICE_MICROPHONE',
-    'android.permission.FOREGROUND_SERVICE_CAMERA',
-    'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK'
+    'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+    'android.permission.WAKE_LOCK'
   ];
 
   for (const p of required) {

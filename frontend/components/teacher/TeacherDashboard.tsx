@@ -17,6 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, onSnapshot, query, where, limit, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { COLORS, RADIUS, SPACING, SHADOWS } from '@/constants/theme';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { startLiveClass } from '@/lib/liveClasses';
 import { UserProfile } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { db } from '@/lib/firebase';
@@ -85,6 +87,7 @@ export function TeacherDashboard({
   refreshing,
 }: TeacherDashboardProps) {
   const router = useRouter();
+  const { activeOrg, activeOrgId } = useActiveOrganization();
   const insets = useSafeAreaInsets();
   const { courses, teachers, enrolledCourses } = useData();
 
@@ -104,6 +107,38 @@ export function TeacherDashboard({
   const [selfProfileModalVisible, setSelfProfileModalVisible] = useState(false);
   const [enrollmentCounts, setEnrollmentCounts] = useState<Record<string, number>>({});
   const [totalEnrolledStudents, setTotalEnrolledStudents] = useState<number>(0);
+  const [startingQuickClass, setStartingQuickClass] = useState(false);
+
+  // Ghalati 3 Fix: 1-Tap Quick Start Live Class
+  const handleQuickGoLive = async (targetCourseId?: string, targetCourseName?: string) => {
+    if (!user?.uid || startingQuickClass) return;
+    setStartingQuickClass(true);
+    try {
+      const primaryCourse = targetCourseId
+        ? courses.find((c) => c.id === targetCourseId)
+        : (myAssignedCourses[0] || courses[0]);
+      const courseId = primaryCourse?.id || targetCourseId || 'general';
+      const courseName = primaryCourse?.name || targetCourseName || 'Live Tajweed & Dars';
+      const orgId = activeOrgId || DEFAULT_ORGANIZATION_ID;
+
+      const classId = await startLiveClass({
+        courseId,
+        title: `${courseName} — Live Dars with ${profile?.name || 'Ustaadha'}`,
+        teacherId: user.uid,
+        teacherName: profile?.name || 'Ustaadha',
+        meetUrl: 'https://meet.google.com/lookup/suffah-live',
+        profile,
+        purdahModeEnabled: true,
+        organizationId: orgId,
+      });
+
+      router.push(`/live-class/${classId}` as any);
+    } catch (err: any) {
+      Alert.alert('Class Error', err?.message || 'Failed to start live class.');
+    } finally {
+      setStartingQuickClass(false);
+    }
+  };
 
   // Match canonical teacher record by UID, user_uid, or normalized name
   const currentTeacher = useMemo(() => {
@@ -188,7 +223,7 @@ export function TeacherDashboard({
           const data = d.data();
           const isMySession = data.teacher_id === user?.uid;
           const isAssignedCourse = data.course_id && assignedCourseMeta.ids.has(String(data.course_id).toLowerCase());
-          if (assignedCourseMeta.ids.size === 0 || isMySession || isAssignedCourse) {
+          if (isMySession || isAssignedCourse) {
             list.push({
               id: d.id,
               course_id: data.course_id || '',
@@ -471,6 +506,44 @@ export function TeacherDashboard({
         </View>
 
         {/* ========================================================================= */}
+        {/* QUICK LIVE CLASS LAUNCHER (Ghalati 3 Fix: 1-Tap Go Live)                  */}
+        {/* ========================================================================= */}
+        <View style={styles.quickLiveLaunchContainer}>
+          <View style={styles.quickLiveLaunchCard}>
+            <View style={styles.quickLiveLaunchHeader}>
+              <View style={styles.quickLivePulseBadge}>
+                <View style={styles.quickLivePulseDot} />
+                <Text style={styles.quickLivePulseText}>LIVE DARs DISPATCH</Text>
+              </View>
+              <Text style={styles.quickLiveUrduSub}>فوری آن لائن کلاس شروع کریں</Text>
+            </View>
+
+            <Text style={styles.quickLiveTitle}>
+              {myAssignedCourses[0]?.name ? `Start "${myAssignedCourses[0].name}"` : 'Start Daily Live Dars'}
+            </Text>
+            <Text style={styles.quickLiveSubtitle}>
+              Purdah-compliant voice stream with real-time Quran Mushaf synchronization. One tap connects all enrolled students.
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.quickLiveLaunchBtn, startingQuickClass && { opacity: 0.7 }]}
+              onPress={() => handleQuickGoLive()}
+              disabled={startingQuickClass}
+              activeOpacity={0.85}
+            >
+              {startingQuickClass ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="radio" size={18} color="#FFFFFF" />
+                  <Text style={styles.quickLiveLaunchBtnText}>⚡ Go Live Now • کلاس شروع کریں</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ========================================================================= */}
         {/* SECTION 2: MY CLASSES (ASSIGNED COURSES & SUBJECTS)                       */}
         {/* ========================================================================= */}
         <View style={styles.sectionContainer}>
@@ -590,6 +663,15 @@ export function TeacherDashboard({
                     >
                       <Ionicons name="checkbox-outline" size={13} color={COLORS.primary} />
                       <Text style={styles.myClassActionBtnText}>Attendance</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.myClassActionBtn, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }]}
+                      onPress={() => handleQuickGoLive(c.id, c.name || c.title)}
+                      disabled={startingQuickClass}
+                    >
+                      <Ionicons name="radio" size={13} color="#DC2626" />
+                      <Text style={[styles.myClassActionBtnText, { color: '#DC2626', fontWeight: '700' }]}>Live</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1319,14 +1401,14 @@ export function TeacherDashboard({
             <TouchableOpacity
               style={styles.actionCard}
               activeOpacity={0.7}
-              onPress={() => router.push('/tasbeeh' as any)}
+              onPress={() => router.push('/sabaq-diary' as any)}
             >
               <View style={[styles.actionIconBox, { backgroundColor: '#ECFDF5' }]}>
-                <Ionicons name="finger-print-outline" size={20} color="#059669" />
+                <Ionicons name="journal-outline" size={20} color="#059669" />
               </View>
               <View style={styles.actionTextWrap}>
-                <Text style={styles.actionTitle}>Smart Tasbeeh</Text>
-                <Text style={styles.actionSubtitle}>Daily Dhikr & Wazaif</Text>
+                <Text style={styles.actionTitle}>Sabaq & Manzil Diary</Text>
+                <Text style={styles.actionSubtitle}>Hifz & Dars Daily Log</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -1365,7 +1447,7 @@ export function TeacherDashboard({
                 <Ionicons name="globe-outline" size={22} color={COLORS.secondary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.portalTitle}>Madrasatu-s-Salikat Official Portal</Text>
+                <Text style={styles.portalTitle}>{activeOrg?.name ? `${activeOrg.name} Portal` : 'Official Madrasa Portal'}</Text>
                 <Text style={styles.portalSub}>Visit institutional portal: {MADRASA_WEBSITE_DISPLAY}</Text>
               </View>
             </View>
@@ -2507,6 +2589,81 @@ const styles = StyleSheet.create({
   authoringLaunchBtnText: {
     fontSize: 12,
     fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  quickLiveLaunchContainer: {
+    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  quickLiveLaunchCard: {
+    backgroundColor: '#064E3B',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    ...SHADOWS.card,
+    borderWidth: 1,
+    borderColor: '#047857',
+  },
+  quickLiveLaunchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xs,
+  },
+  quickLivePulseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.5)',
+  },
+  quickLivePulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+  },
+  quickLivePulseText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FCA5A5',
+    letterSpacing: 0.5,
+  },
+  quickLiveUrduSub: {
+    fontSize: 13,
+    color: '#A7F3D0',
+    fontWeight: '600',
+  },
+  quickLiveTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 4,
+  },
+  quickLiveSubtitle: {
+    fontSize: 12,
+    color: '#D1FAE5',
+    lineHeight: 18,
+    marginTop: 4,
+    marginBottom: SPACING.md,
+  },
+  quickLiveLaunchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    gap: 8,
+    ...SHADOWS.card,
+  },
+  quickLiveLaunchBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
     color: '#FFFFFF',
   },
 });

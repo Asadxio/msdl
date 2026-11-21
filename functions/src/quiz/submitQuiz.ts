@@ -13,6 +13,7 @@ interface SubmitQuizRequest {
   startedAtMs?: number;            // for timing analysis (not trusted for security)
   course_id?: string;              // course ID if submitted within a course
   student_name?: string;           // student name for academic visibility
+  organization_id?: string;        // target organization for multi-tenant isolation
 }
 
 interface SubmitQuizResponse {
@@ -36,6 +37,7 @@ export const submitQuiz = onCall(
   async (request: https.CallableRequest<SubmitQuizRequest>): Promise<SubmitQuizResponse> => {
     const user = await requireAuthenticatedUser(request);
     const { category, answers, nonce, startedAtMs } = request.data ?? {};
+    const targetOrg = String(request.data?.organization_id || (user as any).organization_id || 'mslb-main').trim();
 
     // Validate
     if (!category || typeof category !== 'string' || category.trim().length === 0) {
@@ -49,6 +51,22 @@ export const submitQuiz = onCall(
     }
     if (!nonce || typeof nonce !== 'string' || nonce.length > 200) {
       throw invalidArgumentError('nonce is required.');
+    }
+
+    // Resolve Organization profile for multi-tenant isolation & branding
+    let orgSlug = 'MSLB';
+    let orgName = 'Madrasatu-s-Salikat Lil Banat';
+    let orgArabic = 'مدرسۃ السالکات للبنات';
+    try {
+      const orgDoc = await db.collection('organizations').doc(targetOrg).get();
+      if (orgDoc.exists) {
+        const orgData = orgDoc.data() || {};
+        orgName = String(orgData.name || orgName);
+        if (orgData.slug) orgSlug = String(orgData.slug).toUpperCase();
+        if (orgData.name_arabic) orgArabic = String(orgData.name_arabic);
+      }
+    } catch (orgErr) {
+      logger.warn(`[submitQuiz] Failed to load org details for targetOrg=${targetOrg}`, orgErr);
     }
 
     // Deduplication check
@@ -69,17 +87,28 @@ export const submitQuiz = onCall(
     }
 
     // Load quiz questions WITH correct answers server-side (Admin SDK reads all fields)
-    const snapshot = await db.collection('quizzes')
-      .where('category', '==', category.trim())
-      .get();
+    let quizQuery: FirebaseFirestore.Query = db.collection('quizzes')
+      .where('category', '==', category.trim());
+    if (targetOrg !== 'mslb-main') {
+      quizQuery = quizQuery.where('organization_id', '==', targetOrg);
+    }
+    const snapshot = await quizQuery.get();
 
-    if (snapshot.empty) {
+    const validDocs = snapshot.docs.filter((doc) => {
+      if (targetOrg === 'mslb-main') {
+        const docOrg = doc.data().organization_id;
+        return !docOrg || docOrg === 'mslb-main';
+      }
+      return true;
+    });
+
+    if (validDocs.length === 0) {
       throw invalidArgumentError(`No quiz found for category: ${category}`);
     }
 
     // Build answer key & explanation map: { docId -> { correctAnswer, explanation } }
     const answerKeyMap: Record<string, { correctAnswer: string; explanation: string }> = {};
-    snapshot.docs.forEach((doc: FirebaseFirestore.QueryDocumentSnapshot) => {
+    validDocs.forEach((doc: FirebaseFirestore.QueryDocumentSnapshot) => {
       const data = doc.data();
       // Support both field names used in production data
       const correctAnswer = String(data.correctAnswer ?? data.correct_answer ?? '');
@@ -91,7 +120,7 @@ export const submitQuiz = onCall(
       answerKeyMap[doc.id] = { correctAnswer, explanation };
     });
 
-    const total = snapshot.docs.length;
+    const total = validDocs.length;
 
     // Timing check (from quizSecurity.py logic)
     if (startedAtMs && typeof startedAtMs === 'number') {
@@ -144,6 +173,8 @@ export const submitQuiz = onCall(
     const resultDocData: Record<string, any> = {
       uid: user.uid,
       user_id: user.uid, // backward compat with existing quiz_results schema
+      organization_id: targetOrg,
+      institution_name: orgName,
       category: category.trim(),
       score,
       total_questions: total,
@@ -168,6 +199,7 @@ export const submitQuiz = onCall(
     // Write dedupe BEFORE awaiting result (prevent race condition)
     await dedupeRef.set({
       uid: user.uid,
+      organization_id: targetOrg,
       category,
       nonce,
       score,
@@ -181,12 +213,17 @@ export const submitQuiz = onCall(
     const resultDoc = await resultRef;
     const resultId = resultDoc.id;
 
-    logger.info(`[submitQuiz] Result written resultId=${resultId} uid=${user.uid} score=${score}/${total}`);
+    logger.info(`[submitQuiz] Result written resultId=${resultId} uid=${user.uid} org=${targetOrg} score=${score}/${total}`);
 
     // If student passed with >= 60%, automatically persist verified certificate via Admin SDK
     let certificateId: string | undefined = undefined;
     if (percentage >= 60) {
       certificateId = `cert_quiz_${user.uid}_${category.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+      const serialCat = category.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'GEN';
+      const serialUser = user.uid.slice(-3).toUpperCase();
+      const serialSalt = Math.random().toString(36).slice(2, 6).toUpperCase();
+      const serialId = `${orgSlug}-QZ-${new Date().getFullYear()}-${serialCat}-${serialUser}${serialSalt}`;
+
       const studentName = String(request.data?.student_name || user.email || 'Student').trim();
       const gradeLabel = percentage >= 90
         ? 'Distinction (Mumtaz - ممتاز)'
@@ -198,6 +235,7 @@ export const submitQuiz = onCall(
 
       await collections.certificates().doc(certificateId).set({
         certificate_id: certificateId,
+        serial_id: serialId,
         user_id: user.uid,
         user_name: studentName,
         course_name: `Quiz: ${category}`,
@@ -207,6 +245,9 @@ export const submitQuiz = onCall(
         total_questions: total,
         percentage,
         grade_label: gradeLabel,
+        organization_id: targetOrg,
+        institution_name: orgName,
+        institution_arabic: orgArabic,
         completion_date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
         hijri_date: '1447 AH',
         created_at: FieldValue.serverTimestamp(),

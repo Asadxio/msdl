@@ -20,7 +20,7 @@ export default function PrivacyScreen() {
       <View style={styles.highlightBanner}>
         <Ionicons name="shield-checkmark" size={20} color="#005F46" />
         <Text style={styles.highlightText}>
-          Madrasatu-s-Salikat Lil Banat is committed to the highest standards of Islamic modesty (Purdah), student data protection, and transparent educational governance.
+          Suffah is committed to the highest standards of Islamic modesty (Purdah), student data protection, and transparent educational governance across all member Madrasas.
         </Text>
       </View>
 
@@ -63,7 +63,7 @@ export default function PrivacyScreen() {
       {/* 7. Contact Academic Administration */}
       <Text style={styles.sectionHeading}>7. Governance & Contact</Text>
       <Text style={styles.bodyText}>
-        For privacy queries, data access requests, or official support, please contact the Madrasatu-s-Salikat Lil Banat administration via the in-app support center or official madrasa portal.
+        For privacy queries, data access requests, or official support, please contact the Suffah platform administration via the in-app support center or official portal.
       </Text>
     </LegalDocScreen>
   );

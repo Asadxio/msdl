@@ -75,6 +75,9 @@ export default function QuranReaderScreen() {
   const surahDataRef = useRef<SurahData | null>(null);
   const autoAdvanceRef = useRef(true);
   const [autoAdvance, setAutoAdvance] = useState(true);
+  const activePlayRequestId = useRef(0);
+  const isStoppingOrPausingRef = useRef(false);
+  const hasShownNotificationForSurahRef = useRef(false);
 
   useEffect(() => {
     surahDataRef.current = surahData;
@@ -128,10 +131,17 @@ export default function QuranReaderScreen() {
     void checkOfflineAudioStatus();
 
     return () => {
+      activePlayRequestId.current++;
       if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
+        const s = soundRef.current;
         soundRef.current = null;
+        try {
+          s.setOnPlaybackStatusUpdate(null);
+          s.stopAsync().catch(() => {});
+          s.unloadAsync().catch(() => {});
+        } catch (e) {}
       }
+      void dismissMediaPlaybackNotification();
     };
   }, [surahNum, initialAyat]);
 
@@ -219,33 +229,101 @@ export default function QuranReaderScreen() {
     }
   }, [status, surahData, initialAyat, scrollToAyat]);
 
-  // Audio Playback Handlers
-  const stopCurrentAudio = async () => {
+  // Clean Unload Helper: Detaches listener FIRST to avoid triggering false didJustFinish
+  const unloadActiveSound = async () => {
+    isStoppingOrPausingRef.current = true;
     if (soundRef.current) {
+      const s = soundRef.current;
+      soundRef.current = null;
       try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
+        s.setOnPlaybackStatusUpdate(null);
+        await s.stopAsync().catch(() => {});
+        await s.unloadAsync().catch(() => {});
       } catch (e) {
         // ignore
       }
-      soundRef.current = null;
     }
     setSound(null);
+  };
+
+  // Full Stop Audio & dismiss media notification
+  const stopCurrentAudio = async () => {
+    activePlayRequestId.current++;
+    await unloadActiveSound();
     setIsPlayingAudio(false);
     setPlayingAyatNum(null);
     setIsFullSurahPlaying(false);
+    hasShownNotificationForSurahRef.current = false;
     void dismissMediaPlaybackNotification();
+    isStoppingOrPausingRef.current = false;
+  };
+
+  // Pause Audio: Keeps sound loaded, pauses audio, preserves active verse
+  const pauseCurrentAudio = async () => {
+    isStoppingOrPausingRef.current = true;
+    if (soundRef.current) {
+      try {
+        await soundRef.current.pauseAsync();
+      } catch (e) {
+        console.warn('pauseAsync error:', e);
+      }
+    }
+    setIsPlayingAudio(false);
+    isStoppingOrPausingRef.current = false;
+  };
+
+  // Resume Audio: Continues playing loaded verse without reloading
+  const resumeCurrentAudio = async () => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.playAsync();
+        setIsPlayingAudio(true);
+        return;
+      } catch (e) {
+        console.warn('resumeAsync error:', e);
+      }
+    }
+    if (playingAyatNum !== null) {
+      void playAyatAudio(playingAyatNum);
+    } else if (isFullSurahPlaying) {
+      void playFullSurahAudio();
+    }
+  };
+
+  // 1-Tap Toggle Play/Pause
+  const togglePlayPause = async () => {
+    if (isPlayingAudio) {
+      await pauseCurrentAudio();
+    } else {
+      await resumeCurrentAudio();
+    }
   };
 
   const playAyatAudio = async (ayatNum: number) => {
+    const thisRequestId = ++activePlayRequestId.current;
+
     try {
       setAudioLoading(true);
-      if (soundRef.current && isPlayingAudio && playingAyatNum === ayatNum) {
-        await stopCurrentAudio();
-        setAudioLoading(false);
-        return;
+
+      // If user tapped the currently active verse, toggle between pause and play
+      if (soundRef.current && playingAyatNum === ayatNum) {
+        if (isPlayingAudio) {
+          await pauseCurrentAudio();
+          setAudioLoading(false);
+          return;
+        } else {
+          await resumeCurrentAudio();
+          setAudioLoading(false);
+          return;
+        }
       }
-      await stopCurrentAudio();
+
+      // Concurrency protection: safely unload previous audio with listener detached
+      await unloadActiveSound();
+
+      if (activePlayRequestId.current !== thisRequestId) {
+        return; // A newer request has already started
+      }
 
       // Immediately highlight and smooth-shift viewport to this verse
       setPlayingAyatNum(ayatNum);
@@ -256,6 +334,8 @@ export default function QuranReaderScreen() {
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
 
       const audioUrl = getAyatAudioUrl(surahNum, ayatNum);
@@ -263,23 +343,41 @@ export default function QuranReaderScreen() {
         { uri: audioUrl },
         { shouldPlay: true }
       );
+
+      // If a newer request arrived while loading, cancel this instance immediately
+      if (activePlayRequestId.current !== thisRequestId) {
+        newSound.setOnPlaybackStatusUpdate(null);
+        await newSound.stopAsync().catch(() => {});
+        await newSound.unloadAsync().catch(() => {});
+        return;
+      }
+
       await newSound.setRateAsync(playbackSpeedRef.current, true).catch(() => {});
 
       soundRef.current = newSound;
       setSound(newSound);
 
-      // Display Lock-Screen & Status Bar Media Controls
-      void showMediaPlaybackNotification({
-        title: `${surahMeta?.englishName || 'Surah ' + surahNum} (Ayat ${ayatNum})`,
-        subtitle: `Mishary Rashid Alafasy • Verse ${ayatNum} of ${surahDataRef.current?.totalAyat || surahMeta?.totalAyat || ''}`,
-        isPlaying: true,
-        playbackRate: playbackSpeedRef.current,
-        surahNumber: surahNum,
-        ayatNumber: ayatNum,
-      });
+      // Single Notification Policy: Show ONCE per Surah session, never beep on every verse!
+      if (!hasShownNotificationForSurahRef.current) {
+        hasShownNotificationForSurahRef.current = true;
+        void showMediaPlaybackNotification({
+          title: `Surah ${surahMeta?.englishName || 'Surah ' + surahNum}`,
+          subtitle: `Recitation: Mishary Rashid Alafasy`,
+          isPlaying: true,
+          playbackRate: playbackSpeedRef.current,
+          surahNumber: surahNum,
+          ayatNumber: ayatNum,
+        });
+      }
 
       newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
+        // Discard callbacks from aborted or in-flight cancelled tracks
+        if (activePlayRequestId.current !== thisRequestId || isStoppingOrPausingRef.current) {
+          return;
+        }
+
         if (!playbackStatus.isLoaded) return;
+
         if (playbackStatus.positionMillis && playbackStatus.positionMillis > 1000) {
           void saveQuranAudioPlayback({
             surahNumber: surahNum,
@@ -290,15 +388,17 @@ export default function QuranReaderScreen() {
             timestamp: Date.now(),
           });
         }
+
         if (playbackStatus.didJustFinish) {
           const currentData = surahDataRef.current;
           const total = currentData?.totalAyat || surahMeta?.totalAyat || 0;
           if (autoAdvanceRef.current && ayatNum < total) {
-            // Automatically advance, shift viewport, and play next verse
+            // Automatically advance to the next verse safely without overlapping audio
             void playAyatAudio(ayatNum + 1);
           } else {
             setIsPlayingAudio(false);
             setPlayingAyatNum(null);
+            hasShownNotificationForSurahRef.current = false;
             void dismissMediaPlaybackNotification();
           }
         }
@@ -307,21 +407,32 @@ export default function QuranReaderScreen() {
       console.warn('Audio play error:', error);
       setIsPlayingAudio(false);
       setPlayingAyatNum(null);
+      hasShownNotificationForSurahRef.current = false;
       void dismissMediaPlaybackNotification();
     } finally {
-      setAudioLoading(false);
+      if (activePlayRequestId.current === thisRequestId) {
+        setAudioLoading(false);
+      }
     }
   };
 
   const playFullSurahAudio = async () => {
+    const thisRequestId = ++activePlayRequestId.current;
     try {
       setAudioLoading(true);
       if (soundRef.current && isFullSurahPlaying) {
-        await stopCurrentAudio();
-        setAudioLoading(false);
-        return;
+        if (isPlayingAudio) {
+          await pauseCurrentAudio();
+          setAudioLoading(false);
+          return;
+        } else {
+          await resumeCurrentAudio();
+          setAudioLoading(false);
+          return;
+        }
       }
-      await stopCurrentAudio();
+      await unloadActiveSound();
+      if (activePlayRequestId.current !== thisRequestId) return;
 
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
@@ -438,7 +549,15 @@ export default function QuranReaderScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerArabic}>{surahMeta?.arabicName || ''}</Text>
-          <Text style={styles.headerEn}>{surahMeta?.englishName} ({surahNum})</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+            <Text style={styles.headerEn}>{surahMeta?.englishName} ({surahNum})</Text>
+            {(isAudioDownloaded || isOffline) && (
+              <View style={styles.isOfflineBadge}>
+                <Ionicons name="cloud-done" size={10} color="#6EE7B7" />
+                <Text style={styles.isOfflineBadgeText}>Offline Ready • آف لائن دستیاب</Text>
+              </View>
+            )}
+          </View>
         </View>
         <TouchableOpacity style={styles.headerBtn} onPress={() => setShowSettings(true)}>
           <Ionicons name="options-outline" size={20} color="#FFFFFF" />
@@ -678,14 +797,18 @@ export default function QuranReaderScreen() {
       )}
 
       {/* Floating Bottom Audio Player Bar with Auto-Shift & Verse Navigation */}
-      {playingAyatNum !== null && isPlayingAudio && (
+      {playingAyatNum !== null && (
         <View style={[styles.floatingPlayer, { bottom: insets.bottom + 12 }]}>
           <View style={styles.floatingInfo}>
             <View style={styles.playingIndicatorDot}>
               {audioLoading ? (
                 <ActivityIndicator size="small" color="#C8A84E" />
               ) : (
-                <Ionicons name="volume-medium" size={18} color="#C8A84E" />
+                <Ionicons
+                  name={isPlayingAudio ? "volume-medium" : "pause-circle"}
+                  size={18}
+                  color="#C8A84E"
+                />
               )}
             </View>
             <View style={{ flex: 1 }}>
@@ -693,7 +816,7 @@ export default function QuranReaderScreen() {
                 {surahMeta?.englishName || 'Surah'} • Verse {playingAyatNum} of {surahData?.totalAyat || surahMeta?.totalAyat || 7}
               </Text>
               <Text style={styles.floatingSubtitle}>
-                {autoAdvance ? 'Auto-Shifting to Next Verses' : 'Single Verse Mode'}
+                {!isPlayingAudio ? 'Paused • Tap to resume' : autoAdvance ? 'Auto-Shifting to Next Verses' : 'Single Verse Mode'}
               </Text>
             </View>
           </View>
@@ -713,13 +836,13 @@ export default function QuranReaderScreen() {
               <Ionicons name="play-skip-back" size={16} color={playingAyatNum <= 1 ? '#64748B' : '#FFFFFF'} />
             </TouchableOpacity>
 
-            {/* Play/Pause/Stop */}
+            {/* Play/Pause Button */}
             <TouchableOpacity
               style={styles.floatingPlayBtn}
-              onPress={stopCurrentAudio}
-              accessibilityLabel="Pause Audio"
+              onPress={togglePlayPause}
+              accessibilityLabel={isPlayingAudio ? "Pause Audio" : "Play Audio"}
             >
-              <Ionicons name="pause" size={18} color="#002E23" />
+              <Ionicons name={isPlayingAudio ? "pause" : "play"} size={18} color="#002E23" />
             </TouchableOpacity>
 
             {/* Next Verse */}
@@ -783,6 +906,15 @@ export default function QuranReaderScreen() {
               accessibilityLabel="Toggle Continuous Auto-Play"
             >
               <Ionicons name="repeat" size={14} color={autoAdvance ? '#002E23' : '#94A3B8'} />
+            </TouchableOpacity>
+
+            {/* Dismiss Player Button */}
+            <TouchableOpacity
+              style={styles.floatingAutoBtn}
+              onPress={stopCurrentAudio}
+              accessibilityLabel="Dismiss Player"
+            >
+              <Ionicons name="close" size={15} color="#94A3B8" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1089,6 +1221,22 @@ const styles = StyleSheet.create({
   toastText: {
     color: '#FFFFFF',
     fontSize: 12,
+    fontWeight: '700',
+  },
+  isOfflineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: RADIUS.full,
+    borderWidth: 0.5,
+    borderColor: '#6EE7B7',
+  },
+  isOfflineBadgeText: {
+    color: '#A7F3D0',
+    fontSize: 9.5,
     fontWeight: '700',
   },
 });

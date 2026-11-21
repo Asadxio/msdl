@@ -38,6 +38,5 @@ export const ALL_QUICK_ACCESS_SERVICES: QuickAccessService[] = [
   // ── Academy Administration & Services ──
   { name: 'Sanad / Cert', subtitle: 'Your Sanad', icon: 'ribbon-outline', route: '/(tabs)/certificate' },
   { name: 'Pay Fees', subtitle: 'Fee Receipts', icon: 'wallet-outline', route: '/payment' },
-  { name: 'Referral Rewards', subtitle: 'Invite & Earn', icon: 'gift-outline', route: '/referral' },
   { name: 'All Services', subtitle: 'Full Directory', icon: 'grid-outline', route: '/more' },
 ];

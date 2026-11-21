@@ -27,8 +27,9 @@ export function evaluateRouteAuthorization(
   // 1. Guest Routes — Allowed for non-authenticated users
   const isGuestRoute =
     cleanPath.startsWith('/auth') ||
-    cleanPath === '/onboarding-entry' ||
-    cleanPath.startsWith('/onboarding-first-time') ||
+    cleanPath === '/select-madrasa' ||
+    cleanPath === '/register-madrasa' ||
+    cleanPath.startsWith('/onboarding') ||
     cleanPath === '/verify-sanad' ||
     cleanPath === '/terms' ||
     cleanPath === '/privacy' ||
@@ -105,6 +106,20 @@ export function evaluateRouteAuthorization(
   // 8. Fatawa Management — /fatawa/manage
   if (cleanPath === '/fatawa/manage') {
     if (isFounder || userRole === 'admin' || userRole === 'super_admin' || userRole === 'teacher') {
+      return { allowed: true };
+    }
+    return { allowed: false, redirectTo: '/unauthorized?required=teacher', reason: 'teacher-required' };
+  }
+
+  // 9. Teacher Workspace Routes — /teacher, /teacher/*
+  if (cleanPath === '/teacher' || cleanPath.startsWith('/teacher/')) {
+    if (
+      isFounder ||
+      userRole === 'teacher' ||
+      userRole === 'assistant_teacher' ||
+      userRole === 'admin' ||
+      userRole === 'super_admin'
+    ) {
       return { allowed: true };
     }
     return { allowed: false, redirectTo: '/unauthorized?required=teacher', reason: 'teacher-required' };

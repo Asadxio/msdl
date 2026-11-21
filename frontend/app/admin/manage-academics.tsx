@@ -23,9 +23,10 @@ import { isFounderEmail } from '@/lib/founderPolicy';
 import { getEnrollmentDocId } from '@/lib/enrollments';
 import { withTimeout } from '@/lib/errors';
 import { logFirestoreFailure } from '@/lib/firestoreDebug';
-import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID, DEFAULT_ORGANIZATION_NAME } from '@/lib/tenantContext';
 import { deleteClassRecording } from '@/lib/classRecording';
 import { AdminTeacherProfileModal } from '@/components/admin/AdminTeacherProfileModal';
+import { CurriculumTemplateModal } from '@/components/admin/CurriculumTemplateModal';
 import {
   type TeacherProfile,
   getNextTeacherId,
@@ -156,6 +157,7 @@ export default function ManageAcademicsScreen() {
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
   const [adminEditTeacher, setAdminEditTeacher] = useState<Partial<TeacherProfile> | null>(null);
   const [showAdminTeacherModal, setShowAdminTeacherModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   
@@ -1220,6 +1222,7 @@ export default function ManageAcademicsScreen() {
                 } else {
                   const ref = await withTimeout(addDoc(collection(db, 'teachers'), {
                     ...t,
+                    organization_id: activeOrgId || DEFAULT_ORGANIZATION_ID,
                     created_at: serverTimestamp(),
                     updated_at: serverTimestamp(),
                   }), 10000);
@@ -1548,7 +1551,7 @@ export default function ManageAcademicsScreen() {
           <View style={styles.orgBadgeWrap}>
             <Ionicons name="business" size={11} color={COLORS.primary} />
             <Text style={styles.orgBadgeText} numberOfLines={1}>
-              {activeOrg?.name || (activeOrgId === DEFAULT_ORGANIZATION_ID ? 'Madrasatu-s-Salikat Lil Banat' : activeOrgId)}
+              {activeOrg?.name || (activeOrgId === DEFAULT_ORGANIZATION_ID ? DEFAULT_ORGANIZATION_NAME : activeOrgId)}
             </Text>
           </View>
         </View>
@@ -1586,6 +1589,25 @@ export default function ManageAcademicsScreen() {
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#D4AF37" />
+        </TouchableOpacity>
+
+        {/* 1-Click Accredited Curriculum Templates Importer */}
+        <TouchableOpacity
+          style={[styles.populateBannerBtn, { borderColor: '#064E3B', backgroundColor: '#ECFDF5', marginTop: 10 }]}
+          onPress={() => setShowTemplateModal(true)}
+          disabled={actionLoading}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.populateBannerIconWrap, { backgroundColor: '#064E3B' }]}>
+            <Ionicons name="library" size={20} color="#D4AF37" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.populateBannerTitle, { color: '#064E3B' }]}>1-Click Curriculum Template Importer (نصاب کے سانچے)</Text>
+            <Text style={[styles.populateBannerSubtitle, { color: '#047857' }]}>
+              Dars-e-Nizami (5 Years), Hifz & Tajweed, or Maktab Essentials with structured syllabus & fees.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#064E3B" />
         </TouchableOpacity>
 
         <View style={styles.lmsBanner}>
@@ -2212,6 +2234,13 @@ export default function ManageAcademicsScreen() {
         onClose={() => setShowAdminTeacherModal(false)}
         initialTeacher={adminEditTeacher}
         onTeacherSaved={fetchData}
+      />
+      <CurriculumTemplateModal
+        visible={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        organizationId={activeOrgId || DEFAULT_ORGANIZATION_ID}
+        organizationName={activeOrg?.name}
+        onImportSuccess={fetchData}
       />
     </View>
   );

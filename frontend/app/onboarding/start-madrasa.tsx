@@ -126,6 +126,7 @@ export default function StartMadrasaScreen() {
         state: stateName.trim(),
         logo_url: logoUrl.trim() || undefined,
         starter_course_name: starterCourseName.trim() || undefined,
+        principal_name: principalName.trim() || undefined,
       });
 
       const newOrg = orgResult.data.organization;
@@ -190,7 +191,7 @@ export default function StartMadrasaScreen() {
         <View style={[styles.progressBarFill, { width: `${(currentStep / totalSteps) * 100}%` }]} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="always">
         {/* Step 1: Identity */}
         {currentStep === 1 && (
           <View style={styles.stepCard}>

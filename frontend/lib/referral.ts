@@ -75,11 +75,12 @@ export function getSadqahTier(count: number): SadqahTier {
   };
 }
 
-export function getReferralShareMessage(referralCode: string, studentName?: string): string {
+export function getReferralShareMessage(referralCode: string, studentName?: string, madrasaName?: string): string {
+  const institution = madrasaName || 'Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات)';
   return (
     'Bismillahir-Rahmanir-Rahim\n\n' +
-    '🌸 *Madrasatu-s-Salikat Lil Banat (مدرسۃ السالکات للبنات)* — Online Islamic Education for Women.\n\n' +
-    'Dear Sister! I warmly invite you to join Madrasatu-s-Salikat Lil Banat, offering Tajweed, Fiqh, Hadith, and essential Islamic sciences under strict Purdah compliance.\n\n' +
+    `🌸 *${institution}* — Online Islamic Education Platform.\n\n` +
+    `Dear Student! I warmly invite you to join ${institution}, offering authentic Islamic education, Tajweed, Fiqh, and Hadith.\n\n` +
     '✨ *Referral / Invite Code:* ' + referralCode + '\n' +
     '📲 *App Download & Registration:* https://mslb.app/join?ref=' + referralCode + '\n\n' +
     'The Prophet ﷺ said:\n' +

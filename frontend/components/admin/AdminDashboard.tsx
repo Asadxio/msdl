@@ -22,7 +22,7 @@ import { cacheGet, cacheSet } from '@/lib/cacheManager';
 import { QuickAdminActions } from '@/components/admin/QuickAdminActions';
 import { AdminPendingTasks, type PendingTasksCounts } from '@/components/admin/AdminPendingTasks';
 import { AdminActivityCenter } from '@/components/admin/AdminActivityCenter';
-import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID, DEFAULT_ORGANIZATION_NAME } from '@/lib/tenantContext';
 import { CustomerSupportModal } from '@/components/CustomerSupportModal';
 import { ROUTES } from '@/lib/routes';
 
@@ -405,7 +405,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
             <View style={[styles.adminBadge, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
               <Ionicons name="business" size={13} color="#059669" />
               <Text style={[styles.adminBadgeText, { color: '#059669' }]}>
-                {activeOrg?.name || 'Madrasatu-s-Salikat Lil Banat'}
+                {activeOrg?.name || DEFAULT_ORGANIZATION_NAME}
               </Text>
             </View>
             <TouchableOpacity onPress={() => safePush(ROUTES.admin.organizationSettings)} style={{ marginLeft: 8 }}>
@@ -521,7 +521,7 @@ export const AdminDashboard = React.memo(function AdminDashboard({
                 onPress={() => setSupportModalVisible(true)}
               >
                 <Ionicons name="logo-whatsapp" size={16} color="#25D366" style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Need Help? WhatsApp MSLB Support</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Need Help? WhatsApp Platform Support</Text>
               </TouchableOpacity>
             </View>
           )

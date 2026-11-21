@@ -23,6 +23,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { deduplicateAttendanceRecords } from '@/lib/attendanceDeduplication';
 import { db, storage } from '@/lib/firebase';
 import { Course, CourseModule, Lesson, Assignment, AssignmentSubmission } from '@/context/DataContext';
 import { TeacherAcademicScope, isTeacherAssignedToCourse, isTeacherAssignedToSubject } from '@/lib/teacherScoping';
@@ -413,12 +414,13 @@ export async function fetchTeacherStudentRoster(
     }
 
     // Fetch Attendance records for these courses
-    const attendanceRecords: any[] = [];
+    const rawAttendance: any[] = [];
     for (const chunk of queryChunks) {
       const attQ = query(collection(db, 'attendance'), where('course_id', 'in', chunk), limit(500));
       const attSnap = await getDocs(attQ);
-      attSnap.forEach((d) => attendanceRecords.push(d.data()));
+      attSnap.forEach((d) => rawAttendance.push({ id: d.id, ...d.data() }));
     }
+    const attendanceRecords = deduplicateAttendanceRecords(rawAttendance);
 
     // Fetch Submissions for these courses/students
     const submissionsList: any[] = [];

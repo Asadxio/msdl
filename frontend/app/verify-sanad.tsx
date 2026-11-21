@@ -16,11 +16,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SPACING, SHADOWS, TYPOGRAPHY } from '@/constants/theme';
 import { VerifiedSanad, verifySanadById, getSanadVerificationUrl } from '@/lib/sanadVerification';
 import { goBackOrReplace } from '@/lib/navigation';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_NAME } from '@/lib/tenantContext';
 
 export default function VerifySanadScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { activeOrg } = useActiveOrganization();
 
   const [searchId, setSearchId] = useState(id || '');
   const [sanad, setSanad] = useState<VerifiedSanad | null>(null);
@@ -53,7 +55,7 @@ export default function VerifySanadScreen() {
   const handleShareVerification = async () => {
     if (!sanad) return;
     const shareMsg =
-      '📜 *Madrasatu-s-Salikat Lil Banat — Official Sanad Verification*\n\n' +
+      '📜 *' + (sanad.organizationName || activeOrg?.name || DEFAULT_ORGANIZATION_NAME) + ' — Official Sanad Verification*\n\n' +
       '✅ This certificate is officially authenticated and verified:\n' +
       'Student: ' + sanad.studentName + '\n' +
       'Course / Discipline: ' + sanad.courseName + '\n' +
@@ -65,7 +67,7 @@ export default function VerifySanadScreen() {
     try {
       await Share.share({
         message: shareMsg,
-        title: 'Sanad Verification - Madrasatu-s-Salikat',
+        title: 'Sanad Verification - ' + (sanad.organizationName || activeOrg?.name || 'Suffah'),
       });
     } catch {}
   };
@@ -95,7 +97,7 @@ export default function VerifySanadScreen() {
           <View style={styles.searchRow}>
             <TextInput
               style={styles.searchInput}
-              placeholder="e.g. MSLB-SANAD-2026-..."
+              placeholder="e.g. SANAD-2026-..."
               placeholderTextColor="#94A3B8"
               value={searchId}
               onChangeText={setSearchId}
@@ -132,8 +134,8 @@ export default function VerifySanadScreen() {
             {/* Islamic Header & Seal */}
             <View style={styles.bismillahBox}>
               <Text style={styles.bismillahText}>Bismillahir-Rahmanir-Rahim</Text>
-              <Text style={styles.madrasaTitle}>Madrasatu-s-Salikat Lil Banat</Text>
-              <Text style={styles.madrasaEng}>Madrasatu-s-Salikat Lil Banat</Text>
+              <Text style={styles.madrasaTitle}>{sanad.organizationName || activeOrg?.name || DEFAULT_ORGANIZATION_NAME}</Text>
+              <Text style={styles.madrasaEng}>{sanad.organizationName || activeOrg?.name || 'Suffah Digital Sanad'}</Text>
             </View>
 
             {/* Verification Status Banner */}
@@ -209,7 +211,7 @@ export default function VerifySanadScreen() {
             <Ionicons name="shield-checkmark-outline" size={48} color="#C8A84E" />
             <Text style={styles.infoTitle}>Official Sanad Verification</Text>
             <Text style={styles.infoSub}>
-              Enter a certificate serial number above to verify authentic degrees, certificates, and authorizations issued by Madrasatu-s-Salikat Lil Banat.
+              Enter a certificate serial number above to verify authentic degrees, certificates, and authorizations issued by affiliated Madrasas on Suffah.
             </Text>
           </View>
         )}

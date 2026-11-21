@@ -706,7 +706,7 @@ export default function TeacherAssignmentsScreen() {
 
             <ScrollView
               showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
+              keyboardShouldPersistTaps="always"
               keyboardDismissMode="on-drag"
               style={{ maxHeight: 460 }}
             >
@@ -867,7 +867,7 @@ export default function TeacherAssignmentsScreen() {
             {selectedSubmission && (
               <ScrollView
                 showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
                 keyboardDismissMode="on-drag"
                 style={{ maxHeight: 440 }}
               >

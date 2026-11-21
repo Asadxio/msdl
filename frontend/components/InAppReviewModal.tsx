@@ -56,9 +56,9 @@ export function InAppReviewModal({
             <Ionicons name="star" size={38} color="#F59E0B" />
           </View>
 
-          <Text style={styles.title}>Loving Madrasatu-s-Salikat? 🌟</Text>
+          <Text style={styles.title}>Loving Suffah? 🌟</Text>
           <Text style={styles.message}>
-            Your 5-star review on Google Play helps more Muslim sisters discover and benefit from authentic Islamic education.
+            Your 5-star review on Google Play helps more madrasas, teachers, and students discover authentic Islamic learning.
           </Text>
 
           <TouchableOpacity style={styles.primaryButton} onPress={handleRate} activeOpacity={0.85}>

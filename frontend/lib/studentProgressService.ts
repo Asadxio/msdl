@@ -178,13 +178,16 @@ export async function exportStudentProgressCsv(params: {
     total_questions?: number;
     created_at?: { toDate?: () => Date };
   }>;
+  institutionName?: string;
+  orgSlug?: string;
 }): Promise<void> {
-  const { studentName, studentEmail, overallAccuracy, totalAttempts, streakDays, attendance, quizResults } = params;
+  const { studentName, studentEmail, overallAccuracy, totalAttempts, streakDays, attendance, quizResults, institutionName, orgSlug } = params;
 
   const today = new Date().toISOString().slice(0, 10);
   const lines: string[] = [];
 
-  lines.push(escapeCsvCell('MADRASATU-S-SALIKAT LIL BANAT (MSLB) - STUDENT PROGRESS REPORT'));
+  const orgTitle = (institutionName || 'MADRASATU-S-SALIKAT LIL BANAT').toUpperCase();
+  lines.push(escapeCsvCell(`${orgTitle} - STUDENT PROGRESS REPORT`));
   lines.push(escapeCsvCell(`Report Date: ${today}`));
   lines.push(escapeCsvCell(`Student Name: ${studentName || 'Student'}`));
   lines.push(escapeCsvCell(`Student Email: ${studentEmail || 'N/A'}`));
@@ -256,7 +259,8 @@ export async function exportStudentProgressCsv(params: {
 
   const csvContent = '\uFEFF' + lines.join('\n');
   const safeName = (studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '_');
-  const fileName = `MSLB_My_Progress_${safeName}_${today}.csv`;
+  const orgPrefix = (orgSlug || 'MADRASA').toUpperCase();
+  const fileName = `${orgPrefix}_Progress_${safeName}_${today}.csv`;
 
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined') {

@@ -116,41 +116,90 @@ export async function getTokensForUids(uids: string[]): Promise<{ uid: string; t
 }
 
 export async function getUidsForRole(role: string, organizationId: string): Promise<string[]> {
-  if (organizationId === "mslb-main") {
-    const snap = await db.collection("users")
+  const targetOrg = (organizationId || "mslb-main").trim();
+  const uidSet = new Set<string>();
+
+  // 1. Tenant-scoped users collection lookup
+  if (targetOrg === "mslb-main") {
+    const allRoleSnap = await db.collection("users")
       .where("role", "==", role)
-      .where("status", "==", "approved")
+      .where("status", "in", ["approved", "active"])
       .limit(500)
       .get();
-    return snap.docs.map((d) => d.id);
+    allRoleSnap.docs.forEach((d) => {
+      const data = d.data();
+      const userOrg = data.organization_id;
+      if (!userOrg || userOrg === "mslb-main") {
+        uidSet.add(d.id);
+      }
+    });
+  } else {
+    const userSnap = await db.collection("users")
+      .where("role", "==", role)
+      .where("organization_id", "==", targetOrg)
+      .where("status", "in", ["approved", "active"])
+      .limit(500)
+      .get();
+    userSnap.docs.forEach((d) => uidSet.add(d.id));
   }
 
-  // Tenant-scoped membership lookup
-  const snap = await db.collection("organization_memberships")
-    .where("organization_id", "==", organizationId)
+  // 2. Tenant-scoped organization_memberships lookup
+  const memSnap = await db.collection("organization_memberships")
+    .where("organization_id", "==", targetOrg)
     .where("role", "==", role)
     .where("status", "==", "active")
     .limit(500)
     .get();
-  return snap.docs.map((d) => d.data().user_id).filter(Boolean);
+  memSnap.docs.forEach((d) => {
+    const uid = d.data().user_id;
+    if (uid && typeof uid === "string") {
+      uidSet.add(uid);
+    }
+  });
+
+  return Array.from(uidSet);
 }
 
 export async function getAllApprovedUids(organizationId: string): Promise<string[]> {
-  if (organizationId === "mslb-main") {
-    const snap = await db.collection("users")
-      .where("status", "==", "approved")
+  const targetOrg = (organizationId || "mslb-main").trim();
+  const uidSet = new Set<string>();
+
+  // 1. Tenant-scoped users collection lookup
+  if (targetOrg === "mslb-main") {
+    const allApprovedSnap = await db.collection("users")
+      .where("status", "in", ["approved", "active"])
       .limit(1000)
       .get();
-    return snap.docs.map((d) => d.id);
+    allApprovedSnap.docs.forEach((d) => {
+      const data = d.data();
+      const userOrg = data.organization_id;
+      if (!userOrg || userOrg === "mslb-main") {
+        uidSet.add(d.id);
+      }
+    });
+  } else {
+    const userSnap = await db.collection("users")
+      .where("organization_id", "==", targetOrg)
+      .where("status", "in", ["approved", "active"])
+      .limit(1000)
+      .get();
+    userSnap.docs.forEach((d) => uidSet.add(d.id));
   }
 
-  // Tenant-scoped membership lookup
-  const snap = await db.collection("organization_memberships")
-    .where("organization_id", "==", organizationId)
+  // 2. Tenant-scoped organization_memberships lookup (union for multi-tenant members)
+  const memSnap = await db.collection("organization_memberships")
+    .where("organization_id", "==", targetOrg)
     .where("status", "==", "active")
     .limit(1000)
     .get();
-  return snap.docs.map((d) => d.data().user_id).filter(Boolean);
+  memSnap.docs.forEach((d) => {
+    const uid = d.data().user_id;
+    if (uid && typeof uid === "string") {
+      uidSet.add(uid);
+    }
+  });
+
+  return Array.from(uidSet);
 }
 
 /**
@@ -367,6 +416,23 @@ export const sendNotification = onCall(
 
     // Verify organization operational status
     await assertOrgOperational(targetOrg, false);
+
+    // Enforce Tenant Administration boundary:
+    // If not super_admin, caller must be an administrator belonging to targetOrg
+    const isSuper = role === "super_admin" || isSuperAdminEmail(admin.email);
+    const callerOrg = (userProfile.organization_id || "mslb-main").trim();
+    if (!isSuper && targetOrg !== callerOrg) {
+      const memDoc = await db.collection("organization_memberships")
+        .where("organization_id", "==", targetOrg)
+        .where("user_id", "==", admin.uid)
+        .where("role", "in", ["admin", "super_admin"])
+        .where("status", "==", "active")
+        .limit(1)
+        .get();
+      if (memDoc.empty) {
+        throw permissionDeniedError(`You are not authorized to send broadcasts for organization ${targetOrg}.`);
+      }
+    }
 
     // 2. Validate content
     if (!payload?.title || !payload?.body) {

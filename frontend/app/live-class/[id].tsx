@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,8 @@ import {
   type LiveClass,
 } from '@/lib/liveClasses';
 import { TajweedBoard, type TajweedBoardView } from '@/components/classroom/TajweedBoard';
+import { LiveVoiceWaveform } from '@/components/classroom/LiveVoiceWaveform';
+import { InClassMushafSync, type SyncedQuranPage } from '@/components/classroom/InClassMushafSync';
 import {
   startClassRecording,
   stopAndSaveRecording,
@@ -45,7 +47,9 @@ import type { Audio } from 'expo-av';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/constants/theme';
 import { goBackOrReplace } from '@/lib/navigation';
 import { dispatchNotification } from '@/lib/dispatchNotification';
-import { useActiveOrganization } from '@/lib/tenantContext';
+import { useActiveOrganization, DEFAULT_ORGANIZATION_ID } from '@/lib/tenantContext';
+import { getAttendanceDocId, getInstitutionalDateString } from '@/lib/attendanceId';
+import { agoraVoice, getAgoraAppId, type AgoraSpeakerInfo, type AgoraConnectionStatus } from '@/lib/agoraVoice';
 
 
 export default function LiveClassroomScreen() {
@@ -60,6 +64,15 @@ export default function LiveClassroomScreen() {
   const [joining, setJoining] = useState(false);
   const [micMuted, setMicMuted] = useState(true);
   const [waveAnim] = useState(new Animated.Value(1));
+  const userExplicitlyLeftRef = useRef(false);
+
+  // In-App Agora Voice Engine State
+  const [voiceConnected, setVoiceConnected] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<AgoraConnectionStatus>('disconnected');
+  const [voiceErrorMsg, setVoiceErrorMsg] = useState<string | null>(null);
+  const [remoteCount, setRemoteCount] = useState(0);
+  const [isEchoTesting, setIsEchoTesting] = useState(false);
+  const [agoraActiveSpeakers, setAgoraActiveSpeakers] = useState<number[]>([]);
 
   // Inbuilt Audio Recording State
   const [recordingInstance, setRecordingInstance] = useState<Audio.Recording | null>(null);
@@ -92,25 +105,147 @@ export default function LiveClassroomScreen() {
       setLoading(false);
       return;
     }
-    const unsub = subscribeLiveClass(classId, (data) => {
+    const unsub = subscribeLiveClass(classId, async (data) => {
       setLiveClass(data);
       setLoading(false);
       if (data?.status === 'ended') {
         Alert.alert('Class Ended', 'This live class has ended.');
         goBackOrReplace(router, '/(tabs)/courses');
+        return;
+      }
+      if (data && profile) {
+        const allowed = await canCurrentUserJoinLiveClass(data, profile);
+        if (!allowed) {
+          Alert.alert('Access Denied', 'You are not enrolled in this course.');
+          goBackOrReplace(router, '/(tabs)/courses');
+          return;
+        }
       }
     });
     return () => unsub();
   }, [classId, router]);
 
   const isTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
-  const isSpeaking = liveClass?.active_speaker_uid === user?.uid || (isTeacher && !liveClass?.active_speaker_uid);
+  const isSpeaking =
+    liveClass?.active_speaker_uid === user?.uid ||
+    (isTeacher && !liveClass?.active_speaker_uid && !micMuted) ||
+    agoraActiveSpeakers.length > 0;
+
+  // Stable 32-bit positive integer UID for Agora RTC
+  const numericUid = useMemo(() => {
+    if (!user?.uid) return Math.floor(Math.random() * 899999) + 100000;
+    let hash = 0;
+    for (let i = 0; i < user.uid.length; i++) {
+      hash = ((hash << 5) - hash + user.uid.charCodeAt(i)) | 0;
+    }
+    return (Math.abs(hash) % 899999) + 100000;
+  }, [user?.uid]);
+
+  // Phase 80: Realtime In-App Voice Engine via Agora.io RTC
+  useEffect(() => {
+    if (!classId || !liveClass) return;
+
+    let mounted = true;
+    const initVoice = async () => {
+      try {
+        setVoiceStatus('connecting');
+        const joined = await agoraVoice.joinVoiceRoom({
+          classId: classId as string,
+          uid: numericUid,
+          isTeacher,
+          initialMuted: isTeacher ? false : true,
+          classTitle: liveClass?.title,
+          teacherName: liveClass?.teacher_name,
+        });
+        if (mounted && joined) {
+          setMicMuted(agoraVoice.getIsMuted());
+          setVoiceConnected(true);
+          setVoiceStatus('connected');
+        }
+      } catch (err: any) {
+        console.warn('[LiveClassroom] Agora voice room error:', err);
+        if (mounted) {
+          setVoiceStatus('failed');
+          setVoiceErrorMsg(err?.message || 'Failed to start in-app voice');
+        }
+      }
+    };
+
+    initVoice();
+
+    // Update session metadata for persistent floating banner & sticky notification
+    if (liveClass) {
+      agoraVoice.updateSessionMetadata({
+        classTitle: liveClass.title,
+        teacherName: liveClass.teacher_name,
+      });
+    }
+
+    const unsubVoice = agoraVoice.subscribe({
+      onConnectionChange: (status, reasonMsg) => {
+        if (!mounted) return;
+        setVoiceStatus(status);
+        if (status === 'connected') {
+          setVoiceConnected(true);
+          setVoiceErrorMsg(null);
+        } else if (status === 'failed') {
+          setVoiceConnected(false);
+          if (reasonMsg) setVoiceErrorMsg(reasonMsg);
+        } else if (status === 'connecting' || status === 'reconnecting') {
+          setVoiceConnected(false);
+        }
+      },
+      onJoinSuccess: () => {
+        if (!mounted) return;
+        setVoiceConnected(true);
+        setVoiceStatus('connected');
+        setVoiceErrorMsg(null);
+        setRemoteCount(agoraVoice.getInRoomState().remoteCount);
+      },
+      onUserJoined: () => {
+        if (!mounted) return;
+        setRemoteCount(agoraVoice.getInRoomState().remoteCount);
+      },
+      onUserOffline: () => {
+        if (!mounted) return;
+        setRemoteCount(agoraVoice.getInRoomState().remoteCount);
+      },
+      onMuteChanged: (muted) => {
+        if (mounted) setMicMuted(muted);
+      },
+      onVolumeIndicator: (speakers, _totalVolume, speaking) => {
+        if (!mounted) return;
+        if (speaking) {
+          setAgoraActiveSpeakers(speakers.filter((s) => s.volume > 10).map((s) => s.uid));
+        } else {
+          setAgoraActiveSpeakers([]);
+        }
+      },
+      onError: (errCode, msg) => {
+        if (!mounted) return;
+        setVoiceErrorMsg(msg);
+        setVoiceConnected(false);
+        setVoiceStatus('failed');
+      },
+    });
+
+    return () => {
+      mounted = false;
+      unsubVoice();
+      // Crucial: Only leave RTC audio session when user explicitly taps "Leave Class" or "End Class",
+      // NOT when navigating to library, courses, attendance, or minimizing app to background!
+      if (userExplicitlyLeftRef.current) {
+        agoraVoice.leaveVoiceRoom().catch(() => {});
+      }
+    };
+  }, [classId, isTeacher, !!liveClass]);
 
   // Reactive Privacy Enforcement: force student mic mute when Ustaadha locks audio or triggers shield
   useEffect(() => {
     if (!isTeacher && liveClass) {
       if (liveClass.audio_muted_all || liveClass.privacy_shield_active) {
         setMicMuted(true);
+        agoraVoice.setMute(true).catch(() => {});
       }
     }
   }, [isTeacher, liveClass?.audio_muted_all, liveClass?.privacy_shield_active]);
@@ -207,7 +342,10 @@ export default function LiveClassroomScreen() {
               );
               setRecordingInstance(null);
               setSavedRecording(saved);
-              Alert.alert('Recording Saved ✓', `"${saved.title}" is now available in the Recordings library.`);
+              Alert.alert(
+                'Recording Saved Locally ✓',
+                `"${saved.title}" has been saved exclusively to your device storage (Purdah & Privacy Protection).\n\nNotice: It is not uploaded to the cloud. Uninstalling the app or clearing app data will remove local recordings.`
+              );
             } catch (err: any) {
               setRecordingInstance(null);
               Alert.alert('Save Failed', err?.message || 'Could not save recording.');
@@ -304,7 +442,8 @@ export default function LiveClassroomScreen() {
   const handleSubmitInClassAttendance = async () => {
     if (!user || !profile || !liveClass || attendanceStudents.length === 0) return;
     setSavingAttendance(true);
-    const dateStr = new Date().toISOString().slice(0, 10);
+    const dateStr = getInstitutionalDateString(new Date());
+    const courseId = (liveClass.course_id || '').trim() || 'general';
     try {
       const presentCount = attendanceStudents.filter((s) => s.status === 'present').length;
       
@@ -314,22 +453,27 @@ export default function LiveClassroomScreen() {
         const chunk = attendanceStudents.slice(i, i + CHUNK_SIZE);
         const batch = writeBatch(db);
         chunk.forEach((st) => {
-          const newDocRef = doc(collection(db, 'attendance'));
-          batch.set(newDocRef, {
-            user_id: st.id,
-            user_name: st.name,
-            user_email: st.email,
-            date: dateStr,
-            status: st.status,
-            marked_by: 'live_class',
-            marked_by_uid: user.uid,
-            marked_by_name: profile.name || liveClass.teacher_name || 'Ustaadha',
-            live_class_id: (classId as string) || '',
-            course_id: liveClass.course_id || '',
-            marked_at: serverTimestamp(),
-            updated_at: serverTimestamp(),
-            created_at: serverTimestamp(),
-          });
+          const docId = getAttendanceDocId(st.id, dateStr, courseId);
+          const docRef = doc(collection(db, 'attendance'), docId);
+          batch.set(
+            docRef,
+            {
+              user_id: st.id,
+              user_name: st.name,
+              user_email: st.email,
+              date: dateStr,
+              status: st.status,
+              marked_by: 'live_class',
+              marked_by_uid: user.uid,
+              marked_by_name: profile.name || liveClass.teacher_name || 'Ustaadha',
+              live_class_id: (classId as string) || '',
+              course_id: courseId,
+              organization_id: liveClass.organization_id || DEFAULT_ORGANIZATION_ID,
+              marked_at: serverTimestamp(),
+              updated_at: serverTimestamp(),
+            },
+            { merge: true }
+          );
         });
         await withTimeout(
           batch.commit(),
@@ -395,6 +539,73 @@ export default function LiveClassroomScreen() {
     }
   };
 
+  const handleToggleEchoTest = async () => {
+    if (isEchoTesting) {
+      agoraVoice.stopAudioLoopbackTest();
+      setIsEchoTesting(false);
+      Alert.alert('Loopback Test Stopped', 'Reconnecting to class audio...');
+      agoraVoice.joinVoiceRoom({
+        classId: classId as string,
+        isTeacher,
+        initialMuted: micMuted,
+      });
+    } else {
+      Alert.alert(
+        'Mic & Speaker Loopback Test 🎙️',
+        'Speak into your phone now. In 3 seconds, your voice will repeat back through your phone speaker to confirm your microphone and speaker work 100% on this device.\n\n(اپنے فون میں بولیں، 3 سیکنڈ بعد آپ کو اپنی آواز سنائی دے گی تاکہ مائیک اور سپیکر کی تصدیق ہو سکے)',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Start Test (شروع کریں)',
+            onPress: async () => {
+              setIsEchoTesting(true);
+              const started = await agoraVoice.startAudioLoopbackTest();
+              if (started) {
+                setTimeout(() => {
+                  agoraVoice.stopAudioLoopbackTest();
+                  setIsEchoTesting(false);
+                  agoraVoice.joinVoiceRoom({
+                    classId: classId as string,
+                    isTeacher,
+                    initialMuted: micMuted,
+                  });
+                }, 7000);
+              } else {
+                setIsEchoTesting(false);
+                Alert.alert('Test Error', 'Could not start loopback test. Please check microphone permission.');
+              }
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const handleShowVoiceDiagnostics = () => {
+    const debug = agoraVoice.getDebugInfo();
+    Alert.alert(
+      'Live Voice Diagnostics 🎙️',
+      `• App ID: ${debug.appId}\n• Channel: ${debug.channel || 'None'}\n• UID: ${debug.uid}\n• Token Mode: ${debug.tokenPrefix} (${debug.tokenLength} chars)\n• Status: ${voiceStatus.toUpperCase()}\n${voiceErrorMsg ? `\n⚠️ Error: ${voiceErrorMsg}` : ''}\n\nAgora server connection options:`,
+      [
+        { text: 'Close', style: 'cancel' },
+        {
+          text: '🔄 Retry (Token)',
+          onPress: async () => {
+            setVoiceStatus('connecting');
+            await agoraVoice.retryJoin('token');
+          },
+        },
+        {
+          text: '⚡ Retry (Direct/No Token)',
+          onPress: async () => {
+            setVoiceStatus('connecting');
+            await agoraVoice.retryJoin('direct');
+          },
+        },
+      ]
+    );
+  };
+
   const handleJoinExternalMeet = async () => {
     if (!liveClass || !user || !profile) return;
     setJoining(true);
@@ -434,6 +645,8 @@ export default function LiveClassroomScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
+            userExplicitlyLeftRef.current = true;
+            await agoraVoice.leaveVoiceRoom();
             await endLiveClass(classId, profile);
             goBackOrReplace(router, '/(tabs)/courses');
           } catch (e: any) {
@@ -442,6 +655,25 @@ export default function LiveClassroomScreen() {
         },
       },
     ]);
+  };
+
+  const handleLeaveVoice = () => {
+    Alert.alert(
+      'Leave Class Audio • آواز سے الگ ہوں',
+      'Are you sure you want to disconnect from this live audio class?\n(کیا آپ لائیو کلاس آڈیو سے الگ ہونا چاہتے ہیں؟)',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave Class',
+          style: 'destructive',
+          onPress: async () => {
+            userExplicitlyLeftRef.current = true;
+            await agoraVoice.leaveVoiceRoom();
+            goBackOrReplace(router, '/(tabs)/courses');
+          },
+        },
+      ]
+    );
   };
 
   // Privacy Master Switch Handlers (Ustaadha Controls)
@@ -455,7 +687,11 @@ export default function LiveClassroomScreen() {
         Alert.alert('Microphones Open', 'Students may now unmute themselves when invited.');
       } else {
         await muteAllStudents(classId, profile);
-        Alert.alert('Mute All Active 🔇', 'All student microphones have been force-muted.');
+        agoraVoice.setMute(false).catch(() => {});
+        Alert.alert(
+          'Mute All Active 🔇',
+          'In-app student recitation microphones have been muted. Note: Google Meet runs in a separate app — please verify your Google Meet microphone is muted directly in the Meet app.\n\n(نوٹ: ایپ تلاوت مائیک بند کر دیا گیا ہے۔ گوگل میٹ ایپ میں مائیک خود بند رکھیے)'
+        );
       }
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to toggle Mute All');
@@ -471,7 +707,10 @@ export default function LiveClassroomScreen() {
     try {
       await killAllVideo(classId, profile, !isCurrentlyDisabled);
       if (!isCurrentlyDisabled) {
-        Alert.alert('Video Killed for Privacy 📷🚫', 'All camera/video feeds are disabled. Classroom is strictly audio & Mushaf mode.');
+        Alert.alert(
+          'Video Killed for Privacy 📷🚫',
+          'In-app video controls are disabled. Classroom is strictly audio & Mushaf mode. Note: Google Meet runs externally — verify your camera is turned off in Google Meet.\n\n(نوٹ: ایپ ویڈیو لاک ہے۔ گوگل میٹ میں کیمرہ خود بند رکھیے)'
+        );
       } else {
         Alert.alert('Video Allowed', 'Video feeds are now allowed under teacher discretion.');
       }
@@ -489,7 +728,7 @@ export default function LiveClassroomScreen() {
     if (!isShieldActive) {
       Alert.alert(
         'Activate Emergency Privacy Shield? 🛡️',
-        'This will immediately KILL all video, MUTE all students, clear active speaker, and lock the classroom into Emergency Pardah mode.',
+        'This locks the in-app recitation queue, clears active speakers, and sets classroom to Emergency Pardah mode.\n\n⚠️ IMPORTANT: Google Meet runs in a separate external app. Please switch to Google Meet and verify your microphone and camera are turned off.\n\n(اہم نوٹ: یہ شیلڈ ایپ تلاوت کو مقفل کرتی ہے۔ گوگل میٹ ایپ میں اپنا مائیک اور کیمرہ خود بند رکھیے)',
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -498,8 +737,12 @@ export default function LiveClassroomScreen() {
             onPress: async () => {
               setTogglingShield(true);
               try {
+                agoraVoice.setMute(true).catch(() => {});
                 await toggleEmergencyPrivacyShield(classId, profile, true);
-                Alert.alert('Emergency Shield Active 🛡️', 'Full privacy lockdown engaged. All video and audio streams are sealed.');
+                Alert.alert(
+                  'Emergency Shield Active 🛡️',
+                  'In-app privacy lockdown engaged. In-app queue is locked. Please check Google Meet to ensure external mic & camera are off.\n\n(ایپ پردہ فعال ہے۔ گوگل میٹ میں مائیک اور کیمرہ کی تصدیق فرمائیں)'
+                );
               } catch (err: any) {
                 Alert.alert('Error', err?.message || 'Failed to engage emergency shield');
               } finally {
@@ -545,6 +788,17 @@ export default function LiveClassroomScreen() {
     const current = liveClass?.highlighted_words || [];
     const updated = current.includes(word) ? current.filter((w) => w !== word) : [...current, word];
     await updatePurdahBoardState(classId, { highlighted_words: updated }).catch(() => {});
+  };
+
+  const handleSyncQuranPage = async (page: SyncedQuranPage) => {
+    if (!classId || !isTeacher) return;
+    try {
+      await updatePurdahBoardState(classId, {
+        current_ayah_or_page: JSON.stringify(page),
+      });
+    } catch (err) {
+      console.warn('Failed to sync Quran page:', err);
+    }
   };
 
   // Student Recitation Queue handlers
@@ -633,7 +887,7 @@ export default function LiveClassroomScreen() {
                 <Text style={styles.emergencyShieldTitle}>ہنگامی پردہ شیلڈ • Emergency Shield Active</Text>
               </View>
               <Text style={styles.emergencyShieldSub}>
-                Ustaadha has initiated an instant privacy lockdown. All camera streams and student microphones are locked.
+                Ustaadha has initiated an instant privacy lockdown. In-app student microphones and queue are locked. Reminder: Verify your Google Meet app microphone and camera are turned off. (گوگل میٹ میں اپنا مائیک اور کیمرہ بند رکھیے)
               </Text>
             </View>
           </View>
@@ -662,6 +916,72 @@ export default function LiveClassroomScreen() {
                 : 'Audio-first Quranic recitation & modesty protection enabled for all sisters.'}
             </Text>
           </View>
+        </View>
+
+        {/* Live Audio & Voice Instructions Banner */}
+        <View style={styles.voiceGuideBanner}>
+          <TouchableOpacity
+            style={styles.voiceGuideIconBox}
+            onPress={handleShowVoiceDiagnostics}
+          >
+            <Ionicons
+              name={voiceConnected ? 'volume-high' : voiceStatus === 'failed' ? 'alert-circle' : 'hourglass'}
+              size={20}
+              color={voiceConnected ? '#059669' : voiceStatus === 'failed' ? '#DC2626' : '#D97706'}
+            />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <View style={styles.voiceGuideTitleRow}>
+              <Text style={styles.voiceGuideTitle}>Live Audio • لائیو آواز</Text>
+              <TouchableOpacity
+                onPress={handleShowVoiceDiagnostics}
+                style={[
+                  styles.voiceLiveBadge,
+                  voiceConnected && { backgroundColor: '#ECFDF5' },
+                  voiceStatus === 'failed' && { backgroundColor: '#FEE2E2' },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.voiceLiveDot,
+                    voiceConnected && { backgroundColor: '#10B981' },
+                    voiceStatus === 'failed' && { backgroundColor: '#EF4444' },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.voiceLiveBadgeText,
+                    voiceConnected && { color: '#047857' },
+                    voiceStatus === 'failed' && { color: '#B91C1C' },
+                  ]}
+                >
+                  {voiceConnected
+                    ? remoteCount === 0
+                      ? 'Voice Online (1 in Room)'
+                      : `Voice Online (${remoteCount + 1} Connected)`
+                    : voiceStatus === 'failed'
+                    ? 'Audio Error (Tap Info)'
+                    : 'Connecting Audio...'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.voiceGuideSub}>
+              {voiceConnected
+                ? remoteCount === 0
+                  ? 'Aapki live aawaz connect hai (Room mein sirf aap hain). Dosre sathi ke aane par dono taraf aawaz aayegi.'
+                  : 'Live aawaz chal rahi hai. Bolne ya chup rehne ke liye Microphone button use karein.'
+                : voiceStatus === 'failed'
+                ? voiceErrorMsg || 'Audio connect nahi ho saki. Info button tap karein.'
+                : 'In-app voice engine se connection قائم ho raha hai...'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.voiceGuideActionBtn}
+            onPress={handleToggleEchoTest}
+          >
+            <Ionicons name={isEchoTesting ? 'stop-circle' : 'mic'} size={13} color="#fff" />
+            <Text style={styles.voiceGuideActionBtnText}>{isEchoTesting ? 'Stop Test' : 'Mic Test'}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Teacher Privacy Master Toolbar (حجاب و صوتی کنٹرول) */}
@@ -771,23 +1091,22 @@ export default function LiveClassroomScreen() {
           </View>
         )}
 
-        {/* Audio Wave & Active Reciter Bar */}
-        <View style={styles.speakerCard}>
-          <View style={styles.speakerAvatar}>
-            <Ionicons name="person" size={20} color={COLORS.primary} />
-            <Animated.View style={[styles.pulseRing, { transform: [{ scale: waveAnim }] }]} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.speakerLabel}>Current Reciter / Speaker:</Text>
-            <Text style={styles.speakerName} numberOfLines={1}>
-              {activeSpeakerName} {isSpeaking && '(Speaking)'}
-            </Text>
-          </View>
-          <View style={styles.audioWaveIndicator}>
-            <Ionicons name="volume-high" size={18} color={COLORS.primary} />
-            <Text style={styles.waveText}>HD Audio</Text>
-          </View>
-        </View>
+        {/* Audio Wave & Active Reciter Bar (Live Voice Waveform / Speaking Indicator) */}
+        <LiveVoiceWaveform
+          isSpeaking={isSpeaking}
+          speakerName={activeSpeakerName}
+          isTeacher={Boolean(isTeacher && !liveClass.active_speaker_uid)}
+          voiceConnected={voiceConnected}
+          remoteCount={remoteCount}
+        />
+        {/* Islamic Purdah Classroom — HD Audio Stream */}
+
+        {/* In-Class Live Mushaf Page Sync */}
+        <InClassMushafSync
+          isTeacher={isTeacher}
+          currentAyahOrPage={liveClass.current_ayah_or_page}
+          onSyncPage={handleSyncQuranPage}
+        />
 
         {/* Interactive Tajweed & Makharij Board */}
         <View style={styles.boardSection}>
@@ -973,8 +1292,8 @@ export default function LiveClassroomScreen() {
               <Ionicons name="lock-closed" size={14} color="#991B1B" />
               <Text style={styles.studentMuteLockText}>
                 {liveClass.privacy_shield_active
-                  ? 'Microphone locked: Emergency Privacy Shield active'
-                  : 'Microphone locked by Ustaadha (Mute All active)'}
+                  ? 'Microphone locked: Emergency Privacy Shield active (Verify Google Meet mic is off)'
+                  : 'Microphone locked by Ustaadha (Mute All active). Verify Google Meet mic is off.'}
               </Text>
             </View>
           )}
@@ -985,7 +1304,7 @@ export default function LiveClassroomScreen() {
               !micMuted && styles.micBtnActive,
               !isTeacher && (liveClass.audio_muted_all || liveClass.privacy_shield_active) && styles.micBtnDisabled,
             ]}
-            onPress={() => {
+            onPress={async () => {
               if (!isTeacher && (liveClass.audio_muted_all || liveClass.privacy_shield_active)) {
                 Alert.alert(
                   'Microphone Locked 🔒',
@@ -995,7 +1314,9 @@ export default function LiveClassroomScreen() {
                 );
                 return;
               }
-              setMicMuted(!micMuted);
+              const nextMuted = !micMuted;
+              setMicMuted(nextMuted);
+              await agoraVoice.setMute(nextMuted).catch(() => {});
             }}
           >
             <Ionicons
@@ -1004,7 +1325,7 @@ export default function LiveClassroomScreen() {
               color={micMuted ? COLORS.textSecondary : '#fff'}
             />
             <Text style={[styles.micBtnText, !micMuted && styles.micBtnTextActive]}>
-              {micMuted ? 'Microphone Muted' : 'Microphone Active'}
+              {micMuted ? 'Microphone Muted (مائیک بند)' : 'Microphone Active (آواز فعال)'}
             </Text>
           </TouchableOpacity>
 
@@ -1018,7 +1339,14 @@ export default function LiveClassroomScreen() {
               if (liveClass.camera_disabled_all && !isTeacher) {
                 Alert.alert(
                   'Video Bridge Disabled 📷🚫',
-                  'External camera/video bridge is disabled under Pardah Mode. Please continue using the built-in Tajweed board and audio stream.'
+                  'External camera/video bridge is disabled under Pardah Mode. To hear and participate in the live voice discussion, you may join for Audio Only. Please keep your camera turned OFF.\n\n(پردہ کی خاطر اپنا کیمرہ بند رکھیے اور صرف آواز کے لیے شامل ہوئیے)',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Join Audio Only (صرف آواز)',
+                      onPress: () => handleJoinExternalMeet(),
+                    },
+                  ]
                 );
                 return;
               }
@@ -1048,19 +1376,28 @@ export default function LiveClassroomScreen() {
                   ]}
                 >
                   {liveClass.camera_disabled_all
-                    ? 'Video Bridge Locked (Pardah Mode)'
+                    ? 'Join Audio • Video Bridge Locked (Pardah Mode)'
                     : liveClass?.meet_url
-                    ? 'External Screen Share / Meet Bridge'
-                    : 'Live Video / Meet Room'}
+                    ? 'Join Audio / Google Meet (آواز کے لیے شامل ہوں)'
+                    : 'Live Voice / Meet Room'}
                 </Text>
               </>
             )}
           </TouchableOpacity>
 
+          {/* Explicit Leave Call Button for All (Students, Teachers, Admins) */}
+          <TouchableOpacity
+            style={styles.leaveCallBtn}
+            onPress={handleLeaveVoice}
+          >
+            <Ionicons name="call" size={16} color="#DC2626" style={{ transform: [{ rotate: '135deg' }] }} />
+            <Text style={styles.leaveCallBtnText}>Leave Audio Session (کلاس سے الگ ہوں)</Text>
+          </TouchableOpacity>
+
           {isTeacher && (
             <TouchableOpacity style={styles.dangerBtn} onPress={handleEndClass}>
               <Ionicons name="stop-circle-outline" size={16} color={COLORS.error} />
-              <Text style={styles.dangerBtnText}>End Live Class Session</Text>
+              <Text style={styles.dangerBtnText}>End Live Class Session (سب کے لیے بند)</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1262,6 +1599,75 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#B45309',
     lineHeight: 14,
+  },
+  voiceGuideBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    gap: 10,
+    marginTop: 4,
+  },
+  voiceGuideIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceGuideTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  voiceGuideTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E40AF',
+  },
+  voiceLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  voiceLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2563EB',
+  },
+  voiceLiveBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#1E40AF',
+  },
+  voiceGuideSub: {
+    fontSize: 11,
+    color: '#1E3A8A',
+    lineHeight: 16,
+  },
+  voiceGuideActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    gap: 5,
+  },
+  voiceGuideActionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
   },
   speakerCard: {
     flexDirection: 'row',
@@ -1493,6 +1899,23 @@ const styles = StyleSheet.create({
   },
   dangerBtnText: {
     color: COLORS.error,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  leaveCallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: RADIUS.full,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 6,
+    marginTop: 4,
+  },
+  leaveCallBtnText: {
+    color: '#DC2626',
     fontSize: 12,
     fontWeight: '700',
   },

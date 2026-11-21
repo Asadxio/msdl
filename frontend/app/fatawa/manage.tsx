@@ -27,11 +27,13 @@ import {
   subscribeToQuestionsForTeacher,
 } from '@/lib/fatawa';
 import { goBackOrReplace } from '@/lib/navigation';
+import { useActiveOrganization } from '@/lib/tenantContext';
 
 export default function TeacherFatawaManageScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { activeOrgId, activeOrg } = useActiveOrganization();
 
   const isTeacherOrAdmin =
     profile?.role === 'teacher' ||
@@ -60,19 +62,22 @@ export default function TeacherFatawaManageScreen() {
 
   useEffect(() => {
     setLoading(true);
-    // Subscribe to all questions to compute dynamic badge counts and filter smoothly
-    const unsub = subscribeToQuestionsForTeacher({ status: 'all' }, (data) => {
-      setQuestions(data);
-      const pending = data.filter((q) => q.status === 'pending').length;
-      const answered = data.filter((q) => q.status === 'answered').length;
-      setPendingCount(pending);
-      setAnsweredCount(answered);
-      setTotalCount(data.length);
-      setLoading(false);
-    });
+    // Subscribe to questions scoped by active organization to preserve privacy
+    const unsub = subscribeToQuestionsForTeacher(
+      { status: 'all', orgId: activeOrgId },
+      (data) => {
+        setQuestions(data);
+        const pending = data.filter((q) => q.status === 'pending').length;
+        const answered = data.filter((q) => q.status === 'answered').length;
+        setPendingCount(pending);
+        setAnsweredCount(answered);
+        setTotalCount(data.length);
+        setLoading(false);
+      }
+    );
 
     return () => unsub();
-  }, []);
+  }, [activeOrgId]);
 
   const handleOpenAnswer = (q: FatawaQuestion) => {
     setSelectedQ(q);
@@ -165,6 +170,23 @@ export default function TeacherFatawaManageScreen() {
           <Text style={styles.headerTitle}>Ustaadha Masail & Fatawa Console</Text>
         </View>
         <View style={{ width: 40 }} />
+      </View>
+
+      {/* Institution Context Banner */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ECFDF5',
+        borderBottomWidth: 1,
+        borderBottomColor: '#D1FAE5',
+        paddingHorizontal: SPACING.md,
+        paddingVertical: 7,
+        gap: 6,
+      }}>
+        <Ionicons name="business" size={14} color="#059669" />
+        <Text style={{ fontSize: 12, fontWeight: '700', color: '#065F46', flex: 1 }} numberOfLines={1}>
+          Dar-ul-Iftaa Campus: {activeOrg?.name || 'Madrasa Dar-ul-Iftaa'}
+        </Text>
       </View>
 
       {/* Filter Tabs: Pending (Default), Answered, All */}

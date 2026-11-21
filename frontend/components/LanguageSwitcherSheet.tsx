@@ -48,10 +48,12 @@ export const LanguageSwitcherSheet: React.FC<LanguageSwitcherSheetProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Language Options List */}
+          {/* Clean Language Options List */}
           <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
             {LANGUAGE_OPTIONS.map((opt) => {
               const isSelected = language === opt.code;
+              const hasDifferentEnglishName = opt.name !== opt.nativeName;
+
               return (
                 <TouchableOpacity
                   key={opt.code}
@@ -59,15 +61,15 @@ export const LanguageSwitcherSheet: React.FC<LanguageSwitcherSheetProps> = ({
                   onPress={() => handleSelect(opt.code)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.flag}>{opt.flag}</Text>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.nameRow}>
-                      <Text style={[styles.nativeName, isSelected && styles.nativeNameSelected]}>
-                        {opt.nativeName}
+                  <View style={styles.nameContainer}>
+                    <Text style={[styles.primaryName, isSelected && styles.primaryNameSelected]}>
+                      {opt.nativeName}
+                    </Text>
+                    {hasDifferentEnglishName && (
+                      <Text style={[styles.secondaryName, isSelected && styles.secondaryNameSelected]}>
+                        ({opt.name})
                       </Text>
-                      <Text style={styles.englishName}>({opt.name})</Text>
-                    </View>
-                    <Text style={styles.subtitle}>{opt.subtitle}</Text>
+                    )}
                   </View>
                   <View style={[styles.radio, isSelected && styles.radioSelected]}>
                     {isSelected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
@@ -143,42 +145,40 @@ const styles = StyleSheet.create({
   langCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#F8FAFC',
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
     borderRadius: RADIUS.lg,
-    padding: 14,
-    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
   langCardSelected: {
     borderColor: '#005F46',
     backgroundColor: '#E8F5EE',
   },
-  flag: {
-    fontSize: 26,
-  },
-  nameRow: {
+  nameContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    flex: 1,
   },
-  nativeName: {
-    fontSize: 15,
-    fontWeight: '800',
+  primaryName: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#0F172A',
   },
-  nativeNameSelected: {
+  primaryNameSelected: {
     color: '#005F46',
+    fontWeight: '800',
   },
-  englishName: {
-    fontSize: 12,
+  secondaryName: {
+    fontSize: 13,
     color: '#64748B',
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  subtitle: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
+  secondaryNameSelected: {
+    color: '#005F46',
   },
   radio: {
     width: 22,
