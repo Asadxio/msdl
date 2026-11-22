@@ -24,8 +24,8 @@ import { resourceExhaustedError, invalidArgumentError } from '../shared/errors';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Primary and fallback Gemini models for MSLB AI features. Client cannot override. */
-const PRIMARY_MODEL = 'gemini-2.5-flash';
-const FALLBACK_MODEL = 'gemini-1.5-flash';
+const PRIMARY_MODEL = 'gemini-3.5-flash';
+const FALLBACK_MODEL = 'gemini-flash-latest';
 export const ALLOWED_MODEL = PRIMARY_MODEL;
 
 /** Max input lengths — prevents abuse */
@@ -197,9 +197,10 @@ export interface GeminiCallOptions {
  * Keys are NEVER logged or returned to client.
  */
 export async function callGemini(apiKeyOrKeys: string | string[], options: GeminiCallOptions): Promise<string> {
+  const envVal = process.env.GEMINI_API_KEY || '';
   const rawKeys = Array.isArray(apiKeyOrKeys)
     ? apiKeyOrKeys
-    : String(apiKeyOrKeys || '')
+    : String(apiKeyOrKeys || envVal)
         .split(/[,;\s\n]+/)
         .map((k) => k.trim())
         .filter(Boolean);
