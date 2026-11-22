@@ -18,6 +18,7 @@ import type { UserProfile } from '@/context/AuthContext';
 import { dispatchNotification } from '@/lib/dispatchNotification';
 import { ENROLLMENT_DOC_ID_SEPARATOR, allowsLegacyCourseAccessWhenEnrollmentMissing, getEnrollmentDocId, isActiveEnrollmentForUserCourse } from '@/lib/enrollments';
 import { dispatchLiveClass10MinReminder } from '@/lib/liveClassNotifications';
+import { getAgoraAppId } from './agoraVoice';
 
 export { dispatchLiveClass10MinReminder };
 
@@ -40,6 +41,8 @@ export type LiveClass = {
   title: string;
   status: LiveClassStatus;
   meet_url: string;
+  agora_app_id?: string;
+  telecom_failover_count?: number;
   purdah_mode_enabled?: boolean;
   audio_muted_all?: boolean;
   camera_disabled_all?: boolean;
@@ -68,6 +71,7 @@ export type LiveClassCreateInput = {
   profile: UserProfile | null;
   purdahModeEnabled?: boolean;
   scheduledStartAt?: Date | null;
+  agoraAppId?: string;
   // organizationId: the caller's active org. Required for tenant scoping.
   // Must be derived from the authenticated admin/teacher's own org context.
   // Never accept from untrusted user input.
@@ -135,6 +139,8 @@ export async function startLiveClass(input: LiveClassCreateInput): Promise<strin
     title: input.title,
     status: 'live',
     meet_url: input.meetUrl.trim(),
+    agora_app_id: input.agoraAppId || getAgoraAppId(),
+    telecom_failover_count: 0,
     purdah_mode_enabled: input.purdahModeEnabled !== false,
     active_board_view: 'mushaf',
     current_ayah_or_page: 1,

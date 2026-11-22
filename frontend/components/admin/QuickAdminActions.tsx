@@ -36,7 +36,7 @@ const ACTION_CATEGORIES: ActionCategory[] = [
     title: 'Academic & Faculty',
     items: [
       { id: 'users', label: 'Approve Students', subLabel: 'Roster Review', icon: 'person-add-outline', route: ROUTES.admin.users, color: '#10B981' },
-      { id: 'academics', label: 'Courses & Faculty', subLabel: 'LMS Curriculum & Teachers', icon: 'school-outline', route: ROUTES.admin.academics, color: '#8B5CF6' },
+      { id: 'teachers', label: 'Courses & Faculty', subLabel: 'LMS Curriculum & Teachers', icon: 'school-outline', route: ROUTES.admin.academics, color: '#8B5CF6' },
       { id: 'quizzes', label: 'Quiz & Exams', subLabel: 'Questions & Evaluation', icon: 'list-outline', route: ROUTES.admin.manageQuizzes, color: '#F59E0B' },
       { id: 'sabaq', label: 'Sabaq Diary', subLabel: 'Hifz & Dars Progress', icon: 'journal-outline', route: '/sabaq-diary' as Href, color: '#047857' },
       { id: 'library', label: 'Madrasa Library', subLabel: 'Publish Textbooks', icon: 'book-outline', route: ROUTES.admin.addBook, color: '#06B6D4' },

@@ -1054,7 +1054,8 @@ service cloud.firestore {
           'meet_url', 'started_at', 'ended_at', 'created_at', 'updated_at',
           'purdah_mode_enabled', 'active_board_view', 'current_ayah_or_page',
           'highlighted_words', 'recitation_queue', 'active_speaker_name', 'active_speaker_uid',
-          'class_time', 'time', 'participant_count', 'organization_id'
+          'class_time', 'time', 'participant_count', 'organization_id',
+          'agora_app_id', 'telecom_failover_count'
         ])
         && request.resource.data.course_id is string
         && request.resource.data.teacher_id is string
@@ -1072,6 +1073,8 @@ service cloud.firestore {
         && (!('started_at' in request.resource.data) || request.resource.data.started_at is timestamp)
         && (!('ended_at' in request.resource.data) || request.resource.data.ended_at is timestamp)
         && (!('participant_count' in request.resource.data) || (request.resource.data.participant_count is number && request.resource.data.participant_count >= 0 && request.resource.data.participant_count <= 500))
+        && (!('agora_app_id' in request.resource.data) || (request.resource.data.agora_app_id is string && request.resource.data.agora_app_id.size() <= 64))
+        && (!('telecom_failover_count' in request.resource.data) || (request.resource.data.telecom_failover_count is number && request.resource.data.telecom_failover_count >= 0))
         && request.resource.data.updated_at is timestamp;
     }
 

@@ -3,16 +3,87 @@ import {
   formatAgoraChannelName,
   getAgoraAppId,
   getAgoraAppCertificate,
+  getAgoraPool,
+  getActiveAgoraAccount,
+  markAgoraAccountExhausted,
+  getNextPoolAccount,
+  resetAgoraPoolExhaustion,
+  AGORA_CREDENTIAL_POOL,
 } from './agoraVoice';
 
 describe('Agora Voice Service & Configuration', () => {
-  it('loads valid Agora App ID and Certificate from env or fallback', () => {
+  beforeEach(() => {
+    resetAgoraPoolExhaustion();
+  });
+
+  it('loads valid Agora App ID and Certificate from env or pool', () => {
     const appId = getAgoraAppId();
-    expect(appId).toBe('eabe6cf2f8404a7e8a17a58b1665c52b');
+    expect(appId).toBe('e60c4718af28454c94664323a7f52d30');
     expect(appId.length).toBe(32);
 
     const cert = getAgoraAppCertificate();
     expect(typeof cert).toBe('string');
+    expect(cert.length).toBe(32);
+  });
+
+  it('contains at least 7 active production accounts in credential pool', () => {
+    const pool = getAgoraPool();
+    expect(pool.length).toBeGreaterThanOrEqual(7);
+    const activeProduction = pool.filter((acc) => acc.isActive && acc.appCertificate.length === 32);
+    expect(activeProduction.length).toBe(7);
+
+    // Each account must have unique 32-char hex App ID and App Certificate
+    const appIds = new Set(activeProduction.map((a) => a.appId));
+    expect(appIds.size).toBe(7);
+    activeProduction.forEach((acc) => {
+      expect(acc.appId).toMatch(/^[0-9a-f]{32}$/i);
+      expect(acc.appCertificate).toMatch(/^[0-9a-f]{32}$/i);
+    });
+  });
+
+  it('supports preferredAppId resolution and account lookup', () => {
+    const secondAcc = AGORA_CREDENTIAL_POOL[1];
+    const resolved = getActiveAgoraAccount(secondAcc.appId);
+    expect(resolved.appId).toBe(secondAcc.appId);
+    expect(resolved.appCertificate).toBe(secondAcc.appCertificate);
+    expect(resolved.label).toBe(secondAcc.label);
+  });
+
+  it('rotates through pool accounts when an account is marked exhausted', () => {
+    const primary = AGORA_CREDENTIAL_POOL[0];
+    const secondary = AGORA_CREDENTIAL_POOL[1];
+
+    markAgoraAccountExhausted(primary.appId, 60);
+    const nextAcc = getNextPoolAccount(primary.appId);
+    expect(nextAcc).not.toBeNull();
+    expect(nextAcc?.appId).toBe(secondary.appId);
+
+    // Next getActiveAgoraAccount should automatically skip the exhausted account
+    const active = getActiveAgoraAccount();
+    expect(active.appId).toBe(secondary.appId);
+  });
+
+  it('triggers failover to next account on AgoraVoiceService', async () => {
+    await agoraVoice.initEngine();
+    const initialAppId = agoraVoice.getCurrentAppId();
+    expect(initialAppId).toBe(AGORA_CREDENTIAL_POOL[0].appId);
+
+    let rotatedAppId = '';
+    let rotatedLabel = '';
+    const unsub = agoraVoice.subscribe({
+      onAccountRotated: (newId, label) => {
+        rotatedAppId = newId;
+        rotatedLabel = label;
+      },
+    });
+
+    const failedOver = await agoraVoice.handleFailoverToNextAccount();
+    expect(failedOver).toBe(true);
+    expect(agoraVoice.getCurrentAppId()).toBe(AGORA_CREDENTIAL_POOL[1].appId);
+    expect(rotatedAppId).toBe(AGORA_CREDENTIAL_POOL[1].appId);
+    expect(rotatedLabel).toBe(AGORA_CREDENTIAL_POOL[1].label);
+
+    unsub();
   });
 
   it('formats channel names according to Agora specs (alphanumeric, underscores, <= 64 chars)', () => {

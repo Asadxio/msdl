@@ -144,6 +144,41 @@ function sanitizeInput(text: string): string {
     .trim();
 }
 
+// ─── Gemini Multi-Key Failover Pool ──────────────────────────────────────────
+
+const exhaustedGeminiKeys = new Map<string, number>();
+
+function isGeminiKeyExhausted(key: string): boolean {
+  const hash = key.slice(-8);
+  const until = exhaustedGeminiKeys.get(hash);
+  if (!until) return false;
+  if (Date.now() > until) {
+    exhaustedGeminiKeys.delete(hash);
+    return false;
+  }
+  return true;
+}
+
+function markGeminiKeyExhausted(key: string, cooldownMins = 30): void {
+  const hash = key.slice(-8);
+  exhaustedGeminiKeys.set(hash, Date.now() + cooldownMins * 60 * 1000);
+  logger.warn(`[aiGateway] Gemini key ending in ...${hash} marked exhausted for ${cooldownMins} minutes.`);
+}
+
+function isQuotaError(err: any): boolean {
+  const msg = String(err?.message || err || '').toLowerCase();
+  const status = err?.status || err?.code || err?.statusCode;
+  return (
+    status === 429 ||
+    status === 'RESOURCE_EXHAUSTED' ||
+    msg.includes('429') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('quota') ||
+    msg.includes('rate limit') ||
+    msg.includes('too many requests')
+  );
+}
+
 // ─── Gemini API Caller ────────────────────────────────────────────────────────
 
 export interface GeminiCallOptions {
@@ -155,14 +190,25 @@ export interface GeminiCallOptions {
 }
 
 /**
- * Calls Gemini API server-side using provided key from Secret Manager.
+ * Calls Gemini API server-side using provided key(s) from Secret Manager.
+ * Supports multi-key pools (comma, semicolon, or newline separated).
+ * Automatically fails over to the next key if quota is exhausted (HTTP 429).
  * Tries PRIMARY_MODEL first, falling back to FALLBACK_MODEL if unavailable.
- * Key is never logged or returned.
+ * Keys are NEVER logged or returned to client.
  */
-export async function callGemini(apiKey: string, options: GeminiCallOptions): Promise<string> {
-  // Dynamic import prevents @google/genai being bundled if not reached
+export async function callGemini(apiKeyOrKeys: string | string[], options: GeminiCallOptions): Promise<string> {
+  const rawKeys = Array.isArray(apiKeyOrKeys)
+    ? apiKeyOrKeys
+    : String(apiKeyOrKeys || '')
+        .split(/[,;\s\n]+/)
+        .map((k) => k.trim())
+        .filter(Boolean);
+
+  const keys = rawKeys.length > 0 ? rawKeys : [apiKeyOrKeys as string];
+  const nonExhausted = keys.filter((k) => !isGeminiKeyExhausted(k));
+  const candidateKeys = nonExhausted.length > 0 ? nonExhausted : keys;
+
   const { GoogleGenAI } = await import('@google/genai');
-  const ai = new GoogleGenAI({ apiKey });
 
   const config: Record<string, unknown> = {
     systemInstruction: options.systemInstruction,
@@ -173,31 +219,61 @@ export async function callGemini(apiKey: string, options: GeminiCallOptions): Pr
     config.responseMimeType = options.responseMimeType;
   }
 
-  try {
-    const response = await ai.models.generateContent({
-      model:    PRIMARY_MODEL,
-      config,
-      contents: options.contents,
-    });
-    const text = (response.text ?? '').trim();
-    if (!text) throw new Error('Empty Gemini response from primary model');
-    return text;
-  } catch (primaryErr: any) {
-    logger.warn('[aiGateway] Primary model failed, attempting fallback model:', {
-      primaryModel: PRIMARY_MODEL,
-      fallbackModel: FALLBACK_MODEL,
-      err: primaryErr?.message || primaryErr,
-    });
+  let lastError: any = null;
 
-    const fallbackResponse = await ai.models.generateContent({
-      model:    FALLBACK_MODEL,
-      config,
-      contents: options.contents,
-    });
-    const fallbackText = (fallbackResponse.text ?? '').trim();
-    if (!fallbackText) throw new Error('Empty Gemini response from fallback model');
-    return fallbackText;
+  for (let i = 0; i < candidateKeys.length; i++) {
+    const activeKey = candidateKeys[i];
+    const ai = new GoogleGenAI({ apiKey: activeKey });
+
+    try {
+      const response = await ai.models.generateContent({
+        model:    PRIMARY_MODEL,
+        config,
+        contents: options.contents,
+      });
+      const text = (response.text ?? '').trim();
+      if (!text) throw new Error('Empty Gemini response from primary model');
+      return text;
+    } catch (primaryErr: any) {
+      if (isQuotaError(primaryErr)) {
+        markGeminiKeyExhausted(activeKey, 30);
+        lastError = primaryErr;
+        logger.warn(`[aiGateway] Gemini key [${i + 1}/${candidateKeys.length}] quota exceeded (429). Automatically failing over to next key in pool...`);
+        continue;
+      }
+
+      logger.warn('[aiGateway] Primary model failed, attempting fallback model:', {
+        primaryModel: PRIMARY_MODEL,
+        fallbackModel: FALLBACK_MODEL,
+        err: primaryErr?.message || primaryErr,
+      });
+
+      try {
+        const fallbackResponse = await ai.models.generateContent({
+          model:    FALLBACK_MODEL,
+          config,
+          contents: options.contents,
+        });
+        const fallbackText = (fallbackResponse.text ?? '').trim();
+        if (!fallbackText) throw new Error('Empty Gemini response from fallback model');
+        return fallbackText;
+      } catch (fallbackErr: any) {
+        lastError = fallbackErr;
+        if (isQuotaError(fallbackErr)) {
+          markGeminiKeyExhausted(activeKey, 30);
+          logger.warn(`[aiGateway] Gemini fallback key [${i + 1}/${candidateKeys.length}] quota exceeded. Failing over to next key...`);
+          continue;
+        }
+        // If not a quota error and not the last key, try next key
+        if (i < candidateKeys.length - 1) {
+          logger.warn('[aiGateway] Model error on key, trying next key in pool...', { err: fallbackErr?.message || fallbackErr });
+          continue;
+        }
+      }
+    }
   }
+
+  throw lastError || new Error('All Gemini API keys in pool failed to generate a response');
 }
 
 // ─── Telemetry ────────────────────────────────────────────────────────────────

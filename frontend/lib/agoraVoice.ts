@@ -54,6 +54,8 @@ export interface AgoraVoiceCallbacks {
   onError?: (errCode: number, errorDescription: string) => void;
   onMuteChanged?: (muted: boolean) => void;
   onEchoTestResult?: (message: string) => void;
+  onAccountRotated?: (newAppId: string, accountLabel: string) => void;
+  onPoolExhausted?: () => void;
 }
 
 // Lazy dynamic load of native Agora RTC SDK
@@ -76,24 +78,166 @@ try {
   // Graceful fallback for mock / non-native environments
 }
 
-export const AGORA_DEFAULT_APP_ID = 'eabe6cf2f8404a7e8a17a58b1665c52b';
-// Project MSLB is configured in Agora Console as App ID Only (Testing) mode (no certificate/token required).
-export const AGORA_DEFAULT_APP_CERTIFICATE = '';
-
-export function getAgoraAppId(): string {
-  const envId = process.env.EXPO_PUBLIC_AGORA_APP_ID;
-  if (envId && envId.trim().length > 0) {
-    return envId.trim();
-  }
-  return AGORA_DEFAULT_APP_ID;
+export interface AgoraAccountCredential {
+  appId: string;
+  appCertificate: string;
+  label: string;
+  isActive: boolean;
+  exhaustedUntilMs?: number;
 }
 
-export function getAgoraAppCertificate(): string {
-  const envCert = process.env.EXPO_PUBLIC_AGORA_APP_CERTIFICATE;
-  if (envCert !== undefined && envCert !== null) {
-    return envCert.trim();
+/**
+ * 7-Account High-Availability Production Agora Pool
+ * 7 accounts x 10,000 mins = 70,000 free minutes per month (~1,166 hours of voice dars)
+ */
+export const AGORA_CREDENTIAL_POOL: AgoraAccountCredential[] = [
+  {
+    appId: 'e60c4718af28454c94664323a7f52d30',
+    appCertificate: 'aee6d77cbac54be1afb18d3017f32175',
+    label: 'Primary Account 1',
+    isActive: true,
+  },
+  {
+    appId: 'b18d896b556f43c1a6e8e25070ec481e',
+    appCertificate: '99fd27b6b4ed41378974d103f2df657d',
+    label: 'Pool Account 2',
+    isActive: true,
+  },
+  {
+    appId: 'a5a30d682ff74f3bbf20b4c8b1edfcd3',
+    appCertificate: '563fae87513f4222ba7377b13b40d9c2',
+    label: 'Pool Account 3',
+    isActive: true,
+  },
+  {
+    appId: '1ea7bce71b0348dc9ed39283ea80b013',
+    appCertificate: '8dd520088240425f870ebb22d4f4efc4',
+    label: 'Pool Account 4',
+    isActive: true,
+  },
+  {
+    appId: '07073a016e52454e8369974463487d1b',
+    appCertificate: '54972faaadec43cc81ff60f1706cf693',
+    label: 'Pool Account 5',
+    isActive: true,
+  },
+  {
+    appId: '7beb566b6c9548b0a25063911fdb1d41',
+    appCertificate: 'd7b302ab23954b04bbb4b51f9d1b54f8',
+    label: 'Pool Account 6',
+    isActive: true,
+  },
+  {
+    appId: '40eb3f537eea456998d75eeed1ddfb89',
+    appCertificate: 'd1f6bfd298204c5181882e4cd4221cb3',
+    label: 'Pool Account 7',
+    isActive: true,
+  },
+  {
+    appId: 'eabe6cf2f8404a7e8a17a58b1665c52b',
+    appCertificate: '',
+    label: 'Testing Fallback Account',
+    isActive: true,
+  },
+];
+
+export const AGORA_DEFAULT_APP_ID = AGORA_CREDENTIAL_POOL[0].appId;
+export const AGORA_DEFAULT_APP_CERTIFICATE = AGORA_CREDENTIAL_POOL[0].appCertificate;
+
+let dynamicRemotePool: AgoraAccountCredential[] | null = null;
+let currentPoolIndex = 0;
+
+export function getAgoraPool(): AgoraAccountCredential[] {
+  if (dynamicRemotePool && dynamicRemotePool.length > 0) {
+    return dynamicRemotePool;
   }
-  return AGORA_DEFAULT_APP_CERTIFICATE;
+  return AGORA_CREDENTIAL_POOL;
+}
+
+export function setDynamicRemotePool(pool: AgoraAccountCredential[]) {
+  if (Array.isArray(pool) && pool.length > 0) {
+    dynamicRemotePool = pool;
+  }
+}
+
+export function getActiveAgoraAccount(preferredAppId?: string): AgoraAccountCredential {
+  const pool = getAgoraPool();
+  if (preferredAppId) {
+    const found = pool.find((acc) => acc.appId.toLowerCase() === preferredAppId.toLowerCase().trim() && acc.isActive);
+    if (found) return found;
+  }
+
+  const envId = process.env.EXPO_PUBLIC_AGORA_APP_ID?.trim();
+  const envCert = process.env.EXPO_PUBLIC_AGORA_APP_CERTIFICATE?.trim();
+  if (envId && envId.length === 32 && !preferredAppId) {
+    const envMatch = pool.find((acc) => acc.appId.toLowerCase() === envId.toLowerCase());
+    if (envMatch) return envMatch;
+    return {
+      appId: envId,
+      appCertificate: envCert || '',
+      label: 'Environment Custom Account',
+      isActive: true,
+    };
+  }
+
+  const now = Date.now();
+  for (let i = 0; i < pool.length; i++) {
+    const idx = (currentPoolIndex + i) % pool.length;
+    const candidate = pool[idx];
+    if (candidate.isActive && (!candidate.exhaustedUntilMs || candidate.exhaustedUntilMs < now)) {
+      currentPoolIndex = idx;
+      return candidate;
+    }
+  }
+
+  return pool[0] || AGORA_CREDENTIAL_POOL[0];
+}
+
+export function getAgoraAppId(preferredAppId?: string): string {
+  return getActiveAgoraAccount(preferredAppId).appId;
+}
+
+export function getAgoraAppCertificate(appId?: string): string {
+  if (appId) {
+    const pool = getAgoraPool();
+    const found = pool.find((acc) => acc.appId.toLowerCase() === appId.toLowerCase().trim());
+    if (found) return found.appCertificate;
+  }
+  return getActiveAgoraAccount(appId).appCertificate;
+}
+
+export function markAgoraAccountExhausted(appId: string, durationMinutes = 60): void {
+  const pool = getAgoraPool();
+  const acc = pool.find((a) => a.appId.toLowerCase() === appId.toLowerCase().trim());
+  if (acc) {
+    acc.exhaustedUntilMs = Date.now() + durationMinutes * 60 * 1000;
+    console.warn(`[AgoraVoice] Account ${acc.label} (${acc.appId.slice(0, 8)}...) marked exhausted for ${durationMinutes} mins.`);
+  }
+}
+
+export function getNextPoolAccount(currentAppId?: string): AgoraAccountCredential | null {
+  const pool = getAgoraPool();
+  const now = Date.now();
+  const currIdx = currentAppId ? pool.findIndex((a) => a.appId.toLowerCase() === currentAppId.toLowerCase().trim()) : currentPoolIndex;
+  const start = currIdx >= 0 ? currIdx + 1 : 0;
+
+  for (let i = 0; i < pool.length; i++) {
+    const idx = (start + i) % pool.length;
+    const candidate = pool[idx];
+    if (candidate.isActive && (!candidate.exhaustedUntilMs || candidate.exhaustedUntilMs < now)) {
+      currentPoolIndex = idx;
+      return candidate;
+    }
+  }
+  return null;
+}
+
+export function resetAgoraPoolExhaustion(): void {
+  const pool = getAgoraPool();
+  pool.forEach((acc) => {
+    delete acc.exhaustedUntilMs;
+  });
+  currentPoolIndex = 0;
 }
 
 export function formatAgoraChannelName(classId: string): string {
@@ -121,6 +265,8 @@ class AgoraVoiceService {
   private hasRetriedWithoutToken = false;
   private hasRetriedWithToken = false;
   private activeSession: ActiveLiveSessionInfo | null = null;
+  private activeAppId: string = '';
+  private isFailingOver = false;
 
   public isSupported(): boolean {
     return !!createAgoraRtcEngine && Platform.OS !== 'web';
@@ -128,6 +274,14 @@ class AgoraVoiceService {
 
   public getConnectionStatus(): AgoraConnectionStatus {
     return this.connectionStatus;
+  }
+
+  public getCurrentAppId(): string {
+    return this.activeAppId || getAgoraAppId();
+  }
+
+  public getActiveAccountInfo(): AgoraAccountCredential {
+    return getActiveAgoraAccount(this.activeAppId);
   }
 
   public getInRoomState() {
@@ -165,23 +319,39 @@ class AgoraVoiceService {
     }
   }
 
-  public async initEngine(): Promise<boolean> {
+  public async initEngine(forcedAppId?: string): Promise<boolean> {
+    const targetAccount = getActiveAgoraAccount(forcedAppId || this.activeAppId);
+    const appId = targetAccount.appId;
+
     if (!this.isSupported()) {
+      this.activeAppId = appId;
       this.isInitialized = true;
       this.connectionStatus = 'connected';
       return true;
     }
 
-    if (this.isInitialized && this.engine) {
-      return true;
-    }
-
-    const appId = getAgoraAppId();
     if (!appId) {
       this.lastErrorMessage = 'Agora App ID is missing from configuration.';
       this.connectionStatus = 'failed';
       return false;
     }
+
+    if (this.isInitialized && this.engine && this.activeAppId === appId) {
+      return true;
+    }
+
+    if (this.engine) {
+      try {
+        this.engine.leaveChannel();
+      } catch {}
+      try {
+        this.engine.release();
+      } catch {}
+      this.engine = null;
+      this.isInitialized = false;
+    }
+
+    this.activeAppId = appId;
 
     try {
       // Background Audio Configuration: ensure audio continues when app is minimized or navigating in-app
@@ -301,11 +471,11 @@ class AgoraVoiceService {
           this.connectionStatus = 'reconnecting';
           this.callbacks.forEach((cb) => cb.onConnectionChange?.('reconnecting'));
         } else if (state === 5 || state === 1) {
-          if (reason === 8 || reason === 9) {
+          if (reason === 8 || reason === 9 || reason === 10) {
             // Error 110/Token Rejection: Automatic Dual-Mode Fallback
             if (!this.hasRetriedWithoutToken && this.lastTokenUsed !== '') {
               this.hasRetriedWithoutToken = true;
-              console.log('[AgoraVoice] Token rejected (reason 8). Automatically retrying Direct App-ID Mode...');
+              console.log('[AgoraVoice] Token rejected (reason ' + reason + '). Automatically retrying Direct App-ID Mode...');
               try {
                 this.engine?.leaveChannel();
                 this.lastTokenUsed = '';
@@ -316,7 +486,7 @@ class AgoraVoiceService {
               }
             } else if (!this.hasRetriedWithToken && this.lastTokenUsed === '' && this.cachedRtcToken) {
               this.hasRetriedWithToken = true;
-              console.log('[AgoraVoice] Direct mode rejected (reason 8). Automatically retrying Token Mode...');
+              console.log('[AgoraVoice] Direct mode rejected (reason ' + reason + '). Automatically retrying Token Mode...');
               try {
                 this.engine?.leaveChannel();
                 this.lastTokenUsed = this.cachedRtcToken;
@@ -327,21 +497,21 @@ class AgoraVoiceService {
               }
             }
 
-            // Both modes attempted and rejected by Agora server
+            // Both modes attempted and rejected by Agora server -> Failover to next pool account!
             this.lastErrorMessage =
-              'Agora Error 110: Audio authentication failed. Tap "Audio Error" for diagnosis.';
-            this.connectionStatus = 'failed';
+              'Agora Error 110: Audio authentication failed. Rotating to next telecom account...';
+            this.connectionStatus = 'reconnecting';
             this.callbacks.forEach((cb) => {
-              cb.onError?.(110, this.lastErrorMessage!);
-              cb.onConnectionChange?.('failed', this.lastErrorMessage!);
+              cb.onConnectionChange?.('reconnecting', this.lastErrorMessage!);
             });
+            this.handleFailoverToNextAccount().catch(() => {});
           } else if (reason === 6) {
-            this.lastErrorMessage = 'Agora Error: Invalid App ID. Please verify your Agora project App ID.';
-            this.connectionStatus = 'failed';
+            this.lastErrorMessage = 'Agora Error: Invalid App ID. Rotating to next pool account...';
+            this.connectionStatus = 'reconnecting';
             this.callbacks.forEach((cb) => {
-              cb.onError?.(101, this.lastErrorMessage!);
-              cb.onConnectionChange?.('failed', this.lastErrorMessage!);
+              cb.onConnectionChange?.('reconnecting', this.lastErrorMessage!);
             });
+            this.handleFailoverToNextAccount().catch(() => {});
           }
         }
       },
@@ -397,8 +567,75 @@ class AgoraVoiceService {
           cb.onError?.(errCode, errorDesc);
           cb.onConnectionChange?.('failed', errorDesc);
         });
+
+        if (errCode === 110 || errCode === 101) {
+          this.handleFailoverToNextAccount().catch(() => {});
+        }
       },
     });
+  }
+
+  public async handleFailoverToNextAccount(): Promise<boolean> {
+    if (this.isFailingOver) return false;
+    this.isFailingOver = true;
+    try {
+      const currentAppId = this.getCurrentAppId();
+      markAgoraAccountExhausted(currentAppId, 60);
+      const nextAccount = getNextPoolAccount(currentAppId);
+      if (!nextAccount) {
+        console.warn('[AgoraVoice] All Agora pool accounts are exhausted!');
+        this.callbacks.forEach((cb) => cb.onPoolExhausted?.());
+        this.lastErrorMessage = 'All telecom voice accounts are currently at maximum capacity. Please retry shortly.';
+        this.connectionStatus = 'failed';
+        this.callbacks.forEach((cb) => cb.onError?.(503, this.lastErrorMessage!));
+        return false;
+      }
+
+      console.log(`[AgoraVoice] Failing over from ${currentAppId.slice(0, 8)}... to ${nextAccount.label} (${nextAccount.appId.slice(0, 8)}...)`);
+      const switched = await this.switchRoomAccount(nextAccount.appId);
+      if (switched) {
+        this.callbacks.forEach((cb) => cb.onAccountRotated?.(nextAccount.appId, nextAccount.label));
+      }
+      return switched;
+    } catch (err: any) {
+      console.warn('[AgoraVoice] handleFailoverToNextAccount error:', err);
+      return false;
+    } finally {
+      this.isFailingOver = false;
+    }
+  }
+
+  public async switchRoomAccount(newAppId: string): Promise<boolean> {
+    const session = this.activeSession;
+    const previousMute = this.localMuted;
+
+    if (this.engine && this.isSupported()) {
+      try {
+        this.engine.leaveChannel();
+      } catch {}
+      try {
+        this.engine.release();
+      } catch {}
+      this.engine = null;
+      this.isInitialized = false;
+    }
+
+    this.activeAppId = newAppId;
+    const initialized = await this.initEngine(newAppId);
+    if (!initialized) return false;
+
+    if (session && session.classId) {
+      return this.joinVoiceRoom({
+        classId: session.classId,
+        uid: session.uid,
+        isTeacher: session.isTeacher,
+        initialMuted: previousMute,
+        classTitle: session.classTitle,
+        teacherName: session.teacherName,
+        preferredAppId: newAppId,
+      });
+    }
+    return true;
   }
 
   public async joinVoiceRoom(params: {
@@ -408,11 +645,13 @@ class AgoraVoiceService {
     initialMuted?: boolean;
     classTitle?: string;
     teacherName?: string;
+    preferredAppId?: string;
   }): Promise<boolean> {
     const channelName = formatAgoraChannelName(params.classId);
+    const targetAccount = getActiveAgoraAccount(params.preferredAppId || this.activeAppId);
 
-    // Fast-path re-entrancy: if already in this room, preserve active connection & update metadata
-    if (this.isJoined && this.currentChannel === channelName) {
+    // Fast-path re-entrancy: if already in this room and using target appId, preserve active connection & update metadata
+    if (this.isJoined && this.currentChannel === channelName && this.activeAppId === targetAccount.appId) {
       if (this.activeSession) {
         if (params.classTitle) this.activeSession.classTitle = params.classTitle;
         if (params.teacherName) this.activeSession.teacherName = params.teacherName;
@@ -426,7 +665,7 @@ class AgoraVoiceService {
       this.callbacks.forEach((cb) => cb.onError?.(-1, this.lastErrorMessage!));
     }
 
-    const initialized = await this.initEngine();
+    const initialized = await this.initEngine(params.preferredAppId);
     if (!initialized) return false;
 
     this.currentChannel = channelName;
@@ -469,8 +708,9 @@ class AgoraVoiceService {
 
     try {
       // Generate RTC AccessToken2 if App Certificate is configured
-      const appId = getAgoraAppId();
-      const appCert = getAgoraAppCertificate();
+      const activeAccount = this.getActiveAccountInfo();
+      const appId = activeAccount.appId;
+      const appCert = activeAccount.appCertificate;
       let rtcToken = '';
       if (appId && appCert) {
         try {
@@ -480,14 +720,14 @@ class AgoraVoiceService {
             channelName,
             uid: userUid,
           });
-          console.log(`[AgoraVoice] Token generated for uid=${userUid}: length=${rtcToken.length}, starts=${rtcToken.slice(0, 10)}`);
+          console.log(`[AgoraVoice] Token generated for uid=${userUid} on ${activeAccount.label} (${appId.slice(0, 8)}...): length=${rtcToken.length}`);
         } catch (tokenErr) {
           console.warn('[AgoraVoice] Token generation failed:', tokenErr);
         }
       }
 
       if (!rtcToken) {
-        console.log('[AgoraVoice] Connecting in Direct App-ID Mode (no token required for testing-mode project)');
+        console.log(`[AgoraVoice] Connecting in Direct App-ID Mode on ${activeAccount.label} (${appId.slice(0, 8)}...)`);
       }
 
       this.currentUid = userUid;
@@ -696,13 +936,16 @@ class AgoraVoiceService {
   }
 
   public getDebugInfo() {
+    const activeAcc = this.getActiveAccountInfo();
     return {
-      appId: getAgoraAppId(),
+      appId: activeAcc.appId,
+      accountLabel: activeAcc.label,
+      poolTotal: getAgoraPool().length,
       channel: this.currentChannel,
       uid: this.currentUid,
       tokenLength: this.lastTokenUsed ? this.lastTokenUsed.length : 0,
       tokenPrefix: this.lastTokenUsed ? this.lastTokenUsed.slice(0, 10) : 'NONE (Direct)',
-      hasCertificate: !!getAgoraAppCertificate(),
+      hasCertificate: !!activeAcc.appCertificate,
       lastError: this.lastErrorMessage,
       status: this.connectionStatus,
     };

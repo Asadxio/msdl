@@ -15,7 +15,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, query, where, addDoc, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, query, where, addDoc, serverTimestamp, writeBatch, doc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { withTimeout } from '@/lib/errors';
@@ -156,6 +156,7 @@ export default function LiveClassroomScreen() {
           initialMuted: isTeacher ? false : true,
           classTitle: liveClass?.title,
           teacherName: liveClass?.teacher_name,
+          preferredAppId: liveClass?.agora_app_id,
         });
         if (mounted && joined) {
           setMicMuted(agoraVoice.getIsMuted());
@@ -227,6 +228,21 @@ export default function LiveClassroomScreen() {
         setVoiceConnected(false);
         setVoiceStatus('failed');
       },
+      onAccountRotated: async (newAppId, accountLabel) => {
+        if (!mounted) return;
+        console.log(`[LiveClassroom] Teacher Agora voice rotated to ${accountLabel} (${newAppId.slice(0, 8)}...)`);
+        if (isTeacher && classId) {
+          try {
+            await updateDoc(doc(db, 'live_classes', classId as string), {
+              agora_app_id: newAppId,
+              telecom_failover_count: increment(1),
+              updated_at: serverTimestamp(),
+            });
+          } catch (syncErr) {
+            console.warn('[LiveClassroom] Failed to sync rotated agora_app_id to Firestore:', syncErr);
+          }
+        }
+      },
     });
 
     return () => {
@@ -239,6 +255,19 @@ export default function LiveClassroomScreen() {
       }
     };
   }, [classId, isTeacher, !!liveClass]);
+
+  // High-Availability Multi-Account Sync: If teacher rotates Agora pool account,
+  // students automatically transition to the new account without interrupting the class!
+  useEffect(() => {
+    if (!liveClass?.agora_app_id || !classId) return;
+    const currentAppId = agoraVoice.getCurrentAppId();
+    if (currentAppId && currentAppId.toLowerCase() !== liveClass.agora_app_id.toLowerCase()) {
+      console.log(`[LiveClassroom] In-class agora_app_id changed to ${liveClass.agora_app_id.slice(0, 8)}... Auto-switching account!`);
+      agoraVoice.switchRoomAccount(liveClass.agora_app_id).catch((err) => {
+        console.warn('[LiveClassroom] Student auto-switch account failed:', err);
+      });
+    }
+  }, [liveClass?.agora_app_id, classId]);
 
   // Reactive Privacy Enforcement: force student mic mute when Ustaadha locks audio or triggers shield
   useEffect(() => {
@@ -583,9 +612,10 @@ export default function LiveClassroomScreen() {
 
   const handleShowVoiceDiagnostics = () => {
     const debug = agoraVoice.getDebugInfo();
+    const failoverCount = liveClass?.telecom_failover_count || 0;
     Alert.alert(
       'Live Voice Diagnostics 🎙️',
-      `• App ID: ${debug.appId}\n• Channel: ${debug.channel || 'None'}\n• UID: ${debug.uid}\n• Token Mode: ${debug.tokenPrefix} (${debug.tokenLength} chars)\n• Status: ${voiceStatus.toUpperCase()}\n${voiceErrorMsg ? `\n⚠️ Error: ${voiceErrorMsg}` : ''}\n\nAgora server connection options:`,
+      `• Account: ${debug.accountLabel} (Pool: ${debug.poolTotal} accounts)\n• App ID: ${debug.appId}\n• Channel: ${debug.channel || 'None'}\n• Failovers: ${failoverCount}\n• Token: ${debug.tokenPrefix} (${debug.tokenLength} chars)\n• Status: ${voiceStatus.toUpperCase()}\n${voiceErrorMsg ? `\n⚠️ Error: ${voiceErrorMsg}` : ''}\n\nHigh-availability voice options:`,
       [
         { text: 'Close', style: 'cancel' },
         {
@@ -596,10 +626,10 @@ export default function LiveClassroomScreen() {
           },
         },
         {
-          text: '⚡ Retry (Direct/No Token)',
+          text: '⚡ Switch to Next Account',
           onPress: async () => {
             setVoiceStatus('connecting');
-            await agoraVoice.retryJoin('direct');
+            await agoraVoice.handleFailoverToNextAccount();
           },
         },
       ]

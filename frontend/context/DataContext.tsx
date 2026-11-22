@@ -519,11 +519,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setBooksLoading(true);
     try {
       const activeOrgId = orgId || getActiveOrganizationIdSync() || DEFAULT_ORGANIZATION_ID;
-      const booksQuery = activeOrgId === DEFAULT_ORGANIZATION_ID
-        ? collection(db, 'library')
-        : query(collection(db, 'library'), where('organization_id', '==', activeOrgId));
-
-      const booksSnap = await withTimeout(getDocs(booksQuery));
+      const booksSnap = await withTimeout(
+        activeOrgId === DEFAULT_ORGANIZATION_ID
+          ? getDocs(collection(db, 'library'))
+          : getDocs(query(collection(db, 'library'), where('organization_id', '==', activeOrgId)))
+      );
       const booksData: Book[] = [];
       booksSnap.forEach((doc) => {
         const data = doc.data();
