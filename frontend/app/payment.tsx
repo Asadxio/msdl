@@ -1333,7 +1333,7 @@ export default function PaymentFlowScreen() {
                 ) : (
                   <TouchableOpacity
                     style={[styles.secondaryBtn, { width: "100%", marginTop: 6 }]}
-                    onPress={() => router.replace("/(tabs)/index")}
+                    onPress={() => router.replace("/(tabs)")}
                   >
                     <Text style={styles.secondaryBtnText}>Back to Home</Text>
                   </TouchableOpacity>

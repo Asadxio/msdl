@@ -21,32 +21,48 @@ export const COLORS = {
   lightChampagne: '#D8C28A', // Light Champagne
   secondary: '#C6A15B', // Gold accent alias
   secondaryLight: '#D8C28A', // Soft gold alias
+  softGold: '#E8D9A8',
   goldBg: '#FCF9F0',
   goldText: '#9A7328',
+  goldBorder: '#F3E5BE',
+  errorBg: '#FEF2F2',
+  successBg: '#ECFDF5',
+  white: '#FFFFFF',
+  emerald: '#075B49',
+  textPrimary: '#17332C',
+  textTertiary: '#94A3B8',
 };
 
 export const DARK_COLORS = {
-  primary: '#0FA958', // Brighter green for dark mode readability
+  primary: '#10B981', // Brighter emerald green for dark mode readability
   primaryDeep: '#064E3B',
-  primaryDarkest: '#02231E',
-  background: '#0B132B',
-  surface: '#1C2541',
-  text: '#F8FAFC',
-  textMain: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  secondaryText: '#94A3B8',
-  textMuted: '#94A3B8',
-  border: '#2E3D5C',
+  primaryDarkest: '#022C22',
+  primaryLight: '#047857',
+  background: '#071714', // Deep charcoal-emerald background
+  surface: '#0E2922', // Deep emerald surface
+  surfaceAlt: '#14382F',
+  text: '#F2FBF8', // Crisp legible light text
+  textMain: '#F2FBF8',
+  textSecondary: '#A3C0B8', // Soft sage secondary text
+  secondaryText: '#A3C0B8',
+  textMuted: '#6B8E85',
+  border: '#1C4A3E', // Subtle emerald border
   error: '#EF4444',
+  errorBg: '#3B1818',
   success: '#10B981',
-  primaryLight: '#1B3B36',
-  gold: '#F59E0B',
-  lightChampagne: '#D97706',
-  secondary: '#F59E0B',
+  successBg: '#0D3829',
+  gold: '#E5C378', // Warm glowing gold
+  lightChampagne: '#D4AF37',
+  secondary: '#E5C378',
   secondaryLight: '#3B2F17',
-  surfaceAlt: '#161F38',
-  goldBg: '#3B2F17',
-  goldText: '#FBBF24',
+  softGold: '#C5A059',
+  goldBg: '#2A2415',
+  goldText: '#FDE047',
+  goldBorder: '#5C4A20',
+  white: '#FFFFFF',
+  emerald: '#10B981',
+  textPrimary: '#F2FBF8',
+  textTertiary: '#6B8E85',
 };
 
 export function getThemeColors(isDark?: boolean) {
@@ -61,6 +77,7 @@ export const SPACING = {
   lg: 20,
   xl: 24,
   xxl: 32,
+  xxxl: 40,
 };
 
 export const RADIUS = {
@@ -166,6 +183,27 @@ export const SHADOWS = {
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 2,
+  },
+  sm: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  md: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  lg: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
 };
 

@@ -22,7 +22,7 @@ export function NetworkStatusBanner() {
   const [showReconnected, setShowReconnected] = useState(false);
   const wasOfflineRef = useRef(false);
   const translateY = useRef(new Animated.Value(-60)).current;
-  const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const animateIn = () => {
     Animated.timing(translateY, {

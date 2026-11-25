@@ -1,0 +1,768 @@
+import { DuaCategory, DuaEntry } from '@/types/islamic';
+
+/**
+ * Authentic Duas & Azkar Collection
+ * Sourced directly from Hisn al-Muslim (Fortress of the Muslim)
+ * by Shaykh Saeed bin Ali bin Wahf al-Qahtani.
+ */
+
+export const DUA_CATEGORIES: DuaCategory[] = [
+  {
+    id: 'morning',
+    titleEn: 'Morning Azkar',
+    titleUr: 'صبح کے مسنون اذکار',
+    titleAr: 'أَذْكَارُ الصَّبَاحِ',
+    icon: 'sunny-outline',
+    count: 6,
+    colorBg: '#FEF3C7',
+    colorFg: '#D97706',
+    descriptionEn: 'Daily protection and blessings after Fajr prayer until sunrise.',
+    descriptionUr: 'نماز فجر کے بعد طلوعِ آفتاب تک پڑھے جانے والے حفاظت و برکت کے اذکار۔'
+  },
+  {
+    id: 'evening',
+    titleEn: 'Evening Azkar',
+    titleUr: 'شام کے مسنون اذکار',
+    titleAr: 'أَذْكَارُ الْمَسَاءِ',
+    icon: 'moon-outline',
+    count: 6,
+    colorBg: '#EEF2FF',
+    colorFg: '#4F46E5',
+    descriptionEn: 'Evening fortress from Asr until sunset and nightfall.',
+    descriptionUr: 'نماز عصر سے لے کر غروب آفتاب اور رات تک کے حفاظتی اذکار۔'
+  },
+  {
+    id: 'sleep',
+    titleEn: 'Sleeping Duas',
+    titleUr: 'سونے کے وقت کی دعائیں',
+    titleAr: 'أَدْعِيَةُ النَّوْمِ',
+    icon: 'bed-outline',
+    count: 5,
+    colorBg: '#F3E8FF',
+    colorFg: '#7E22CE',
+    descriptionEn: 'Supplications before lying down and seeking peaceful sleep.',
+    descriptionUr: 'بستر پر لیٹتے وقت اور رات کو پرسکون نیند کے لیے مسنون دعائیں۔'
+  },
+  {
+    id: 'wake',
+    titleEn: 'Waking-up Duas',
+    titleUr: 'نیند سے بیدار ہونے کی دعائیں',
+    titleAr: 'أَدْعِيَةُ الاِسْتِيقَاظِ',
+    icon: 'alarm-outline',
+    count: 4,
+    colorBg: '#ECFDF5',
+    colorFg: '#059669',
+    descriptionEn: 'Expressing gratitude upon awakening to a new day.',
+    descriptionUr: 'صبح بیدار ہوتے ہی نئی زندگی اور صحت پر شکر گزاری کی دعائیں۔'
+  },
+  {
+    id: 'eating',
+    titleEn: 'Eating & Drinking',
+    titleUr: 'کھانے پینے کے آداب و دعائیں',
+    titleAr: 'أَدْعِيَةُ الطَّعَامِ وَالشَّرَابِ',
+    icon: 'restaurant-outline',
+    count: 4,
+    colorBg: '#FFF7ED',
+    colorFg: '#EA580C',
+    descriptionEn: 'Before and after meals, and host blessings.',
+    descriptionUr: 'کھانے کے شروع، درمیان اور بعد میں شکر و برکت کی دعائیں۔'
+  },
+  {
+    id: 'travel',
+    titleEn: 'Travelling Duas',
+    titleUr: 'سفر کی مسنون دعائیں',
+    titleAr: 'أَدْعِيَةُ السَّفَرِ',
+    icon: 'airplane-outline',
+    count: 4,
+    colorBg: '#E0F2FE',
+    colorFg: '#0284C7',
+    descriptionEn: 'Stepping into a vehicle, plane, or setting on a journey.',
+    descriptionUr: 'سواری پر سوار ہوتے وقت اور سفر کے خطرات سے پناہ کی دعائیں۔'
+  },
+  {
+    id: 'masjid',
+    titleEn: 'Masjid & Adhan',
+    titleUr: 'مسجد اور اذان کی دعائیں',
+    titleAr: 'أَدْعِيَةُ الْمَسْجِدِ وَالأَذَانِ',
+    icon: 'business-outline',
+    count: 4,
+    colorBg: '#ECFDF5',
+    colorFg: '#047857',
+    descriptionEn: 'Entering, exiting the mosque, and after listening to the Adhan.',
+    descriptionUr: 'مسجد میں داخلے، خروج اور اذان کے جواب کی برکت والی دعائیں۔'
+  },
+  {
+    id: 'daily',
+    titleEn: 'Daily Masnoon Duas',
+    titleUr: 'روزمرہ کی مسنون دعائیں',
+    titleAr: 'أَدْعِيَةُ الْيَوْمِ وَاللَّيْلَةِ',
+    icon: 'sparkles-outline',
+    count: 6,
+    colorBg: '#FEF9C3',
+    colorFg: '#CA8A04',
+    descriptionEn: 'Home, restroom, mirror, dress, and daily affairs.',
+    descriptionUr: 'بیت الخلاء، گھر میں داخلے، نئے کپڑے اور آئینے میں دیکھنے کی دعائیں۔'
+  },
+  {
+    id: 'ramadan',
+    titleEn: 'Ramadan & Fasting',
+    titleUr: 'رمضان اور روزے کی دعائیں',
+    titleAr: 'أَدْعِيَةُ رَمَضَانَ وَالصِّيَامِ',
+    icon: 'star-outline',
+    count: 4,
+    colorBg: '#FDF2F8',
+    colorFg: '#DB2777',
+    descriptionEn: 'Suhoor, Iftar, Laylat al-Qadr, and seeking forgiveness.',
+    descriptionUr: 'سحری کی نیت، افطار کے وقت اور شبِ قدر میں مانگی جانے والی دعائیں۔'
+  },
+  {
+    id: 'general',
+    titleEn: 'General Supplications',
+    titleUr: 'جامع قرآنی و نبوی دعائیں',
+    titleAr: 'أَدْعِيَةٌ جَامِعَةٌ',
+    icon: 'book-outline',
+    count: 6,
+    colorBg: '#F0FDF4',
+    colorFg: '#16A34A',
+    descriptionEn: 'Comprehensive Quranic prayers for world, hereafter, and relief.',
+    descriptionUr: 'دنیا و آخرت کی تمام بھلائیوں، غموں کے مداوے اور بخشش کی جامع دعائیں۔'
+  }
+];
+
+export const DUAS_COLLECTION: DuaEntry[] = [
+  // ─── 1. Morning Azkar ──────────────────────────────────────────────────
+  {
+    id: 'm-1',
+    categoryId: 'morning',
+    titleEn: 'Ayat al-Kursi (Morning Protection)',
+    titleUr: 'آیۃ الکرسی (صبح کی کامل حفاظت)',
+    arabicText: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ ۚ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ ۗ مَن ذَا الَّذِي يَشْفَعُ عِندَهُ إِلَّا بِإِذْنِهِ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلَّا بِمَا شَاءَ ۚ وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ ۖ وَلَا يَئُودُهُ حِفْظُهُمَا ۚ وَهُوَ الْعَلِيُّ الْعَظِيمُ',
+    transliteration: 'Allahu la ilaha illa Huwa, Al-Hayyul-Qayyum. La ta\'khudhuhu sinatun wa la nawm. Lahu ma fis-samawati wa ma fil-ard. Man dhal-ladhi yashfa\'u \'indahu illa bi-idhnih. Ya\'lamu ma bayna aydihim wa ma khalfahum, wa la yuhituna bishay\'im-min \'ilmihi illa bima sha\'a. Wasi\'a kursiyyuhus-samawati wal-ard, wa la ya\'uduhu hifzuhuma, wa Huwal-\'Aliyyul-\'Azeem.',
+    englishTranslation: 'Allah! There is no deity except Him, the Ever-Living, the Sustainer of all existence. Neither drowsiness overtakes Him nor sleep. To Him belongs whatever is in the heavens and whatever is on the earth. Who is it that can intercede with Him except by His permission? He knows what is before them and what will be after them, and they encompass not a thing of His knowledge except for what He wills. His Kursi extends over the heavens and the earth, and their preservation tires Him not. And He is the Most High, the Most Great.',
+    urduTranslation: 'اللہ کے سوا کوئی عبادت کے لائق نہیں، وہ زندہ ہے اور سب کا سنبھالنے والا ہے۔ نہ اسے اونگھ آتی ہے نہ نیند۔ جو کچھ آسمانوں میں ہے اور جو زمین میں ہے سب اسی کا ہے۔ کون ہے جو اس کی اجازت کے بغیر اس کے حضور سفارش کر سکے؟ وہ سب کچھ جانتا ہے جو مخلوق کے سامنے ہے اور جو ان کے پیچھے ہے، اور وہ اس کے علم میں سے کسی چیز کا احاطہ نہیں کر سکتے مگر جتنا وہ چاہے۔ اس کی کرسی نے آسمانوں اور زمین کو گھیر رکھا ہے اور ان دونوں کی حفاظت اس پر گراں نہیں گزرتی اور وہ بلند مرتبہ اور عظمت والا ہے۔',
+    reference: 'Surah Al-Baqarah 2:255 | Hakim (Sahih)',
+    targetCount: 1,
+    virtueUr: 'جو شخص صبح کے وقت اسے پڑھے گا وہ شام تک جنات و شیاطین کے شر سے اللہ کی پناہ میں رہے گا۔',
+    virtueEn: 'Whoever recites this when he wakes in the morning will be shielded from the jinn until evening.'
+  },
+  {
+    id: 'm-2',
+    categoryId: 'morning',
+    titleEn: 'Greeting the Morning with Divine Dominion',
+    titleUr: 'صبح کی بیداری اور ملک و حمد کی گواہی',
+    arabicText: 'أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لاَ إِلَٰهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ، رَبِّ أَسْأَلُكَ خَيْرَ مَا فِي هَٰذَا الْيَوْمِ وَخَيْرَ مَا بَعْدَهُ، وَأَعُوذُ بِكَ مِنْ شَرِّ مَا فِي هَٰذَا الْيَوْمِ وَشَرِّ مَا بَعْدَهُ',
+    transliteration: 'Asbahna wa asbahal-mulku lillah, wal-hamdu lillah, la ilaha illallahu wahdahu la shareeka lah, lahul-mulku wa lahul-hamd, wa Huwa \'ala kulli shay\'in Qadeer. Rabbi as\'aluka khayra ma fi hadhal-yawmi wa khayra ma ba\'dah, wa a\'udhu bika min sharri ma fi hadhal-yawmi wa sharri ma ba\'dah.',
+    englishTranslation: 'We have entered the morning and the kingdom belongs to Allah, and all praise is for Allah. There is no deity worthy of worship except Allah alone, without partner. To Him belongs the dominion and to Him is praise, and He has power over all things. My Lord, I ask You for the good of this day and the good that comes after it, and I seek refuge in You from the evil of this day and the evil that comes after it.',
+    urduTranslation: 'ہم نے صبح کی اور اللہ کے تمام ملک نے صبح کی، اور تمام تعریفیں اللہ کے لیے ہیں۔ اللہ کے سوا کوئی معبود نہیں، وہ اکیلا ہے، اس کا کوئی شریک نہیں، اسی کی بادشاہت ہے اور اسی کے لیے تعریف ہے، اور وہ ہر چیز پر قادر ہے۔ اے میرے رب! میں تجھ سے اس دن کی اور اس کے بعد کے دنوں کی خیر مانگتا ہوں، اور اس دن کے اور اس کے بعد کے دنوں کے شر سے تیری پناہ چاہتا ہوں۔',
+    reference: 'Sahih Muslim 2723',
+    targetCount: 1
+  },
+  {
+    id: 'm-3',
+    categoryId: 'morning',
+    titleEn: 'Sayyidul Istighfar (The Master of Forgiveness)',
+    titleUr: 'سید الاستغفار (بخشش کی سب سے عظیم دعا)',
+    arabicText: 'اللَّهُمَّ أَنْتَ رَبِّي لاَ إِلَٰهَ إِلاَّ أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَعُوذُ بِكَ مِنْ شَرِّ مَا صَنَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ بِذَنْبِي فَاغْفِرْ لِي فَإِنَّهُ لاَ يَغْفِرُ الذُّنُوبَ إِلاَّ أَنْتَ',
+    transliteration: 'Allahumma Anta Rabbi la ilaha illa Anta, khalaqtani wa ana \'abduka, wa ana \'ala \'ahdika wa wa\'dika mastata\'t. A\'udhu bika min sharri ma sana\'t, abu\'u laka bini\'matika \'alayya, wa abu\'u bidhanbi faghfir li fa-innahu la yaghfirudh-dhunuba illa Ant.',
+    englishTranslation: 'O Allah, You are my Lord; none has the right to be worshipped but You. You created me and I am Your servant, and I abide by Your covenant and promise as best I can. I seek refuge in You from the evil of what I have done. I acknowledge Your favor upon me, and I acknowledge my sin, so forgive me, for none forgives sins except You.',
+    urduTranslation: 'اے اللہ! تو ہی میرا رب ہے، تیرے سوا کوئی معبود نہیں، تو نے ہی مجھے پیدا کیا اور میں تیرا بندہ ہوں اور میں اپنی طاقت کے مطابق تیرے عہد اور وعدے پر قائم ہوں۔ میں اپنے اعمال کے شر سے تیری پناہ مانگتا ہوں، میں اپنے اوپر تیری نعمتوں کا اعتراف کرتا ہوں اور اپنے گناہوں کا اعتراف کرتا ہوں، پس مجھے بخش دے کیونکہ تیرے سوا کوئی گناہوں کو معاف نہیں کر سکتا۔',
+    reference: 'Sahih al-Bukhari 6306',
+    targetCount: 1,
+    virtueUr: 'جو شخص یقین کے ساتھ دن کو پڑھے اور شام سے پہلے فوت ہو جائے تو وہ اہل جنت میں سے ہے۔',
+    virtueEn: 'Whoever recites it with firm faith during the day and dies before evening will be among the people of Paradise.'
+  },
+  {
+    id: 'm-4',
+    categoryId: 'morning',
+    titleEn: 'Seeking Protection with the Name of Allah',
+    titleUr: 'اللہ کے نام سے ہر نقصان سے امان',
+    arabicText: 'بِسْمِ اللَّهِ الَّذِي لاَ يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الأَرْضِ وَلاَ فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ',
+    transliteration: 'Bismillahil-ladhi la yadurru ma\'as-mihi shay\'un fil-ardi wa la fis-sama\'i wa Huwas-Samee\'ul-\'Aleem.',
+    englishTranslation: 'In the Name of Allah, with Whose Name nothing can cause harm in the earth or in the heaven, and He is the All-Hearing, the All-Knowing.',
+    urduTranslation: 'اللہ کے نام سے، جس کے نام کی برکت سے زمین اور آسمان کی کوئی چیز نقصان نہیں پہنچا سکتی، اور وہ سب کچھ سننے والا، سب کچھ جاننے والا ہے۔',
+    reference: 'Abu Dawud 5088 | Tirmidhi 3388 (Hasan Sahih)',
+    targetCount: 3,
+    virtueUr: 'جو شخص صبح اور شام تین مرتبہ پڑھے گا، اسے کوئی اچانک مصیبت یا نقصان نہیں پہنچے گا۔',
+    virtueEn: 'Whoever recites it three times in the morning and evening, nothing will harm him.'
+  },
+  {
+    id: 'm-5',
+    categoryId: 'morning',
+    titleEn: 'Contentment with Allah, Islam, and the Prophet',
+    titleUr: 'اللہ، اسلام اور رسول اللہ پر راضی ہونے کا اقرار',
+    arabicText: 'رَضِيتُ بِاللَّهِ رَبًّا، وَبِالإِسْلاَمِ دِينًا، وَبِمُحَمَّدٍ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ نَبِيًّا',
+    transliteration: 'Radeetu billahi Rabba, wa bil-Islami deena, wa bi-Muhammadin sallallahu \'alayhi wa sallama Nabiyya.',
+    englishTranslation: 'I am pleased with Allah as my Lord, with Islam as my religion, and with Muhammad (peace and blessings of Allah be upon him) as my Prophet.',
+    urduTranslation: 'میں اللہ کے رب ہونے پر، اسلام کے دین ہونے پر اور محمد صلی اللہ علیہ وسلم کے نبی ہونے پر دل سے راضی ہوں۔',
+    reference: 'Abu Dawud 5072 | Ahmad (Sahih)',
+    targetCount: 3,
+    virtueUr: 'اللہ تعالیٰ پر حق ہے کہ وہ قیامت کے دن اس شخص کو راضی فرمائے۔',
+    virtueEn: 'Allah has promised that He will satisfy whoever says this three times in the morning and evening.'
+  },
+  {
+    id: 'm-6',
+    categoryId: 'morning',
+    titleEn: 'Tasbeeh for Eradication of Sins',
+    titleUr: 'گناہوں کی معافی اور سمندر کے جھاگ جتنے گناہ دھونا',
+    arabicText: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ',
+    transliteration: 'Subhanallahi wa bihamdihi.',
+    englishTranslation: 'Glory is to Allah and all praise is to Him.',
+    urduTranslation: 'اللہ پاک ہے اپنی تمام تر تعریفوں کے ساتھ۔',
+    reference: 'Sahih Muslim 2691 | Sahih al-Bukhari 6405',
+    targetCount: 100,
+    virtueUr: 'جو شخص دن میں سو مرتبہ پڑھے گا اس کے گناہ مٹا دیے جائیں گے چاہے وہ سمندر کے جھاگ کے برابر ہی کیوں نہ ہوں۔',
+    virtueEn: 'Whoever says it 100 times a day, his sins will be forgiven even if they are like the foam of the sea.'
+  },
+
+  // ─── 2. Evening Azkar ──────────────────────────────────────────────────
+  {
+    id: 'e-1',
+    categoryId: 'evening',
+    titleEn: 'Entering the Evening under Allah\'s Dominion',
+    titleUr: 'شام کا آغاز اور اللہ کی پناہ',
+    arabicText: 'أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لاَ إِلَٰهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ',
+    transliteration: 'Amsayna wa amsal-mulku lillah, wal-hamdu lillah, la ilaha illallahu wahdahu la shareeka lah, lahul-mulku wa lahul-hamd, wa Huwa \'ala kulli shay\'in Qadeer.',
+    englishTranslation: 'We have reached the evening and the kingdom belongs to Allah, and all praise is for Allah. There is no deity worthy of worship except Allah alone, without partner.',
+    urduTranslation: 'ہم نے شام کی اور اللہ کی تمام کائنات نے شام کی، اور تمام تعریفیں اللہ ہی کے لیے ہیں، اللہ کے سوا کوئی معبود نہیں، وہ اکیلا ہے، اس کا کوئی شریک نہیں۔',
+    reference: 'Sahih Muslim 2723',
+    targetCount: 1
+  },
+  {
+    id: 'e-2',
+    categoryId: 'evening',
+    titleEn: 'Seeking Refuge in the Perfect Words of Allah',
+    titleUr: 'اللہ کے کامل کلمات سے تمام موذی چیزوں سے پناہ',
+    arabicText: 'أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ مِنْ شَرِّ مَا خَلَقَ',
+    transliteration: 'A\'udhu bikalimatil-lahit-tammati min sharri ma khalaq.',
+    englishTranslation: 'I seek refuge in the perfect words of Allah from the evil of what He has created.',
+    urduTranslation: 'میں اللہ کے کامل کلمات کے ذریعے اس کی پیدا کردہ تمام مخلوقات کے شر سے پناہ مانگتا ہوں۔',
+    reference: 'Sahih Muslim 2709',
+    targetCount: 3,
+    virtueUr: 'جو شخص شام کو تین مرتبہ یہ پڑھے گا رات بھر کوئی زہریلا جانور یا آفت اسے نقصان نہیں پہنچائے گی۔',
+    virtueEn: 'Whoever recites this three times in the evening will not be harmed by any poisonous creature that night.'
+  },
+  {
+    id: 'e-3',
+    categoryId: 'evening',
+    titleEn: 'Du\'a for Wellness in Body, Hearing, and Sight',
+    titleUr: 'جسم، سماعت اور بصارت کی عافیت کی دعا',
+    arabicText: 'اللَّهُمَّ عَافِنِي فِي بَدَنِي، اللَّهُمَّ عَافِنِي فِي سَمْعِي، اللَّهُمَّ عَافِنِي فِي بَصَرِي، لاَ إِلَٰهَ إِلاَّ أَنْتَ، اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْكُفْرِ وَالْفَقْرِ، وَأَعُوذُ بِكَ مِنْ عَذَابِ الْقَبْرِ',
+    transliteration: 'Allahumma \'afini fi badani, Allahumma \'afini fi sam\'i, Allahumma \'afini fi basari, la ilaha illa Ant. Allahumma inni a\'udhu bika minal-kufri wal-faqr, wa a\'udhu bika min \'adhabil-qabr.',
+    englishTranslation: 'O Allah, make me healthy in my body. O Allah, preserve for me my hearing. O Allah, preserve for me my sight. There is no deity except You. O Allah, I seek refuge in You from disbelief and poverty, and from the punishment of the grave.',
+    urduTranslation: 'اے اللہ! میرے بدن میں مجھے عافیت عطا فرما، اے اللہ! میری سماعت میں مجھے عافیت دے، اے اللہ! میری بینائی میں مجھے عافیت دے، تیرے سوا کوئی معبود نہیں۔ اے اللہ! میں کفر، محتاجی اور عذابِ قبر سے تیری پناہ مانگتا ہوں۔',
+    reference: 'Abu Dawud 5090 | Ahmad (Hasan)',
+    targetCount: 3
+  },
+  {
+    id: 'e-4',
+    categoryId: 'evening',
+    titleEn: 'Evening Invocation of the Ever-Living Sustainer',
+    titleUr: 'یا حی یا قیوم سے رحمت کی التجا',
+    arabicText: 'يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ، أَصْلِحْ لِي شَأْنِي كُلَّهُ، وَلاَ تَكِلْنِي إِلَى نَفْسِي طَرْفَةَ عَيْنٍ',
+    transliteration: 'Ya Hayyu Ya Qayyumu birahmatika astagheeth, aslih li sha\'ni kullah, wa la takilni ila nafsi tarfata \'ayn.',
+    englishTranslation: 'O Ever-Living, O Sustainer, by Your mercy I seek assistance. Rectify for me all of my affairs and do not leave me to myself even for the blink of an eye.',
+    urduTranslation: 'اے ہمیشہ زندہ رہنے والے، اے کائنات کو سنبھالنے والے! میں تیری رحمت کے وسیلے سے مدد چاہتا ہوں، میرے تمام کام سنوار دے اور مجھے آنکھ جھپکنے کی دیر کے لیے بھی میرے نفس کے حوالے نہ فرما۔',
+    reference: 'Hakim | Nasai (Sahih)',
+    targetCount: 1
+  },
+  {
+    id: 'e-5',
+    categoryId: 'evening',
+    titleEn: 'The Three Quls (Protection from All Evils)',
+    titleUr: 'معوذتین اور سورۃ الاخلاص (ہر شر سے کفایت)',
+    arabicText: 'قُلْ هُوَ اللَّهُ أَحَدٌ ۝ قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ ۝ قُلْ أَعُوذُ بِرَبِّ النَّاسِ',
+    transliteration: 'Surah Al-Ikhlas, Surah Al-Falaq, Surah An-Nas.',
+    englishTranslation: 'Recitation of Surah Al-Ikhlas, Surah Al-Falaq, and Surah An-Nas.',
+    urduTranslation: 'سورۃ الاخلاص، سورۃ الفلق اور سورۃ الناس کی تلاوت۔',
+    reference: 'Abu Dawud 5082 | Tirmidhi 3575',
+    targetCount: 3,
+    virtueUr: 'صبح اور شام تین تین مرتبہ پڑھنا ہر چیز کے شر سے کافی ہو جاتا ہے۔',
+    virtueEn: 'Reciting them three times morning and evening will suffice you against everything.'
+  },
+  {
+    id: 'e-6',
+    categoryId: 'evening',
+    titleEn: 'Evening Tahlil and Takbeer',
+    titleUr: 'شام کے وقت لا الہ الا اللہ کا کثرت سے ورد',
+    arabicText: 'لاَ إِلَٰهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ، وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ',
+    transliteration: 'La ilaha illallahu wahdahu la shareeka lah, lahul-mulku wa lahul-hamd, wa Huwa \'ala kulli shay\'in Qadeer.',
+    englishTranslation: 'There is no deity worthy of worship except Allah alone, without partner. To Him belongs all sovereignty and praise, and He has power over everything.',
+    urduTranslation: 'اللہ کے سوا کوئی معبود نہیں، وہ اکیلا ہے، اس کا کوئی شریک نہیں، اسی کے لیے بادشاہت ہے اور اسی کے لیے حمد ہے، اور وہ ہر چیز پر قادر ہے۔',
+    reference: 'Sahih al-Bukhari 3293',
+    targetCount: 10
+  },
+
+  // ─── 3. Sleeping Duas ──────────────────────────────────────────────────
+  {
+    id: 's-1',
+    categoryId: 'sleep',
+    titleEn: 'Lying Down for Sleep in Allah\'s Name',
+    titleUr: 'سونے کے وقت کی بنیادی دعا',
+    arabicText: 'بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا',
+    transliteration: 'Bismikallahumma amootu wa ahya.',
+    englishTranslation: 'In Your Name, O Allah, I die and I live.',
+    urduTranslation: 'اے اللہ! میں تیرے نام کے ساتھ مرتا (سوتا) ہوں اور جیتا (جاگتا) ہوں۔',
+    reference: 'Sahih al-Bukhari 6324',
+    targetCount: 1
+  },
+  {
+    id: 's-2',
+    categoryId: 'sleep',
+    titleEn: 'Surrendering Soul and Body to Allah',
+    titleUr: 'سوتے وقت جان اللہ کے سپرد کرنے کی دعا',
+    arabicText: 'اللَّهُمَّ أَسْلَمْتُ نَفْسِي إِلَيْكَ، وَفَوَّضْتُ أَمْرِي إِلَيْكَ، وَوَجَّهْتُ وَجْهِي إِلَيْكَ، وَأَلْجَأْتُ ظَهْرِي إِلَيْكَ، رَغْبَةً وَرَهْبَةً إِلَيْكَ، لاَ مَلْجَأَ وَلاَ مَنْجَا مِنْكَ إِلاَّ إِلَيْكَ',
+    transliteration: 'Allahumma aslamtu nafsi ilayka, wa fawwadtu amri ilayka, wa wajjahtu wajhi ilayka, wa alja\'tu zahri ilayka, raghbatan wa rahbatan ilayk. La malja\'a wa la manja minka illa ilayk.',
+    englishTranslation: 'O Allah, I surrender my soul unto You, entrust my affair unto You, turn my face unto You, and support my back unto You, out of desire for You and fear of You. There is no shelter and no refuge from You except in You.',
+    urduTranslation: 'اے اللہ! میں نے اپنی جان تیرے سپرد کی، اپنا معاملہ تیرے حوالے کیا، اپنا رخ تیری طرف کیا اور اپنی پیٹھ کو تیری پناہ میں دیا، تیری رغبت اور ڈر کے ساتھ۔ تیرے سوا تجھ سے بچنے کی کوئی پناہ گاہ اور جائے نجات نہیں۔',
+    reference: 'Sahih al-Bukhari 6313',
+    targetCount: 1,
+    virtueUr: 'اگر رات کو وفات پا جائے تو فطرتِ اسلام پر موت واقع ہو گی۔',
+    virtueEn: 'If you should die that night, you will die upon the natural true faith (Fitrah).'
+  },
+  {
+    id: 's-3',
+    categoryId: 'sleep',
+    titleEn: 'Tasbeeh Fatimah before Sleep',
+    titleUr: 'تسبیح فاطمہ (سونے سے پہلے ۳۳، ۳۳ اور ۳۴ مرتبہ)',
+    arabicText: 'سُبْحَانَ اللَّهِ (٣٣) ، اَلْحَمْدُ لِلَّهِ (٣٣) ، اَللَّهُ أَكْبَرُ (٣٤)',
+    transliteration: 'Subhanallah (33 times), Alhamdulillah (33 times), Allahu Akbar (34 times).',
+    englishTranslation: 'Glory be to Allah (33), Praise be to Allah (33), Allah is the Greatest (34).',
+    urduTranslation: 'اللہ پاک ہے (۳۳ بار)، تمام تعریفیں اللہ کے لیے ہیں (۳۳ بار)، اللہ سب سے بڑا ہے (۳۴ بار)۔',
+    reference: 'Sahih al-Bukhari 3705 | Sahih Muslim 2727',
+    targetCount: 33,
+    virtueUr: 'حضور اقدس صلی اللہ علیہ وسلم نے سیدہ فاطمہ رضی اللہ عنہا سے فرمایا تھا کہ یہ تمہارے لیے خادم سے بھی بہتر ہے۔',
+    virtueEn: 'The Prophet taught this to Fatimah (RA), saying it is better than having a servant.'
+  },
+  {
+    id: 's-4',
+    categoryId: 'sleep',
+    titleEn: 'Last Two Verses of Surah Al-Baqarah',
+    titleUr: 'سورۃ البقرہ کی آخری دو آیات (کامل رات کی کفایت)',
+    arabicText: 'آمَنَ الرَّسُولُ بِمَا أُنزِلَ إِلَيْهِ مِن رَّبِّهِ وَالْمُؤْمِنُونَ ۚ كُلٌّ آمَنَ بِاللَّهِ وَمَلَائِكَتِهِ وَكُتُبِهِ وَرُسُلِهِ لَا نُفَرِّقُ بَيْنَ أَحَدٍ مِّن رُّسُلِهِ ۚ وَقَالُوا سَمِعْنَا وَأَطَعْنَا ۖ غُفْرَانَكَ رَبَّنَا وَإِلَيْكَ الْمَصِيرُ',
+    transliteration: 'Amanar-Rasoolu bima unzila ilayhi mir-Rabbihi wal-mu\'minoon...',
+    englishTranslation: 'The Messenger has believed in what was revealed to him from his Lord, and [so have] the believers...',
+    urduTranslation: 'رسول اس پر ایمان لائے جو ان کے رب کی طرف سے ان پر نازل ہوا اور اہل ایمان بھی...',
+    reference: 'Surah Al-Baqarah 2:285-286 | Sahih al-Bukhari 5009',
+    targetCount: 1,
+    virtueUr: 'جس شخص نے رات کو یہ دو آیتیں پڑھ لیں وہ اس کے لیے (ہر بلا و آفت سے) کافی ہو جائیں گی۔',
+    virtueEn: 'Whoever recites the last two verses of Surah Al-Baqarah at night, they will suffice him.'
+  },
+  {
+    id: 's-5',
+    categoryId: 'sleep',
+    titleEn: 'Supplication upon Turning Over during Night',
+    titleUr: 'رات کو کروٹ بدلتے وقت کی دعا',
+    arabicText: 'لاَ إِلَٰهَ إِلاَّ اللَّهُ الْوَاحِدُ الْقَهَّارُ، رَبُّ السَّمَاوَاتِ وَالأَرْضِ وَمَا بَيْنَهُمَا الْعَزِيزُ الْغَفَّارُ',
+    transliteration: 'La ilaha illallahul-Wahidul-Qahhar, Rabbus-samawati wal-ardi wa ma baynahumal-\'Azeezul-Ghaffar.',
+    englishTranslation: 'There is no deity except Allah, the One, the Subduer, Lord of the heavens and earth and what is between them, the All-Mighty, the Perpetual Forgiver.',
+    urduTranslation: 'اللہ کے سوا کوئی معبود نہیں جو یکتا اور سب پر غالب ہے، آسمانوں اور زمین اور جو کچھ ان کے درمیان ہے سب کا رب ہے، زبردست اور بڑا بخشنے والا ہے۔',
+    reference: 'Hakim | Nasai (Sahih)',
+    targetCount: 1
+  },
+
+  // ─── 4. Waking-up Duas ─────────────────────────────────────────────────
+  {
+    id: 'w-1',
+    categoryId: 'wake',
+    titleEn: 'Upon Awakening (Praising the Restorer of Life)',
+    titleUr: 'نیند سے جاگنے کی دعا',
+    arabicText: 'الْحَمْدُ لِلَّهِ الَّذِي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا وَإِلَيْهِ النُّشُورُ',
+    transliteration: 'Alhamdu lillahil-ladhi ahyana ba\'da ma amatana wa ilayhin-nushoor.',
+    englishTranslation: 'All praise is for Allah who gave us life after having taken it from us, and unto Him is the resurrection.',
+    urduTranslation: 'تمام تعریفیں اللہ کے لیے ہیں جس نے ہمیں مارنے (سلانے) کے بعد زندہ کیا اور اسی کی طرف لوٹ کر جانا ہے۔',
+    reference: 'Sahih al-Bukhari 6312',
+    targetCount: 1
+  },
+  {
+    id: 'w-2',
+    categoryId: 'wake',
+    titleEn: 'Praising Allah for Restoring Health and Soul',
+    titleUr: 'جسم کی سلامتی اور روح لوٹانے پر شکر',
+    arabicText: 'الْحَمْدُ لِلَّهِ الَّذِي عَافَانِي فِي جَسَدِي، وَرَدَّ عَلَيَّ رُوحِي، وَأَذِنَ لِي بِذِكْرِهِ',
+    transliteration: 'Alhamdu lillahil-ladhi \'afani fi jasadi, wa radda \'alayya roohi, wa adhina li bidhikrih.',
+    englishTranslation: 'All praise is for Allah who restored health to my body, returned my soul to me, and permitted me to remember Him.',
+    urduTranslation: 'تمام تعریفیں اللہ کے لیے ہیں جس نے مجھے جسمانی صحت و عافیت دی، میری روح مجھ پر لوٹا دی اور مجھے اپنے ذکر کی توفیق بخشی۔',
+    reference: 'Jami at-Tirmidhi 3401 (Hasan)',
+    targetCount: 1
+  },
+  {
+    id: 'w-3',
+    categoryId: 'wake',
+    titleEn: 'Rubbing Face and Reciting Verses of Aal-Imran',
+    titleUr: 'بیدار ہو کر چہرے سے نیند کے اثرات مٹانا اور تفکر',
+    arabicText: 'إِنَّ فِي خَلْقِ السَّمَاوَاتِ وَالْأَرْضِ وَاخْتِلَافِ اللَّيْلِ وَالنَّهَارِ لَآيَاتٍ لِّأُولِي الْأَلْبَابِ',
+    transliteration: 'Inna fi khalqis-samawati wal-ardi wakhtilafil-layli wan-nahari la-ayatin li-ulil-albab.',
+    englishTranslation: 'Indeed, in the creation of the heavens and the earth and the alternation of the night and the day are signs for those of understanding.',
+    urduTranslation: 'بے شک آسمانوں اور زمین کی پیدائش اور رات اور دن کے باری باری آنے میں عقل والوں کے لیے نشانیاں ہیں۔',
+    reference: 'Surah Al-Imran 3:190 | Sahih al-Bukhari 4569',
+    targetCount: 1
+  },
+  {
+    id: 'w-4',
+    categoryId: 'wake',
+    titleEn: 'Waking up with Tahajjud Invocation',
+    titleUr: 'تہجد کے لیے بیدار ہوتے وقت کا شکر',
+    arabicText: 'لاَ إِلَٰهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ، وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ، سُبْحَانَ اللَّهِ، وَالْحَمْدُ لِلَّهِ، وَلاَ إِلَٰهَ إِلاَّ اللَّهُ، وَاللَّهُ أَكْبَرُ، وَلاَ حَوْلَ وَلاَ قُوَّةَ إِلاَّ بِاللَّهِ الْعَلِيِّ الْعَظِيمِ',
+    transliteration: 'La ilaha illallahu wahdahu la shareeka lah, lahul-mulku wa lahul-hamd, wa Huwa \'ala kulli shay\'in Qadeer. Subhanallah, wal-hamdulillah, wa la ilaha illallah, wallahu Akbar, wa la hawla wa la quwwata illa billahil-\'Aliyyil-\'Azeem.',
+    englishTranslation: 'None has the right to be worshipped but Allah alone, without partner. He possesses all dominion and praise. Glory be to Allah, praise be to Allah, there is no god but Allah, Allah is the Greatest, and there is no power or strength except with Allah.',
+    urduTranslation: 'اللہ کے سوا کوئی معبود نہیں، وہ اکیلا ہے، اس کا کوئی شریک نہیں، بادشاہت اسی کی ہے اور تعریف اسی کے لیے ہے، اور وہ ہر چیز پر قادر ہے۔ اللہ پاک ہے، اور تمام تعریفیں اللہ کے لیے ہیں، اور اللہ کے سوا کوئی معبود نہیں، اور اللہ سب سے بڑا ہے، اور گناہوں سے بچنے اور نیکی کرنے کی طاقت صرف اللہ ہی کی توفیق سے ہے۔',
+    reference: 'Sahih al-Bukhari 1154',
+    targetCount: 1,
+    virtueUr: 'اس کے بعد دعا مانگی جائے تو قبول ہوتی ہے اور اگر وضو کر کے نماز پڑھے تو نماز قبول ہوتی ہے۔',
+    virtueEn: 'Whoever says this and then supplicates, his prayer will be answered.'
+  },
+
+  // ─── 5. Eating & Drinking ──────────────────────────────────────────────
+  {
+    id: 'eat-1',
+    categoryId: 'eating',
+    titleEn: 'Before Beginning a Meal',
+    titleUr: 'کھانا شروع کرنے کی دعا',
+    arabicText: 'بِسْمِ اللَّهِ وَعَلَى بَرَكَةِ اللَّهِ',
+    transliteration: 'Bismillahi wa \'ala barakatillah.',
+    englishTranslation: 'In the Name of Allah and with the blessings of Allah.',
+    urduTranslation: 'اللہ کے نام کے ساتھ اور اللہ کی برکت پر (کھانا شروع کرتا ہوں)۔',
+    reference: 'Abu Dawud 3767 | Hakim',
+    targetCount: 1
+  },
+  {
+    id: 'eat-2',
+    categoryId: 'eating',
+    titleEn: 'If Bismillah was Forgotten at the Start',
+    titleUr: 'اگر شروع میں بسم اللہ بھول جائے',
+    arabicText: 'بِسْمِ اللَّهِ أَوَّلَهُ وَآخِرَهُ',
+    transliteration: 'Bismillahi awwalahu wa akhirah.',
+    englishTranslation: 'In the Name of Allah at its beginning and at its end.',
+    urduTranslation: 'اللہ کے نام سے اس کے اول اور اس کے آخر میں۔',
+    reference: 'Abu Dawud 3767 | Tirmidhi 1858 (Sahih)',
+    targetCount: 1
+  },
+  {
+    id: 'eat-3',
+    categoryId: 'eating',
+    titleEn: 'Upon Finishing the Meal',
+    titleUr: 'کھانا کھانے کے بعد کی دعا',
+    arabicText: 'الْحَمْدُ لِلَّهِ الَّذِي أَطْعَمَنَا وَسَقَانَا وَجَعَلَنَا مُسْلِمِينَ',
+    transliteration: 'Alhamdu lillahil-ladhi at\'amana wa saqana wa ja\'alana muslimeen.',
+    englishTranslation: 'All praise is due to Allah Who has fed us, given us drink, and made us Muslims.',
+    urduTranslation: 'تمام تعریفیں اللہ کے لیے ہیں جس نے ہمیں کھلایا، پلایا اور ہمیں مسلمان بنایا۔',
+    reference: 'Abu Dawud 3850 | Tirmidhi 3457',
+    targetCount: 1
+  },
+  {
+    id: 'eat-4',
+    categoryId: 'eating',
+    titleEn: 'Supplication for the Host who Served Food',
+    titleUr: 'میزبان کے لیے برکت کی دعا',
+    arabicText: 'اللَّهُمَّ بَارِكْ لَهُمْ فِيمَا رَزَقْتَهُمْ، وَاغْفِرْ لَهُمْ وَارْحَمْهُمْ',
+    transliteration: 'Allahumma barik lahum feema razaqtahum, waghfir lahum warhamhum.',
+    englishTranslation: 'O Allah, bless for them that which You have provided them, forgive them, and have mercy upon them.',
+    urduTranslation: 'اے اللہ! جو رزق تو نے انہیں دیا ہے اس میں برکت فرما، ان کی مغفرت فرما اور ان پر رحم فرما۔',
+    reference: 'Sahih Muslim 2042',
+    targetCount: 1
+  },
+
+  // ─── 6. Travelling Duas ────────────────────────────────────────────────
+  {
+    id: 'tr-1',
+    categoryId: 'travel',
+    titleEn: 'Mounting a Vehicle / Boarding Conveyance',
+    titleUr: 'سواری پر سوار ہوتے وقت کی دعا',
+    arabicText: 'بِسْمِ اللَّهِ، الْحَمْدُ لِلَّهِ، سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ، وَإِنَّا إِلَىٰ رَبِّنَا لَمُنقَلِبُونَ',
+    transliteration: 'Bismillah, Alhamdu lillah, Subhanal-ladhi sakh-khara lana hadha wa ma kunna lahu muqrineen, wa inna ila Rabbina lamunqaliboon.',
+    englishTranslation: 'In the Name of Allah. Praise is to Allah. Glory be to Him Who has subjected this to us, and we could never have achieved it by ourselves, and indeed to our Lord we shall return.',
+    urduTranslation: 'اللہ کے نام سے، تمام تعریفیں اللہ کے لیے ہیں۔ پاک ہے وہ ذات جس نے اس سواری کو ہمارے تابع کیا حالانکہ ہم خود اسے قابو میں لانے والے نہ تھے، اور بے شک ہم اپنے رب ہی کی طرف پلٹ کر جانے والے ہیں۔',
+    reference: 'Surah Az-Zukhruf 43:13-14 | Abu Dawud 2602',
+    targetCount: 1
+  },
+  {
+    id: 'tr-2',
+    categoryId: 'travel',
+    titleEn: 'Full Travel Supplication (Dua al-Safar)',
+    titleUr: 'سفر کی مسنون دعا',
+    arabicText: 'اللَّهُمَّ إِنَّا نَسْأَلُكَ فِي سَفَرِنَا هَٰذَا الْبِرَّ وَالتَّقْوَى، وَمِنَ الْعَمَلِ مَا تَرْضَى، اللَّهُمَّ هَوِّنْ عَلَيْنَا سَفَرَنَا هَٰذَا وَاطْوِ عَنَّا بُعْدَهُ، اللَّهُمَّ أَنْتَ الصَّاحِبُ فِي السَّفَرِ، وَالْخَلِيفَةُ فِي الأَهْلِ',
+    transliteration: 'Allahumma inna nas\'aluka fi safarina hadhal-birra wat-taqwa, wa minal-\'amali ma tarda. Allahumma hawwin \'alayna safarana hadha watwi \'anna bu\'dah. Allahumma Antas-Sahibu fis-safar, wal-Khaleefatu fil-ahl.',
+    englishTranslation: 'O Allah, we ask You on this journey of ours for righteousness and piety, and for deeds that please You. O Allah, make this journey easy for us and shorten its distance. O Allah, You are our Companion on the road and the Guardian of our family.',
+    urduTranslation: 'اے اللہ! ہم اپنے اس سفر میں تجھ سے نیکی اور تقویٰ کا اور ایسے عمل کا سوال کرتے ہیں جس سے تو راضی ہو۔ اے اللہ! ہمارے لیے اس سفر کو آسان فرما دے اور اس کی دوری کو سمیٹ دے۔ اے اللہ! تو ہی سفر میں ہمارا رفیق ہے اور پیچھے اہل و عیال کا نگہبان ہے۔',
+    reference: 'Sahih Muslim 1342',
+    targetCount: 1
+  },
+  {
+    id: 'tr-3',
+    categoryId: 'travel',
+    titleEn: 'Upon Returning from Journey',
+    titleUr: 'سفر سے واپسی کی دعا',
+    arabicText: 'آيِبُونَ، تَائِبُونَ، عَابِدُونَ، لِرَبِّنَا حَامِدُونَ',
+    transliteration: 'Ayiboona, ta\'iboona, \'abidoona, li-Rabbina hamidoon.',
+    englishTranslation: 'We return, repenting, worshipping, and praising our Lord.',
+    urduTranslation: 'ہم واپس لوٹنے والے ہیں، توبہ کرنے والے ہیں، عبادت کرنے والے ہیں اور اپنے رب کی حمد بیان کرنے والے ہیں۔',
+    reference: 'Sahih Muslim 1342',
+    targetCount: 1
+  },
+  {
+    id: 'tr-4',
+    categoryId: 'travel',
+    titleEn: 'Entering a City or Destination',
+    titleUr: 'کسی بستی یا شہر میں داخل ہوتے وقت کی دعا',
+    arabicText: 'اللَّهُمَّ رَبَّ السَّمَاوَاتِ السَّبْعِ وَمَا أَظْلَلْنَ، وَرَبَّ الأَرَضِينَ السَّبْعِ وَمَا أَقْلَلْنَ، أَسْأَلُكَ خَيْرَ هَٰذِهِ الْقَرْيَةِ وَخَيْرَ أَهْلِهَا، وَأَعُوذُ بِكَ مِنْ شَرِّهَا وَشَرِّ أَهْلِهَا',
+    transliteration: 'Allahumma Rabbas-samawatis-sab\'i wa ma azlalna... as\'aluka khayra hadhihil-qaryati wa khayra ahliha...',
+    englishTranslation: 'O Allah, Lord of the seven heavens and what they shade... I ask You for the good of this town and the good of its people, and seek refuge in You from its evil.',
+    urduTranslation: 'اے اللہ! ساتوں آسمانوں کے رب... میں تجھ سے اس بستی کی بھلائی اور اس کے رہنے والوں کی بھلائی کا سوال کرتا ہوں اور اس کے شر سے پناہ مانگتا ہوں۔',
+    reference: 'Hakim | Hisn al-Muslim',
+    targetCount: 1
+  },
+
+  // ─── 7. Masjid & Adhan ─────────────────────────────────────────────────
+  {
+    id: 'ms-1',
+    categoryId: 'masjid',
+    titleEn: 'Entering the Masjid (Doors of Mercy)',
+    titleUr: 'مسجد میں داخل ہوتے وقت کی دعا',
+    arabicText: 'بِسْمِ اللَّهِ، وَالصَّلاَةُ وَالسَّلاَمُ عَلَى رَسُولِ اللَّهِ، اللَّهُمَّ افْتَحْ لِي أَبْوَابَ رَحْمَتِكَ',
+    transliteration: 'Bismillahi, was-salatu was-salamu \'ala Rasoolillah, Allahummaftah li abwaba rahmatik.',
+    englishTranslation: 'In the Name of Allah, and blessings and peace be upon the Messenger of Allah. O Allah, open for me the gates of Your mercy.',
+    urduTranslation: 'اللہ کے نام کے ساتھ، اور رسول اللہ صلی اللہ علیہ وسلم پر درود و سلام ہو۔ اے اللہ! میرے لیے اپنی رحمت کے دروازے کھول دے۔',
+    reference: 'Sahih Muslim 713 | Abu Dawud 465',
+    targetCount: 1
+  },
+  {
+    id: 'ms-2',
+    categoryId: 'masjid',
+    titleEn: 'Leaving the Masjid (Seeking Bounty)',
+    titleUr: 'مسجد سے نکلتے وقت کی دعا',
+    arabicText: 'بِسْمِ اللَّهِ، وَالصَّلاَةُ وَالسَّلاَمُ عَلَى رَسُولِ اللَّهِ، اللَّهُمَّ إِنِّي أَسْأَلُكَ مِنْ فَضْلِكَ',
+    transliteration: 'Bismillahi, was-salatu was-salamu \'ala Rasoolillah, Allahumma inni as\'aluka min fadlik.',
+    englishTranslation: 'In the Name of Allah, and blessings and peace be upon the Messenger of Allah. O Allah, I ask You from Your bounty.',
+    urduTranslation: 'اللہ کے نام سے، اور رسول اللہ صلی اللہ علیہ وسلم پر درود و سلام ہو۔ اے اللہ! میں تجھ سے تیرے فضل کا سوال کرتا ہوں۔',
+    reference: 'Sahih Muslim 713',
+    targetCount: 1
+  },
+  {
+    id: 'ms-3',
+    categoryId: 'masjid',
+    titleEn: 'Du\'a After the Call to Prayer (Wasila for the Prophet)',
+    titleUr: 'اذان کے بعد کی مسنون دعا (وسیلہ کی التجا)',
+    arabicText: 'اللَّهُمَّ رَبَّ هَٰذِهِ الدَّعْوَةِ التَّامَّةِ، وَالصَّلاَةِ الْقَائِمَةِ، آتِ مُحَمَّدًا الْوَسِيلَةَ وَالْفَضِيلَةَ، وَابْعَثْهُ مَقَامًا مَحْمُودًا الَّذِي وَعَدْتَهُ',
+    transliteration: 'Allahumma Rabba hadhihid-da\'watit-tammah, was-salatil-qa\'imah, ati Muhammadanil-waseelata wal-fadeelah, wab\'athhu maqamam-mahmudanil-ladhi wa\'adtah.',
+    englishTranslation: 'O Allah, Owner of this perfect call and established prayer, grant Muhammad the intercession and virtue, and resurrect him to the praised station which You have promised him.',
+    urduTranslation: 'اے اللہ! اس کامل پکار اور قائم ہونے والی نماز کے رب! ہمارے آقا حضرت محمد صلی اللہ علیہ وسلم کو وسیلہ اور فضیلت عطا فرما اور ان کو اس مقامِ محمود پر فائز فرما جس کا تو نے ان سے وعدہ فرمایا ہے۔',
+    reference: 'Sahih al-Bukhari 614',
+    targetCount: 1,
+    virtueUr: 'حضور صلی اللہ علیہ وسلم نے فرمایا کہ جو اذان سن کر یہ دعا پڑھے گا اس کے لیے قیامت کے روز میری شفاعت واجب ہو جائے گی۔',
+    virtueEn: 'Whoever says this after hearing the call will be granted my intercession on the Day of Resurrection.'
+  },
+  {
+    id: 'ms-4',
+    categoryId: 'masjid',
+    titleEn: 'Going to the Masjid (Light Invocation)',
+    titleUr: 'مسجد جاتے ہوئے نور کی دعا',
+    arabicText: 'اللَّهُمَّ اجْعَلْ فِي قَلْبِي نُورًا، وَفِي لِسَانِي نُورًا، وَفِي سَمْعِي نُورًا، وَفِي بَصَرِي نُورًا، وَمِنْ فَوْقِي نُورًا، وَمِنْ تَحْتِي نُورًا، وَعَنْ يَمِينِي نُورًا، وَعَنْ شِمَالِي نُورًا، وَاجْعَلْ لِي نُورًا',
+    transliteration: 'Allahummaj\'al fi qalbi noora, wa fi lisani noora, wa fi sam\'i noora, wa fi basari noora, wa min fawqi noora, wa min tahti noora, wa \'an yameeni noora, wa \'an shimali noora, waj\'al li noora.',
+    englishTranslation: 'O Allah, place light in my heart, light on my tongue, light in my hearing, light in my sight, light above me, light below me, light to my right, light to my left, and grant me light.',
+    urduTranslation: 'اے اللہ! میرے دل میں نور پیدا فرما، میری زبان میں نور، میرے کانوں میں نور، میری آنکھوں میں نور، میرے اوپر نور، میرے نیچے نور، میرے دائیں نور، میرے بائیں نور پیدا فرما اور مجھے سراپا نور بنا دے۔',
+    reference: 'Sahih Muslim 763',
+    targetCount: 1
+  },
+
+  // ─── 8. Daily Masnoon Duas ─────────────────────────────────────────────
+  {
+    id: 'd-1',
+    categoryId: 'daily',
+    titleEn: 'Entering the Home',
+    titleUr: 'گھر میں داخل ہوتے وقت کی دعا',
+    arabicText: 'بِسْمِ اللَّهِ وَلَجْنَا، وَبِسْمِ اللَّهِ خَرَجْنَا، وَعَلَى اللَّهِ رَبِّنَا تَوَكَّلْنَا',
+    transliteration: 'Bismillahi walajna, wa bismillahi kharajna, wa \'alallahi Rabbina tawakkalna.',
+    englishTranslation: 'In the Name of Allah we enter, in the Name of Allah we leave, and upon Allah our Lord we rely.',
+    urduTranslation: 'اللہ کے نام سے ہم داخل ہوئے اور اللہ ہی کے نام سے ہم نکلے اور اپنے رب اللہ پر ہم نے بھروسہ کیا۔',
+    reference: 'Abu Dawud 5096',
+    targetCount: 1
+  },
+  {
+    id: 'd-2',
+    categoryId: 'daily',
+    titleEn: 'Leaving the Home (Tawakkul)',
+    titleUr: 'گھر سے باہر نکلتے وقت کی دعا',
+    arabicText: 'بِسْمِ اللَّهِ تَوَكَّلْتُ عَلَى اللَّهِ، لاَ حَوْلَ وَلاَ قُوَّةَ إِلاَّ بِاللَّهِ',
+    transliteration: 'Bismillahi tawakkaltu \'alallahi, la hawla wa la quwwata illa billah.',
+    englishTranslation: 'In the Name of Allah, I rely upon Allah; there is no power or strength except through Allah.',
+    urduTranslation: 'اللہ کے نام سے، میں نے اللہ پر توکل کیا، برائی سے بچنے اور نیکی کرنے کی طاقت صرف اللہ کی مدد سے ہے۔',
+    reference: 'Abu Dawud 5095 | Tirmidhi 3426 (Sahih)',
+    targetCount: 1,
+    virtueUr: 'فرشتہ کہتا ہے: تجھے ہدایت دی گئی، تیری کفایت کی گئی اور تجھے حفاظت میں لے لیا گیا۔',
+    virtueEn: 'It is said to him: You are guided, defended, and protected, and Satan moves away.'
+  },
+  {
+    id: 'd-3',
+    categoryId: 'daily',
+    titleEn: 'Entering the Restroom',
+    titleUr: 'بیت الخلاء میں داخل ہونے کی دعا',
+    arabicText: 'اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْخُبُثِ وَالْخَبَائِثِ',
+    transliteration: 'Allahumma inni a\'udhu bika minal-khubuthi wal-khaba\'ith.',
+    englishTranslation: 'O Allah, I seek refuge in You from impure male and female spirits.',
+    urduTranslation: 'اے اللہ! میں خبیث جنوں اور خبیث جننیوں (ناپاکیوں) سے تیری پناہ مانگتا ہوں۔',
+    reference: 'Sahih al-Bukhari 142 | Sahih Muslim 375',
+    targetCount: 1
+  },
+  {
+    id: 'd-4',
+    categoryId: 'daily',
+    titleEn: 'Leaving the Restroom (Ghufranak)',
+    titleUr: 'بیت الخلاء سے باہر نکلنے کی دعا',
+    arabicText: 'غُفْرَانَكَ، الْحَمْدُ لِلَّهِ الَّذِي أَذْهَبَ عَنِّي الأَذَى وَعَافَانِي',
+    transliteration: 'Ghufranaka. Alhamdu lillahil-ladhi adh-haba \'annil-adha wa \'afani.',
+    englishTranslation: 'I ask You for forgiveness. Praise be to Allah who removed from me the harm and granted me health.',
+    urduTranslation: 'اے اللہ! میں تجھ سے مغفرت کا طلب گار ہوں۔ تمام تعریفیں اللہ کے لیے ہیں جس نے مجھ سے تکلیف دہ چیز دور فرمائی اور مجھے عافیت بخشی۔',
+    reference: 'Abu Dawud 17 | Tirmidhi 7 | Ibn Majah 301',
+    targetCount: 1
+  },
+  {
+    id: 'd-5',
+    categoryId: 'daily',
+    titleEn: 'Looking into the Mirror (Moral Beauty)',
+    titleUr: 'آئینہ دیکھنے کی مسنون دعا (حسنِ اخلاق کی التجا)',
+    arabicText: 'اللَّهُمَّ أَنْتَ حَسَّنْتَ خَلْقِي فَحَسِّنْ خُلُقِي',
+    transliteration: 'Allahumma Anta hassanta khalqi fa-hassin khuluqi.',
+    englishTranslation: 'O Allah, just as You have made my physical form good, so make my character good.',
+    urduTranslation: 'اے اللہ! جس طرح تو نے میری صورت اچھی بنائی ہے اسی طرح میرے اخلاق و کردار کو بھی خوبصورت بنا دے۔',
+    reference: 'Ahmad 24392 | Ibn Hibban (Sahih)',
+    targetCount: 1
+  },
+  {
+    id: 'd-6',
+    categoryId: 'daily',
+    titleEn: 'Wearing a New Garment',
+    titleUr: 'نیا لباس پہنتے وقت کی دعا',
+    arabicText: 'الْحَمْدُ لِلَّهِ الَّذِي كَسَانِي هَٰذَا الثَّوْبَ وَرَزَقَنِيهِ مِنْ غَيْرِ حَوْلٍ مِنِّي وَلاَ قُوَّةٍ',
+    transliteration: 'Alhamdu lillahil-ladhi kasani hadhath-thawba wa razaqaneehi min ghayri hawlin minni wa la quwwah.',
+    englishTranslation: 'Praise belongs to Allah Who has clothed me with this garment and provided it for me without any power or strength on my part.',
+    urduTranslation: 'تمام تعریفیں اللہ کے لیے ہیں جس نے مجھے یہ لباس پہنایا اور میری طاقت و قدرت کے بغیر مجھے یہ عطا فرمایا۔',
+    reference: 'Abu Dawud 4023 | Tirmidhi',
+    targetCount: 1
+  },
+
+  // ─── 9. Ramadan & Fasting ──────────────────────────────────────────────
+  {
+    id: 'ram-1',
+    categoryId: 'ramadan',
+    titleEn: 'Intention for Fasting (Niyyah for Fasting)',
+    titleUr: 'روزے کی نیت',
+    arabicText: 'وَبِصَوْمِ غَدٍ نَوَيْتُ مِنْ شَهْرِ رَمَضَانَ',
+    transliteration: 'Wa bisawmi ghadin nawaytu min shahri Ramadan.',
+    englishTranslation: 'And I intend to fast tomorrow in the month of Ramadan.',
+    urduTranslation: 'اور میں نے ماہِ رمضان کے کل کے روزے کی نیت کی۔',
+    reference: 'Fiqh Sunnah | Traditional Niyyah',
+    targetCount: 1
+  },
+  {
+    id: 'ram-2',
+    categoryId: 'ramadan',
+    titleEn: 'Du\'a for Breaking the Fast (Iftar)',
+    titleUr: 'افطار کے وقت کی مسنون دعا',
+    arabicText: 'ذَهَبَ الظَّمَأُ، وَابْتَلَّتِ الْعُرُوقُ، وَثَبَتَ الأَجْرُ إِنْ شَاءَ اللَّهُ',
+    transliteration: 'Dhahabadh-dhama\'u wabtallatil-\'urooqu wa thabatal-ajru in sha\'Allah.',
+    englishTranslation: 'The thirst has gone, the veins are moistened, and the reward is confirmed, if Allah wills.',
+    urduTranslation: 'پیاس چلی گئی، رگیں تر ہو گئیں اور اللہ نے چاہا تو اجر ثابت ہو گیا۔',
+    reference: 'Abu Dawud 2357 | Daraqutni (Hasan)',
+    targetCount: 1
+  },
+  {
+    id: 'ram-3',
+    categoryId: 'ramadan',
+    titleEn: 'Du\'a on Laylat al-Qadr (Night of Decree)',
+    titleUr: 'شبِ قدر کی خاص دعا (معافی کی التجا)',
+    arabicText: 'اللَّهُمَّ إِنَّكَ عَفُوٌّ تُحِبُّ الْعَفْوَ فَاعْفُ عَنِّي',
+    transliteration: 'Allahumma innaka \'Afuwwun tuhibbul-\'afwa fa\'fu \'anni.',
+    englishTranslation: 'O Allah, You are Most Forgiving and You love to forgive, so forgive me.',
+    urduTranslation: 'اے اللہ! تو بہت معاف فرمانے والا ہے، معافی کو پسند فرماتا ہے، پس تو مجھے معاف فرما دے۔',
+    reference: 'Jami at-Tirmidhi 3513 | Ibn Majah 3850 (Sahih)',
+    targetCount: 10
+  },
+  {
+    id: 'ram-4',
+    categoryId: 'ramadan',
+    titleEn: 'Upon Sighting the New Crescent Moon',
+    titleUr: 'نیا چاند دیکھنے کی دعا',
+    arabicText: 'اللَّهُمَّ أَهِلَّهُ عَلَيْنَا بِالْيُمْنِ وَالإِيمَانِ، وَالسَّلاَمَةِ وَالإِسْلاَمِ، رَبِّي وَرَبُّكَ اللَّهُ',
+    transliteration: 'Allahumma ahillahu \'alayna bilyumni wal-imani was-salamati wal-Islami, Rabbi wa Rabbukallah.',
+    englishTranslation: 'O Allah, bring this crescent upon us with peace, faith, safety, and Islam. My Lord and your Lord is Allah.',
+    urduTranslation: 'اے اللہ! اس چاند کو ہم پر برکت، ایمان، سلامتی اور اسلام کے ساتھ طلوع فرما، (اے چاند) میرا اور تیرا رب اللہ ہے۔',
+    reference: 'Jami at-Tirmidhi 3451 (Hasan)',
+    targetCount: 1
+  },
+
+  // ─── 10. General Supplications ─────────────────────────────────────────
+  {
+    id: 'gen-1',
+    categoryId: 'general',
+    titleEn: 'The Comprehensive Quranic Prayer (Dunya & Akhirah)',
+    titleUr: 'دنیا اور آخرت کی بھلائی کی جامع دعا',
+    arabicText: 'رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ',
+    transliteration: 'Rabbana atina fid-dunya hasanatan wa fil-akhirati hasanatan wa qina \'adhaban-nar.',
+    englishTranslation: 'Our Lord, grant us in this world [that which is] good and in the Hereafter [that which is] good and protect us from the punishment of the Fire.',
+    urduTranslation: 'اے ہمارے رب! ہمیں دنیا میں بھی بھلائی عطا فرما اور آخرت میں بھی بھلائی عطا فرما اور ہمیں دوزخ کے عذاب سے بچا۔',
+    reference: 'Surah Al-Baqarah 2:201 | Sahih al-Bukhari 4522',
+    targetCount: 3
+  },
+  {
+    id: 'gen-2',
+    categoryId: 'general',
+    titleEn: 'Relief from Anxiety, Debt, and Distress',
+    titleUr: 'پریشانی، غم اور قرض سے نجات کی دعا',
+    arabicText: 'اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْهَمِّ وَالْحَزَنِ، وَالْعَجْزِ وَالْكَسَلِ، وَالْبُخْلِ وَالْجُبْنِ، وَضَلَعِ الدَّيْنِ وَغَلَبَةِ الرِّجَالِ',
+    transliteration: 'Allahumma inni a\'udhu bika minal-hammi wal-hazani, wal-\'ajzi wal-kasali, wal-bukhli wal-jubni, wa dala\'id-dayni wa ghalabatir-rijal.',
+    englishTranslation: 'O Allah, I seek refuge in You from anxiety and grief, helplessness and laziness, miserliness and cowardice, the burden of debt, and being overpowered by men.',
+    urduTranslation: 'اے اللہ! میں تفکرات اور غم سے، عاجزی اور سستی سے، بخل اور بزدلی سے، قرض کے بوجھ سے اور لوگوں کے دباؤ و غلبے سے تیری پناہ مانگتا ہوں۔',
+    reference: 'Sahih al-Bukhari 2893',
+    targetCount: 1
+  },
+  {
+    id: 'gen-3',
+    categoryId: 'general',
+    titleEn: 'Firmness in Faith (Heart Steadfastness)',
+    titleUr: 'دین پر دل کی ثابت قدمی کی دعا',
+    arabicText: 'يَا مُقَلِّبَ الْقُلُوبِ ثَبِّتْ قَلْبِي عَلَىٰ دِينِكَ',
+    transliteration: 'Ya Muqallibal-quloobi thabbit qalbi \'ala deenik.',
+    englishTranslation: 'O Turner of the hearts, make my heart firm upon Your religion.',
+    urduTranslation: 'اے دلوں کے پھیرنے والے! میرے دل کو اپنے دین پر ثابت قدم رکھ۔',
+    reference: 'Jami at-Tirmidhi 2140 (Sahih)',
+    targetCount: 3
+  },
+  {
+    id: 'gen-4',
+    categoryId: 'general',
+    titleEn: 'Seeking Beneficial Knowledge and Sustenance',
+    titleUr: 'نفع بخش علم، پاکیزہ رزق اور مقبول عمل کی دعا',
+    arabicText: 'اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا، وَرِزْقًا طَيِّبًا، وَعَمَلاً مُتَقَبَّلاً',
+    transliteration: 'Allahumma inni as\'aluka \'ilman nafi\'an, wa rizqan tayyiban, wa \'amalan mutaqabbala.',
+    englishTranslation: 'O Allah, I ask You for beneficial knowledge, good and lawful provision, and deeds that are accepted.',
+    urduTranslation: 'اے اللہ! میں تجھ سے نفع دینے والے علم، پاکیزہ حلال رزق اور قبول ہونے والے عمل کا سوال کرتا ہوں۔',
+    reference: 'Sunan Ibn Majah 925 | Ahmad (Sahih)',
+    targetCount: 1
+  },
+  {
+    id: 'gen-5',
+    categoryId: 'general',
+    titleEn: 'Seeking Forgiveness for Parents',
+    titleUr: 'والدین کے لیے رحمت و مغفرت کی قرآنی دعا',
+    arabicText: 'رَّبِّ ارْحَمْهُمَا كَمَا رَبَّيَانِي صَغِيرًا',
+    transliteration: 'Rabbir-hamhuma kama rabbayani sagheera.',
+    englishTranslation: 'My Lord, have mercy upon them as they brought me up [when I was] small.',
+    urduTranslation: 'اے میرے پروردگار! تو میرے والدین پر رحم فرما جیسا کہ انہوں نے بچپن میں میری پرورش فرمائی۔',
+    reference: 'Surah Al-Isra 17:24',
+    targetCount: 3
+  },
+  {
+    id: 'gen-6',
+    categoryId: 'general',
+    titleEn: 'Dua of Prophet Yunus (Removal of Hardship)',
+    titleUr: 'دعاۓ یونس علیہ السلام (مشکلات و غم سے نجات کا وظیفہ)',
+    arabicText: 'لَّا إِلَٰهَ إِلَّا أَنتَ سُبْحَانَكَ إِنِّي كُنتُ مِنَ الظَّالِمِينَ',
+    transliteration: 'La ilaha illa Anta subhanaka inni kuntu minaz-zalimeen.',
+    englishTranslation: 'There is no deity except You; exalted are You. Indeed, I have been of the wrongdoers.',
+    urduTranslation: 'تیرے سوا کوئی معبود نہیں، تو پاک ہے، بے شک میں ہی قصورواروں میں سے تھا۔',
+    reference: 'Surah Al-Anbiya 21:87 | Tirmidhi 3505',
+    targetCount: 10,
+    virtueUr: 'حضور صلی اللہ علیہ وسلم نے فرمایا کہ جو مسلمان بھی کسی مصیبت میں یہ دعا مانگے گا اللہ تعالیٰ اس کی دعا ضرور قبول فرمائے گا۔',
+    virtueEn: 'No Muslim supplicates with it in any trouble except that Allah answers him.'
+  }
+];

@@ -87,16 +87,29 @@ export function PrayerTimesHeroCard({
             )}
           </View>
 
-          <TouchableOpacity
-            style={styles.viewAllBtn}
-            onPress={() => router.push('/prayer-times')}
-            accessibilityRole="button"
-            accessibilityLabel="View All Prayer Times and Compass"
-            activeOpacity={0.8}
-          >
-            <Text style={styles.viewAllText}>View All</Text>
-            <Ionicons name="chevron-forward" size={14} color="#D8C28A" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => router.push('/azaan-audio' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Azaan Audio & Notifications"
+              activeOpacity={0.8}
+            >
+              <Ionicons name="notifications-outline" size={13} color="#D8C28A" />
+              <Text style={styles.viewAllText}>Azaan</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => router.push('/prayer-times')}
+              accessibilityRole="button"
+              accessibilityLabel="View All Prayer Times and Compass"
+              activeOpacity={0.8}
+            >
+              <Text style={styles.viewAllText}>Times</Text>
+              <Ionicons name="chevron-forward" size={14} color="#D8C28A" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Current & Next Prayer Focus */}

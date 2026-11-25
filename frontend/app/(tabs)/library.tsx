@@ -13,6 +13,7 @@ import {
   ScrollView,
   Animated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -88,6 +89,7 @@ function BookCard({
   progress,
   isRecommended,
   rank,
+  cardWidth,
   onDelete,
   onOpen,
 }: {
@@ -96,6 +98,7 @@ function BookCard({
   progress?: BookReadingProgress;
   isRecommended?: boolean;
   rank?: number;
+  cardWidth?: number;
   onDelete: (book: Book) => void;
   onOpen: (book: Book) => void;
 }) {
@@ -109,7 +112,10 @@ function BookCard({
 
   return (
     <ScalePressable
-      style={styles.card}
+      style={[
+        styles.card,
+        cardWidth ? { width: cardWidth, maxWidth: cardWidth, flex: 0, flexGrow: 0 } : null,
+      ]}
       testID={`book-card-${book.id}`}
       onPress={() => onOpen(book)}
     >
@@ -139,7 +145,9 @@ function BookCard({
               style={styles.deleteBtn}
               onPress={() => onDelete(book)}
               testID={`delete-book-btn-${book.id}`}
-              hitSlop={8}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete book ${book.title}`}
             >
               <Ionicons name="trash-outline" size={16} color={COLORS.error} />
             </TouchableOpacity>
@@ -166,6 +174,15 @@ function BookCard({
 }
 
 export default function LibraryScreen() {
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 600;
+  const isWideTablet = windowWidth >= 840;
+  const numColumns = isWideTablet ? 4 : isTablet ? 3 : 2;
+  const gridGap = SPACING.md;
+  const horizontalPadding = SPACING.md * 2;
+  const availableWidth = Math.max(0, windowWidth - horizontalPadding);
+  const cardWidth = Math.floor((availableWidth - ((numColumns - 1) * gridGap)) / numColumns);
+
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     if (refetchBooks) await refetchBooks();
   });
@@ -375,6 +392,7 @@ export default function LibraryScreen() {
               onPress={handleRefreshLibrary}
               activeOpacity={0.8}
               disabled={refreshing || booksLoading}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 4 }}
               accessibilityRole="button"
               accessibilityLabel="Refresh library"
             >
@@ -388,6 +406,9 @@ export default function LibraryScreen() {
                 testID="admin-add-book-btn"
                 onPress={() => router.push('/admin/add-book')}
                 activeOpacity={0.8}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Add book"
               >
                 <Ionicons name="add-circle" size={28} color={COLORS.primary} />
               </TouchableOpacity>
@@ -499,10 +520,11 @@ export default function LibraryScreen() {
         </View>
       ) : (
         <FlatList
+          key={`library-grid-${numColumns}`}
           data={filteredBooks}
           refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyExtractor={(item) => item.id}
-          numColumns={2}
+          numColumns={numColumns}
           ListHeaderComponent={
             <View>
               {/* Recently Viewed (when not searching) */}
@@ -565,15 +587,16 @@ export default function LibraryScreen() {
               progress={bookProgressMap[item.id]}
               isRecommended={TEACHER_RECOMMENDED_TITLES.some((t) => item.title.toLowerCase().includes(t.toLowerCase()))}
               rank={selectedFilter === 'popular' ? bookRankMap[item.id] : undefined}
+              cardWidth={cardWidth}
               onDelete={handleDeleteBook}
               onOpen={handleOpenBook}
             />
           )}
           contentContainerStyle={styles.listContent}
-          columnWrapperStyle={styles.columnWrapper}
+          columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
+          initialNumToRender={isTablet ? 16 : 12}
+          maxToRenderPerBatch={isTablet ? 16 : 12}
           windowSize={8}
           removeClippedSubviews
           testID="library-grid"
@@ -630,7 +653,7 @@ const styles = StyleSheet.create({
   },
   errorText: { color: '#B3261E', fontSize: 12, flex: 1 },
   retryText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   refreshBtn: {
     width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
     backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border,

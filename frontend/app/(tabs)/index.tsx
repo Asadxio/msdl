@@ -27,6 +27,7 @@ import { SpiritualMomentsRow } from '@/components/dashboard/SpiritualMomentsRow'
 import { PrayerTimesHeroCard } from '@/components/dashboard/PrayerTimesHeroCard';
 import { TodaysJourneyCard } from '@/components/dashboard/TodaysJourneyCard';
 import { QuickAccessGrid } from '@/components/dashboard/QuickAccessGrid';
+import { IslamicKnowledgeHub } from '@/components/dashboard/IslamicKnowledgeHub';
 
 const HIJRI_MONTH_NORMALIZATION: Record<string, string> = {
   "Dhuʻl-Qiʻdah": 'Zul Qidah', 'Dhu’l-Qi’dah': 'Zul Qidah',
@@ -474,6 +475,9 @@ export default function HomeScreen() {
           now={now}
           formatTime={formatTime}
         />
+
+        {/* Section 5.5: Islamic Knowledge & Worship Hub */}
+        <IslamicKnowledgeHub />
 
         {/* Section 6: Continue Learning */}
         <View style={styles.sectionContainer}>

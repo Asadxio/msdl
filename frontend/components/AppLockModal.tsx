@@ -62,7 +62,7 @@ export function AppLockModal({ visible, onUnlock }: AppLockModalProps) {
 
   // Handle countdown if locked out
   useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
+    let timer: ReturnType<typeof setInterval> | null = null;
     if (isLockedOut()) {
       setLockoutSecs(getRemainingLockoutSeconds());
       timer = setInterval(() => {

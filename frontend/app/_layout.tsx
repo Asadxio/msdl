@@ -17,6 +17,8 @@ import {
 } from '@/lib/appLock';
 import { evaluateRouteAuthorization } from '@/lib/navigationGuard';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { GlobalAudioProvider } from '@/context/GlobalAudioContext';
+import { GlobalAudioMiniPlayer } from '@/components/audio/GlobalAudioMiniPlayer';
 import { LanguageProvider } from '@/context/LanguageContext';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -651,6 +653,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         <AppLockModal visible={isAppLocked} onUnlock={() => setIsAppLocked(false)} />
         {children}
         <LiveClassFloatingBanner />
+        <GlobalAudioMiniPlayer />
         {showLoader ? (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: COLORS.background }]}>
             <FullScreenLoader label={splashHidden ? 'Loading account…' : 'Starting app…'} />
@@ -668,7 +671,8 @@ export default function RootLayout() {
       <LanguageProvider>
       <AuthProvider>
         <DataProvider>
-          <AuthGate>
+          <GlobalAudioProvider>
+            <AuthGate>
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -704,6 +708,8 @@ export default function RootLayout() {
               <Stack.Screen name="qibla" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="islamic-dashboard" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="islamic-calendar" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="six-kalmas" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="zakat" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="prayer-times" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="tasbeeh" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="flashcards" options={{ animation: 'slide_from_right' }} />
@@ -744,6 +750,7 @@ export default function RootLayout() {
               <Stack.Screen name="auth/forgot-password" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthGate>
+          </GlobalAudioProvider>
         </DataProvider>
       </AuthProvider>
       </LanguageProvider>

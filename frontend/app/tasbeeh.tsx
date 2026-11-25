@@ -445,6 +445,9 @@ export default function DigitalTasbeehScreen() {
         <TouchableOpacity
           style={styles.headerBtn}
           onPress={() => goBackOrReplace(router, '/(tabs)')}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={24} color="#C8A84E" />
         </TouchableOpacity>
@@ -458,6 +461,9 @@ export default function DigitalTasbeehScreen() {
         <TouchableOpacity
           style={[styles.headerBtn, fullScreenMode && styles.headerBtnActive]}
           onPress={() => setFullScreenMode(!fullScreenMode)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle fullscreen counter"
         >
           <Ionicons
             name={fullScreenMode ? 'scan' : 'expand'}
@@ -467,8 +473,81 @@ export default function DigitalTasbeehScreen() {
         </TouchableOpacity>
       </View>
 
-      {!fullScreenMode && (
-        <>
+      {fullScreenMode ? (
+        <View style={styles.fullScreenCounterZone}>
+          {/* Progress Bar Strip */}
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${progressPct}%` }]} />
+          </View>
+
+          {/* Fast Pressable Arena */}
+          <Pressable
+            style={styles.pressableArena}
+            onPress={handleFastTap}
+            android_disableSound={false}
+          >
+            {/* 9.1 Celebration Halo Overlay when Target reached */}
+            <Animated.View
+              style={[
+                styles.celebrateGlow,
+                {
+                  opacity: celebrateAnim,
+                  transform: [
+                    {
+                      scale: celebrateAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 1.15],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+
+            <Animated.View
+              style={[
+                styles.beadCircleOuter,
+                { transform: [{ scale: scaleAnim }] },
+              ]}
+            >
+              <View style={styles.beadCircleInner}>
+                <Text style={styles.counterDigits}>{count}</Text>
+                <Text style={styles.counterTargetLabel}>
+                  TARGET: {currentDhikrInfo.target} ({progressPct}%)
+                </Text>
+                <Text style={styles.tapPrompt}>⚡ TAP ANYWHERE TO COUNT</Text>
+              </View>
+            </Animated.View>
+          </Pressable>
+
+          {/* Counter Helper Controls */}
+          <View style={styles.counterControls}>
+            <TouchableOpacity style={styles.controlBtn} onPress={handleDecrement}>
+              <Ionicons name="remove" size={20} color="#C8A84E" />
+              <Text style={styles.controlBtnText}>-1 Undo</Text>
+            </TouchableOpacity>
+
+            <View style={styles.lapBadge}>
+              <Ionicons name="sync" size={14} color="#C8A84E" />
+              <Text style={styles.lapText}>Rounds: {laps}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.controlBtn} onPress={handleResetCounter}>
+              <Ionicons name="refresh" size={18} color="#EF4444" />
+              <Text style={[styles.controlBtnText, { color: '#EF4444' }]}>Reset</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollArea}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 24 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* ─── Dhikr Preset Selector Strip (Includes 9.3 Custom Dhikrs) ─── */}
           <View style={styles.presetSection}>
             <View style={styles.presetHeaderRow}>
@@ -485,6 +564,7 @@ export default function DigitalTasbeehScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled={true}
               contentContainerStyle={styles.presetScroll}
             >
               {allPresets.map((preset) => {
@@ -533,131 +613,129 @@ export default function DigitalTasbeehScreen() {
               </View>
             ) : null}
           </View>
-        </>
-      )}
 
-      {/* ─── Main Interactive Counter Zone (Ultra-Fast Response) ─── */}
-      <View style={styles.counterZone}>
-        {/* Progress Bar Strip */}
-        <View style={styles.progressBarBg}>
-          <View style={[styles.progressBarFill, { width: `${progressPct}%` }]} />
-        </View>
+          {/* ─── Main Interactive Counter Zone (Ultra-Fast Response) ─── */}
+          <View style={styles.counterZone}>
+            {/* Progress Bar Strip */}
+            <View style={styles.progressBarBg}>
+              <View style={[styles.progressBarFill, { width: `${progressPct}%` }]} />
+            </View>
 
-        {/* Fast Pressable Arena */}
-        <Pressable
-          style={styles.pressableArena}
-          onPress={handleFastTap}
-          android_disableSound={false}
-        >
-          {/* 9.1 Celebration Halo Overlay when Target reached */}
-          <Animated.View
-            style={[
-              styles.celebrateGlow,
-              {
-                opacity: celebrateAnim,
-                transform: [
+            {/* Fast Pressable Arena */}
+            <Pressable
+              style={styles.pressableArena}
+              onPress={handleFastTap}
+              android_disableSound={false}
+            >
+              {/* 9.1 Celebration Halo Overlay when Target reached */}
+              <Animated.View
+                style={[
+                  styles.celebrateGlow,
                   {
-                    scale: celebrateAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 1.15],
-                    }),
+                    opacity: celebrateAnim,
+                    transform: [
+                      {
+                        scale: celebrateAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [1, 1.15],
+                        }),
+                      },
+                    ],
                   },
-                ],
-              },
-            ]}
-          />
+                ]}
+              />
 
-          <Animated.View
-            style={[
-              styles.beadCircleOuter,
-              { transform: [{ scale: scaleAnim }] },
-            ]}
-          >
-            <View style={styles.beadCircleInner}>
-              <Text style={styles.counterDigits}>{count}</Text>
-              <Text style={styles.counterTargetLabel}>
-                TARGET: {currentDhikrInfo.target} ({progressPct}%)
-              </Text>
-              <Text style={styles.tapPrompt}>⚡ TAP ANYWHERE TO COUNT</Text>
+              <Animated.View
+                style={[
+                  styles.beadCircleOuter,
+                  { transform: [{ scale: scaleAnim }] },
+                ]}
+              >
+                <View style={styles.beadCircleInner}>
+                  <Text style={styles.counterDigits}>{count}</Text>
+                  <Text style={styles.counterTargetLabel}>
+                    TARGET: {currentDhikrInfo.target} ({progressPct}%)
+                  </Text>
+                  <Text style={styles.tapPrompt}>⚡ TAP ANYWHERE TO COUNT</Text>
+                </View>
+              </Animated.View>
+            </Pressable>
+
+            {/* Counter Helper Controls */}
+            <View style={styles.counterControls}>
+              <TouchableOpacity style={styles.controlBtn} onPress={handleDecrement}>
+                <Ionicons name="remove" size={20} color="#C8A84E" />
+                <Text style={styles.controlBtnText}>-1 Undo</Text>
+              </TouchableOpacity>
+
+              <View style={styles.lapBadge}>
+                <Ionicons name="sync" size={14} color="#C8A84E" />
+                <Text style={styles.lapText}>Rounds: {laps}</Text>
+              </View>
+
+              <TouchableOpacity style={styles.controlBtn} onPress={handleResetCounter}>
+                <Ionicons name="refresh" size={18} color="#EF4444" />
+                <Text style={[styles.controlBtnText, { color: '#EF4444' }]}>Reset</Text>
+              </TouchableOpacity>
             </View>
-          </Animated.View>
-        </Pressable>
-
-        {/* Counter Helper Controls */}
-        <View style={styles.counterControls}>
-          <TouchableOpacity style={styles.controlBtn} onPress={handleDecrement}>
-            <Ionicons name="remove" size={20} color="#C8A84E" />
-            <Text style={styles.controlBtnText}>-1 Undo</Text>
-          </TouchableOpacity>
-
-          <View style={styles.lapBadge}>
-            <Ionicons name="sync" size={14} color="#C8A84E" />
-            <Text style={styles.lapText}>Rounds: {laps}</Text>
           </View>
 
-          <TouchableOpacity style={styles.controlBtn} onPress={handleResetCounter}>
-            <Ionicons name="refresh" size={18} color="#EF4444" />
-            <Text style={[styles.controlBtnText, { color: '#EF4444' }]}>Reset</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ─── 9.2 Bottom 7-Day Stats & Streak Dashboard ─── */}
-      {!fullScreenMode && (
-        <View style={[styles.statsContainer, { marginBottom: insets.bottom + 8 }]}>
-          {/* 7-Day Bar Chart Strip */}
-          <View style={styles.chartContainer}>
-            <View style={styles.chartHeader}>
-              <Text style={styles.chartTitle}>📊 7-Day Dhikr Activity</Text>
-              <Text style={styles.chartSub}>Pichle 7 dino ki tauseeq</Text>
-            </View>
-            <View style={styles.chartRow}>
-              {past7DaysData.days.map((d, index) => {
-                const heightPct = Math.max(8, Math.round((d.count / past7DaysData.maxCount) * 100));
-                const isToday = index === 6;
-                return (
-                  <View key={d.dateStr} style={styles.chartBarCol}>
-                    <Text style={styles.barCountText}>
-                      {d.count > 0 ? (d.count > 999 ? `${(d.count / 1000).toFixed(1)}k` : d.count) : ''}
-                    </Text>
-                    <View style={styles.barTrack}>
-                      <View
-                        style={[
-                          styles.barFill,
-                          { height: `${heightPct}%` },
-                          isToday && styles.barFillToday,
-                        ]}
-                      />
+          {/* ─── 9.2 Bottom 7-Day Stats & Streak Dashboard ─── */}
+          <View style={styles.statsContainer}>
+            {/* 7-Day Bar Chart Strip */}
+            <View style={styles.chartContainer}>
+              <View style={styles.chartHeader}>
+                <Text style={styles.chartTitle}>📊 7-Day Dhikr Activity</Text>
+                <Text style={styles.chartSub}>Pichle 7 dino ki tauseeq</Text>
+              </View>
+              <View style={styles.chartRow}>
+                {past7DaysData.days.map((d, index) => {
+                  const heightPct = Math.max(8, Math.round((d.count / past7DaysData.maxCount) * 100));
+                  const isToday = index === 6;
+                  return (
+                    <View key={d.dateStr} style={styles.chartBarCol}>
+                      <Text style={styles.barCountText}>
+                        {d.count > 0 ? (d.count > 999 ? `${(d.count / 1000).toFixed(1)}k` : d.count) : ''}
+                      </Text>
+                      <View style={styles.barTrack}>
+                        <View
+                          style={[
+                            styles.barFill,
+                            { height: `${heightPct}%` },
+                            isToday && styles.barFillToday,
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.barLabel, isToday && styles.barLabelToday]}>
+                        {d.label}
+                      </Text>
                     </View>
-                    <Text style={[styles.barLabel, isToday && styles.barLabelToday]}>
-                      {d.label}
-                    </Text>
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </View>
             </View>
-          </View>
 
-          {/* Today & Lifetime Stats Cards */}
-          <View style={styles.statsCard}>
-            <View style={styles.statCol}>
-              <Text style={styles.statNumber}>{stats.todayCount}</Text>
-              <Text style={styles.statLabel}>Today's Dhikr</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statCol}>
-              <Text style={[styles.statNumber, { color: '#C8A84E' }]}>
-                {stats.streakDays} Days
-              </Text>
-              <Text style={styles.statLabel}>Daily Streak 🔥</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statCol}>
-              <Text style={styles.statNumber}>{stats.lifetimeCount}</Text>
-              <Text style={styles.statLabel}>Lifetime Total</Text>
+            {/* Today & Lifetime Stats Cards */}
+            <View style={styles.statsCard}>
+              <View style={styles.statCol}>
+                <Text style={styles.statNumber}>{stats.todayCount}</Text>
+                <Text style={styles.statLabel}>Today's Dhikr</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statCol}>
+                <Text style={[styles.statNumber, { color: '#C8A84E' }]}>
+                  {stats.streakDays} Days
+                </Text>
+                <Text style={styles.statLabel}>Daily Streak 🔥</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statCol}>
+                <Text style={styles.statNumber}>{stats.lifetimeCount}</Text>
+                <Text style={styles.statLabel}>Lifetime Total</Text>
+              </View>
             </View>
           </View>
-        </View>
+        </ScrollView>
       )}
 
       {/* ─── Custom Target Modal (Simple count edit) ─── */}
@@ -767,6 +845,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#002E23',
   },
+  scrollArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -800,6 +884,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#C8A84E',
     fontWeight: '700',
+    writingDirection: 'rtl',
   },
   presetSection: {
     paddingVertical: 8,
@@ -832,8 +917,10 @@ const styles = StyleSheet.create({
   },
   presetArabic: {
     fontSize: 14,
+    lineHeight: 22,
     fontWeight: '700',
     color: '#E2E8F0',
+    writingDirection: 'rtl',
   },
   presetArabicActive: {
     color: '#C8A84E',
@@ -859,9 +946,11 @@ const styles = StyleSheet.create({
   },
   bannerArabic: {
     fontSize: 26,
+    lineHeight: 38,
     fontWeight: '800',
     color: '#FFF',
     textAlign: 'center',
+    writingDirection: 'rtl',
   },
   bannerTransliteration: {
     fontSize: 14,
@@ -892,6 +981,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   counterZone: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 14,
+  },
+  fullScreenCounterZone: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -968,9 +1063,12 @@ const styles = StyleSheet.create({
   controlBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    minHeight: 48,
+    minWidth: 48,
     borderRadius: RADIUS.md,
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
@@ -1135,6 +1233,7 @@ const styles = StyleSheet.create({
   statsContainer: {
     marginHorizontal: SPACING.md,
     gap: 8,
+    marginTop: 14,
   },
   chartContainer: {
     backgroundColor: 'rgba(0,35,26,0.9)',

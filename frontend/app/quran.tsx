@@ -6,10 +6,12 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator, FlatList, Share, StyleSheet, Text,
-  TextInput, TouchableOpacity, View, ScrollView,
+  TextInput, TouchableOpacity, View, ScrollView, useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { COLORS, RADIUS, SPACING } from "@/constants/theme";
+import { COLORS, RADIUS, SHADOWS, SPACING } from "@/constants/theme";
+import { useTheme } from "@/context/ThemeContext";
+import { ReadingControlsSheet } from "@/components/ui/ReadingControlsSheet";
 import { QURAN_SURAHS, searchSurahs, TOTAL_AYAT, TOTAL_PARAHS, SurahMeta } from "@/constants/quranSurahs";
 import {
   loadLastRead, loadKhatamProgress, loadHifzProgress, loadBookmarks,
@@ -26,7 +28,12 @@ type ActiveTab = 'surahs' | 'reader' | 'khatam' | 'hifz' | 'daily';
 export default function QuranScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
+  const tabScrollRef = useRef<ScrollView>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('surahs');
+  const [showReadingControls, setShowReadingControls] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredSurahs, setFilteredSurahs] = useState<SurahMeta[]>(QURAN_SURAHS);
   const [lastRead, setLastRead] = useState<{ surahNumber: number; ayatNumber: number; surahName: string } | null>(null);
@@ -39,6 +46,14 @@ export default function QuranScreen() {
   const [cachedTextSurahIds, setCachedTextSurahIds] = useState<Set<number>>(new Set());
   const [cachingJuzAmma, setCachingJuzAmma] = useState(false);
   const [juzAmmaProgress, setJuzAmmaProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const TAB_ORDER = useMemo<ActiveTab[]>(() => ['surahs', 'reader', 'khatam', 'hifz', 'daily'], []);
+  useEffect(() => {
+    const idx = TAB_ORDER.indexOf(activeTab);
+    if (idx >= 0 && tabScrollRef.current && !isTablet) {
+      tabScrollRef.current.scrollTo({ x: Math.max(0, idx * 85 - 30), animated: true });
+    }
+  }, [activeTab, isTablet, TAB_ORDER]);
 
   useEffect(() => {
     const init = async () => {
@@ -141,38 +156,65 @@ export default function QuranScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => goBackOrReplace(router)}>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => goBackOrReplace(router)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>القرآن الكريم</Text>
           <Text style={styles.headerSubtitle}>Holy Quran with Roman Urdu & Audio</Text>
         </View>
-        <View style={styles.headerBtn} />
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => setShowReadingControls(true)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          accessibilityRole="button"
+          accessibilityLabel="Adjust reading preferences"
+        >
+          <Ionicons name="text-outline" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
-      {/* Tab Bar */}
-      <View style={styles.tabBar}>
-        {([
-          { id: 'surahs', label: 'Surahs', icon: 'list-outline' },
-          { id: 'reader', label: 'Reader', icon: 'book-outline' },
-          { id: 'khatam', label: 'Khatam', icon: 'checkmark-circle-outline' },
-          { id: 'hifz',   label: 'Hifz',  icon: 'star-outline' },
-          { id: 'daily',  label: 'Daily Ayat',   icon: 'sunny-outline' },
-        ] as const).map((tab) => {
-          const isSelected = activeTab === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.tabBtn, isSelected && styles.tabBtnSelected]}
-              onPress={() => setActiveTab(tab.id)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name={tab.icon as any} size={14} color={isSelected ? '#002E23' : '#94A3B8'} />
-              <Text style={[styles.tabBtnText, isSelected && styles.tabBtnTextSelected]} numberOfLines={1}>{tab.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* Horizontally Scrollable Responsive Tab Bar */}
+      <View style={styles.tabBarWrapper}>
+        <ScrollView
+          ref={tabScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.tabBarScroll,
+            isTablet && styles.tabBarScrollTablet,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          accessibilityRole="tablist"
+        >
+          {([
+            { id: 'surahs', label: 'Surahs', icon: 'list-outline' },
+            { id: 'reader', label: 'Reader', icon: 'book-outline' },
+            { id: 'khatam', label: 'Khatam', icon: 'checkmark-circle-outline' },
+            { id: 'hifz',   label: 'Hifz',  icon: 'star-outline' },
+            { id: 'daily',  label: 'Daily Ayat',   icon: 'sunny-outline' },
+          ] as const).map((tab) => {
+            const isSelected = activeTab === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[
+                  styles.tabBtn,
+                  isTablet && styles.tabBtnTablet,
+                  isSelected && styles.tabBtnSelected,
+                ]}
+                onPress={() => setActiveTab(tab.id)}
+                activeOpacity={0.8}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isSelected }}
+                accessibilityLabel={`${tab.label} tab`}
+              >
+                <Ionicons name={tab.icon as any} size={15} color={isSelected ? '#002E23' : '#94A3B8'} />
+                <Text style={[styles.tabBtnText, isSelected && styles.tabBtnTextSelected]} numberOfLines={1}>{tab.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Tab Content */}
@@ -210,7 +252,13 @@ export default function QuranScreen() {
               onChangeText={handleSearch}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => handleSearch('')}>
+              <TouchableOpacity
+                style={styles.searchClearBtn}
+                onPress={() => handleSearch('')}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
                 <Ionicons name="close-circle" size={16} color="#94A3B8" />
               </TouchableOpacity>
             )}
@@ -234,6 +282,9 @@ export default function QuranScreen() {
                 style={[styles.offlinePackBtn, cachingJuzAmma && { opacity: 0.6 }]}
                 onPress={handleDownloadJuzAmma}
                 disabled={cachingJuzAmma}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel="Download Juz Amma offline pack"
               >
                 {cachingJuzAmma ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
@@ -454,6 +505,11 @@ export default function QuranScreen() {
           )}
         </ScrollView>
       )}
+
+      <ReadingControlsSheet
+        visible={showReadingControls}
+        onClose={() => setShowReadingControls(false)}
+      />
     </View>
   );
 }
@@ -465,21 +521,61 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '900', color: '#C8A84E' },
   headerSubtitle: { fontSize: 11, color: '#FFFFFF', fontWeight: '500', marginTop: 2 },
-  tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.2)', marginHorizontal: SPACING.md, marginBottom: 12, borderRadius: RADIUS.lg, padding: 4, gap: 4 },
-  tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: RADIUS.md, gap: 4 },
-  tabBtnSelected: { backgroundColor: '#C8A84E' },
-  tabBtnText: { fontSize: 11, fontWeight: '700', color: '#94A3B8' },
-  tabBtnTextSelected: { color: '#002E23', fontWeight: '900' },
+  tabBarWrapper: {
+    marginHorizontal: SPACING.md,
+    marginBottom: 12,
+  },
+  tabBarScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    borderRadius: RADIUS.lg,
+    padding: 4,
+    gap: 6,
+  },
+  tabBarScrollTablet: {
+    minWidth: '100%',
+    justifyContent: 'space-between',
+  },
+  tabBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: RADIUS.md,
+    minHeight: 44,
+    minWidth: 78,
+    gap: 6,
+  },
+  tabBtnTablet: {
+    flex: 1,
+    minWidth: 100,
+  },
+  tabBtnSelected: {
+    backgroundColor: '#C8A84E',
+    ...SHADOWS.card,
+  },
+  tabBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  tabBtnTextSelected: {
+    color: '#002E23',
+    fontWeight: '900',
+  },
   tabContent: { padding: SPACING.md, gap: 14 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', marginHorizontal: SPACING.md, marginBottom: 12, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
   searchInput: { flex: 1, fontSize: 14, color: '#0F172A' },
+  searchClearBtn: { padding: 4, alignItems: 'center', justifyContent: 'center' },
   surahRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 16, marginBottom: 10, gap: 14, borderWidth: 1, borderColor: '#F1F5F9' },
   surahNumCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#E8F5EE', alignItems: 'center', justifyContent: 'center' },
   surahNumText: { fontSize: 14, fontWeight: '900', color: '#005F46' },
   surahDetailsCol: { flex: 1, gap: 4 },
   surahTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   surahEnglishName: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
-  surahArabicName: { fontSize: 18, fontWeight: '800', color: '#005F46' },
+  surahArabicName: { fontSize: 18, fontWeight: '800', color: '#005F46', writingDirection: 'rtl' },
   surahMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   surahAyatCount: { fontSize: 12, color: '#64748B', fontWeight: '500' },
   typeBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
@@ -531,10 +627,10 @@ const styles = StyleSheet.create({
   dailyBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(200,168,78,0.15)', borderRadius: RADIUS.full, paddingHorizontal: 14, paddingVertical: 6, alignSelf: 'center', borderWidth: 1, borderColor: 'rgba(200,168,78,0.3)' },
   dailyBadgeText: { fontSize: 12, fontWeight: '700', color: '#C8A84E' },
   dailyAyatCard: { backgroundColor: '#FFFFFF', borderRadius: RADIUS.xl, padding: SPACING.lg, gap: 12 },
-  dailyArabic: { fontSize: 26, fontWeight: '700', color: '#0F172A', textAlign: 'right', lineHeight: 44 },
+  dailyArabic: { fontSize: 26, fontWeight: '700', color: '#0F172A', textAlign: 'right', lineHeight: 44, writingDirection: 'rtl' },
   divider: { height: 1, backgroundColor: '#F1F5F9' },
   dailyRoman: { fontSize: 15, fontStyle: 'italic', color: '#4F46E5', lineHeight: 24 },
-  dailyUrdu: { fontSize: 16, color: '#334155', textAlign: 'right', lineHeight: 28 },
+  dailyUrdu: { fontSize: 16, color: '#334155', textAlign: 'right', lineHeight: 28, writingDirection: 'rtl' },
   dailySurahRef: { fontSize: 12, color: '#64748B', fontWeight: '600', textAlign: 'right' },
   shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#25D366', borderRadius: RADIUS.lg, padding: 14, gap: 8 },
   shareBtnText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
@@ -566,6 +662,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#94A3B8',
     fontWeight: '600',
+    writingDirection: 'rtl',
   },
   surahLastReadTitle: {
     fontSize: 14,
@@ -663,7 +760,8 @@ const styles = StyleSheet.create({
   offlinePackBtn: {
     backgroundColor: '#005F46',
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 10,
+    minHeight: 44,
     borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Platform, Share, Linking } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
+import { RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 
 interface SpiritualMomentsRowProps {
   dua: {
@@ -23,9 +25,13 @@ interface ModalContent {
   reference: string;
   icon: keyof typeof Ionicons.glyphMap;
   iconColor: string;
+  moduleRoute: string;
+  moduleBtnText: string;
 }
 
 export function SpiritualMomentsRow({ dua, hadith }: SpiritualMomentsRowProps) {
+  const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [selectedMoment, setSelectedMoment] = useState<ModalContent | null>(null);
 
   const handleShare = async (item: ModalContent) => {
@@ -43,16 +49,22 @@ export function SpiritualMomentsRow({ dua, hadith }: SpiritualMomentsRowProps) {
   return (
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
-        <View style={styles.iconTag}>
-          <Ionicons name="sparkles" size={14} color="#C6A15B" />
+        <View style={[styles.iconTag, { backgroundColor: isDark ? '#2A200B' : '#FEF9C3' }]}>
+          <Ionicons name="sparkles" size={14} color={colors.gold} />
         </View>
-        <Text style={styles.sectionTitle}>Spiritual Moments</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Spiritual Moments</Text>
       </View>
 
       <View style={styles.cardsRow}>
         {/* Dua Card */}
         <TouchableOpacity
-          style={styles.momentCard}
+          style={[
+            styles.momentCard,
+            {
+              backgroundColor: isDark ? '#0D2721' : colors.surface,
+              borderColor: isDark ? '#1C4A3E' : colors.border,
+            },
+          ]}
           onPress={() =>
             setSelectedMoment({
               title: 'Dua of the Day',
@@ -60,7 +72,9 @@ export function SpiritualMomentsRow({ dua, hadith }: SpiritualMomentsRowProps) {
               translation: dua.translation,
               reference: dua.reference,
               icon: 'moon-outline',
-              iconColor: '#075B49',
+              iconColor: colors.primary,
+              moduleRoute: '/duas',
+              moduleBtnText: 'مسنون دعائیں دیکھیں (Open Duas)',
             })
           }
           activeOpacity={0.8}
@@ -68,24 +82,37 @@ export function SpiritualMomentsRow({ dua, hadith }: SpiritualMomentsRowProps) {
           accessibilityLabel={`Dua of the Day: ${dua.translation}`}
         >
           <View style={styles.cardTopRow}>
-            <View style={[styles.cardIconWrap, { backgroundColor: '#F0FDF4' }]}>
-              <Ionicons name="moon-outline" size={14} color="#075B49" />
+            <View
+              style={[
+                styles.cardIconWrap,
+                { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#F0FDF4' },
+              ]}
+            >
+              <Ionicons name="moon-outline" size={14} color={colors.primary} />
             </View>
-            <Text style={styles.cardCategory}>DUA OF THE DAY</Text>
+            <Text style={[styles.cardCategory, { color: colors.primary }]}>DUA OF THE DAY</Text>
           </View>
-          <Text style={styles.arabicText}>{dua.arabic}</Text>
-          <Text style={styles.translationText} numberOfLines={3}>
+          <Text style={[styles.arabicText, { color: colors.text }]}>{dua.arabic}</Text>
+          <Text style={[styles.translationText, { color: colors.textSecondary }]} numberOfLines={3}>
             &ldquo;{dua.translation}&rdquo;
           </Text>
-          <View style={styles.cardFooter}>
-            <Text style={styles.referenceText} numberOfLines={1}>{dua.reference}</Text>
-            <Ionicons name="open-outline" size={12} color="#C6A15B" />
+          <View style={[styles.cardFooter, { borderTopColor: isDark ? '#1C4A3E' : '#EFECE2' }]}>
+            <Text style={[styles.referenceText, { color: colors.gold }]} numberOfLines={1}>
+              {dua.reference}
+            </Text>
+            <Ionicons name="open-outline" size={12} color={colors.gold} />
           </View>
         </TouchableOpacity>
 
         {/* Hadith Card */}
         <TouchableOpacity
-          style={styles.momentCard}
+          style={[
+            styles.momentCard,
+            {
+              backgroundColor: isDark ? '#0D2721' : colors.surface,
+              borderColor: isDark ? '#1C4A3E' : colors.border,
+            },
+          ]}
           onPress={() =>
             setSelectedMoment({
               title: 'Hadith of the Day',
@@ -93,7 +120,9 @@ export function SpiritualMomentsRow({ dua, hadith }: SpiritualMomentsRowProps) {
               translation: hadith.translation,
               reference: hadith.reference,
               icon: 'book-outline',
-              iconColor: '#C6A15B',
+              iconColor: colors.gold,
+              moduleRoute: '/hadith',
+              moduleBtnText: 'کتبِ احادیث دیکھیں (Open Hadiths)',
             })
           }
           activeOpacity={0.8}
@@ -101,18 +130,25 @@ export function SpiritualMomentsRow({ dua, hadith }: SpiritualMomentsRowProps) {
           accessibilityLabel={`Hadith of the Day: ${hadith.translation}`}
         >
           <View style={styles.cardTopRow}>
-            <View style={[styles.cardIconWrap, { backgroundColor: '#FCF9F0' }]}>
-              <Ionicons name="book-outline" size={14} color="#C6A15B" />
+            <View
+              style={[
+                styles.cardIconWrap,
+                { backgroundColor: isDark ? 'rgba(229,195,120,0.12)' : '#FCF9F0' },
+              ]}
+            >
+              <Ionicons name="book-outline" size={14} color={colors.gold} />
             </View>
-            <Text style={styles.cardCategory}>HADITH OF THE DAY</Text>
+            <Text style={[styles.cardCategory, { color: colors.gold }]}>HADITH OF THE DAY</Text>
           </View>
-          <Text style={styles.arabicText}>{hadith.arabic}</Text>
-          <Text style={styles.translationText} numberOfLines={3}>
+          <Text style={[styles.arabicText, { color: colors.text }]}>{hadith.arabic}</Text>
+          <Text style={[styles.translationText, { color: colors.textSecondary }]} numberOfLines={3}>
             &ldquo;{hadith.translation}&rdquo;
           </Text>
-          <View style={styles.cardFooter}>
-            <Text style={styles.referenceText} numberOfLines={1}>{hadith.reference}</Text>
-            <Ionicons name="open-outline" size={12} color="#C6A15B" />
+          <View style={[styles.cardFooter, { borderTopColor: isDark ? '#1C4A3E' : '#EFECE2' }]}>
+            <Text style={[styles.referenceText, { color: colors.gold }]} numberOfLines={1}>
+              {hadith.reference}
+            </Text>
+            <Ionicons name="open-outline" size={12} color={colors.gold} />
           </View>
         </TouchableOpacity>
       </View>
@@ -126,41 +162,84 @@ export function SpiritualMomentsRow({ dua, hadith }: SpiritualMomentsRowProps) {
           onRequestClose={() => setSelectedMoment(null)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: isDark ? '#081B17' : colors.surface,
+                  borderColor: isDark ? '#1C4A3E' : colors.border,
+                },
+              ]}
+            >
               <View style={styles.modalHeader}>
                 <View style={styles.modalTitleRow}>
                   <Ionicons name={selectedMoment.icon} size={18} color={selectedMoment.iconColor} />
-                  <Text style={styles.modalTitle}>{selectedMoment.title}</Text>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>
+                    {selectedMoment.title}
+                  </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setSelectedMoment(null)}
                   style={styles.closeBtn}
                   accessibilityLabel="Close detail"
                 >
-                  <Ionicons name="close" size={20} color="#71817B" />
+                  <Ionicons name="close" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.modalArabic}>{selectedMoment.arabic}</Text>
-              <Text style={styles.modalTranslation}>&ldquo;{selectedMoment.translation}&rdquo;</Text>
-              <Text style={styles.modalRef}>— {selectedMoment.reference}</Text>
+              <Text style={[styles.modalArabic, { color: colors.text }]}>
+                {selectedMoment.arabic}
+              </Text>
+              <Text style={[styles.modalTranslation, { color: colors.textSecondary }]}>
+                &ldquo;{selectedMoment.translation}&rdquo;
+              </Text>
+              <Text style={[styles.modalRef, { color: colors.gold }]}>
+                — {selectedMoment.reference}
+              </Text>
+
+              {/* Action to Jump to Full Module */}
+              <TouchableOpacity
+                style={[styles.jumpModuleBtn, { backgroundColor: colors.surfaceAlt }]}
+                onPress={() => {
+                  setSelectedMoment(null);
+                  router.push(selectedMoment.moduleRoute as any);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={selectedMoment.moduleBtnText}
+              >
+                <Ionicons name="arrow-forward-circle" size={18} color={colors.primary} />
+                <Text style={[styles.jumpModuleText, { color: colors.primary }]}>
+                  {selectedMoment.moduleBtnText}
+                </Text>
+              </TouchableOpacity>
 
               <View style={styles.modalActionRow}>
                 <TouchableOpacity
-                  style={styles.modalShareBtn}
+                  style={[
+                    styles.modalShareBtn,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(16, 185, 129, 0.12)'
+                        : 'rgba(7, 91, 73, 0.08)',
+                    },
+                  ]}
                   onPress={() => handleShare(selectedMoment)}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="logo-whatsapp" size={16} color="#075B49" />
-                  <Text style={styles.modalShareBtnText}>Share on WhatsApp</Text>
+                  <Ionicons name="logo-whatsapp" size={16} color={colors.primary} />
+                  <Text style={[styles.modalShareBtnText, { color: colors.primary }]}>
+                    Share on WhatsApp
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.modalDismissBtn}
+                  style={[styles.modalDismissBtn, { backgroundColor: colors.surfaceAlt }]}
                   onPress={() => setSelectedMoment(null)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.modalDismissBtnText}>Close</Text>
+                  <Text style={[styles.modalDismissBtnText, { color: colors.textSecondary }]}>
+                    Close
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -183,33 +262,26 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   iconTag: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#FCF9F0',
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#17332C',
-    letterSpacing: -0.2,
+    fontSize: 16,
+    fontWeight: '700',
   },
   cardsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   momentCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
     borderWidth: 1,
-    borderColor: '#E7E4DA',
-    ...SHADOWS.card,
-    justifyContent: 'space-between',
-    minHeight: 160,
+    ...SHADOWS.sm,
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -225,66 +297,59 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardCategory: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
-    color: '#71817B',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   arabicText: {
-    fontSize: 15.5,
-    color: '#17332C',
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 28,
     textAlign: 'right',
-    lineHeight: 25,
-    marginBottom: 6,
     writingDirection: 'rtl',
+    marginBottom: 6,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   translationText: {
-    fontSize: 11.5,
-    color: '#71817B',
-    lineHeight: 17,
+    fontSize: 12,
+    lineHeight: 18,
+    fontStyle: 'italic',
     marginBottom: 8,
+    minHeight: 36,
   },
   cardFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 'auto',
+    alignItems: 'center',
     paddingTop: 6,
     borderTopWidth: 1,
-    borderTopColor: '#F7F5EF',
   },
   referenceText: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '700',
-    color: '#C6A15B',
     flex: 1,
     marginRight: 4,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.xl,
+    padding: SPACING.lg,
   },
   modalCard: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
+    borderRadius: RADIUS.xl,
     padding: SPACING.xl,
+    width: '100%',
+    maxWidth: 420,
     borderWidth: 1,
-    borderColor: '#E7E4DA',
-    ...SHADOWS.premiumCard,
+    ...SHADOWS.lg,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0ECE1',
+    marginBottom: SPACING.md,
   },
   modalTitleRow: {
     flexDirection: 'row',
@@ -293,70 +358,73 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#17332C',
+    fontWeight: '700',
   },
   closeBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalArabic: {
     fontSize: 22,
-    color: '#17332C',
-    textAlign: 'center',
+    fontWeight: '600',
     lineHeight: 38,
+    textAlign: 'center',
     writingDirection: 'rtl',
-    marginVertical: 10,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    marginBottom: SPACING.md,
   },
   modalTranslation: {
     fontSize: 14,
-    color: '#5A6B65',
+    lineHeight: 22,
     textAlign: 'center',
     fontStyle: 'italic',
-    lineHeight: 22,
-    marginVertical: 10,
+    marginBottom: SPACING.sm,
   },
   modalRef: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#C6A15B',
     textAlign: 'center',
-    marginBottom: 18,
+    marginBottom: SPACING.lg,
+  },
+  jumpModuleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
+    gap: 6,
+    marginBottom: SPACING.md,
+  },
+  jumpModuleText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   modalActionRow: {
     flexDirection: 'row',
-    gap: 10,
+    justifyContent: 'flex-end',
+    gap: SPACING.sm,
   },
   modalShareBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 6,
-    backgroundColor: 'rgba(7, 91, 73, 0.08)',
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(7, 91, 73, 0.16)',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
   },
   modalShareBtnText: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#075B49',
   },
   modalDismissBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: '#F7F5EF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E7E4DA',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
   },
   modalDismissBtnText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: '#17332C',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

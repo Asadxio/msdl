@@ -1,21 +1,11 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { ROUTES } from '@/lib/routes';
 
-const THEME = {
-  primary: '#005F46',
-  primaryLight: '#0B6B53',
-  gold: '#C8A84E',
-  background: '#F7F8F6',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F0F4F2',
-  textMain: '#12332A',
-  textMuted: '#60736B',
-  border: '#E2E8E4',
-};
+const THEME = COLORS;
 
 type ActionItem = {
   id: string;
@@ -70,11 +60,16 @@ const ACTION_CATEGORIES: ActionCategory[] = [
   },
 ];
 
-const { width } = Dimensions.get('window');
-const IS_TABLET = width > 768;
-
 export const QuickAdminActions = React.memo(function QuickAdminActions() {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
+  const numCols = isTablet ? 3 : 2;
+  const gap = 8;
+  // container has marginHorizontal: SPACING.md (16*2), padding: SPACING.md (16*2), and borderWidth: 1 (1*2) => 66dp total
+  const containerOffset = (SPACING.md * 4) + 2;
+  const availableGridWidth = Math.max(0, windowWidth - containerOffset);
+  const cardWidth = Math.floor((availableGridWidth - ((numCols - 1) * gap)) / numCols);
 
   const handlePress = useCallback((route: Href) => {
     try {
@@ -101,7 +96,7 @@ export const QuickAdminActions = React.memo(function QuickAdminActions() {
             {category.items.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={[styles.actionCard, IS_TABLET ? styles.actionCardTablet : styles.actionCardMobile]}
+                style={[styles.actionCard, { width: cardWidth }]}
                 onPress={() => handlePress(item.route)}
                 activeOpacity={0.75}
                 accessible={true}
@@ -112,11 +107,11 @@ export const QuickAdminActions = React.memo(function QuickAdminActions() {
                   <Ionicons name={item.icon} size={20} color={item.color} />
                 </View>
                 <View style={styles.actionTextContainer}>
-                  <Text style={styles.actionLabel} numberOfLines={1}>
+                  <Text style={styles.actionLabel} numberOfLines={2}>
                     {item.label}
                   </Text>
                   {item.subLabel ? (
-                    <Text style={styles.actionSubLabel} numberOfLines={1}>
+                    <Text style={styles.actionSubLabel} numberOfLines={2}>
                       {item.subLabel}
                     </Text>
                   ) : null}
@@ -181,7 +176,6 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 8,
   },
   actionCard: {
@@ -196,12 +190,6 @@ const styles = StyleSheet.create({
     minHeight: 52,
     gap: 8,
   },
-  actionCardMobile: {
-    width: '48.5%',
-  },
-  actionCardTablet: {
-    width: '32%',
-  },
   iconBox: {
     width: 34,
     height: 34,
@@ -214,16 +202,19 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 12,
+    lineHeight: 16,
     fontWeight: '700',
     color: THEME.textMain,
   },
   actionSubLabel: {
     fontSize: 10,
+    lineHeight: 13,
     color: THEME.textMuted,
     marginTop: 1,
     fontWeight: '500',
   },
   chevron: {
     marginLeft: 'auto',
+    padding: 4,
   },
 });

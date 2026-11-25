@@ -1,8 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform, Share } from 'react-native';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
+import { RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 
 interface DailyWisdomCardProps {
   arabic: string;
@@ -11,6 +13,9 @@ interface DailyWisdomCardProps {
 }
 
 export function DailyWisdomCard({ arabic, translation, reference }: DailyWisdomCardProps) {
+  const router = useRouter();
+  const { colors, isDark } = useTheme();
+
   const handleShareWhatsApp = async () => {
     const msg = `✨ Daily Wisdom — Suffah ✨\n\n${arabic}\n\n"${translation}"\n— ${reference}\n\n🕌 Suffah • Digital Madrasa Portal`;
     try {
@@ -27,7 +32,15 @@ export function DailyWisdomCard({ arabic, translation, reference }: DailyWisdomC
   };
 
   return (
-    <View style={styles.cardContainer}>
+    <View
+      style={[
+        styles.cardContainer,
+        {
+          backgroundColor: isDark ? '#0D2721' : '#FCFBF7',
+          borderColor: isDark ? '#1C4A3E' : '#EFECE2',
+        },
+      ]}
+    >
       {/* Subtle Lantern Graphic Accent */}
       <View style={styles.artworkContainer}>
         <Image
@@ -35,35 +48,56 @@ export function DailyWisdomCard({ arabic, translation, reference }: DailyWisdomC
           style={styles.lanternImage}
           contentFit="cover"
         />
-        <View style={styles.artworkOverlay} />
+        <View
+          style={[
+            styles.artworkOverlay,
+            { backgroundColor: isDark ? '#0D2721' : '#FCFBF7' },
+          ]}
+        />
       </View>
 
       {/* Content Layer */}
       <View style={styles.contentWrap}>
         <View style={styles.headerRow}>
           <View style={styles.sparkleRow}>
-            <Text style={styles.goldStar}>✦</Text>
-            <Text style={styles.eyebrow}>DAILY WISDOM</Text>
+            <Text style={[styles.goldStar, { color: colors.gold }]}>✦</Text>
+            <Text style={[styles.eyebrow, { color: colors.gold }]}>DAILY WISDOM • حکمتِ روزانہ</Text>
           </View>
-          <View style={styles.goldDividerSmall} />
+          <TouchableOpacity
+            style={styles.hadithLibBtn}
+            onPress={() => router.push('/hadith' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Open Hadith Library"
+          >
+            <Text style={[styles.hadithLibText, { color: colors.primary }]}>احادیث کتب</Text>
+            <Ionicons name="arrow-forward" size={12} color={colors.primary} />
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.arabicText}>{arabic}</Text>
+        <Text style={[styles.arabicText, { color: colors.text }]}>{arabic}</Text>
 
-        <Text style={styles.translationText}>&ldquo;{translation}&rdquo;</Text>
+        <Text style={[styles.translationText, { color: colors.textSecondary }]}>
+          &ldquo;{translation}&rdquo;
+        </Text>
 
-        <View style={styles.footerRow}>
-          <Text style={styles.referenceText}>— {reference}</Text>
+        <View style={[styles.footerRow, { borderTopColor: isDark ? '#1C4A3E' : '#EFECE2' }]}>
+          <Text style={[styles.referenceText, { color: colors.gold }]}>— {reference}</Text>
 
           <TouchableOpacity
-            style={styles.shareBtn}
+            style={[
+              styles.shareBtn,
+              {
+                backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(7, 91, 73, 0.08)',
+                borderColor: isDark ? 'rgba(16, 185, 129, 0.25)' : 'rgba(7, 91, 73, 0.16)',
+              },
+            ]}
             onPress={handleShareWhatsApp}
             accessibilityRole="button"
             accessibilityLabel="Share Daily Wisdom on WhatsApp"
             activeOpacity={0.8}
           >
-            <Ionicons name="logo-whatsapp" size={15} color="#075B49" />
-            <Text style={styles.shareBtnText}>Share</Text>
+            <Ionicons name="logo-whatsapp" size={15} color={colors.primary} />
+            <Text style={[styles.shareBtnText, { color: colors.primary }]}>Share</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -73,13 +107,11 @@ export function DailyWisdomCard({ arabic, translation, reference }: DailyWisdomC
 
 const styles = StyleSheet.create({
   cardContainer: {
-    backgroundColor: '#FCFBF7',
     borderRadius: 20,
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.md,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#EFECE2',
     ...SHADOWS.premiumCard,
   },
   artworkContainer: {
@@ -96,7 +128,6 @@ const styles = StyleSheet.create({
   },
   artworkOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FCFBF7',
     opacity: 0.1,
   },
   contentWrap: {
@@ -115,22 +146,25 @@ const styles = StyleSheet.create({
   },
   goldStar: {
     fontSize: 12,
-    color: '#C6A15B',
   },
   eyebrow: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#C6A15B',
     letterSpacing: 1.2,
   },
-  goldDividerSmall: {
-    height: 1,
-    width: 32,
-    backgroundColor: '#E7E4DA',
+  hadithLibBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  hadithLibText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   arabicText: {
     fontSize: 22,
-    color: '#17332C',
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 38,
@@ -140,7 +174,6 @@ const styles = StyleSheet.create({
   },
   translationText: {
     fontSize: 13.5,
-    color: '#5A6B65',
     textAlign: 'center',
     fontStyle: 'italic',
     lineHeight: 21,
@@ -153,28 +186,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#EFECE2',
   },
   referenceText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#C6A15B',
     letterSpacing: 0.4,
   },
   shareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(7, 91, 73, 0.08)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(7, 91, 73, 0.16)',
   },
   shareBtnText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#075B49',
   },
 });

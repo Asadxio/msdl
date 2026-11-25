@@ -16,6 +16,7 @@ import {
   Animated,
   Platform,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,25 +51,8 @@ import { db, functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { WHATSAPP_HELP_URL, MADRASA_WEBSITE_URL, isValidHttpsUrl, normalizeWhatsAppUrl, prepareExternalUrl } from '@/lib/links';
 
-// ─── MSLB Institutional Design System ───
-const THEME = {
-  primary: '#005F46',
-  primaryLight: '#0B6B53',
-  gold: '#C8A84E',
-  softGold: '#E8D9A8',
-  goldBg: '#FEF9EE',
-  goldBorder: '#F3E5BE',
-  background: '#F7F8F6',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F0F4F2',
-  textMain: '#12332A',
-  textMuted: '#60736B',
-  border: '#E2E8E4',
-  error: '#DC2626',
-  errorBg: '#FEF2F2',
-  success: '#10B981',
-  successBg: '#ECFDF5',
-};
+// ─── Consolidated Central Design System ───
+const THEME = COLORS;
 
 type AppSettings = {
   fees_amount: number;
@@ -362,6 +346,14 @@ const AboutMadrasaSection = React.memo(function AboutMadrasaSection({
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
+  const gridColumns = isTablet ? 4 : 2;
+  const GRID_GAP = 10;
+  // scrollContent has padding: 16 (16 on left, 16 on right = 32dp total horizontal offset)
+  const availableContentWidth = Math.max(0, windowWidth - 32);
+  const gridCardWidth = Math.floor((availableContentWidth - ((gridColumns - 1) * GRID_GAP)) / gridColumns);
+
   const { user, profile, signOut, updateProfileName } = useAuth();
   const { lessonProgress, courses, books } = useData();
   const router = useRouter();
@@ -1019,6 +1011,7 @@ export default function AboutScreen() {
           <TouchableOpacity
             style={styles.headerSettingBtn}
             onPress={() => safePush('/settings')}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             accessibilityRole="button"
             accessibilityLabel="Open Settings"
           >
@@ -1191,28 +1184,28 @@ export default function AboutScreen() {
 
                 <Text style={[styles.sectionSubtitleText, { marginTop: SPACING.md }]}>⚡ Executive Command Shortcuts</Text>
                 <View style={styles.statsGrid}>
-                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/(tabs)')} accessibilityRole="button" accessibilityLabel="Admin Dashboard Home">
+                  <TouchableOpacity style={[styles.statCardItem, { width: gridCardWidth }]} onPress={() => safePush('/(tabs)')} accessibilityRole="button" accessibilityLabel="Admin Dashboard Home">
                     <View style={[styles.statIconBox, { backgroundColor: '#EEF2FF' }]}>
                       <Ionicons name="speedometer-outline" size={20} color="#4F46E5" />
                     </View>
                     <Text style={styles.statCardValue}>Control Hub</Text>
                     <Text style={styles.statCardLabel}>Full Dashboard</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/organization-settings')} accessibilityRole="button" accessibilityLabel="Madrasa Settings">
+                  <TouchableOpacity style={[styles.statCardItem, { width: gridCardWidth }]} onPress={() => safePush('/admin/organization-settings')} accessibilityRole="button" accessibilityLabel="Madrasa Settings">
                     <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
                       <Ionicons name="business-outline" size={20} color="#10B981" />
                     </View>
                     <Text style={styles.statCardValue}>Settings</Text>
                     <Text style={styles.statCardLabel}>Bank, UPI & Profile</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/admin/send-push')} accessibilityRole="button" accessibilityLabel="Broadcast">
+                  <TouchableOpacity style={[styles.statCardItem, { width: gridCardWidth }]} onPress={() => safePush('/admin/send-push')} accessibilityRole="button" accessibilityLabel="Broadcast">
                     <View style={[styles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
                       <Ionicons name="megaphone-outline" size={20} color="#D97706" />
                     </View>
                     <Text style={styles.statCardValue}>Broadcast</Text>
                     <Text style={styles.statCardLabel}>Push Notifications</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.statCardItem} onPress={() => safePush('/fatawa/manage')} accessibilityRole="button" accessibilityLabel="Dar-ul-Iftaa">
+                  <TouchableOpacity style={[styles.statCardItem, { width: gridCardWidth }]} onPress={() => safePush('/fatawa/manage')} accessibilityRole="button" accessibilityLabel="Dar-ul-Iftaa">
                     <View style={[styles.statIconBox, { backgroundColor: '#F5F3FF' }]}>
                       <Ionicons name="ribbon-outline" size={20} color="#7C3AED" />
                     </View>
@@ -1228,7 +1221,7 @@ export default function AboutScreen() {
                   <Text style={styles.sectionSubtitleText}>📖 Teaching Workspace Overview</Text>
                   <View style={styles.statsGrid}>
                     <TouchableOpacity
-                      style={styles.statCardItem}
+                      style={[styles.statCardItem, { width: gridCardWidth }]}
                       onPress={() => safePush('/(tabs)/courses')}
                       accessibilityRole="button"
                       accessibilityLabel="My Courses"
@@ -1241,7 +1234,7 @@ export default function AboutScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.statCardItem}
+                      style={[styles.statCardItem, { width: gridCardWidth }]}
                       onPress={() => safePush('/live-class')}
                       accessibilityRole="button"
                       accessibilityLabel="Live Classes"
@@ -1254,7 +1247,7 @@ export default function AboutScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.statCardItem}
+                      style={[styles.statCardItem, { width: gridCardWidth }]}
                       onPress={() => safePush('/attendance')}
                       accessibilityRole="button"
                       accessibilityLabel="Attendance Log"
@@ -1267,7 +1260,7 @@ export default function AboutScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.statCardItem}
+                      style={[styles.statCardItem, { width: gridCardWidth }]}
                       onPress={() => safePush('/(tabs)/quiz')}
                       accessibilityRole="button"
                       accessibilityLabel="Submissions"
@@ -1285,28 +1278,28 @@ export default function AboutScreen() {
                 <View style={styles.statsSectionContainer}>
                   <Text style={styles.sectionSubtitleText}>📊 Institutional Curriculum Stats</Text>
                   <View style={styles.statsGrid}>
-                    <View style={styles.statCardItem}>
+                    <View style={[styles.statCardItem, { width: gridCardWidth }]}>
                       <View style={[styles.statIconBox, { backgroundColor: '#EEF2FF' }]}>
                         <Ionicons name="school-outline" size={20} color="#4F46E5" />
                       </View>
                       <Text style={styles.statCardValue}>{totalCoursesCount}</Text>
                       <Text style={styles.statCardLabel}>Total Courses</Text>
                     </View>
-                    <View style={styles.statCardItem}>
+                    <View style={[styles.statCardItem, { width: gridCardWidth }]}>
                       <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
                         <Ionicons name="checkmark-circle-outline" size={20} color="#10B981" />
                       </View>
                       <Text style={styles.statCardValue}>{lessonsCompletedCount}</Text>
                       <Text style={styles.statCardLabel}>Lessons Done</Text>
                     </View>
-                    <View style={styles.statCardItem}>
+                    <View style={[styles.statCardItem, { width: gridCardWidth }]}>
                       <View style={[styles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
                         <Ionicons name="help-circle-outline" size={20} color="#D97706" />
                       </View>
                       <Text style={styles.statCardValue}>{quizzesCompletedCount}</Text>
                       <Text style={styles.statCardLabel}>Quizzes Passed</Text>
                     </View>
-                    <View style={styles.statCardItem}>
+                    <View style={[styles.statCardItem, { width: gridCardWidth }]}>
                       <View style={[styles.statIconBox, { backgroundColor: '#F5F3FF' }]}>
                         <Ionicons name="library-outline" size={20} color="#7C3AED" />
                       </View>
@@ -1345,28 +1338,28 @@ export default function AboutScreen() {
                 <View style={styles.statsSectionContainer}>
                   <Text style={styles.sectionSubtitleText}>📊 Academic Performance</Text>
                   <View style={styles.statsGrid}>
-                    <View style={styles.statCardItem}>
+                    <View style={[styles.statCardItem, { width: gridCardWidth }]}>
                       <View style={[styles.statIconBox, { backgroundColor: '#EEF2FF' }]}>
                         <Ionicons name="book" size={20} color="#4F46E5" />
                       </View>
                       <Text style={styles.statCardValue}>{totalCoursesCount}</Text>
                       <Text style={styles.statCardLabel}>Courses</Text>
                     </View>
-                    <View style={styles.statCardItem}>
+                    <View style={[styles.statCardItem, { width: gridCardWidth }]}>
                       <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
                         <Ionicons name="checkmark-circle" size={20} color="#10B981" />
                       </View>
                       <Text style={styles.statCardValue}>{lessonsCompletedCount}</Text>
                       <Text style={styles.statCardLabel}>Lessons Done</Text>
                     </View>
-                    <View style={styles.statCardItem}>
+                    <View style={[styles.statCardItem, { width: gridCardWidth }]}>
                       <View style={[styles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
                         <Ionicons name="help-circle" size={20} color="#D97706" />
                       </View>
                       <Text style={styles.statCardValue}>{quizzesCompletedCount}</Text>
                       <Text style={styles.statCardLabel}>Quizzes Passed</Text>
                     </View>
-                    <View style={styles.statCardItem}>
+                    <View style={[styles.statCardItem, { width: gridCardWidth }]}>
                       <View style={[styles.statIconBox, { backgroundColor: '#F5F3FF' }]}>
                         <Ionicons name="library" size={20} color="#7C3AED" />
                       </View>
@@ -1411,7 +1404,7 @@ export default function AboutScreen() {
                 {isTeacher ? (
                   <>
                     <TouchableOpacity
-                      style={styles.quickActionCard}
+                      style={[styles.quickActionCard, { width: gridCardWidth }]}
                       onPress={() => safePush('/sabaq-diary')}
                       accessibilityRole="button"
                       accessibilityLabel="Sabaq Diary, Daily evaluations"
@@ -1420,13 +1413,13 @@ export default function AboutScreen() {
                         <Ionicons name="journal-outline" size={20} color="#047857" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Sabaq & Manzil</Text>
-                        <Text style={styles.quickActionSubText}>Daily Evaluation</Text>
+                        <Text style={styles.quickActionText} numberOfLines={2}>Sabaq & Manzil</Text>
+                        <Text style={styles.quickActionSubText} numberOfLines={2}>Daily Evaluation</Text>
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.quickActionCard}
+                      style={[styles.quickActionCard, { width: gridCardWidth }]}
                       onPress={() => safePush('/fatawa/manage')}
                       accessibilityRole="button"
                       accessibilityLabel="Dar-ul-Iftaa Scholar Q&A"
@@ -1435,13 +1428,13 @@ export default function AboutScreen() {
                         <Ionicons name="ribbon-outline" size={20} color="#D97706" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Dar-ul-Iftaa</Text>
-                        <Text style={styles.quickActionSubText}>Answer Questions</Text>
+                        <Text style={styles.quickActionText} numberOfLines={2}>Dar-ul-Iftaa</Text>
+                        <Text style={styles.quickActionSubText} numberOfLines={2}>Answer Questions</Text>
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.quickActionCard}
+                      style={[styles.quickActionCard, { width: gridCardWidth }]}
                       onPress={() => safePush('/(tabs)/library')}
                       accessibilityRole="button"
                       accessibilityLabel="Library, Islamic Books"
@@ -1450,13 +1443,13 @@ export default function AboutScreen() {
                         <Ionicons name="library-outline" size={20} color="#4F46E5" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Islamic Library</Text>
-                        <Text style={styles.quickActionSubText}>Reference Texts</Text>
+                        <Text style={styles.quickActionText} numberOfLines={2}>Islamic Library</Text>
+                        <Text style={styles.quickActionSubText} numberOfLines={2}>Reference Texts</Text>
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.quickActionCard}
+                      style={[styles.quickActionCard, { width: gridCardWidth }]}
                       onPress={() => safePush('/(tabs)/chats')}
                       accessibilityRole="button"
                       accessibilityLabel="Faculty Chat, Direct Messages"
@@ -1465,15 +1458,15 @@ export default function AboutScreen() {
                         <Ionicons name="chatbubbles-outline" size={20} color="#9333EA" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Faculty Chat</Text>
-                        <Text style={styles.quickActionSubText}>1-on-1 Messages</Text>
+                        <Text style={styles.quickActionText} numberOfLines={2}>Faculty Chat</Text>
+                        <Text style={styles.quickActionSubText} numberOfLines={2}>1-on-1 Messages</Text>
                       </View>
                     </TouchableOpacity>
                   </>
                 ) : (
                   <>
                     <TouchableOpacity
-                      style={styles.quickActionCard}
+                      style={[styles.quickActionCard, { width: gridCardWidth }]}
                       onPress={() => safePush('/(tabs)/courses')}
                       accessibilityRole="button"
                       accessibilityLabel="My Courses, Continue learning"
@@ -1482,13 +1475,13 @@ export default function AboutScreen() {
                         <Ionicons name="book-outline" size={20} color={THEME.primary} />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>My Courses</Text>
-                        <Text style={styles.quickActionSubText}>Study materials</Text>
+                        <Text style={styles.quickActionText} numberOfLines={2}>My Courses</Text>
+                        <Text style={styles.quickActionSubText} numberOfLines={2}>Study materials</Text>
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.quickActionCard}
+                      style={[styles.quickActionCard, { width: gridCardWidth }]}
                       onPress={() => safePush('/(tabs)/library')}
                       accessibilityRole="button"
                       accessibilityLabel="Library, Islamic Books"
@@ -1497,13 +1490,13 @@ export default function AboutScreen() {
                         <Ionicons name="library-outline" size={20} color="#4F46E5" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Library</Text>
-                        <Text style={styles.quickActionSubText}>Islamic Books</Text>
+                        <Text style={styles.quickActionText} numberOfLines={2}>Library</Text>
+                        <Text style={styles.quickActionSubText} numberOfLines={2}>Islamic Books</Text>
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.quickActionCard}
+                      style={[styles.quickActionCard, { width: gridCardWidth }]}
                       onPress={() => safePush('/(tabs)/quiz')}
                       accessibilityRole="button"
                       accessibilityLabel="Quiz History, View Results"
@@ -1512,13 +1505,13 @@ export default function AboutScreen() {
                         <Ionicons name="help-circle-outline" size={20} color="#7C3AED" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Quiz & Certificates</Text>
-                        <Text style={styles.quickActionSubText}>Test & Results</Text>
+                        <Text style={styles.quickActionText} numberOfLines={2}>Quiz & Certificates</Text>
+                        <Text style={styles.quickActionSubText} numberOfLines={2}>Test & Results</Text>
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.quickActionCard}
+                      style={[styles.quickActionCard, { width: gridCardWidth }]}
                       onPress={() => safePush('/(tabs)/certificate')}
                       accessibilityRole="button"
                       accessibilityLabel="Annual Result Sheet, Marksheet & Transcripts"
@@ -1527,8 +1520,8 @@ export default function AboutScreen() {
                         <Ionicons name="ribbon-outline" size={20} color="#D97706" />
                       </View>
                       <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionText}>Annual Results</Text>
-                        <Text style={styles.quickActionSubText}>کارکردگی رپورٹ</Text>
+                        <Text style={styles.quickActionText} numberOfLines={2}>Annual Results</Text>
+                        <Text style={styles.quickActionSubText} numberOfLines={2}>کارکردگی رپورٹ</Text>
                       </View>
                     </TouchableOpacity>
                   </>
@@ -1538,7 +1531,7 @@ export default function AboutScreen() {
               <Text style={styles.quickActionCategoryTitle}>Faith & Tools</Text>
               <View style={styles.quickActionsGrid}>
                 <TouchableOpacity
-                  style={styles.quickActionCard}
+                  style={[styles.quickActionCard, { width: gridCardWidth }]}
                   onPress={() => safePush('/prayer-times')}
                   accessibilityRole="button"
                   accessibilityLabel="Prayer Times, Today's Salah"
@@ -1547,13 +1540,13 @@ export default function AboutScreen() {
                     <Ionicons name="time-outline" size={20} color="#0284C7" />
                   </View>
                   <View style={styles.quickActionContent}>
-                    <Text style={styles.quickActionText}>Prayer Times</Text>
-                    <Text style={styles.quickActionSubText}>Salah Schedule</Text>
+                    <Text style={styles.quickActionText} numberOfLines={2}>Prayer Times</Text>
+                    <Text style={styles.quickActionSubText} numberOfLines={2}>Salah Schedule</Text>
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.quickActionCard}
+                  style={[styles.quickActionCard, { width: gridCardWidth }]}
                   onPress={() => safePush('/qibla')}
                   accessibilityRole="button"
                   accessibilityLabel="Qibla, Kaaba Direction"
@@ -1562,8 +1555,8 @@ export default function AboutScreen() {
                     <Ionicons name="compass-outline" size={20} color="#D97706" />
                   </View>
                   <View style={styles.quickActionContent}>
-                    <Text style={styles.quickActionText}>Qibla Finder</Text>
-                    <Text style={styles.quickActionSubText}>Kaaba Direction</Text>
+                    <Text style={styles.quickActionText} numberOfLines={2}>Qibla Finder</Text>
+                    <Text style={styles.quickActionSubText} numberOfLines={2}>Kaaba Direction</Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -1571,7 +1564,7 @@ export default function AboutScreen() {
               <Text style={styles.quickActionCategoryTitle}>{isTeacher ? 'Communication & Account' : 'Account & Services'}</Text>
               <View style={styles.quickActionsGrid}>
                 <TouchableOpacity
-                  style={styles.quickActionCard}
+                  style={[styles.quickActionCard, { width: gridCardWidth }]}
                   onPress={() => safePush('/(tabs)/notifications')}
                   accessibilityRole="button"
                   accessibilityLabel="Notifications, Recent updates"
@@ -1580,13 +1573,13 @@ export default function AboutScreen() {
                     <Ionicons name="notifications-outline" size={20} color="#4F46E5" />
                   </View>
                   <View style={styles.quickActionContent}>
-                    <Text style={styles.quickActionText}>Notifications</Text>
-                    <Text style={styles.quickActionSubText}>Announcements</Text>
+                    <Text style={styles.quickActionText} numberOfLines={2}>Notifications</Text>
+                    <Text style={styles.quickActionSubText} numberOfLines={2}>Announcements</Text>
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.quickActionCard, styles.logoutQuickActionCard]}
+                  style={[styles.quickActionCard, styles.logoutQuickActionCard, { width: gridCardWidth }]}
                   onPress={handleSignOutConfirm}
                   accessibilityRole="button"
                   accessibilityLabel="Logout, Sign out"
@@ -1595,8 +1588,8 @@ export default function AboutScreen() {
                     <Ionicons name="log-out-outline" size={20} color={THEME.error} />
                   </View>
                   <View style={styles.quickActionContent}>
-                    <Text style={[styles.quickActionText, { color: THEME.error }]}>Sign Out</Text>
-                    <Text style={[styles.quickActionSubText, { color: THEME.error + 'AA' }]}>End session</Text>
+                    <Text style={[styles.quickActionText, { color: THEME.error }]} numberOfLines={2}>Sign Out</Text>
+                    <Text style={[styles.quickActionSubText, { color: THEME.error + 'AA' }]} numberOfLines={2}>End session</Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -3253,11 +3246,9 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 10,
   },
   statCardItem: {
-    width: '48.5%',
     backgroundColor: THEME.surface,
     borderRadius: 16,
     padding: 14,
@@ -3368,11 +3359,9 @@ const styles = StyleSheet.create({
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 10,
   },
   quickActionCard: {
-    width: '48.5%',
     backgroundColor: THEME.surface,
     borderRadius: 16,
     padding: 12,
@@ -3411,10 +3400,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   logoutQuickActionCard: {
-    width: '100%',
     borderColor: '#FECACA',
     backgroundColor: THEME.errorBg,
-    marginTop: 4,
   },
 
   // Admin Card

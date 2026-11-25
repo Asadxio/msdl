@@ -6,11 +6,13 @@ on:
     branches: [ main, release/play-store-submission-v50 ]
     paths:
       - 'frontend/**'
+      - '.github/workflows/build-apk.yml'
 
 jobs:
   build-apk:
     name: Build Android Release APK
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -53,6 +55,20 @@ jobs:
         working-directory: frontend
         run: npx expo prebuild --platform android --clean
 
+      - name: Tune Gradle Memory & ABI Settings for CI Runner
+        working-directory: frontend/android
+        run: |
+          grep -v -E '^(org\.gradle\.jvmargs|org\.gradle\.parallel|org\.gradle\.workers\.max|reactNativeArchitectures)=' gradle.properties > gradle.properties.tmp
+          mv gradle.properties.tmp gradle.properties
+          {
+            echo ""
+            echo "# CI Runner stability tuning"
+            echo "org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseG1GC"
+            echo "org.gradle.parallel=false"
+            echo "org.gradle.workers.max=2"
+            echo "reactNativeArchitectures=arm64-v8a"
+          } >> gradle.properties
+
       - name: Cache Gradle Packages
         uses: actions/cache@v4
         with:
@@ -69,7 +85,7 @@ jobs:
 
       - name: Build Release APK
         working-directory: frontend/android
-        run: ./gradlew assembleRelease --no-daemon -x lint -x test
+        run: ./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a -x lint -x test -x lintVitalAnalyzeRelease -x lintVitalReportRelease -x lintVitalRelease
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4

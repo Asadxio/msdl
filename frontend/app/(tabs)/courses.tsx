@@ -2,7 +2,7 @@ import { ScreenRefreshControl } from "@/components/ui";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import React, { memo, useMemo, useRef, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Image, StatusBar, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, FlatList, Image, StatusBar, TouchableOpacity, TextInput, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,7 +14,7 @@ import { EmptyState, FadeInView, ScalePressable } from '@/components/ui';
 import { getPerformanceState, registerPerformanceSurface, trackPerformanceMetric } from '@/lib/performanceEngine';
 
 
-const CourseCard = memo(function CourseCard({ course, index }: { course: Course; index: number }) {
+const CourseCard = memo(function CourseCard({ course, index, cardWidth }: { course: Course; index: number; cardWidth?: number }) {
   const router = useRouter();
   const { getCourseProgress, isEnrolledInCourse } = useData();
   const { profile } = useAuth();
@@ -49,7 +49,7 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
 
   return (
     <ScalePressable
-      style={styles.card}
+      style={[styles.card, cardWidth ? { width: cardWidth } : null]}
       testID={`course-card-${course.id}`}
       onPress={handlePress}
       accessible={true}
@@ -108,6 +108,16 @@ const CourseCard = memo(function CourseCard({ course, index }: { course: Course;
 });
 
 export default function CoursesScreen() {
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 600;
+  const numColumns = isTablet ? 2 : 1;
+  const listGap = SPACING.lg;
+  const horizontalPadding = SPACING.lg * 2;
+  const availableWidth = Math.max(0, windowWidth - horizontalPadding);
+  const cardWidth = isTablet
+    ? Math.floor((availableWidth - ((numColumns - 1) * listGap)) / numColumns)
+    : undefined;
+
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     if (refetch) await refetch();
   });
@@ -235,7 +245,7 @@ export default function CoursesScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>{headerTitleText}</Text>
           </View>
-          <TouchableOpacity style={styles.refreshBtn} onPress={refetch} accessible={true} accessibilityRole="button" accessibilityLabel="Refresh courses">
+          <TouchableOpacity style={styles.refreshBtn} onPress={refetch} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} accessible={true} accessibilityRole="button" accessibilityLabel="Refresh courses">
             <Ionicons name="refresh-outline" size={14} color={COLORS.primary} />
             <Text style={styles.refreshText}>Refresh</Text>
           </TouchableOpacity>
@@ -311,7 +321,7 @@ export default function CoursesScreen() {
             autoCorrect={false}
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={handleClearSearch} style={styles.clearBtn} accessible={true} accessibilityRole="button" accessibilityLabel="Clear search">
+            <TouchableOpacity onPress={handleClearSearch} style={styles.clearBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessible={true} accessibilityRole="button" accessibilityLabel="Clear search">
               <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
           )}
@@ -357,14 +367,17 @@ export default function CoursesScreen() {
         />
       ) : (
         <FlatList
+          key={`courses-grid-${numColumns}`}
           data={filteredCourses}
+          numColumns={numColumns}
+          columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
           refreshControl={<ScreenRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item, index }) => <CourseCard course={item} index={index} />}
+          renderItem={({ item, index }) => <CourseCard course={item} index={index} cardWidth={cardWidth} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={5}
-          maxToRenderPerBatch={6}
+          initialNumToRender={isTablet ? 8 : 5}
+          maxToRenderPerBatch={isTablet ? 8 : 6}
           updateCellsBatchingPeriod={40}
           windowSize={5}
           removeClippedSubviews
@@ -474,6 +487,7 @@ const styles = StyleSheet.create({
   teacherChipText: { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
   teacherChipTextSelected: { color: COLORS.surface, fontWeight: '700' },
   listContent: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg, gap: SPACING.lg },
+  columnWrapper: { gap: SPACING.lg },
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
@@ -551,8 +565,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 8,
+    minHeight: 48,
     borderRadius: RADIUS.full,
     gap: 6,
   },

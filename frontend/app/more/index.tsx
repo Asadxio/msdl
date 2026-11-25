@@ -1,7 +1,7 @@
 import { ScreenRefreshControl, ScalePressable } from '@/components/ui';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,6 +59,21 @@ const QUICK_ACTIONS: QuickAction[] = [
 /* ─────────────────────────────── Menu Sections ─────────────────────────── */
 
 const MENU_SECTIONS: MenuSection[] = [
+  {
+    title: 'Islamic Knowledge & Worship',
+    emoji: '🕌',
+    colorBg: '#ECFDF5',
+    colorIcon: '#059669',
+    items: [
+      { label: 'Hadith Library (Kutub as-Sittah)', subtitle: 'Bukhari, Muslim, Abu Dawud, Tirmidhi & more with Urdu/Eng', icon: 'library-outline', route: '/hadith', colorBg: '#ECFDF5', colorIcon: '#059669' },
+      { label: 'Duas & Azkar (Hisn al-Muslim)', subtitle: 'Masnoon supplications with repeat counter & authentic citations', icon: 'book-outline', route: '/duas', colorBg: '#FEF3C7', colorIcon: '#D97706' },
+      { label: 'Asma-ul-Husna (99 Names)', subtitle: '99 Beautiful Names of Allah, meanings, reflections & audio', icon: 'sparkles-outline', route: '/asma-ul-husna', colorBg: '#F0FDF4', colorIcon: '#16A34A' },
+      { label: 'Salah Guide & Step Player', subtitle: "Step-by-step visual & audio prayer tutorial (Hanafi & Shafi'i)", icon: 'body-outline', route: '/salah-guide', colorBg: '#EEF2FF', colorIcon: '#4F46E5' },
+      { label: 'Six Kalmas (6 Foundations)', subtitle: 'Arabic text, transliteration, Urdu & English meanings', icon: 'shield-checkmark-outline', route: '/six-kalmas', colorBg: '#ECFDF5', colorIcon: '#059669' },
+      { label: 'Zakat & Nisab Calculator', subtitle: 'Gold & Silver Nisab threshold calculator at 2.5%', icon: 'calculator-outline', route: '/zakat', colorBg: '#FEF3C7', colorIcon: '#D97706' },
+      { label: 'Azaan & Prayer Audio', subtitle: 'Makkah, Madinah, Al-Aqsa & Alafasy Azaans & prayer alerts', icon: 'mic-outline', route: '/azaan-audio', colorBg: '#FFF7ED', colorIcon: '#EA580C' },
+    ]
+  },
   {
     title: 'Learning',
     emoji: '📚',
@@ -126,6 +141,7 @@ const MENU_SECTIONS: MenuSection[] = [
       { label: 'Live Telemetry & Errors', subtitle: 'Real-time crash & error stream', icon: 'pulse-outline', route: '/admin/telemetry', colorBg: '#FEF2F2', colorIcon: '#DC2626' },
       { label: 'Privacy Requests', subtitle: 'Review user data requests', icon: 'document-lock-outline', route: '/admin/privacy-requests' },
       { label: 'Send Push Notifications', subtitle: 'Broadcast messages to users', icon: 'notifications-outline', route: '/admin/send-push' },
+      { label: 'Islamic Content Console', subtitle: 'Review & audit Hadiths, Duas, audio & cache', icon: 'shield-checkmark-outline', route: '/admin/islamic-content', colorBg: '#ECFDF5', colorIcon: '#059669' },
     ]
   }
 ];
@@ -134,6 +150,20 @@ const MENU_SECTIONS: MenuSection[] = [
 
 export default function MoreLandingScreen() {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
+  const availableContentWidth = Math.max(0, windowWidth - 32); // content has paddingHorizontal: 16 (32dp total)
+
+  // Stats Grid: 2 columns on mobile, 4 columns on tablet
+  const statCols = isTablet ? 4 : 2;
+  const statGap = 12;
+  const statCardWidth = Math.floor((availableContentWidth - ((statCols - 1) * statGap)) / statCols);
+
+  // Quick Actions Grid: 4 columns on mobile & tablet => balanced 4 x 2 grid for 8 services
+  const quickCols = 4;
+  const quickGap = 10;
+  const quickItemWidth = Math.floor((availableContentWidth - ((quickCols - 1) * quickGap)) / quickCols);
+
   const { activeOrg } = useActiveOrganization();
   const insets = useSafeAreaInsets();
   const { profile, user } = useAuth();
@@ -212,7 +242,7 @@ export default function MoreLandingScreen() {
 
       {/* ─── Stats Card ─── */}
       <View style={styles.statsGrid}>
-        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Courses Available: ${totalCourses}`}>
+        <ScalePressable style={[styles.statCard, { width: statCardWidth }]} accessibilityRole="summary" accessibilityLabel={`Courses Available: ${totalCourses}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#EEF2FF' }]}>
             <Ionicons name="book" size={22} color="#4F46E5" />
           </View>
@@ -221,7 +251,7 @@ export default function MoreLandingScreen() {
             <Text style={styles.statLabel} numberOfLines={1}>Courses</Text>
           </View>
         </ScalePressable>
-        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Lessons Done: ${lessonsCompleted}`}>
+        <ScalePressable style={[styles.statCard, { width: statCardWidth }]} accessibilityRole="summary" accessibilityLabel={`Lessons Done: ${lessonsCompleted}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#ECFDF5' }]}>
             <Ionicons name="checkmark-circle" size={22} color="#10B981" />
           </View>
@@ -230,7 +260,7 @@ export default function MoreLandingScreen() {
             <Text style={styles.statLabel} numberOfLines={1}>Lessons</Text>
           </View>
         </ScalePressable>
-        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Quizzes Done: ${quizzesCompleted}`}>
+        <ScalePressable style={[styles.statCard, { width: statCardWidth }]} accessibilityRole="summary" accessibilityLabel={`Quizzes Done: ${quizzesCompleted}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#FEF3C7' }]}>
             <Ionicons name="help-circle" size={22} color="#D97706" />
           </View>
@@ -239,7 +269,7 @@ export default function MoreLandingScreen() {
             <Text style={styles.statLabel} numberOfLines={1}>Quizzes</Text>
           </View>
         </ScalePressable>
-        <ScalePressable style={styles.statCard} accessibilityRole="summary" accessibilityLabel={`Library Books: ${totalBooks}`}>
+        <ScalePressable style={[styles.statCard, { width: statCardWidth }]} accessibilityRole="summary" accessibilityLabel={`Library Books: ${totalBooks}`}>
           <View style={[styles.statIconContainer, { backgroundColor: '#F5F3FF' }]}>
             <Ionicons name="library" size={22} color="#7C3AED" />
           </View>
@@ -257,7 +287,7 @@ export default function MoreLandingScreen() {
           {QUICK_ACTIONS.map((action) => (
             <ScalePressable
               key={action.label}
-              style={styles.quickItem}
+              style={[styles.quickItem, { width: quickItemWidth }]}
               onPress={() => router.push(action.route as any)}
               accessibilityRole="button"
               accessibilityLabel={action.label}
@@ -265,7 +295,7 @@ export default function MoreLandingScreen() {
               <View style={[styles.quickIconContainer, { backgroundColor: action.bg }]}>
                 <Ionicons name={action.icon} size={24} color={action.fg} />
               </View>
-              <Text style={styles.quickLabel} numberOfLines={1}>{action.label}</Text>
+              <Text style={styles.quickLabel} numberOfLines={2}>{action.label}</Text>
             </ScalePressable>
           ))}
         </View>
@@ -478,8 +508,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   statCard: {
-    flexBasis: '48%',
-    flexGrow: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingVertical: 14,
@@ -519,8 +547,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   quickItem: {
-    flexBasis: '22%',
-    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,

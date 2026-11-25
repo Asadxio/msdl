@@ -12,6 +12,7 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -35,10 +36,15 @@ import {
 import { generateAiFlashcards } from '@/lib/aiFlashcardGenerator';
 import { goBackOrReplace } from '@/lib/navigation';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH - 40;
+const DEFAULT_CARD_MAX_WIDTH = 520;
 
 export default function FlashcardsScreen() {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isTablet = windowWidth >= 600;
+  const cardWidth = useMemo(() => {
+    return Math.min(DEFAULT_CARD_MAX_WIDTH, Math.max(0, windowWidth - 32));
+  }, [windowWidth]);
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -119,7 +125,7 @@ export default function FlashcardsScreen() {
 
   // Swipe gesture interpolations
   const rotateCard = pan.x.interpolate({
-    inputRange: [-SCREEN_WIDTH * 1.5, 0, SCREEN_WIDTH * 1.5],
+    inputRange: [-windowWidth * 1.5, 0, windowWidth * 1.5],
     outputRange: ['-25deg', '0deg', '25deg'],
     extrapolate: 'clamp',
   });
@@ -147,7 +153,7 @@ export default function FlashcardsScreen() {
   // 10.3 Card Swipe Completion Handlers
   const handleSwipeComplete = (direction: 'right' | 'left') => {
     const card = cards[currentIndex];
-    const toX = direction === 'right' ? SCREEN_WIDTH + 80 : -SCREEN_WIDTH - 80;
+    const toX = direction === 'right' ? windowWidth + 80 : -windowWidth - 80;
 
     Animated.timing(pan, {
       toValue: { x: toX, y: 0 },
@@ -359,14 +365,16 @@ export default function FlashcardsScreen() {
 
       {/* Progress Bar Banner */}
       <View style={styles.progressBanner}>
-        <View style={styles.progressInfoRow}>
-          <Text style={styles.progressText}>
-            Mastered: <Text style={styles.progressBold}>{masteredInActiveDeck} / {cards.length}</Text>
-          </Text>
-          <Text style={styles.progressPercent}>{Math.round(progressPercent)}% Done</Text>
-        </View>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+        <View style={isTablet ? { maxWidth: DEFAULT_CARD_MAX_WIDTH, width: '100%', alignSelf: 'center' } : undefined}>
+          <View style={styles.progressInfoRow}>
+            <Text style={styles.progressText}>
+              Mastered: <Text style={styles.progressBold}>{masteredInActiveDeck} / {cards.length}</Text>
+            </Text>
+            <Text style={styles.progressPercent}>{Math.round(progressPercent)}% Done</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+          </View>
         </View>
       </View>
 
@@ -378,6 +386,10 @@ export default function FlashcardsScreen() {
             style={[
               styles.touchArea,
               {
+                width: cardWidth,
+                maxWidth: DEFAULT_CARD_MAX_WIDTH,
+                maxHeight: isTablet ? 620 : undefined,
+                alignSelf: 'center',
                 transform: [
                   { translateX: pan.x },
                   { translateY: pan.y },
@@ -533,7 +545,17 @@ export default function FlashcardsScreen() {
       </View>
 
       {/* Bottom Controls */}
-      <View style={[styles.controlsRow, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View
+        style={[
+          styles.controlsRow,
+          {
+            paddingBottom: Math.max(insets.bottom, 16),
+            maxWidth: isTablet ? DEFAULT_CARD_MAX_WIDTH : undefined,
+            width: '100%',
+            alignSelf: 'center',
+          },
+        ]}
+      >
         <TouchableOpacity
           style={[styles.navBtn, currentIndex === 0 && styles.navBtnDisabled]}
           onPress={handlePrev}
@@ -756,7 +778,7 @@ const styles = StyleSheet.create({
     marginVertical: SPACING.sm,
   },
   touchArea: {
-    width: CARD_WIDTH,
+    width: '100%',
     height: '92%',
   },
   card: {
@@ -841,6 +863,7 @@ const styles = StyleSheet.create({
     color: '#003D2E',
     textAlign: 'center',
     lineHeight: 36,
+    writingDirection: 'rtl',
     fontFamily: Platform.select({ ios: 'Geeza Pro', default: 'sans-serif' }),
   },
   frontSubtitleText: {
@@ -957,9 +980,11 @@ const styles = StyleSheet.create({
   },
   backTranslationText: {
     fontSize: 14,
-    lineHeight: 23,
+    lineHeight: 26,
     color: '#0F172A',
     fontWeight: '700',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   backEnglishText: {
     fontSize: 13,
@@ -1151,6 +1176,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.xxl,
     padding: SPACING.lg,
     gap: 14,
+    maxWidth: 540,
+    width: '100%',
+    alignSelf: 'center',
     ...SHADOWS.card,
   },
   modalHeader: {

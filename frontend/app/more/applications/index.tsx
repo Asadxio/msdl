@@ -13,6 +13,13 @@ type AppItem = { label: string; subtitle: string; icon: keyof typeof Ionicons.gl
 
 const APPLICATION_ITEMS: AppItem[] = [
   { label: 'Islamic Dashboard', subtitle: 'Complete prayer, Hijri, location, and Qibla overview', icon: 'grid-outline', route: '/more/applications/islamic-dashboard', featured: true },
+  { label: 'Hadith Library (Kutub as-Sittah)', subtitle: 'Bukhari, Muslim, Abu Dawud, Tirmidhi & more', icon: 'library-outline', route: '/hadith' },
+  { label: 'Duas & Azkar (Hisn al-Muslim)', subtitle: 'Masnoon supplications with repeat counter', icon: 'book-outline', route: '/duas' },
+  { label: 'Asma-ul-Husna (99 Names)', subtitle: '99 Beautiful Names of Allah, meanings & audio', icon: 'sparkles-outline', route: '/asma-ul-husna' },
+  { label: 'Six Kalmas', subtitle: 'Core declarations of faith with Arabic & translations', icon: 'shield-checkmark-outline', route: '/six-kalmas' },
+  { label: 'Zakat Calculator', subtitle: 'Gold & Silver Nisab and 2.5% Zakat calculation', icon: 'calculator-outline', route: '/zakat' },
+  { label: 'Salah Guide & Step Player', subtitle: 'Step-by-step visual & audio prayer guide', icon: 'body-outline', route: '/salah-guide' },
+  { label: 'Azaan & Prayer Audio', subtitle: 'Makkah, Madinah, Al-Aqsa & Alafasy Azaans', icon: 'mic-outline', route: '/azaan-audio' },
   { label: 'The Holy Quran (Roman Urdu)', subtitle: 'Read, Khatam & Hifz tracker in Roman Urdu', icon: 'book-outline', route: '/quran' },
   { label: 'Smart Tasbeeh', subtitle: 'Digital smart dhikr counter and bead vibration', icon: 'finger-print-outline', route: '/tasbeeh' },
   { label: 'Taharat & Purity Tracker', subtitle: 'Private Islamic purity, cycle & habit tracker', icon: 'heart-outline', route: '/taharat-tracker' },

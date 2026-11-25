@@ -53,6 +53,16 @@ export const ROUTES = {
     fatawa: '/fatawa' as Href,
     fatwaDetail: (id: string): Href => `/fatawa/${encodeURIComponent(id)}` as Href,
     fatawaManage: '/fatawa/manage' as Href,
+    hadith: '/hadith' as Href,
+    hadithBook: (book: string): Href => `/hadith/${encodeURIComponent(book)}` as Href,
+    duas: '/duas' as Href,
+    duasCategory: (category: string): Href => `/duas/${encodeURIComponent(category)}` as Href,
+    asmaUlHusna: '/asma-ul-husna' as Href,
+    asmaDetail: (id: number): Href => `/asma-ul-husna/${id}` as Href,
+    salahGuide: '/salah-guide' as Href,
+    azaanAudio: '/azaan-audio' as Href,
+    sixKalmas: '/six-kalmas' as Href,
+    zakat: '/zakat' as Href,
   },
 
   // Admin Routes (Explicitly partitioned)
@@ -71,6 +81,7 @@ export const ROUTES = {
     manageQuizzes: '/admin/manage-quizzes' as Href,
     sendPush: '/admin/send-push' as Href,
     addBook: '/admin/add-book' as Href,
+    islamicContent: '/admin/islamic-content' as Href,
   },
 
   // Auth Routes
