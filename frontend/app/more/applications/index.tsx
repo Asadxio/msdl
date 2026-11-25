@@ -24,6 +24,12 @@ const APPLICATION_ITEMS: AppItem[] = [
   { label: 'Smart Tasbeeh', subtitle: 'Digital smart dhikr counter and bead vibration', icon: 'finger-print-outline', route: '/tasbeeh' },
   { label: 'Taharat & Purity Tracker', subtitle: 'Private Islamic purity, cycle & habit tracker', icon: 'heart-outline', route: '/taharat-tracker' },
   { label: 'Islamic Calendar', subtitle: 'Hijri date and Islamic calendar view', icon: 'calendar-number-outline', route: '/islamic-calendar' },
+  { label: 'Live Islamic Radio', subtitle: '24/7 Haramain, Urdu translation & Qari audio streams', icon: 'radio-outline', route: '/islamic-radio' },
+  { label: 'Nearby Masjids & Halal Compass', subtitle: 'Locate nearby mosques & halal spots with directions', icon: 'location-outline', route: '/nearby-masjids' },
+  { label: 'Asma-un-Nabi (ﷺ) & Seerah Timeline', subtitle: '99 Blessed Names of Prophet ﷺ & Makki/Madani timeline', icon: 'star-outline', route: '/asma-un-nabi' },
+  { label: 'Muhasabah & Sadaqah Journal', subtitle: 'Daily spiritual accountability & charity tracker', icon: 'heart-circle-outline', route: '/muhasabah' },
+  { label: 'Wirasat (Mirath) Inheritance Guide', subtitle: 'Qur’anic inheritance share calculator & rules', icon: 'pie-chart-outline', route: '/wirasat' },
+  { label: 'Umrah & Hajj Guide + Tawaf Counter', subtitle: 'Makkah/Madinah rituals & 7-round Tawaf/Sa’i counter', icon: 'cube-outline', route: '/umrah-hajj' },
   { label: 'Qibla Finder', subtitle: 'Camera Qibla & Compass Direction', icon: 'compass-outline', route: '/qibla' },
   { label: 'Prayer Times', subtitle: 'Daily prayer schedule and countdown', icon: 'time-outline', route: '/prayer-times' },
 ];

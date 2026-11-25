@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import {
+  EXTENDED_HADITH_BOOKS,
   HADITH_BOOKS,
   getHadithBookmarks,
   getRecentHadiths,
@@ -262,6 +263,53 @@ export default function HadithLibraryIndexScreen() {
                     <View style={styles.statChip}>
                       <Ionicons name="folder-open-outline" size={13} color={COLORS.gold} />
                       <Text style={styles.statChipText}>{book.totalChapters} Chapters</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={COLORS.primary} style={{ marginLeft: 'auto' }} />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* ─── 40 Hadith Special Collections ─── */}
+          <View style={styles.extHeaderRow}>
+            <Ionicons name="star" size={18} color={COLORS.gold} />
+            <Text style={styles.extSectionTitle}>40 Hadith Special Collections (چالیس احادیث)</Text>
+          </View>
+
+          <View style={[styles.booksGrid, isTablet && styles.booksGridTablet]}>
+            {EXTENDED_HADITH_BOOKS.map((book) => (
+              <TouchableOpacity
+                key={book.id}
+                style={[styles.bookCard, isTablet && styles.bookCardTablet]}
+                onPress={() => openBook(book.id)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`${book.titleEnglish}. ${book.totalHadith} hadiths.`}
+              >
+                <View style={[styles.bookIconBadge, { backgroundColor: book.colorBg }]}>
+                  <Ionicons name="bookmarks" size={24} color={book.colorFg} />
+                </View>
+
+                <View style={styles.bookDetails}>
+                  <View style={styles.bookTitleRow}>
+                    <Text style={styles.bookTitleEn}>{book.titleEnglish}</Text>
+                    <Text style={styles.bookTitleAr}>{book.titleArabic}</Text>
+                  </View>
+                  <Text style={styles.bookTitleUr}>{book.titleUrdu}</Text>
+                  <Text style={styles.bookAuthor}>{book.author}</Text>
+                  <Text style={styles.bookDesc} numberOfLines={2}>
+                    {book.descriptionUr}
+                  </Text>
+
+                  <View style={styles.bookFooter}>
+                    <View style={styles.statChip}>
+                      <Ionicons name="document-text-outline" size={13} color={COLORS.primary} />
+                      <Text style={styles.statChipText}>{book.totalHadith} Hadiths</Text>
+                    </View>
+                    <View style={styles.statChip}>
+                      <Ionicons name="sparkles-outline" size={13} color={COLORS.gold} />
+                      <Text style={styles.statChipText}>Arba'een</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={COLORS.primary} style={{ marginLeft: 'auto' }} />
                   </View>
@@ -635,5 +683,17 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
     paddingHorizontal: 30,
+  },
+  extHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  extSectionTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: COLORS.primary,
   },
 });

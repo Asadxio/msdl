@@ -243,8 +243,8 @@ export function GlobalAudioMiniPlayer() {
                 <Text style={[styles.timeText, { color: colors.textSecondary }]}>
                   {formatTime(positionMs)}
                 </Text>
-                <Text style={[styles.timeText, { color: colors.textSecondary }]}>
-                  {formatTime(durationMs)}
+                <Text style={[styles.timeText, { color: durationMs > 0 ? colors.textSecondary : colors.gold }]}>
+                  {durationMs > 0 ? formatTime(durationMs) : currentTrack.id?.includes('radio') ? '● LIVE' : '--:--'}
                 </Text>
               </View>
             </View>

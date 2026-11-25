@@ -63,6 +63,12 @@ export const ROUTES = {
     azaanAudio: '/azaan-audio' as Href,
     sixKalmas: '/six-kalmas' as Href,
     zakat: '/zakat' as Href,
+    islamicRadio: '/islamic-radio' as Href,
+    nearbyMasjids: '/nearby-masjids' as Href,
+    asmaUnNabi: '/asma-un-nabi' as Href,
+    muhasabah: '/muhasabah' as Href,
+    wirasat: '/wirasat' as Href,
+    umrahHajj: '/umrah-hajj' as Href,
   },
 
   // Admin Routes (Explicitly partitioned)

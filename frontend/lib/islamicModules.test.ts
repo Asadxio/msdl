@@ -160,6 +160,21 @@ describe('SUFFAH Islamic Knowledge Modules Architecture', () => {
       const recents = await getRecentHadiths();
       expect(recents.some((r) => r.hadithId === hadithItem.id)).toBe(true);
     });
+
+    it('provides extended 40 Hadith collections (Nawawi, Qudsi, Dehlawi) cleanly alongside Kutub as-Sittah', async () => {
+      const { getExtendedHadithBooks } = require('./hadithService');
+      const extBooks = getExtendedHadithBooks();
+      expect(extBooks).toHaveLength(3);
+      const extIds = extBooks.map((b: any) => b.id);
+      expect(extIds).toContain('nawawi');
+      expect(extIds).toContain('qudsi');
+      expect(extIds).toContain('dehlawi');
+
+      const nawawi = getHadithBook('nawawi');
+      expect(nawawi?.titleEnglish).toContain('Nawawi');
+      const chapters = await getHadithChapters('nawawi');
+      expect(chapters).toHaveLength(1);
+    });
   });
 
   /* ─────────────────────────────────────────────────────────── */

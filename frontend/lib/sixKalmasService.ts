@@ -1,6 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SUFFAH — Six Kalmas (Kalimat) Service & Authentic Multilingual Texts
-// Includes fully diacritized Arabic, transliteration, English, Urdu & Hadith context.
+// Includes fully diacritized Arabic, transliteration, English, Urdu, verified
+// recitation audio, and Kids / Memorization phrase-chunking helpers.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface KalmaEntry {
@@ -16,7 +19,10 @@ export interface KalmaEntry {
   englishTranslation: string;
   urduTranslation: string;
   significance: string;
+  audioUrl: string;
 }
+
+const MEMORIZED_KALMAS_KEY = '@suffah_kalmas_memorized_v1';
 
 export const SIX_KALMAS: readonly KalmaEntry[] = [
   {
@@ -34,6 +40,7 @@ export const SIX_KALMAS: readonly KalmaEntry[] = [
     urduTranslation: 'اللہ کے سوا کوئی معبود نہیں، محمد (ﷺ) اللہ کے رسول ہیں۔',
     significance:
       'The foundational declaration of Islamic faith (Kalimat al-Tayyibah), uniting absolute monotheism (Tawheed) with acceptance of the final Prophethood of Muhammad (ﷺ).',
+    audioUrl: 'https://archive.org/download/kalma_5/kalma_1.mp3',
   },
   {
     id: 'kalma-2',
@@ -53,6 +60,7 @@ export const SIX_KALMAS: readonly KalmaEntry[] = [
       'میں گواہی دیتا/دیتی ہوں کہ اللہ کے سوا کوئی معبود نہیں، وہ اکیلا ہے اس کا کوئی شریک نہیں، اور میں گواہی دیتا/دیتی ہوں کہ محمد (ﷺ) اس کے بندے اور رسول ہیں۔',
     significance:
       'The explicit testimony of faith recited in every Tashahhud of daily prayer and upon embracing Islam, affirmed in Sahih al-Bukhari and Sahih Muslim.',
+    audioUrl: 'https://archive.org/download/kalma_5/kalma_2.mp3',
   },
   {
     id: 'kalma-3',
@@ -72,6 +80,7 @@ export const SIX_KALMAS: readonly KalmaEntry[] = [
       'اللہ پاک ہے، اور تمام تعریفیں اللہ ہی کے لیے ہیں، اور اللہ کے سوا کوئی معبود نہیں، اور اللہ سب سے بڑا ہے، اور گناہ سے بچنے کی طاقت اور نیکی کرنے کی قوت صرف اللہ ہی کی طرف سے ہے جو بلند و عظیم ہے۔',
     significance:
       'Combines the four most beloved phrases to Allah (SubhanAllah, Alhamdulillah, La ilaha illallah, Allahu Akbar) with Hawqalah—a treasure from the treasures of Paradise (Sahih al-Bukhari & Muslim).',
+    audioUrl: 'https://archive.org/download/kalma_5/kalma_3.mp3',
   },
   {
     id: 'kalma-4',
@@ -91,6 +100,7 @@ export const SIX_KALMAS: readonly KalmaEntry[] = [
       'اللہ کے سوا کوئی معبود نہیں، وہ اکیلا ہے اس کا کوئی شریک نہیں، اسی کی بادشاہی ہے اور اسی کے لیے تمام تعریفیں ہیں، وہی زندہ کرتا ہے اور وہی مارتا ہے، اور وہ ہمیشہ زندہ رہنے والا ہے جسے کبھی موت نہیں آئے گی، عظمت اور بزرگی والا ہے، اسی کے ہاتھ میں تمام بھلائی ہے، اور وہ ہر چیز پر قادر ہے۔',
     significance:
       'Affirms Allah’s absolute sovereignty over life, death, creation, and every good. Narrations in Jami’ al-Tirmidhi highlight immense reward for reciting phrases of Tawheed upon entering markets or morning/evening remembrance.',
+    audioUrl: 'https://archive.org/download/kalma_5/kalma_4.mp3',
   },
   {
     id: 'kalma-5',
@@ -110,6 +120,7 @@ export const SIX_KALMAS: readonly KalmaEntry[] = [
       'میں اپنے رب اللہ سے ہر اس گناہ کی معافی مانگتا/مانگتی ہوں جو میں نے جان بوجھ کر یا بھول چوک سے، چھپ کر یا کھلم کھلا کیا ہو، اور میں اس کی بارگاہ میں توبہ کرتا/کرتی ہوں اس گناہ سے جسے میں جانتا/جانتی ہوں اور اس گناہ سے بھی جسے میں نہیں جانتا/جانتی۔ بے شک تو غیبوں کا خوب جاننے والا، عیبوں کا چھپانے والا اور گناہوں کو بخشنے والا ہے، اور گناہ سے بچنے کی طاقت اور نیکی کرنے کی قوت صرف اللہ ہی کی طرف سے ہے جو بلند و عظیم ہے۔',
     significance:
       'A comprehensive supplication of Tawbah (repentance), seeking forgiveness for intentional, unintentional, hidden, and public shortcomings while recognizing Allah as Al-Ghaffar and As-Sattar.',
+    audioUrl: 'https://archive.org/download/kalma_5/kalma_5.mp3',
   },
   {
     id: 'kalma-6',
@@ -129,6 +140,7 @@ export const SIX_KALMAS: readonly KalmaEntry[] = [
       'اے اللہ! میں تیری پناہ مانگتا/مانگتی ہوں اس بات سے کہ میں جانتے بوجھتے تیرے ساتھ کسی چیز کو شریک ٹھہراؤں، اور میں تجھ سے معافی مانگتا/مانگتی ہوں اس سے جسے میں نہیں جانتا/جانتی۔ میں نے اس سے توبہ کی اور میں بیزار ہوا/ہوئی کفر، شرک، جھوٹ، غیبت، بدعت، چغل خوری، بے حیائی، بہتان اور تمام گناہوں سے، اور میں اسلام لایا/لائی اور کہتا/کہتی ہوں: اللہ کے سوا کوئی معبود نہیں، محمد (ﷺ) اللہ کے رسول ہیں۔',
     significance:
       'Opens with the prophetic refuge prayer against conscious and hidden Shirk (Al-Adab al-Mufrad / Musnad Ahmad), followed by an explicit pledge renewing devotion to sincerity and upright conduct.',
+    audioUrl: 'https://archive.org/download/kalma_5/kalma_6.mp3',
   },
 ];
 
@@ -150,4 +162,40 @@ export function searchKalmas(query: string): KalmaEntry[] {
       k.urduTitle.includes(query.trim()) ||
       k.arabicText.includes(query.trim())
   );
+}
+
+/**
+ * Splits Arabic Kalma text along punctuation/pauses into bite-sized chunks for Kids Memorization Mode.
+ */
+export function getKalmaChunks(arabicText: string): string[] {
+  const parts = arabicText
+    .split(/([،:])/)
+    .reduce<string[]>((acc, token, idx, arr) => {
+      if (token === '،' || token === ':') return acc;
+      const next = arr[idx + 1];
+      const combined = (token + (next === '،' || next === ':' ? next : '')).trim();
+      if (combined.length > 0) acc.push(combined);
+      return acc;
+    }, []);
+  return parts.length > 0 ? parts : [arabicText];
+}
+
+export async function loadMemorizedKalmaIds(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(MEMORIZED_KALMAS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function toggleMemorizedKalmaId(id: string): Promise<string[]> {
+  const existing = await loadMemorizedKalmaIds();
+  const next = existing.includes(id)
+    ? existing.filter((x) => x !== id)
+    : [...existing, id];
+  try {
+    await AsyncStorage.setItem(MEMORIZED_KALMAS_KEY, JSON.stringify(next));
+  } catch {}
+  return next;
 }

@@ -708,6 +708,12 @@ export default function RootLayout() {
               <Stack.Screen name="qibla" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="islamic-dashboard" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="islamic-calendar" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="islamic-radio" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="nearby-masjids" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="asma-un-nabi" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="muhasabah" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="wirasat" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="umrah-hajj" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="six-kalmas" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="zakat" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="prayer-times" options={{ animation: 'slide_from_right' }} />

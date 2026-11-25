@@ -21,6 +21,7 @@ import { ReadingControlsSheet } from '@/components/ui/ReadingControlsSheet';
 import {
   HADITH_BOOKS,
   addRecentHadith,
+  getHadithBook,
   getHadithChapters,
   getHadiths,
   isHadithBookmarked,
@@ -45,7 +46,7 @@ export default function HadithReaderScreen() {
 
   const bookId = (bookParam as HadithBookId) || 'bukhari';
   const bookInfo: HadithBook =
-    HADITH_BOOKS.find((b) => b.id === bookId) || HADITH_BOOKS[0];
+    getHadithBook(bookId) || HADITH_BOOKS[0];
 
   const [chapters, setChapters] = useState<HadithChapter[]>([]);
   const [selectedChapter, setSelectedChapter] = useState<number>(1);

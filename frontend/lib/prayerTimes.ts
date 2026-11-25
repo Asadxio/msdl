@@ -551,3 +551,66 @@ export function getPrayerWindowProgress(
   return Math.min(1, Math.max(0, elapsed / windowMs));
 }
 
+export interface AlAdhanVerificationResult {
+  fajr: string;
+  sunrise: string;
+  dhuhr: string;
+  asr: string;
+  maghrib: string;
+  isha: string;
+  hijriDateLabel: string;
+  methodName: string;
+}
+
+const ALADHAN_METHOD_MAP: Record<string, number> = {
+  karachi: 1,
+  northAmerica: 2,
+  muslimWorldLeague: 3,
+  ummAlQura: 4,
+  egyptian: 5,
+};
+
+/**
+ * Verifies daily prayer times & Hijri date against AlAdhan public REST API v1.
+ * Maps Asr school (1 = Hanafi, 0 = Shafi'i) and calculation method cleanly.
+ */
+export async function fetchAlAdhanPrayerTimes(params: {
+  latitude: number;
+  longitude: number;
+  method?: string;
+  asrFactor?: 1 | 2;
+}): Promise<AlAdhanVerificationResult> {
+  const methodId = params.method && ALADHAN_METHOD_MAP[params.method] ? ALADHAN_METHOD_MAP[params.method] : 1;
+  const school = params.asrFactor === 1 ? 0 : 1;
+  const url = `https://api.aladhan.com/v1/timings?latitude=${params.latitude}&longitude=${params.longitude}&method=${methodId}&school=${school}`;
+
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 9000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`AlAdhan HTTP ${res.status}`);
+    const json = await res.json();
+    const timings = json?.data?.timings;
+    const hijri = json?.data?.date?.hijri;
+    if (!timings?.Fajr || !timings?.Maghrib) {
+      throw new Error('AlAdhan timings payload incomplete');
+    }
+    const cleanTime = (val: string) => String(val).replace(/\s*\([^)]*\)\s*/g, '').trim();
+    const hijriLabel = hijri
+      ? `${hijri.day} ${hijri.month?.en || ''} ${hijri.year} AH`.trim()
+      : '';
+    return {
+      fajr: cleanTime(timings.Fajr),
+      sunrise: cleanTime(timings.Sunrise),
+      dhuhr: cleanTime(timings.Dhuhr),
+      asr: cleanTime(timings.Asr),
+      maghrib: cleanTime(timings.Maghrib),
+      isha: cleanTime(timings.Isha),
+      hijriDateLabel: hijriLabel,
+      methodName: String(json?.data?.meta?.method?.name || 'AlAdhan Verified'),
+    };
+  } finally {
+    clearTimeout(id);
+  }
+}
+

@@ -72,6 +72,12 @@ const MENU_SECTIONS: MenuSection[] = [
       { label: 'Six Kalmas (6 Foundations)', subtitle: 'Arabic text, transliteration, Urdu & English meanings', icon: 'shield-checkmark-outline', route: '/six-kalmas', colorBg: '#ECFDF5', colorIcon: '#059669' },
       { label: 'Zakat & Nisab Calculator', subtitle: 'Gold & Silver Nisab threshold calculator at 2.5%', icon: 'calculator-outline', route: '/zakat', colorBg: '#FEF3C7', colorIcon: '#D97706' },
       { label: 'Azaan & Prayer Audio', subtitle: 'Makkah, Madinah, Al-Aqsa & Alafasy Azaans & prayer alerts', icon: 'mic-outline', route: '/azaan-audio', colorBg: '#FFF7ED', colorIcon: '#EA580C' },
+      { label: 'Live Islamic Radio (24/7)', subtitle: 'Stream Haramain, Urdu Translation & Famous Reciters live', icon: 'radio-outline', route: '/islamic-radio', colorBg: '#ECFDF5', colorIcon: '#059669' },
+      { label: 'Nearby Masjids & Halal Compass', subtitle: 'GPS mosque & halal food locator with map directions', icon: 'location-outline', route: '/nearby-masjids', colorBg: '#CCFBF1', colorIcon: '#0F766E' },
+      { label: 'Asma-un-Nabi (ﷺ) & Seerah Timeline', subtitle: '99 Blessed Names of Prophet ﷺ & Makki/Madani milestones', icon: 'star-outline', route: '/asma-un-nabi', colorBg: '#FEF3C7', colorIcon: '#B45309' },
+      { label: 'Muhasabah & Sadaqah Journal', subtitle: 'Daily deeds accountability & private charity log', icon: 'heart-circle-outline', route: '/muhasabah', colorBg: '#ECFDF5', colorIcon: '#047857' },
+      { label: 'Wirasat (Mirath) Inheritance Guide', subtitle: 'Qur’anic inheritance shares calculator & quick guide', icon: 'pie-chart-outline', route: '/wirasat', colorBg: '#EEF2FF', colorIcon: '#4F46E5' },
+      { label: 'Umrah & Hajj Guide + Tawaf Counter', subtitle: 'Step-by-step Makkah/Madinah guide & live 7-round counter', icon: 'cube-outline', route: '/umrah-hajj', colorBg: '#ECFDF5', colorIcon: '#059669' },
     ]
   },
   {

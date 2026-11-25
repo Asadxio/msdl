@@ -32,6 +32,8 @@ import {
   getQiblaDirection,
   getGoldenHourTimes,
   getPrayerWindowProgress,
+  fetchAlAdhanPrayerTimes,
+  AlAdhanVerificationResult,
 } from '@/lib/prayerTimes';
 import {
   loadPrayerSettings,
@@ -146,6 +148,26 @@ export default function PrayerTimesScreen() {
   const [alarmConfig, setAlarmConfig]   = useState<PrayerAlarmsConfig>(DEFAULT_PRAYER_ALARMS_CONFIG);
   const pulseAnim                         = useRef(new Animated.Value(1)).current;
   const cdRef                             = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [aladhanVerify, setAladhanVerify] = useState<AlAdhanVerificationResult | null>(null);
+  const [verifyingAladhan, setVerifyingAladhan] = useState(false);
+
+  const handleVerifyAlAdhan = useCallback(async () => {
+    if (verifyingAladhan) return;
+    setVerifyingAladhan(true);
+    try {
+      const res = await fetchAlAdhanPrayerTimes({
+        latitude: settings.latitude,
+        longitude: settings.longitude,
+        method: settings.method,
+        asrFactor: settings.asrFactor || asrFactor,
+      });
+      setAladhanVerify(res);
+    } catch {
+      Alert.alert('AlAdhan Sync', 'Unable to reach AlAdhan API right now. Offline astronomical times remain active.');
+    } finally {
+      setVerifyingAladhan(false);
+    }
+  }, [verifyingAladhan, settings.latitude, settings.longitude, settings.method, settings.asrFactor, asrFactor]);
 
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -460,6 +482,30 @@ export default function PrayerTimesScreen() {
                       <Text style={s.dayNightLbl}>Qibla</Text>
                       <Text style={s.dayNightVal}>{qiblaDir.toFixed(1)}° {compassLabel(qiblaDir)}</Text>
                     </View>
+                  </View>
+
+                  <View style={[s.pillRow, { marginTop: 6, justifyContent: 'space-between', alignItems: 'center' }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.dayNightLbl, { textTransform: 'none', fontSize: 10.5 }]} numberOfLines={2}>
+                        {aladhanVerify
+                          ? `AlAdhan (${aladhanVerify.methodName}): Fajr ${aladhanVerify.fajr} · Asr ${aladhanVerify.asr} · Maghrib ${aladhanVerify.maghrib}`
+                          : 'Offline Jean Meeus Astronomical Engine Active'}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[s.pill, { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: GOLD_BG }]}
+                      onPress={() => void handleVerifyAlAdhan()}
+                      disabled={verifyingAladhan}
+                      accessibilityRole="button"
+                      accessibilityLabel="Verify prayer timings via AlAdhan API"
+                    >
+                      {verifyingAladhan ? (
+                        <ActivityIndicator size="small" color={GOLD} />
+                      ) : (
+                        <Ionicons name="checkmark-done-outline" size={12} color={GOLD} />
+                      )}
+                      <Text style={s.pillTxt}>{verifyingAladhan ? 'Checking' : 'Verify AlAdhan'}</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
 

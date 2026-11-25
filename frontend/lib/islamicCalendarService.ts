@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SUFFAH — Islamic (Hijri) Calendar Service & Significant Milestones
 // Combines Intl Umm al-Qura precision with deterministic Kuwayti/Tabular math fallback.
@@ -515,4 +517,262 @@ export function getUpcomingIslamicEvents(
   return combined
     .filter((ev) => ev.daysRemaining >= 0 && ev.daysRemaining <= horizonDays)
     .sort((a, b) => a.gregorianDate.getTime() - b.gregorianDate.getTime());
+}
+
+export type MoonSightingOffset = -1 | 0 | 1;
+
+const MOON_OFFSET_KEY = '@suffah_hijri_moon_offset_v1';
+
+/**
+ * Applies a local moonsighting adjustment (-1, 0, or +1 day) to a Gregorian reference
+ * date so calculated Hijri dates & milestones match local Hilal committee announcements.
+ */
+export function getAdjustedDateForMoonOffset(
+  referenceNow: Date,
+  moonOffset: MoonSightingOffset
+): Date {
+  if (moonOffset === 0) return referenceNow;
+  const shifted = new Date(referenceNow.getTime());
+  shifted.setDate(shifted.getDate() + moonOffset);
+  return shifted;
+}
+
+export async function loadMoonSightingOffset(): Promise<MoonSightingOffset> {
+  try {
+    const raw = await AsyncStorage.getItem(MOON_OFFSET_KEY);
+    if (raw === '-1') return -1;
+    if (raw === '1' || raw === '+1') return 1;
+  } catch {
+    // ignore storage errors
+  }
+  return 0;
+}
+
+export async function saveMoonSightingOffset(offset: MoonSightingOffset): Promise<void> {
+  try {
+    await AsyncStorage.setItem(MOON_OFFSET_KEY, String(offset));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export interface AlAdhanHijriSyncResult {
+  day: number;
+  month: number;
+  year: number;
+  monthNameEn: string;
+  monthNameAr: string;
+  formatted: string;
+  method: string;
+}
+
+function formatDdMmYyyy(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}-${mm}-${d.getFullYear()}`;
+}
+
+/**
+ * Queries AlAdhan public API v1 (/gToH) to verify today's Hijri date against
+ * international AlAdhan calendar calculation.
+ */
+export async function syncHijriWithAlAdhan(
+  referenceNow: Date = new Date()
+): Promise<AlAdhanHijriSyncResult> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 9000);
+  try {
+    const dateParam = formatDdMmYyyy(referenceNow);
+    const res = await fetch(`https://api.aladhan.com/v1/gToH?date=${dateParam}`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`AlAdhan HTTP ${res.status}`);
+    const json = await res.json();
+    const h = json?.data?.hijri;
+    const day = Number(h?.day);
+    const month = Number(h?.month?.number);
+    const year = Number(h?.year);
+    if (!day || !month || !year) {
+      throw new Error('Incomplete Hijri response from AlAdhan');
+    }
+    const localMeta = HIJRI_MONTHS[month - 1];
+    const monthNameEn = localMeta?.name || String(h?.month?.en || 'Hijri');
+    return {
+      day,
+      month,
+      year,
+      monthNameEn,
+      monthNameAr: String(h?.month?.ar || localMeta?.arabic || ''),
+      formatted: `${day} ${monthNameEn} ${year} AH`,
+      method: String(h?.method || 'AlAdhan Mathematical / Umm al-Qura'),
+    };
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+/**
+ * Fetches AlAdhan /hToG Gregorian equivalent for any Hijri date.
+ */
+export async function fetchAlAdhanGregorianForHijri(
+  hijriYear: number,
+  hijriMonth: number,
+  hijriDay: number
+): Promise<string | null> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 8000);
+  try {
+    const dd = String(hijriDay).padStart(2, '0');
+    const mm = String(hijriMonth).padStart(2, '0');
+    const res = await fetch(`https://api.aladhan.com/v1/hToG?date=${dd}-${mm}-${hijriYear}`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const g = json?.data?.gregorian;
+    return g ? `${g.day} ${g.month?.en || ''} ${g.year}`.trim() : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+/* ────────────────────── Sunnah Fasting Days & Offline Alerts ────────────────────── */
+
+export interface SunnahFastDay {
+  id: string;
+  title: string;
+  type: 'ayyam_al_bid' | 'mon_thu' | 'sacred';
+  hijriLabel: string;
+  gregorianDate: Date;
+  gregorianShort: string;
+  daysRemaining: number;
+}
+
+const FASTING_ALERTS_KEY = '@suffah_sunnah_fasting_alerts_v1';
+
+export async function loadFastingAlertsEnabled(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(FASTING_ALERTS_KEY)) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function saveFastingAlertsEnabled(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(FASTING_ALERTS_KEY, enabled ? 'true' : 'false');
+  } catch {
+    // ignore storage errors
+  }
+}
+
+/**
+ * Generates upcoming recommended Sunnah Fasting days (Ayyam al-Bid 13/14/15,
+ * Mondays & Thursdays, Ashura, Arafah) shifted according to moon-sighting offset.
+ */
+export function getSunnahFastingDays(
+  referenceNow: Date = new Date(),
+  moonOffset: MoonSightingOffset = 0,
+  daysAhead: number = 30
+): SunnahFastDay[] {
+  const results: SunnahFastDay[] = [];
+  const baseDay = startOfLocalDay(referenceNow);
+
+  for (let offsetDays = 0; offsetDays <= daysAhead; offsetDays++) {
+    const greg = toNoonDate(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + offsetDays);
+    const hijriRef = getAdjustedDateForMoonOffset(greg, moonOffset);
+    const h = getHijriDateParts(hijriRef);
+    const weekday = greg.getDay(); // 1 = Monday, 4 = Thursday
+
+    let type: SunnahFastDay['type'] | null = null;
+    let title = '';
+
+    if (h.month === 1 && (h.day === 9 || h.day === 10)) {
+      type = 'sacred';
+      title = h.day === 10 ? 'Day of Ashura Fast (10 Muharram)' : 'Tasu’a Fast (9 Muharram)';
+    } else if (h.month === 12 && h.day === 9) {
+      type = 'sacred';
+      title = 'Day of Arafah Fast (9 Dhul Hijjah)';
+    } else if (h.day >= 13 && h.day <= 15) {
+      type = 'ayyam_al_bid';
+      title = `Ayyam al-Bid (${h.day} ${h.monthName})`;
+    } else if (weekday === 1) {
+      type = 'mon_thu';
+      title = 'Monday Sunnah Fast';
+    } else if (weekday === 4) {
+      type = 'mon_thu';
+      title = 'Thursday Sunnah Fast';
+    }
+
+    if (type) {
+      results.push({
+        id: `fast-${greg.getFullYear()}-${greg.getMonth() + 1}-${greg.getDate()}`,
+        title,
+        type,
+        hijriLabel: `${h.day} ${h.monthName}`,
+        gregorianDate: greg,
+        gregorianShort: formatGregorianShort(greg),
+        daysRemaining: offsetDays,
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Schedules local device notifications (8:00 PM the evening prior to upcoming Ayyam al-Bid
+ * and Monday/Thursday Sunnah fasts) or cancels them cleanly when disabled.
+ */
+export async function scheduleSunnahFastingAlerts(
+  enabled: boolean,
+  moonOffset: MoonSightingOffset = 0
+): Promise<number> {
+  await saveFastingAlertsEnabled(enabled);
+  try {
+    const Notifications = require('expo-notifications');
+    const existing = await Notifications.getAllScheduledNotificationsAsync();
+    for (const item of existing || []) {
+      const id = String(item?.identifier || '');
+      if (id.startsWith('sunnah_fast_')) {
+        await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+      }
+    }
+
+    if (!enabled) return 0;
+
+    const upcomingFasts = getSunnahFastingDays(new Date(), moonOffset, 21);
+    let scheduledCount = 0;
+    const now = Date.now();
+
+    for (const fast of upcomingFasts) {
+      // Remind the evening prior at 20:00 local time
+      const triggerDate = new Date(
+        fast.gregorianDate.getFullYear(),
+        fast.gregorianDate.getMonth(),
+        fast.gregorianDate.getDate() - 1,
+        20,
+        0,
+        0
+      );
+      if (triggerDate.getTime() <= now + 60_000) continue;
+
+      await Notifications.scheduleNotificationAsync({
+        identifier: `sunnah_fast_${fast.id}`,
+        content: {
+          title: `Sunnah Fast Reminder • ${fast.hijriLabel}`,
+          body: `Tomorrow (${fast.gregorianShort}) is ${fast.title}. Plan your Suhoor intention tonight!`,
+          sound: true,
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes?.DATE ?? 'date', date: triggerDate },
+      });
+      scheduledCount++;
+      if (scheduledCount >= 8) break;
+    }
+    return scheduledCount;
+  } catch {
+    return 0;
+  }
 }

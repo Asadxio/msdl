@@ -18,7 +18,10 @@ export type HadithBookId =
   | 'tirmidhi'
   | 'nasai'
   | 'ibnmajah'
-  | 'malik';
+  | 'malik'
+  | 'nawawi'
+  | 'qudsi'
+  | 'dehlawi';
 
 export interface HadithBook {
   id: HadithBookId;

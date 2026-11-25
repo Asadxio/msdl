@@ -264,9 +264,34 @@ export default function QuranScreen() {
             )}
           </View>
 
-          {/* 1-Tap Offline Hifz & Juz Amma Pack */}
+          {/* 1-Tap Offline Hifz & Juz Amma Pack + Live Radio */}
           {!searchQuery && (
-            <View style={styles.offlinePackBanner}>
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.surahLastReadBanner,
+                  { backgroundColor: '#043C32', borderColor: 'rgba(200,168,78,0.45)', marginBottom: 8 },
+                ]}
+                activeOpacity={0.85}
+                onPress={() => router.push('/islamic-radio' as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Open Live Islamic Radio"
+              >
+                <View style={styles.surahLastReadIconWrap}>
+                  <Ionicons name="radio" size={18} color="#C8A84E" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.surahLastReadLabel}>إذاعة القرآن الكريم • 24/7 LIVE</Text>
+                  <Text style={styles.surahLastReadTitle} numberOfLines={1}>
+                    Live Haramain, Urdu & Qari Radio
+                  </Text>
+                </View>
+                <View style={styles.surahLastReadBtn}>
+                  <Text style={styles.surahLastReadBtnText}>Listen ▶</Text>
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.offlinePackBanner}>
               <View style={styles.offlinePackIconBox}>
                 <Ionicons name="cloud-download-outline" size={18} color="#005F46" />
               </View>
@@ -293,6 +318,7 @@ export default function QuranScreen() {
                 )}
               </TouchableOpacity>
             </View>
+            </>
           )}
           <FlatList
             data={filteredSurahs}

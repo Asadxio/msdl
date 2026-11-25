@@ -19,19 +19,76 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScalePressable } from '@/components/ui';
 import { ReadingControlsSheet } from '@/components/ui/ReadingControlsSheet';
 import { RADIUS, SPACING } from '@/constants/theme';
+import { useGlobalAudio } from '@/context/GlobalAudioContext';
 import { useReadingPreferences, useTheme } from '@/context/ThemeContext';
 import { goBackOrReplace } from '@/lib/navigation';
-import { getSixKalmas, type KalmaEntry } from '@/lib/sixKalmasService';
+import {
+  getKalmaChunks,
+  getSixKalmas,
+  loadMemorizedKalmaIds,
+  toggleMemorizedKalmaId,
+  type KalmaEntry,
+} from '@/lib/sixKalmasService';
 
 export default function SixKalmasScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const { readingPreferences } = useReadingPreferences();
+  const { currentTrack, isPlaying, playTrack, pauseTrack } = useGlobalAudio();
 
   const kalmas = useMemo(() => getSixKalmas(), []);
   const [selectedKalma, setSelectedKalma] = useState<KalmaEntry | null>(null);
   const [showReadingSheet, setShowReadingSheet] = useState(false);
+  const [kidsMode, setKidsMode] = useState(false);
+  const [memorizedIds, setMemorizedIds] = useState<string[]>([]);
+  const [revealedChunks, setRevealedChunks] = useState(1);
+  const [hideMeaningQuiz, setHideMeaningQuiz] = useState(false);
+
+  React.useEffect(() => {
+    loadMemorizedKalmaIds().then(setMemorizedIds);
+  }, []);
+
+  React.useEffect(() => {
+    setRevealedChunks(1);
+    setHideMeaningQuiz(kidsMode);
+  }, [selectedKalma?.id, kidsMode]);
+
+  const handleTogglePlayKalma = async (kalma: KalmaEntry) => {
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+    if (currentTrack?.id === kalma.id && isPlaying) {
+      await pauseTrack();
+      return;
+    }
+    await playTrack(
+      {
+        id: kalma.id,
+        titleEn: kalma.title,
+        subtitle: kalma.shortName,
+        titleAr: kalma.arabicTitle,
+        titleUr: kalma.urduTitle,
+        artistOrSource: 'Six Kalmas Recitation',
+        category: 'dua',
+        audioUrl: kalma.audioUrl,
+      },
+      kalmas.map((k) => ({
+        id: k.id,
+        titleEn: k.title,
+        subtitle: k.shortName,
+        titleAr: k.arabicTitle,
+        titleUr: k.urduTitle,
+        artistOrSource: 'Six Kalmas Recitation',
+        category: 'dua' as const,
+        audioUrl: k.audioUrl,
+      }))
+    );
+  };
+
+  const handleToggleMemorized = async (id: string) => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const updated = await toggleMemorizedKalmaId(id);
+    setMemorizedIds(updated);
+  };
 
   const screenBg = isDark ? colors.background : '#F6F7F6';
   const cardBg = isDark ? colors.surface : '#FFFFFF';
@@ -137,65 +194,130 @@ export default function SixKalmasScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {kalmas.map((kalma) => (
-          <ScalePressable
-            key={kalma.id}
+        {/* Kids & Memorization Mode Banner */}
+        <View
+          style={[
+            styles.kidsBanner,
+            { backgroundColor: cardBg, borderColor: cardBorder },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.kidsTitle, { color: colors.text }]}>
+              Kids & Memorization ({memorizedIds.length}/6 ⭐)
+            </Text>
+            <Text style={[styles.kidsSub, { color: colors.textSecondary }]}>
+              {kidsMode
+                ? 'Phrase-by-phrase reveal + hide meaning active'
+                : 'Enable Kids Mode to memorize phrase by phrase'}
+            </Text>
+          </View>
+          <TouchableOpacity
             style={[
-              styles.kalmaCard,
+              styles.kidsToggleBtn,
               {
-                backgroundColor: cardBg,
-                borderColor: cardBorder,
+                backgroundColor: kidsMode ? pillText : pillBg,
               },
             ]}
-            onPress={() => handleSelectKalma(kalma)}
+            onPress={() => setKidsMode((v) => !v)}
             accessibilityRole="button"
-            accessibilityLabel={`${kalma.title}. Tap to view full Arabic, Urdu translation, and transliteration.`}
+            accessibilityLabel="Toggle Kids Memorization Mode"
           >
-            {/* Card Header Row: Mint Badge + Title */}
-            <View style={styles.cardHeaderRow}>
-              <View style={[styles.kalmaBadge, { backgroundColor: pillBg }]}>
-                <Text style={[styles.kalmaBadgeText, { color: pillText }]}>
-                  {kalma.badge}
-                </Text>
-              </View>
-              <Text style={[styles.kalmaTitle, { color: colors.text }]}>
-                {kalma.title}
-              </Text>
-            </View>
+            <Ionicons
+              name={kidsMode ? 'school' : 'school-outline'}
+              size={15}
+              color={kidsMode ? '#FFFFFF' : pillText}
+            />
+            <Text style={[styles.kidsToggleText, { color: kidsMode ? '#FFFFFF' : pillText }]}>
+              {kidsMode ? 'Kids ON' : 'Kids Mode'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-            {/* Right-aligned Diacritized Arabic Text */}
-            <Text
+        {kalmas.map((kalma) => {
+          const isMemorized = memorizedIds.includes(kalma.id);
+          const isThisPlaying = currentTrack?.id === kalma.id && isPlaying;
+          return (
+            <ScalePressable
+              key={kalma.id}
               style={[
-                styles.arabicText,
+                styles.kalmaCard,
                 {
-                  color: colors.text,
-                  fontSize: arabicFontSize,
-                  lineHeight: arabicLineHeight,
+                  backgroundColor: cardBg,
+                  borderColor: isMemorized ? colors.gold : cardBorder,
                 },
               ]}
+              onPress={() => handleSelectKalma(kalma)}
+              accessibilityRole="button"
+              accessibilityLabel={`${kalma.title}. Tap to view full Arabic, Urdu translation, and transliteration.`}
             >
-              {kalma.arabicText}
-            </Text>
+              {/* Card Header Row: Mint Badge + Title + Audio/Memorize */}
+              <View style={styles.cardHeaderRow}>
+                <View style={[styles.kalmaBadge, { backgroundColor: pillBg }]}>
+                  <Text style={[styles.kalmaBadgeText, { color: pillText }]}>
+                    {kalma.badge}
+                  </Text>
+                </View>
+                <Text style={[styles.kalmaTitle, { color: colors.text, flex: 1 }]}>
+                  {kalma.title}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => void handleToggleMemorized(kalma.id)}
+                  style={styles.cardActionMini}
+                  accessibilityLabel={isMemorized ? 'Unmark memorized' : 'Mark memorized'}
+                >
+                  <Ionicons
+                    name={isMemorized ? 'checkmark-circle' : 'checkmark-circle-outline'}
+                    size={21}
+                    color={isMemorized ? colors.gold : colors.textMuted}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void handleTogglePlayKalma(kalma)}
+                  style={[styles.cardAudioBtn, { backgroundColor: isThisPlaying ? pillText : pillBg }]}
+                  accessibilityLabel={isThisPlaying ? `Pause ${kalma.title}` : `Listen ${kalma.title}`}
+                >
+                  <Ionicons
+                    name={isThisPlaying ? 'pause' : 'volume-high'}
+                    size={16}
+                    color={isThisPlaying ? '#FFFFFF' : pillText}
+                  />
+                </TouchableOpacity>
+              </View>
 
-            {/* Concise Translation Preview (matching reference layout) */}
-            {readingPreferences.showEnglishTranslation && (
+              {/* Right-aligned Diacritized Arabic Text */}
               <Text
                 style={[
-                  styles.englishPreview,
+                  styles.arabicText,
                   {
-                    color: colors.textSecondary,
-                    fontSize: transFontSize,
-                    lineHeight: transLineHeight,
+                    color: colors.text,
+                    fontSize: arabicFontSize,
+                    lineHeight: arabicLineHeight,
                   },
                 ]}
-                numberOfLines={2}
-                ellipsizeMode="tail"
               >
-                {kalma.englishTranslation}
+                {kalma.arabicText}
               </Text>
-            )}
-          </ScalePressable>
-        ))}
+
+              {/* Concise Translation Preview (hidden during Kids quiz mode unless revealed in modal) */}
+              {readingPreferences.showEnglishTranslation && !kidsMode && (
+                <Text
+                  style={[
+                    styles.englishPreview,
+                    {
+                      color: colors.textSecondary,
+                      fontSize: transFontSize,
+                      lineHeight: transLineHeight,
+                    },
+                  ]}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  {kalma.englishTranslation}
+                </Text>
+              )}
+            </ScalePressable>
+          );
+        })}
       </ScrollView>
 
       {/* Focus Detail Modal when tapping any Kalma Card */}
@@ -218,185 +340,258 @@ export default function SixKalmasScreen() {
           >
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
 
-            {selectedKalma && (
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.modalScrollContent}
-              >
-                <View style={styles.modalTopRow}>
-                  <View style={[styles.kalmaBadge, { backgroundColor: pillBg }]}>
-                    <Text style={[styles.kalmaBadgeText, { color: pillText }]}>
-                      {selectedKalma.badge}
-                    </Text>
-                  </View>
+            {selectedKalma && (() => {
+              const chunks = getKalmaChunks(selectedKalma.arabicText);
+              const displayedArabic = kidsMode
+                ? chunks.slice(0, revealedChunks).join(' ')
+                : selectedKalma.arabicText;
+              const isMemorized = memorizedIds.includes(selectedKalma.id);
+              const isThisPlaying = currentTrack?.id === selectedKalma.id && isPlaying;
 
-                  <View style={styles.modalIconActions}>
-                    <TouchableOpacity
-                      style={styles.modalActionIcon}
-                      onPress={() => handleCopyKalma(selectedKalma)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Copy Kalma"
-                    >
-                      <Ionicons name="copy-outline" size={20} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.modalActionIcon}
-                      onPress={() => handleShareKalma(selectedKalma)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Share Kalma"
-                    >
-                      <Ionicons name="share-social-outline" size={20} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.modalActionIcon}
-                      onPress={() => setSelectedKalma(null)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Close modal"
-                    >
-                      <Ionicons name="close" size={22} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <Text style={[styles.modalTitle, { color: colors.text }]}>
-                  {selectedKalma.title}
-                </Text>
-                <Text style={[styles.modalArabicHeading, { color: colors.secondary }]}>
-                  {selectedKalma.arabicTitle} {'\u2022'} {selectedKalma.urduTitle}
-                </Text>
-
-                {/* Full Arabic Block */}
-                <View
-                  style={[
-                    styles.arabicBox,
-                    {
-                      backgroundColor: isDark ? colors.surfaceAlt : '#F8FAF9',
-                      borderColor: cardBorder,
-                    },
-                  ]}
+              return (
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.modalScrollContent}
                 >
-                  <Text
+                  <View style={styles.modalTopRow}>
+                    <View style={[styles.kalmaBadge, { backgroundColor: pillBg }]}>
+                      <Text style={[styles.kalmaBadgeText, { color: pillText }]}>
+                        {selectedKalma.badge}
+                      </Text>
+                    </View>
+
+                    <View style={styles.modalIconActions}>
+                      <TouchableOpacity
+                        style={styles.modalActionIcon}
+                        onPress={() => void handleTogglePlayKalma(selectedKalma)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Play Kalma audio"
+                      >
+                        <Ionicons
+                          name={isThisPlaying ? 'pause-circle' : 'play-circle'}
+                          size={24}
+                          color={pillText}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.modalActionIcon}
+                        onPress={() => handleCopyKalma(selectedKalma)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Copy Kalma"
+                      >
+                        <Ionicons name="copy-outline" size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.modalActionIcon}
+                        onPress={() => handleShareKalma(selectedKalma)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share Kalma"
+                      >
+                        <Ionicons name="share-social-outline" size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.modalActionIcon}
+                        onPress={() => setSelectedKalma(null)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Close modal"
+                      >
+                        <Ionicons name="close" size={22} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>
+                    {selectedKalma.title}
+                  </Text>
+                  <Text style={[styles.modalArabicHeading, { color: colors.secondary }]}>
+                    {selectedKalma.arabicTitle} {'\u2022'} {selectedKalma.urduTitle}
+                  </Text>
+
+                  {/* Full Arabic Block */}
+                  <View
                     style={[
-                      styles.modalArabicText,
+                      styles.arabicBox,
                       {
-                        color: colors.text,
-                        fontSize: arabicFontSize + 2,
-                        lineHeight: Math.round((arabicFontSize + 2) * 1.78),
+                        backgroundColor: isDark ? colors.surfaceAlt : '#F8FAF9',
+                        borderColor: cardBorder,
                       },
                     ]}
                   >
-                    {selectedKalma.arabicText}
-                  </Text>
-                </View>
-
-                {readingPreferences.showTransliteration && (
-                  <View style={styles.sectionBlock}>
-                    <Text style={[styles.blockLabel, { color: pillText }]}>TRANSLITERATION</Text>
                     <Text
                       style={[
-                        styles.translitText,
+                        styles.modalArabicText,
                         {
                           color: colors.text,
-                          fontSize: transFontSize,
-                          lineHeight: transLineHeight,
+                          fontSize: arabicFontSize + 2,
+                          lineHeight: Math.round((arabicFontSize + 2) * 1.78),
                         },
                       ]}
                     >
-                      {selectedKalma.transliteration}
+                      {displayedArabic}
+                    </Text>
+
+                    {kidsMode && (
+                      <View style={styles.kidsModalActions}>
+                        <TouchableOpacity
+                          style={[styles.kidsStepPill, { backgroundColor: pillBg }]}
+                          onPress={() =>
+                            setRevealedChunks((c) => (c >= chunks.length ? 1 : c + 1))
+                          }
+                        >
+                          <Text style={[styles.kidsStepText, { color: pillText }]}>
+                            {revealedChunks >= chunks.length
+                              ? 'Reset Phrases'
+                              : `Reveal Phrase (${revealedChunks}/${chunks.length})`}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.kidsStepPill, { backgroundColor: colors.goldBg }]}
+                          onPress={() => setHideMeaningQuiz((v) => !v)}
+                        >
+                          <Text style={[styles.kidsStepText, { color: colors.goldText }]}>
+                            {hideMeaningQuiz ? 'Show Meanings' : 'Hide Meanings'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+
+                  {readingPreferences.showTransliteration && !hideMeaningQuiz && (
+                    <View style={styles.sectionBlock}>
+                      <Text style={[styles.blockLabel, { color: pillText }]}>TRANSLITERATION</Text>
+                      <Text
+                        style={[
+                          styles.translitText,
+                          {
+                            color: colors.text,
+                            fontSize: transFontSize,
+                            lineHeight: transLineHeight,
+                          },
+                        ]}
+                      >
+                        {selectedKalma.transliteration}
+                      </Text>
+                    </View>
+                  )}
+
+                  {readingPreferences.showEnglishTranslation && !hideMeaningQuiz && (
+                    <View style={styles.sectionBlock}>
+                      <Text style={[styles.blockLabel, { color: pillText }]}>ENGLISH TRANSLATION</Text>
+                      <Text
+                        style={[
+                          styles.translationText,
+                          {
+                            color: colors.text,
+                            fontSize: transFontSize + 0.5,
+                            lineHeight: Math.round((transFontSize + 0.5) * 1.5),
+                          },
+                        ]}
+                      >
+                        {selectedKalma.englishTranslation}
+                      </Text>
+                    </View>
+                  )}
+
+                  {readingPreferences.showUrduTranslation && !hideMeaningQuiz && (
+                    <View style={styles.sectionBlock}>
+                      <Text style={[styles.blockLabel, { color: colors.secondary }]}>
+                        URDU TRANSLATION ({'\u0627\u0631\u062f\u0648 \u062a\u0631\u062c\u0645\u06c1'})
+                      </Text>
+                      <Text
+                        style={[
+                          styles.urduText,
+                          {
+                            color: colors.text,
+                            fontSize: transFontSize + 3,
+                            lineHeight: Math.round((transFontSize + 3) * 1.75),
+                          },
+                        ]}
+                      >
+                        {selectedKalma.urduTranslation}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View
+                    style={[
+                      styles.significanceBox,
+                      { backgroundColor: isDark ? 'rgba(198,161,91,0.12)' : '#FCF9F0' },
+                    ]}
+                  >
+                    <Text style={[styles.significanceLabel, { color: colors.goldText }]}>
+                      Meaning &amp; Reflection
+                    </Text>
+                    <Text style={[styles.significanceBody, { color: colors.textSecondary }]}>
+                      {selectedKalma.significance}
                     </Text>
                   </View>
-                )}
 
-                {readingPreferences.showEnglishTranslation && (
-                  <View style={styles.sectionBlock}>
-                    <Text style={[styles.blockLabel, { color: pillText }]}>ENGLISH TRANSLATION</Text>
-                    <Text
-                      style={[
-                        styles.translationText,
-                        {
-                          color: colors.text,
-                          fontSize: transFontSize + 0.5,
-                          lineHeight: Math.round((transFontSize + 0.5) * 1.5),
-                        },
-                      ]}
-                    >
-                      {selectedKalma.englishTranslation}
-                    </Text>
-                  </View>
-                )}
-
-                {readingPreferences.showUrduTranslation && (
-                  <View style={styles.sectionBlock}>
-                    <Text style={[styles.blockLabel, { color: colors.secondary }]}>
-                      URDU TRANSLATION ({'\u0627\u0631\u062f\u0648 \u062a\u0631\u062c\u0645\u06c1'})
-                    </Text>
-                    <Text
-                      style={[
-                        styles.urduText,
-                        {
-                          color: colors.text,
-                          fontSize: transFontSize + 3,
-                          lineHeight: Math.round((transFontSize + 3) * 1.75),
-                        },
-                      ]}
-                    >
-                      {selectedKalma.urduTranslation}
-                    </Text>
-                  </View>
-                )}
-
-                <View
-                  style={[
-                    styles.significanceBox,
-                    { backgroundColor: isDark ? 'rgba(198,161,91,0.12)' : '#FCF9F0' },
-                  ]}
-                >
-                  <Text style={[styles.significanceLabel, { color: colors.goldText }]}>
-                    Meaning &amp; Reflection
-                  </Text>
-                  <Text style={[styles.significanceBody, { color: colors.textSecondary }]}>
-                    {selectedKalma.significance}
-                  </Text>
-                </View>
-
-                {/* Sequential Next / Previous Controls */}
-                <View style={styles.modalNavRow}>
                   <TouchableOpacity
                     style={[
-                      styles.modalNavBtn,
+                      styles.memorizeFullBtn,
                       {
-                        backgroundColor: isDark ? colors.surfaceAlt : '#F3F4F6',
-                        opacity: selectedIndex <= 0 ? 0.45 : 1,
+                        backgroundColor: isMemorized ? colors.goldBg : pillBg,
+                        borderColor: isMemorized ? colors.gold : 'transparent',
                       },
                     ]}
-                    disabled={selectedIndex <= 0}
-                    onPress={() => handleStepKalma(-1)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Previous Kalma"
+                    onPress={() => void handleToggleMemorized(selectedKalma.id)}
                   >
-                    <Ionicons name="chevron-back" size={18} color={colors.text} />
-                    <Text style={[styles.modalNavText, { color: colors.text }]}>Previous</Text>
+                    <Ionicons
+                      name={isMemorized ? 'checkmark-circle' : 'ribbon-outline'}
+                      size={18}
+                      color={isMemorized ? colors.goldText : pillText}
+                    />
+                    <Text
+                      style={{
+                        color: isMemorized ? colors.goldText : pillText,
+                        fontWeight: '800',
+                        fontSize: 13.5,
+                      }}
+                    >
+                      {isMemorized ? 'Memorized ⭐ (Tap to unmark)' : 'Mark This Kalma Memorized ✓'}
+                    </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[
-                      styles.modalNavBtn,
-                      {
-                        backgroundColor: isDark ? colors.primaryDeep : '#045E44',
-                        opacity: selectedIndex >= kalmas.length - 1 ? 0.45 : 1,
-                      },
-                    ]}
-                    disabled={selectedIndex >= kalmas.length - 1}
-                    onPress={() => handleStepKalma(1)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Next Kalma"
-                  >
-                    <Text style={[styles.modalNavText, { color: '#FFFFFF' }]}>Next Kalma</Text>
-                    <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            )}
+                  {/* Sequential Next / Previous Controls */}
+                  <View style={styles.modalNavRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.modalNavBtn,
+                        {
+                          backgroundColor: isDark ? colors.surfaceAlt : '#F3F4F6',
+                          opacity: selectedIndex <= 0 ? 0.45 : 1,
+                        },
+                      ]}
+                      disabled={selectedIndex <= 0}
+                      onPress={() => handleStepKalma(-1)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Previous Kalma"
+                    >
+                      <Ionicons name="chevron-back" size={18} color={colors.text} />
+                      <Text style={[styles.modalNavText, { color: colors.text }]}>Previous</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.modalNavBtn,
+                        {
+                          backgroundColor: isDark ? colors.primaryDeep : '#045E44',
+                          opacity: selectedIndex >= kalmas.length - 1 ? 0.45 : 1,
+                        },
+                      ]}
+                      disabled={selectedIndex >= kalmas.length - 1}
+                      onPress={() => handleStepKalma(1)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Next Kalma"
+                    >
+                      <Text style={[styles.modalNavText, { color: '#FFFFFF' }]}>Next Kalma</Text>
+                      <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              );
+            })()}
           </Pressable>
         </Pressable>
       </Modal>
@@ -601,5 +796,68 @@ const styles = StyleSheet.create({
   modalNavText: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  kidsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+  },
+  kidsTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+  },
+  kidsSub: {
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  kidsToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+  },
+  kidsToggleText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  cardActionMini: {
+    padding: 4,
+  },
+  cardAudioBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kidsModalActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+  kidsStepPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.full,
+  },
+  kidsStepText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  memorizeFullBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 46,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginTop: 14,
   },
 });

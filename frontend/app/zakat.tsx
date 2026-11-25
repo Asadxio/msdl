@@ -14,6 +14,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RADIUS, SHADOWS, SPACING } from '@/constants/theme';
@@ -25,11 +26,14 @@ import {
   NISAB_WEIGHTS,
   calculateZakat,
   clearZakatInputs,
+  fetchLiveMetalPrices,
   formatZakatNumber,
   loadZakatInputs,
   sanitizeDecimalInput,
+  sanitizeSignedDecimalInput,
   saveZakatInputs,
   type CurrencyCode,
+  type GoldKarat,
   type NisabStandard,
   type WeightStandard,
   type ZakatInputs,
@@ -39,6 +43,7 @@ interface ZakatFieldProps {
   label: string;
   value: string;
   onChangeText: (val: string) => void;
+  sanitizer?: (val: string) => string;
   rightBadge?: string | null;
   warningText?: string | null;
   unitHint?: string;
@@ -53,6 +58,7 @@ function ZakatInputBox({
   label,
   value,
   onChangeText,
+  sanitizer,
   rightBadge,
   warningText,
   unitHint,
@@ -75,10 +81,10 @@ function ZakatInputBox({
           )}
           <TextInput
             value={value}
-            onChangeText={(txt) => onChangeText(sanitizeDecimalInput(txt))}
+            onChangeText={(txt) => onChangeText((sanitizer || sanitizeDecimalInput)(txt))}
             placeholder={label}
             placeholderTextColor={mutedColor}
-            keyboardType="decimal-pad"
+            keyboardType={sanitizer ? 'numbers-and-punctuation' : 'decimal-pad'}
             returnKeyType="done"
             style={[
               styles.inputControl,
@@ -115,6 +121,33 @@ export default function ZakatCalculatorScreen() {
   const [inputs, setInputs] = useState<ZakatInputs>(DEFAULT_ZAKAT_INPUTS);
   const [hydrated, setHydrated] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [fetchingRates, setFetchingRates] = useState(false);
+  const [liveRateNote, setLiveRateNote] = useState<string | null>(null);
+  const [liveRateError, setLiveRateError] = useState<string | null>(null);
+
+  const handleFetchLiveRates = async () => {
+    if (fetchingRates) return;
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+    setFetchingRates(true);
+    setLiveRateError(null);
+    try {
+      const targetCurrency = inputs.currency === 'NONE' ? 'INR' : inputs.currency;
+      const result = await fetchLiveMetalPrices(targetCurrency);
+      setInputs((prev) => ({
+        ...prev,
+        currency: prev.currency === 'NONE' ? result.currency : prev.currency,
+        goldPricePerGram: String(result.goldPerGram),
+        silverPricePerGram: String(result.silverPerGram),
+      }));
+      setLiveRateNote(
+        `Live ${result.currency}/g synced (${result.source} • ${result.updatedAt})`
+      );
+    } catch (err: any) {
+      setLiveRateError(err?.message || 'Unable to fetch live gold/silver spot prices.');
+    } finally {
+      setFetchingRates(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -411,8 +444,40 @@ export default function ZakatCalculatorScreen() {
                 }) — applies when holding gold exclusively`}
           </Text>
 
-          {/* Metal Prices Group */}
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Metal prices</Text>
+          {/* Metal Prices Group + Live Spot Fetcher */}
+          <View style={styles.metalHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 0, marginBottom: 0 }]}>
+              Metal prices
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.liveRatesBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(16, 185, 129, 0.18)' : '#E8F5EE',
+                  borderColor: accentColor,
+                },
+              ]}
+              onPress={() => void handleFetchLiveRates()}
+              disabled={fetchingRates}
+              accessibilityRole="button"
+              accessibilityLabel="Fetch live Gold and Silver rates"
+            >
+              {fetchingRates ? (
+                <ActivityIndicator size="small" color={accentColor} />
+              ) : (
+                <Ionicons name="pulse" size={14} color={accentColor} />
+              )}
+              <Text style={[styles.liveRatesBtnText, { color: accentColor }]}>
+                {fetchingRates ? 'Fetching...' : 'Fetch Live Rates'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {!!liveRateNote && (
+            <Text style={[styles.liveRateStatus, { color: accentColor }]}>{liveRateNote}</Text>
+          )}
+          {!!liveRateError && (
+            <Text style={[styles.liveRateStatus, { color: colors.error }]}>{liveRateError}</Text>
+          )}
           <View style={[styles.cardGroup, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <ZakatInputBox
               label="Gold price per gram"
@@ -441,6 +506,55 @@ export default function ZakatCalculatorScreen() {
                   ? 'Enter silver price per gram to include your silver in Net Wealth.'
                   : null
               }
+              inputBg={inputBg}
+              textColor={colors.text}
+              mutedColor={colors.textSecondary}
+              accentColor={accentColor}
+              warningColor={colors.goldText}
+            />
+
+            {/* Gold Purity Karat Selector */}
+            <View style={{ paddingTop: 4 }}>
+              <Text style={[styles.nisabHelper, { color: colors.textSecondary, marginTop: 0, marginBottom: 6, marginLeft: 2 }]}>
+                Owned gold purity (Karat)
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {([24, 22, 21, 18] as const).map((karat) => {
+                  const sel = (inputs.goldPurityKarat || 24) === karat;
+                  return (
+                    <TouchableOpacity
+                      key={karat}
+                      style={[
+                        styles.currencyPill,
+                        {
+                          flex: 1,
+                          minHeight: 38,
+                          paddingVertical: 6,
+                          backgroundColor: sel ? selectedSegBg : inputBg,
+                          borderWidth: 1,
+                          borderColor: sel ? accentColor : 'transparent',
+                        },
+                      ]}
+                      onPress={() => updateField('goldPurityKarat', karat)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Gold ${karat} karat purity`}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: sel ? selectedSegText : colors.text }}>
+                        {karat}K
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Custom Nisab Offset (+/-) */}
+            <ZakatInputBox
+              label="Custom Nisab offset (+/-)"
+              value={inputs.customNisabOffset || ''}
+              onChangeText={(v) => updateField('customNisabOffset', v)}
+              sanitizer={sanitizeSignedDecimalInput}
+              unitHint={inputs.currency === 'NONE' ? '±' : inputs.currency}
               inputBg={inputBg}
               textColor={colors.text}
               mutedColor={colors.textSecondary}
@@ -1052,5 +1166,31 @@ const styles = StyleSheet.create({
   askMuftiText: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  metalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  liveRatesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  liveRatesBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  liveRateStatus: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    marginBottom: 6,
+    marginLeft: 2,
   },
 });

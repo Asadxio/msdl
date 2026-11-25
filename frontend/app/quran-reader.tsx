@@ -4,7 +4,7 @@ import { goBackOrReplace } from '@/lib/navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, ScrollView, Share, StyleSheet,
-  Text, TouchableOpacity, View,
+  Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
@@ -13,6 +13,21 @@ import {
   fetchSurah, QuranAyat, SurahData,
   getAyatAudioUrl, getFullSurahUrduAudioUrl,
 } from '@/lib/quranApi';
+import {
+  AyahTiming,
+  CURATED_QARIS,
+  DEFAULT_TAFSIR_EDITION_SLUG,
+  QuranReciter,
+  fetchAyahTimings,
+  findActiveAyatFromPosition,
+  getPreferredQariId,
+  getPreferredTafsirEdition,
+  getQariAyatAudioUrl,
+  getQariFullSurahAudioUrl,
+  getReciterById,
+} from '@/lib/quranExtrasService';
+import { TafsirBottomSheet } from '@/components/quran/TafsirBottomSheet';
+import { QariPickerModal } from '@/components/quran/QariPickerModal';
 import {
   isSurahAudioDownloaded,
   getPlayableSurahAudioUri,
@@ -51,6 +66,28 @@ export default function QuranReaderScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Multi-Qari, Ayah-Timing Sync & Tafsir State
+  const [selectedQari, setSelectedQari] = useState<QuranReciter>(CURATED_QARIS[0]);
+  const selectedQariRef = useRef<QuranReciter>(CURATED_QARIS[0]);
+  const [showQariModal, setShowQariModal] = useState(false);
+  const [ayahTimings, setAyahTimings] = useState<AyahTiming[]>([]);
+  const ayahTimingsRef = useRef<AyahTiming[]>([]);
+  const lastSyncedAyatRef = useRef<number | null>(null);
+  const [tafsirEditionSlug, setTafsirEditionSlug] = useState<string>(DEFAULT_TAFSIR_EDITION_SLUG);
+  const [tafsirTargetAyat, setTafsirTargetAyat] = useState<QuranAyat | null>(null);
+  // Madrasa Hifz Loop, Self-Test & Quick Jump State
+  const [hifzLoopCount, setHifzLoopCount] = useState<number>(1); // 1, 3, 5, 7, 0 (Infinity loop)
+  const hifzLoopCountRef = useRef<number>(1);
+  const hifzRepeatDoneRef = useRef<number>(0);
+  const [hifzSelfTestMode, setHifzSelfTestMode] = useState(false);
+  const [revealedTranslations, setRevealedTranslations] = useState<Set<number>>(new Set());
+  const [jumpAyatInput, setJumpAyatInput] = useState('');
+
+  useEffect(() => {
+    hifzLoopCountRef.current = hifzLoopCount;
+    hifzRepeatDoneRef.current = 0;
+  }, [hifzLoopCount]);
+
   // Offline Audio Download State
   const [isAudioDownloaded, setIsAudioDownloaded] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
@@ -86,6 +123,52 @@ export default function QuranReaderScreen() {
   useEffect(() => {
     autoAdvanceRef.current = autoAdvance;
   }, [autoAdvance]);
+
+  useEffect(() => {
+    selectedQariRef.current = selectedQari;
+  }, [selectedQari]);
+
+  useEffect(() => {
+    ayahTimingsRef.current = ayahTimings;
+  }, [ayahTimings]);
+
+  useEffect(() => {
+    hifzRepeatDoneRef.current = 0;
+  }, [playingAyatNum]);
+
+  const handleCycleHifzLoop = () => {
+    const cycle = [1, 3, 5, 7, 0];
+    const idx = cycle.indexOf(hifzLoopCount);
+    const next = cycle[(idx + 1) % cycle.length];
+    setHifzLoopCount(next);
+    setToastMessage(
+      next === 0
+        ? 'Hifz Loop: Continuous (∞)'
+        : next === 1
+        ? 'Hifz Repeat: Single (1x)'
+        : `Hifz Repeat: ${next}x per Ayat`
+    );
+    setTimeout(() => setToastMessage(null), 1800);
+  };
+
+  useEffect(() => {
+    getPreferredQariId().then((id) => setSelectedQari(getReciterById(id)));
+    getPreferredTafsirEdition().then((slug) => setTafsirEditionSlug(slug));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedQari.mp3QuranReadId) {
+      setAyahTimings([]);
+      return;
+    }
+    let cancelled = false;
+    fetchAyahTimings(surahNum, selectedQari.mp3QuranReadId).then((list) => {
+      if (!cancelled) setAyahTimings(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [surahNum, selectedQari]);
 
   const scrollToAyat = useCallback((ayatNum: number) => {
     const y = ayatOffsets.current[ayatNum];
@@ -338,7 +421,8 @@ export default function QuranReaderScreen() {
         playThroughEarpieceAndroid: false,
       });
 
-      const audioUrl = getAyatAudioUrl(surahNum, ayatNum);
+      const qari = selectedQariRef.current;
+      const audioUrl = getQariAyatAudioUrl(qari, surahNum, ayatNum);
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: true }
@@ -362,7 +446,7 @@ export default function QuranReaderScreen() {
         hasShownNotificationForSurahRef.current = true;
         void showMediaPlaybackNotification({
           title: `Surah ${surahMeta?.englishName || 'Surah ' + surahNum}`,
-          subtitle: `Recitation: Mishary Rashid Alafasy`,
+          subtitle: `Recitation: ${qari.nameEn}`,
           isPlaying: true,
           playbackRate: playbackSpeedRef.current,
           surahNumber: surahNum,
@@ -390,6 +474,13 @@ export default function QuranReaderScreen() {
         }
 
         if (playbackStatus.didJustFinish) {
+          const targetRepeats = hifzLoopCountRef.current;
+          if (targetRepeats === 0 || hifzRepeatDoneRef.current + 1 < targetRepeats) {
+            hifzRepeatDoneRef.current += 1;
+            void newSound.replayAsync().catch(() => {});
+            return;
+          }
+          hifzRepeatDoneRef.current = 0;
           const currentData = surahDataRef.current;
           const total = currentData?.totalAyat || surahMeta?.totalAyat || 0;
           if (autoAdvanceRef.current && ayatNum < total) {
@@ -439,13 +530,36 @@ export default function QuranReaderScreen() {
         staysActiveInBackground: true,
       });
 
-      const playable = await getPlayableSurahAudioUri(surahNum);
+      const qari = selectedQariRef.current;
+      let streamUri: string | null = null;
+      let usingUrduTranslation = false;
+
+      if (!qari.isUrduTranslationMode) {
+        streamUri = getQariFullSurahAudioUrl(qari, surahNum);
+      }
+      if (!streamUri) {
+        const playable = await getPlayableSurahAudioUri(surahNum);
+        streamUri = playable.uri;
+        usingUrduTranslation = true;
+      }
+
+      if (qari.mp3QuranReadId && ayahTimingsRef.current.length === 0) {
+        const loadedTimings = await fetchAyahTimings(surahNum, qari.mp3QuranReadId);
+        if (loadedTimings.length > 0) {
+          setAyahTimings(loadedTimings);
+          ayahTimingsRef.current = loadedTimings;
+        }
+      }
+
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: playable.uri },
+        { uri: streamUri },
         { shouldPlay: true }
       );
-      if (playable.isOffline) {
-        console.log(`[QuranReader] Playing Surah ${surahNum} from offline local storage`);
+      if (activePlayRequestId.current !== thisRequestId) {
+        newSound.setOnPlaybackStatusUpdate(null);
+        await newSound.stopAsync().catch(() => {});
+        await newSound.unloadAsync().catch(() => {});
+        return;
       }
       await newSound.setRateAsync(playbackSpeedRef.current, true).catch(() => {});
 
@@ -453,24 +567,37 @@ export default function QuranReaderScreen() {
       setSound(newSound);
       setIsPlayingAudio(true);
       setIsFullSurahPlaying(true);
-      setPlayingAyatNum(null);
+      lastSyncedAyatRef.current = null;
+      setPlayingAyatNum(ayahTimingsRef.current.length > 0 ? 1 : null);
 
       // Display Lock-Screen & Notification shade controls for full surah
       void showMediaPlaybackNotification({
         title: `Surah ${surahMeta?.englishName || surahNum} (Full Audio)`,
-        subtitle: 'Arabic Recitation with Urdu Translation',
+        subtitle: usingUrduTranslation ? 'Arabic Recitation with Urdu Translation' : `Recitation: ${qari.nameEn}`,
         isPlaying: true,
         playbackRate: playbackSpeedRef.current,
         surahNumber: surahNum,
       });
 
       newSound.setOnPlaybackStatusUpdate((playbackStatus) => {
+        if (activePlayRequestId.current !== thisRequestId || isStoppingOrPausingRef.current) {
+          return;
+        }
         if (!playbackStatus.isLoaded) return;
-        if (playbackStatus.positionMillis && playbackStatus.positionMillis > 2000) {
+        const posMs = playbackStatus.positionMillis || 0;
+        if (ayahTimingsRef.current.length > 0) {
+          const syncedAyat = findActiveAyatFromPosition(ayahTimingsRef.current, posMs);
+          if (syncedAyat && syncedAyat !== lastSyncedAyatRef.current) {
+            lastSyncedAyatRef.current = syncedAyat;
+            setPlayingAyatNum(syncedAyat);
+            scrollToAyat(syncedAyat);
+          }
+        }
+        if (posMs > 2000) {
           void saveQuranAudioPlayback({
             surahNumber: surahNum,
-            ayatNumber: 1,
-            positionMillis: playbackStatus.positionMillis,
+            ayatNumber: lastSyncedAyatRef.current || 1,
+            positionMillis: posMs,
             durationMillis: playbackStatus.durationMillis || 0,
             playbackRate: playbackSpeedRef.current,
             timestamp: Date.now(),
@@ -479,6 +606,8 @@ export default function QuranReaderScreen() {
         if (playbackStatus.didJustFinish) {
           setIsPlayingAudio(false);
           setIsFullSurahPlaying(false);
+          setPlayingAyatNum(null);
+          lastSyncedAyatRef.current = null;
           void dismissMediaPlaybackNotification();
         }
       });
@@ -486,7 +615,9 @@ export default function QuranReaderScreen() {
       console.warn('Full surah audio error:', error);
       void dismissMediaPlaybackNotification();
     } finally {
-      setAudioLoading(false);
+      if (activePlayRequestId.current === thisRequestId) {
+        setAudioLoading(false);
+      }
     }
   };
 
@@ -676,6 +807,40 @@ export default function QuranReaderScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Multi-Qari & Live Radio Control Bar */}
+      <View style={styles.qariStrip}>
+        <TouchableOpacity
+          style={styles.qariStripBtn}
+          onPress={() => setShowQariModal(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Current reciter ${selectedQari.nameEn}. Tap to switch Qari`}
+        >
+          <Ionicons name="mic-outline" size={14} color="#C8A84E" />
+          <Text style={styles.qariStripText} numberOfLines={1}>
+            Qari: {selectedQari.nameEn}
+          </Text>
+          {ayahTimings.length > 0 && !selectedQari.isUrduTranslationMode && (
+            <View style={styles.syncChip}>
+              <Text style={styles.syncChipText}>SYNC</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-down" size={13} color="#C8A84E" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.radioShortcutBtn}
+          onPress={() => {
+            void stopCurrentAudio();
+            router.push('/islamic-radio' as any);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Open 24/7 Islamic Radio"
+        >
+          <Ionicons name="radio-outline" size={14} color="#6EE7B7" />
+          <Text style={styles.radioShortcutText}>Live Radio</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Floating Reader Toast Message (2.1 & 2.2) */}
       {toastMessage && (
         <View style={styles.toastWrap}>
@@ -738,6 +903,17 @@ export default function QuranReaderScreen() {
                   </View>
 
                   <View style={styles.ayatActions}>
+                    {/* Tafsir Button */}
+                    <TouchableOpacity
+                      onPress={() => setTafsirTargetAyat(ayat)}
+                      style={styles.tafsirPillBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Read Tafsir for verse ${ayat.number}`}
+                    >
+                      <Ionicons name="book-outline" size={13} color="#005F46" />
+                      <Text style={styles.tafsirPillText}>Tafsir</Text>
+                    </TouchableOpacity>
+
                     {/* Audio Tilawat Play Button for this Ayat */}
                     <TouchableOpacity
                       onPress={() => playAyatAudio(ayat.number)}
@@ -769,34 +945,49 @@ export default function QuranReaderScreen() {
                 {/* Arabic Text */}
                 <Text style={[styles.arabicText, { fontSize, lineHeight: fontSize * 2 }]}>{ayat.arabic}</Text>
 
-                {/* Roman Urdu Transliteration Section */}
-                {showRoman && ayat.roman ? (
-                  <View style={styles.romanContainer}>
-                    <View style={styles.sectionHeaderBadge}>
-                      <Ionicons name="text-outline" size={12} color="#4F46E5" />
-                      <Text style={styles.sectionBadgeLabel}>Roman</Text>
-                    </View>
-                    <Text style={styles.romanText}>{ayat.roman}</Text>
-                  </View>
-                ) : null}
+                {hifzSelfTestMode && !revealedTranslations.has(ayat.number) ? (
+                  <TouchableOpacity
+                    style={[styles.romanContainer, { alignItems: 'center', borderLeftColor: '#C8A84E' }]}
+                    onPress={() =>
+                      setRevealedTranslations((prev) => new Set([...prev, ayat.number]))
+                    }
+                  >
+                    <Text style={[styles.romanText, { fontWeight: '700', color: '#005F46' }]}>
+                      Hifz Self-Test Mode • Tap to Peek Translation
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    {/* Roman Urdu Transliteration Section */}
+                    {showRoman && ayat.roman ? (
+                      <View style={styles.romanContainer}>
+                        <View style={styles.sectionHeaderBadge}>
+                          <Ionicons name="text-outline" size={12} color="#4F46E5" />
+                          <Text style={styles.sectionBadgeLabel}>Roman</Text>
+                        </View>
+                        <Text style={styles.romanText}>{ayat.roman}</Text>
+                      </View>
+                    ) : null}
 
-                {/* Urdu Tarjuma Section */}
-                {ayat.urduMeaning ? (
-                  <View style={styles.urduContainer}>
-                    <View style={styles.sectionHeaderBadge}>
-                      <Ionicons name="book-outline" size={12} color="#005F46" />
-                      <Text style={[styles.sectionBadgeLabel, { color: '#005F46' }]}>اردو ترجمہ</Text>
-                    </View>
-                    <Text style={styles.urduText}>{ayat.urduMeaning}</Text>
-                  </View>
-                ) : null}
+                    {/* Urdu Tarjuma Section */}
+                    {ayat.urduMeaning ? (
+                      <View style={styles.urduContainer}>
+                        <View style={styles.sectionHeaderBadge}>
+                          <Ionicons name="book-outline" size={12} color="#005F46" />
+                          <Text style={[styles.sectionBadgeLabel, { color: '#005F46' }]}>اردو ترجمہ</Text>
+                        </View>
+                        <Text style={styles.urduText}>{ayat.urduMeaning}</Text>
+                      </View>
+                    ) : null}
+                  </>
+                )}
               </View>
             );
           })}
         </ScrollView>
       )}
 
-      {/* Floating Bottom Audio Player Bar with Auto-Shift & Verse Navigation */}
+      {/* Floating Bottom Audio Player Bar with Auto-Shift, Hifz Loop & Verse Navigation */}
       {playingAyatNum !== null && (
         <View style={[styles.floatingPlayer, { bottom: insets.bottom + 12 }]}>
           <View style={styles.floatingInfo}>
@@ -816,7 +1007,13 @@ export default function QuranReaderScreen() {
                 {surahMeta?.englishName || 'Surah'} • Verse {playingAyatNum} of {surahData?.totalAyat || surahMeta?.totalAyat || 7}
               </Text>
               <Text style={styles.floatingSubtitle}>
-                {!isPlayingAudio ? 'Paused • Tap to resume' : autoAdvance ? 'Auto-Shifting to Next Verses' : 'Single Verse Mode'}
+                {!isPlayingAudio
+                  ? 'Paused • Tap to resume'
+                  : hifzLoopCount !== 1
+                  ? `Hifz Loop (${hifzLoopCount === 0 ? '∞' : hifzLoopCount + 'x'})`
+                  : autoAdvance
+                  ? 'Auto-Shifting to Next Verses'
+                  : 'Single Verse Mode'}
               </Text>
             </View>
           </View>
@@ -824,16 +1021,26 @@ export default function QuranReaderScreen() {
           <View style={styles.floatingControls}>
             {/* Prev Verse */}
             <TouchableOpacity
-              style={[styles.floatingBtn, playingAyatNum <= 1 && styles.floatingBtnDisabled]}
+              style={[styles.floatingBtn, (playingAyatNum || 1) <= 1 && styles.floatingBtnDisabled]}
               onPress={() => {
-                if (playingAyatNum > 1) {
-                  void playAyatAudio(playingAyatNum - 1);
+                const cur = playingAyatNum || 1;
+                if (cur > 1) {
+                  const targetTiming = isFullSurahPlaying
+                    ? ayahTimingsRef.current.find((t) => t.ayah === cur - 1)
+                    : undefined;
+                  if (targetTiming && soundRef.current) {
+                    void soundRef.current.setPositionAsync(targetTiming.startTimeMs);
+                    setPlayingAyatNum(cur - 1);
+                    scrollToAyat(cur - 1);
+                  } else {
+                    void playAyatAudio(cur - 1);
+                  }
                 }
               }}
-              disabled={playingAyatNum <= 1}
+              disabled={(playingAyatNum || 1) <= 1}
               accessibilityLabel="Previous Verse"
             >
-              <Ionicons name="play-skip-back" size={16} color={playingAyatNum <= 1 ? '#64748B' : '#FFFFFF'} />
+              <Ionicons name="play-skip-back" size={16} color={(playingAyatNum || 1) <= 1 ? '#64748B' : '#FFFFFF'} />
             </TouchableOpacity>
 
             {/* Play/Pause Button */}
@@ -849,22 +1056,51 @@ export default function QuranReaderScreen() {
             <TouchableOpacity
               style={[
                 styles.floatingBtn,
-                playingAyatNum >= (surahData?.totalAyat || surahMeta?.totalAyat || 999) && styles.floatingBtnDisabled,
+                (playingAyatNum || 1) >= (surahData?.totalAyat || surahMeta?.totalAyat || 999) && styles.floatingBtnDisabled,
               ]}
               onPress={() => {
+                const cur = playingAyatNum || 1;
                 const total = surahData?.totalAyat || surahMeta?.totalAyat || 999;
-                if (playingAyatNum < total) {
-                  void playAyatAudio(playingAyatNum + 1);
+                if (cur < total) {
+                  const targetTiming = isFullSurahPlaying
+                    ? ayahTimingsRef.current.find((t) => t.ayah === cur + 1)
+                    : undefined;
+                  if (targetTiming && soundRef.current) {
+                    void soundRef.current.setPositionAsync(targetTiming.startTimeMs);
+                    setPlayingAyatNum(cur + 1);
+                    scrollToAyat(cur + 1);
+                  } else {
+                    void playAyatAudio(cur + 1);
+                  }
                 }
               }}
-              disabled={playingAyatNum >= (surahData?.totalAyat || surahMeta?.totalAyat || 999)}
+              disabled={(playingAyatNum || 1) >= (surahData?.totalAyat || surahMeta?.totalAyat || 999)}
               accessibilityLabel="Next Verse"
             >
               <Ionicons
                 name="play-skip-forward"
                 size={16}
-                color={playingAyatNum >= (surahData?.totalAyat || surahMeta?.totalAyat || 999) ? '#64748B' : '#FFFFFF'}
+                color={(playingAyatNum || 1) >= (surahData?.totalAyat || surahMeta?.totalAyat || 999) ? '#64748B' : '#FFFFFF'}
               />
+            </TouchableOpacity>
+
+            {/* Hifz Loop Repeat Button (1x / 3x / 5x / 7x / Infinity) */}
+            <TouchableOpacity
+              style={[
+                styles.floatingSpeedBtn,
+                hifzLoopCount !== 1 && { backgroundColor: '#C8A84E' },
+              ]}
+              onPress={handleCycleHifzLoop}
+              accessibilityLabel={`Hifz verse repeat ${hifzLoopCount === 0 ? 'infinite' : hifzLoopCount + 'x'}`}
+            >
+              <Text
+                style={[
+                  styles.floatingSpeedText,
+                  hifzLoopCount !== 1 && { color: '#002E23' },
+                ]}
+              >
+                {hifzLoopCount === 0 ? '∞' : `${hifzLoopCount}x↺`}
+              </Text>
             </TouchableOpacity>
 
             {/* Speed Selector Button */}
@@ -926,7 +1162,7 @@ export default function QuranReaderScreen() {
           <TouchableOpacity style={styles.settingsDismiss} onPress={() => setShowSettings(false)} />
           <View style={styles.settingsPanel}>
             <View style={styles.settingsHandle} />
-            <Text style={styles.settingsTitle}>Reader ترتیب</Text>
+            <Text style={styles.settingsTitle}>Reader ترتیب & Madrasa Hifz Tools</Text>
             <View style={styles.settingsRow}>
               <Text style={styles.settingsLabel}>Roman Urdu دکھائیں</Text>
               <TouchableOpacity
@@ -935,6 +1171,69 @@ export default function QuranReaderScreen() {
               >
                 <View style={[styles.toggleThumb, showRoman && styles.toggleThumbOn]} />
               </TouchableOpacity>
+            </View>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Hifz Self-Test (Hide Translations)</Text>
+              <TouchableOpacity
+                style={[styles.toggle, hifzSelfTestMode && styles.toggleOn]}
+                onPress={() => {
+                  setRevealedTranslations(new Set());
+                  setHifzSelfTestMode((v) => !v);
+                }}
+              >
+                <View style={[styles.toggleThumb, hifzSelfTestMode && styles.toggleThumbOn]} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Verse Repeat (Hifz Loop)</Text>
+            </View>
+            <View style={styles.fontSizeRow}>
+              {[1, 3, 5, 7, 0].map((cnt) => (
+                <TouchableOpacity
+                  key={cnt}
+                  style={[styles.fontBtn, hifzLoopCount === cnt && styles.fontBtnActive]}
+                  onPress={() => setHifzLoopCount(cnt)}
+                >
+                  <Text style={[styles.fontBtnText, hifzLoopCount === cnt && { color: '#FFFFFF' }]}>
+                    {cnt === 0 ? 'Infinite ∞' : cnt === 1 ? 'Off (1x)' : `${cnt}x`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Jump to Ayat (1–{surahData?.totalAyat || surahMeta?.totalAyat || 1})</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: '#CBD5E1',
+                    borderRadius: 8,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    minWidth: 64,
+                    textAlign: 'center',
+                    color: '#0F172A',
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="#"
+                  value={jumpAyatInput}
+                  onChangeText={setJumpAyatInput}
+                />
+                <TouchableOpacity
+                  style={[styles.fontBtn, styles.fontBtnActive]}
+                  onPress={() => {
+                    const target = parseInt(jumpAyatInput.trim(), 10);
+                    const maxAyat = surahData?.totalAyat || surahMeta?.totalAyat || 286;
+                    if (target >= 1 && target <= maxAyat) {
+                      scrollToAyat(target);
+                      setShowSettings(false);
+                      setJumpAyatInput('');
+                    }
+                  }}
+                >
+                  <Text style={[styles.fontBtnText, { color: '#FFFFFF' }]}>Go</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.settingsRow}>
               <Text style={styles.settingsLabel}>عربی فونٹ سائز: {fontSize}px</Text>
@@ -953,6 +1252,31 @@ export default function QuranReaderScreen() {
           </View>
         </View>
       )}
+
+      {/* Tafsir Bottom Sheet Modal */}
+      <TafsirBottomSheet
+        visible={tafsirTargetAyat !== null}
+        onClose={() => setTafsirTargetAyat(null)}
+        surahNumber={surahNum}
+        surahName={surahMeta?.englishName || `Surah ${surahNum}`}
+        ayatNumber={tafsirTargetAyat?.number || 1}
+        arabicText={tafsirTargetAyat?.arabic || ''}
+        editionSlug={tafsirEditionSlug}
+        onChangeEdition={setTafsirEditionSlug}
+      />
+
+      {/* Qari Switcher Modal */}
+      <QariPickerModal
+        visible={showQariModal}
+        onClose={() => setShowQariModal(false)}
+        selectedQariId={selectedQari.id}
+        onSelectQari={(qari) => {
+          void stopCurrentAudio();
+          setSelectedQari(qari);
+          setToastMessage(`Reciter: ${qari.nameEn}`);
+          setTimeout(() => setToastMessage(null), 2000);
+        }}
+      />
     </View>
   );
 }
@@ -1238,5 +1562,72 @@ const styles = StyleSheet.create({
     color: '#A7F3D0',
     fontSize: 9.5,
     fontWeight: '700',
+  },
+  qariStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  qariStripBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(200,168,78,0.35)',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  qariStripText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  syncChip: {
+    backgroundColor: 'rgba(16, 185, 129, 0.25)',
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  syncChipText: {
+    color: '#6EE7B7',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  radioShortcutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.4)',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  radioShortcutText: {
+    color: '#A7F3D0',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tafsirPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#E8F5EE',
+  },
+  tafsirPillText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#005F46',
   },
 });

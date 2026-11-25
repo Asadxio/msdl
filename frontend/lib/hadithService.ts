@@ -111,12 +111,63 @@ export const HADITH_BOOKS: HadithBook[] = [
   },
 ];
 
+export const EXTENDED_HADITH_BOOKS: HadithBook[] = [
+  {
+    id: 'nawawi',
+    titleEnglish: '40 Hadith an-Nawawi',
+    titleArabic: 'الأربعون النووية',
+    titleUrdu: 'چالیس حدیثِ نبوی (امام نووی)',
+    author: 'Imam Yahya ibn Sharaf an-Nawawi',
+    deathYearHijri: 676,
+    totalHadith: 42,
+    totalChapters: 1,
+    descriptionEn: 'The timeless core summary of forty-two foundational Prophetic narrations covering the essence of Islam.',
+    descriptionUr: 'اسلام کے بنیادی عقائد و اخلاق پر مشتمل امام نووی کی مشہورِ زمانہ 42 جامع احادیث۔',
+    colorBg: '#ECFDF5',
+    colorFg: '#047857',
+  },
+  {
+    id: 'qudsi',
+    titleEnglish: '40 Hadith Qudsi',
+    titleArabic: 'الأربعون القدسية',
+    titleUrdu: 'چالیس احادیثِ قدسی',
+    author: 'Selected Sacred Narrations',
+    deathYearHijri: 0,
+    totalHadith: 40,
+    totalChapters: 1,
+    descriptionEn: 'Forty sacred Hadiths in which the Messenger of Allah (ﷺ) relates the direct words of Allah.',
+    descriptionUr: 'وہ چالیس مبارک احادیثِ قدسی جن میں اللہ رب العزت کا براہِ راست خطاب منقول ہے۔',
+    colorBg: '#FEF3C7',
+    colorFg: '#B45309',
+  },
+  {
+    id: 'dehlawi',
+    titleEnglish: '40 Hadith Dehlawi',
+    titleArabic: 'أربعون ولي الله الدهلوي',
+    titleUrdu: 'اربعین شاہ ولی اللہ دہلوی',
+    author: 'Shah Waliullah Dehlawi',
+    deathYearHijri: 1176,
+    totalHadith: 40,
+    totalChapters: 1,
+    descriptionEn: 'Forty concise prophetic traditions selected with shortest chains of narration by Shah Waliullah of Delhi.',
+    descriptionUr: 'حضرت شاہ ولی اللہ محدث دہلویؒ کا منتخب کردہ چالیس مختصر و جامع احادیث کا نایاب مجموعہ۔',
+    colorBg: '#EFF6FF',
+    colorFg: '#1D4ED8',
+  },
+];
+
+export const ALL_HADITH_BOOKS: HadithBook[] = [...HADITH_BOOKS, ...EXTENDED_HADITH_BOOKS];
+
 export function getHadithBooks(): HadithBook[] {
   return HADITH_BOOKS;
 }
 
+export function getExtendedHadithBooks(): HadithBook[] {
+  return EXTENDED_HADITH_BOOKS;
+}
+
 export function getHadithBook(id: HadithBookId): HadithBook | undefined {
-  return HADITH_BOOKS.find((b) => b.id === id);
+  return ALL_HADITH_BOOKS.find((b) => b.id === id);
 }
 
 /**
@@ -298,12 +349,97 @@ export const OFFLINE_SEED_HADITHS: Record<HadithBookId, HadithEntry[]> = {
       reference: { book: 1, hadith: 1 },
     },
   ],
+  nawawi: [
+    {
+      id: 'nawawi-1',
+      bookId: 'nawawi',
+      hadithNumber: 1,
+      arabicNumber: 1,
+      chapterNumber: 1,
+      chapterTitleEn: 'Forty Hadith of an-Nawawi',
+      chapterTitleUr: 'اربعینِ نووی',
+      narrator: 'Umar bin Al-Khattab (RA)',
+      arabicText: 'عَنْ أَمِيرِ الْمُؤْمِنِينَ أَبِي حَفْصٍ عُمَرَ بْنِ الْخَطَّابِ رَضِيَ اللَّهُ عَنْهُ قَالَ: سَمِعْتُ رَسُولَ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ يَقُولُ: "إِنَّمَا الأَعْمَالُ بِالنِّيَّاتِ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى".',
+      urduText: 'امیرالمومنین حضرت عمر بن خطاب رضی اللہ عنہ سے روایت ہے کہ رسول اللہ صلی اللہ علیہ وسلم نے فرمایا: اعمال کا دارومدار نیتوں پر ہے اور ہر شخص کے لیے وہی ہے جس کی اس نے نیت کی۔',
+      englishText: 'Actions are judged by intentions, and every person shall have what they intended.',
+      grades: [{ name: 'Agreed Upon', grade: 'Sahih' }],
+      reference: { book: 1, hadith: 1 },
+    },
+    {
+      id: 'nawawi-2',
+      bookId: 'nawawi',
+      hadithNumber: 13,
+      arabicNumber: 13,
+      chapterNumber: 1,
+      chapterTitleEn: 'Forty Hadith of an-Nawawi',
+      chapterTitleUr: 'اربعینِ نووی',
+      narrator: 'Anas bin Malik (RA)',
+      arabicText: 'عَنْ أَنَسٍ رَضِيَ اللَّهُ عَنْهُ عَنِ النَّبِيِّ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ قَالَ: "لاَ يُؤْمِنُ أَحَدُكُمْ حَتَّى يُحِبَّ لأَخِيهِ مَا يُحِبُّ لِنَفْسِهِ".',
+      urduText: 'تم میں سے کوئی شخص اس وقت تک کامل مومن نہیں ہو سکتا جب تک اپنے بھائی کے لیے بھی وہی پسند نہ کرے جو اپنے لیے پسند کرتا ہے۔',
+      englishText: 'None of you truly believes until he loves for his brother what he loves for himself.',
+      grades: [{ name: 'Agreed Upon', grade: 'Sahih' }],
+      reference: { book: 1, hadith: 13 },
+    },
+  ],
+  qudsi: [
+    {
+      id: 'qudsi-1',
+      bookId: 'qudsi',
+      hadithNumber: 1,
+      arabicNumber: 1,
+      chapterNumber: 1,
+      chapterTitleEn: 'Forty Hadith Qudsi',
+      chapterTitleUr: 'چالیس احادیثِ قدسی',
+      narrator: 'Abu Hurairah (RA)',
+      arabicText: 'عَنْ أَبِي هُرَيْرَةَ رَضِيَ اللَّهُ عَنْهُ قَالَ: قَالَ رَسُولُ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ: "لَمَّا قَضَى اللَّهُ الْخَلْقَ كَتَبَ فِي كِتَابِهِ فَهُوَ عِنْدَهُ فَوْقَ الْعَرْشِ: إِنَّ رَحْمَتِي غَلَبَتْ غَضَبِي".',
+      urduText: 'جب اللہ تعالیٰ نے مخلوق کو پیدا فرمایا تو عرش پر موجود اپنی کتاب میں تحریر فرمایا کہ بے شک میری رحمت میرے غضب پر غالب ہے۔',
+      englishText: 'When Allah decreed the Creation, He wrote in His Book which is with Him on His Throne: My mercy prevails over My wrath.',
+      grades: [{ name: 'Sahih', grade: 'Sahih' }],
+      reference: { book: 1, hadith: 1 },
+    },
+  ],
+  dehlawi: [
+    {
+      id: 'dehlawi-1',
+      bookId: 'dehlawi',
+      hadithNumber: 1,
+      arabicNumber: 1,
+      chapterNumber: 1,
+      chapterTitleEn: 'Forty Hadith Shah Waliullah',
+      chapterTitleUr: 'اربعین شاہ ولی اللہ دہلوی',
+      narrator: 'Abu Hurairah (RA)',
+      arabicText: 'قَالَ النَّبِيُّ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ: "الْمُسْلِمُ مَنْ سَلِمَ الْمُسْلِمُونَ مِنْ لِسَانِهِ وَيَدِهِ".',
+      urduText: 'نبی کریم صلی اللہ علیہ وسلم نے فرمایا: کامل مسلمان وہ ہے جس کی زبان اور ہاتھ سے دوسرے مسلمان محفوظ رہیں۔',
+      englishText: 'A Muslim is the one from whose tongue and hands the Muslims are safe.',
+      grades: [{ name: 'Shah Waliullah Musalsal', grade: 'Sahih' }],
+      reference: { book: 1, hadith: 1 },
+    },
+  ],
 };
+
+const EXTENDED_BOOK_IDS = new Set<HadithBookId>(['nawawi', 'qudsi', 'dehlawi']);
 
 /**
  * Fetch chapters / sections for a book
  */
 export async function getHadithChapters(bookId: HadithBookId): Promise<HadithChapter[]> {
+  if (EXTENDED_BOOK_IDS.has(bookId)) {
+    const book = getHadithBook(bookId);
+    return [
+      {
+        id: `${bookId}-1`,
+        bookId,
+        chapterNumber: 1,
+        titleEnglish: book?.titleEnglish || 'Complete 40 Hadith Collection',
+        titleArabic: book?.titleArabic || 'الأربعون',
+        titleUrdu: book?.titleUrdu || 'مکمل چالیس احادیث',
+        hadithStart: 1,
+        hadithEnd: book?.totalHadith || 42,
+        hadithCount: book?.totalHadith || 42,
+      },
+    ];
+  }
+
   const cacheKey = `${STORAGE_PREFIX}chapters_${bookId}`;
   try {
     const cached = await AsyncStorage.getItem(cacheKey);
@@ -350,36 +486,57 @@ export async function getHadiths(
 
   // 2. Fetch from CDN / API if online
   try {
+    const isExtended = EXTENDED_BOOK_IDS.has(bookId);
+    const araUrl = isExtended
+      ? `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${bookId}.json`
+      : `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${bookId}/sections/${chapterNumber}.json`;
+    const engUrl = isExtended
+      ? `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${bookId}.json`
+      : `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${bookId}/sections/${chapterNumber}.json`;
+
     const [araRes, urdRes, engRes] = await Promise.allSettled([
-      fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${bookId}/sections/${chapterNumber}.json`),
-      fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/urd-${bookId}/sections/${chapterNumber}.json`),
-      fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${bookId}/sections/${chapterNumber}.json`),
+      fetch(araUrl),
+      isExtended
+        ? Promise.reject(new Error('No Urdu edition for extended book'))
+        : fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/urd-${bookId}/sections/${chapterNumber}.json`),
+      fetch(engUrl),
     ]);
 
     if (araRes.status === 'fulfilled' && araRes.value.ok) {
       const araData = await araRes.value.json();
       const urdData = urdRes.status === 'fulfilled' && urdRes.value.ok ? await urdRes.value.json() : null;
       const engData = engRes.status === 'fulfilled' && engRes.value.ok ? await engRes.value.json() : null;
+      const seedByNumber = new Map(
+        (OFFLINE_SEED_HADITHS[bookId] || []).map((item) => [item.hadithNumber, item])
+      );
 
-      const entries: HadithEntry[] = (araData.hadiths || []).map((h: any, idx: number) => {
-        const urdText = urdData?.hadiths?.[idx]?.text || '';
-        const engText = engData?.hadiths?.[idx]?.text || '';
-        const grades = h.grades || engData?.hadiths?.[idx]?.grades || urdData?.hadiths?.[idx]?.grades || [];
+      const rawHadiths = Array.isArray(araData.hadiths) ? araData.hadiths : [];
+      const entries: HadithEntry[] = rawHadiths
+        .filter((h: any) => Number(h?.hadithnumber) > 0 && (h?.text || engData?.hadiths))
+        .map((h: any, idx: number) => {
+          const engMatch =
+            engData?.hadiths?.find((e: any) => Number(e?.hadithnumber) === Number(h.hadithnumber)) ||
+            engData?.hadiths?.[idx];
+          const urdMatch = urdData?.hadiths?.[idx];
+          const seedFallback = seedByNumber.get(Number(h.hadithnumber));
+          const urdText = urdMatch?.text || seedFallback?.urduText || '';
+          const engText = engMatch?.text || seedFallback?.englishText || '';
+          const grades = h.grades || engMatch?.grades || urdMatch?.grades || [];
 
-        return {
-          id: `${bookId}-${h.hadithnumber}`,
-          bookId,
-          hadithNumber: h.hadithnumber,
-          arabicNumber: h.arabicnumber,
-          chapterNumber,
-          chapterTitleEn: araData.metadata?.section?.[String(chapterNumber)],
-          arabicText: h.text,
-          englishText: engText,
-          urduText: urdText,
-          grades: Array.isArray(grades) ? grades : [],
-          reference: h.reference || { book: chapterNumber, hadith: h.hadithnumber },
-        };
-      });
+          return {
+            id: `${bookId}-${h.hadithnumber}`,
+            bookId,
+            hadithNumber: h.hadithnumber,
+            arabicNumber: h.arabicnumber,
+            chapterNumber,
+            chapterTitleEn: araData.metadata?.section?.[String(chapterNumber)] || araData.metadata?.name,
+            arabicText: h.text || seedFallback?.arabicText || '',
+            englishText: engText,
+            urduText: urdText,
+            grades: Array.isArray(grades) ? grades : [],
+            reference: h.reference || { book: chapterNumber, hadith: h.hadithnumber },
+          };
+        });
 
       if (entries.length > 0) {
         try {

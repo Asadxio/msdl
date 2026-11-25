@@ -827,6 +827,16 @@ export default function QiblaScreen() {
               <Text style={styles.actionTitle}>{mapMode ? 'Hide Map' : 'Map View'}</Text>
               <Text style={styles.actionSub}>Qibla bearing line</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => router.push('/nearby-masjids' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Open Nearby Masjids and Halal Compass"
+            >
+              <View style={styles.actionIconWrap}><Ionicons name="business" size={22} color={EMERALD_LIGHT} /></View>
+              <Text style={styles.actionTitle}>Nearby Masjids</Text>
+              <Text style={styles.actionSub}>Masjids & Halal</Text>
+            </TouchableOpacity>
           </View>
 
           {/* MAP VIEW */}

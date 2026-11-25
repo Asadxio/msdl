@@ -22,7 +22,7 @@ import { useAuth } from '@/context/AuthContext';
 import { QURAN_SURAHS, searchSurahs } from '@/constants/quranSurahs';
 import { searchDuas } from '@/lib/duasService';
 import { searchNames } from '@/lib/asmaUlHusnaService';
-import { OFFLINE_SEED_HADITHS, HADITH_BOOKS } from '@/lib/hadithService';
+import { OFFLINE_SEED_HADITHS, ALL_HADITH_BOOKS } from '@/lib/hadithService';
 import { getSalahSteps } from '@/lib/salahGuideService';
 import { getAzaanRecitations } from '@/lib/azaanAudioService';
 import { searchKalmas } from '@/lib/sixKalmasService';
@@ -127,6 +127,54 @@ const APP_TOOLS = [
     route: '/islamic-calendar',
     icon: 'calendar-number',
     badge: 'Hijri',
+  },
+  {
+    id: 'islamic-radio',
+    title: 'Live Islamic Radio (24/7 Quran)',
+    subtitle: 'Stream Haramain Imams, Urdu Translation & Reciter Channels',
+    route: '/islamic-radio',
+    icon: 'radio',
+    badge: 'Radio',
+  },
+  {
+    id: 'nearby-masjids',
+    title: 'Nearby Masjids & Halal Compass',
+    subtitle: 'Discover nearby mosques & halal spots via OpenStreetMap',
+    route: '/nearby-masjids',
+    icon: 'location',
+    badge: 'Masjids',
+  },
+  {
+    id: 'asma-un-nabi',
+    title: '99 Names of Prophet Muhammad (ﷺ) & Seerah',
+    subtitle: 'Asma-un-Nabi blessed names & interactive Makki/Madani timeline',
+    route: '/asma-un-nabi',
+    icon: 'star',
+    badge: 'Seerah',
+  },
+  {
+    id: 'muhasabah',
+    title: 'Daily Muhasabah & Sadaqah Journal',
+    subtitle: 'Spiritual deed accountability checklist & charity log',
+    route: '/muhasabah',
+    icon: 'heart',
+    badge: 'Muhasabah',
+  },
+  {
+    id: 'wirasat',
+    title: 'Wirasat (Mirath) Inheritance Guide',
+    subtitle: 'Qur’anic inheritance shares calculator & jurisprudence guide',
+    route: '/wirasat',
+    icon: 'pie-chart',
+    badge: 'Mirath',
+  },
+  {
+    id: 'umrah-hajj',
+    title: 'Umrah & Hajj Guide + Tawaf/Sa’i Counter',
+    subtitle: 'Makkah & Madinah step-by-step guide with live 7-round counter',
+    route: '/umrah-hajj',
+    icon: 'cube',
+    badge: 'Pilgrimage',
   },
   {
     id: 'six-kalmas',
@@ -293,7 +341,7 @@ export default function GlobalSearchScreen() {
     if (selectedFilter === 'all' || selectedFilter === 'hadith') {
       const bookKeys = Object.keys(OFFLINE_SEED_HADITHS) as HadithBookId[];
       for (const bKey of bookKeys) {
-        const bookMeta = HADITH_BOOKS.find((b) => b.id === bKey);
+        const bookMeta = ALL_HADITH_BOOKS.find((b) => b.id === bKey);
         const bookTitle = bookMeta?.titleEnglish || bKey;
         const entries = OFFLINE_SEED_HADITHS[bKey] || [];
 

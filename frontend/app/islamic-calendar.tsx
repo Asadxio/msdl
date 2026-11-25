@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
@@ -18,9 +19,19 @@ import { ScalePressable } from '@/components/ui';
 import { RADIUS, SHADOWS, SPACING } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import {
+  AlAdhanHijriSyncResult,
+  MoonSightingOffset,
+  SunnahFastDay,
+  getAdjustedDateForMoonOffset,
   getEventsForHijriYear,
   getHijriDateParts,
+  getSunnahFastingDays,
   getUpcomingIslamicEvents,
+  loadFastingAlertsEnabled,
+  loadMoonSightingOffset,
+  saveMoonSightingOffset,
+  scheduleSunnahFastingAlerts,
+  syncHijriWithAlAdhan,
   type IslamicCalendarEvent,
 } from '@/lib/islamicCalendarService';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -49,8 +60,21 @@ export default function IslamicCalendarScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
 
+  const [moonOffset, setMoonOffset] = useState<MoonSightingOffset>(0);
+  const [aladhanSync, setAladhanSync] = useState<AlAdhanHijriSyncResult | null>(null);
+  const [syncingAladhan, setSyncingAladhan] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadMoonSightingOffset().then((saved) => setMoonOffset(saved));
+  }, []);
+
   const now = useMemo(() => new Date(), []);
-  const todayHijri = useMemo(() => getHijriDateParts(now), [now]);
+  const adjustedDate = useMemo(
+    () => getAdjustedDateForMoonOffset(now, moonOffset),
+    [now, moonOffset]
+  );
+  const todayHijri = useMemo(() => getHijriDateParts(adjustedDate), [adjustedDate]);
   const todayEnglish = useMemo(
     () =>
       now.toLocaleDateString(undefined, {
@@ -67,16 +91,57 @@ export default function IslamicCalendarScreen() {
   );
 
   // Coming up events starting from today (next ~12 months rolling horizon)
-  const upcomingEvents = useMemo(() => getUpcomingIslamicEvents(now, 370), [now]);
+  const upcomingEvents = useMemo(
+    () => getUpcomingIslamicEvents(adjustedDate, 370),
+    [adjustedDate]
+  );
   const featuredEvent = upcomingEvents[0] ?? null;
   const remainingUpcoming = useMemo(() => upcomingEvents.slice(1), [upcomingEvents]);
 
   // Browse full Hijri year (defaults to next Hijri year just below Coming up)
   const [selectedHijriYear, setSelectedHijriYear] = useState<number>(todayHijri.year + 1);
   const yearEvents = useMemo(
-    () => getEventsForHijriYear(selectedHijriYear, now),
-    [selectedHijriYear, now]
+    () => getEventsForHijriYear(selectedHijriYear, adjustedDate),
+    [selectedHijriYear, adjustedDate]
   );
+
+  const handleSetMoonOffset = (nextOffset: MoonSightingOffset) => {
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+    setMoonOffset(nextOffset);
+    void saveMoonSightingOffset(nextOffset);
+  };
+
+  const handleSyncAlAdhan = async () => {
+    if (syncingAladhan) return;
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+    setSyncingAladhan(true);
+    setSyncError(null);
+    try {
+      const synced = await syncHijriWithAlAdhan(adjustedDate);
+      setAladhanSync(synced);
+    } catch (err: any) {
+      setSyncError(err?.message || 'Unable to verify date with AlAdhan API.');
+    } finally {
+      setSyncingAladhan(false);
+    }
+  };
+
+  const [fastingAlertsEnabled, setFastingAlertsEnabled] = useState(false);
+  const upcomingFasts = useMemo(
+    () => getSunnahFastingDays(now, moonOffset, 21).slice(0, 4),
+    [now, moonOffset]
+  );
+
+  useEffect(() => {
+    loadFastingAlertsEnabled().then(setFastingAlertsEnabled);
+  }, []);
+
+  const handleToggleFastingAlerts = async () => {
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+    const next = !fastingAlertsEnabled;
+    setFastingAlertsEnabled(next);
+    await scheduleSunnahFastingAlerts(next, moonOffset);
+  };
 
   // Detail modal state
   const [selectedEvent, setSelectedEvent] = useState<IslamicCalendarEvent | null>(null);
@@ -218,6 +283,121 @@ export default function IslamicCalendarScreen() {
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </TouchableOpacity>
+
+        {/* Moon Sighting Adjustment (-1 / 0 / +1) & Live AlAdhan Sync */}
+        <View
+          style={[
+            styles.syncCard,
+            { backgroundColor: cardBg, borderColor: cardBorder },
+          ]}
+        >
+          <View style={styles.syncTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.syncTitle, { color: colors.text }]}>Moon Sighting Adjustment</Text>
+              <Text style={[styles.syncSub, { color: colors.textSecondary }]}>
+                {moonOffset === 0
+                  ? 'Standard Umm al-Qura calendar'
+                  : `Adjusted ${moonOffset > 0 ? '+1' : '-1'} day for local Hilal`}
+              </Text>
+            </View>
+            <View style={styles.offsetRow}>
+              {([-1, 0, 1] as const).map((offsetVal) => {
+                const selected = moonOffset === offsetVal;
+                return (
+                  <TouchableOpacity
+                    key={offsetVal}
+                    style={[
+                      styles.offsetPill,
+                      {
+                        backgroundColor: selected ? heroBg : pillBg,
+                        borderColor: selected ? heroBg : 'transparent',
+                      },
+                    ]}
+                    onPress={() => handleSetMoonOffset(offsetVal)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Moon offset ${offsetVal > 0 ? '+1' : offsetVal} days`}
+                  >
+                    <Text
+                      style={[
+                        styles.offsetPillText,
+                        { color: selected ? '#FFFFFF' : pillDayColor },
+                      ]}
+                    >
+                      {offsetVal > 0 ? `+${offsetVal}` : `${offsetVal}d`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={[styles.syncDivider, { backgroundColor: cardBorder }]} />
+
+          <View style={styles.aladhanRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.aladhanText, { color: colors.textSecondary }]} numberOfLines={2}>
+                {aladhanSync
+                  ? `AlAdhan Verified: ${aladhanSync.formatted} (${aladhanSync.method})`
+                  : syncError
+                  ? syncError
+                  : 'Verify today’s Hijri date live via AlAdhan API'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.aladhanBtn, { backgroundColor: pillBg }]}
+              onPress={() => void handleSyncAlAdhan()}
+              disabled={syncingAladhan}
+              accessibilityRole="button"
+              accessibilityLabel="Sync calendar with AlAdhan API"
+            >
+              {syncingAladhan ? (
+                <ActivityIndicator size="small" color={pillDayColor} />
+              ) : (
+                <Ionicons name="sync" size={14} color={pillDayColor} />
+              )}
+              <Text style={[styles.aladhanBtnText, { color: pillDayColor }]}>
+                {syncingAladhan ? 'Syncing' : 'Verify Live'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={[styles.syncDivider, { backgroundColor: cardBorder }]} />
+
+          {/* Sunnah Fasting Alerts Row */}
+          <View style={styles.aladhanRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.syncTitle, { color: colors.text }]}>Sunnah Fasting Alerts</Text>
+              <Text style={[styles.aladhanText, { color: colors.textSecondary }]} numberOfLines={2}>
+                {upcomingFasts.length > 0
+                  ? `Next: ${upcomingFasts[0].title} (${upcomingFasts[0].gregorianShort})`
+                  : 'Ayyam al-Bid & Monday/Thursday reminders'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.aladhanBtn,
+                { backgroundColor: fastingAlertsEnabled ? heroBg : pillBg },
+              ]}
+              onPress={() => void handleToggleFastingAlerts()}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle Sunnah fasting alerts"
+            >
+              <Ionicons
+                name={fastingAlertsEnabled ? 'notifications' : 'notifications-outline'}
+                size={14}
+                color={fastingAlertsEnabled ? '#FFFFFF' : pillDayColor}
+              />
+              <Text
+                style={[
+                  styles.aladhanBtnText,
+                  { color: fastingAlertsEnabled ? '#FFFFFF' : pillDayColor },
+                ]}
+              >
+                {fastingAlertsEnabled ? 'Alerts ON' : 'Notify Me'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Section 1: Coming up */}
         <Text style={[styles.sectionHeader, { color: colors.text }]}>Coming up</Text>
@@ -818,5 +998,66 @@ const styles = StyleSheet.create({
   closeDialogText: {
     fontSize: 15,
     fontWeight: '700',
+  },
+  syncCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: SPACING.md,
+    gap: 10,
+  },
+  syncTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  syncTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+  },
+  syncSub: {
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  offsetRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  offsetPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    minWidth: 38,
+    alignItems: 'center',
+  },
+  offsetPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  syncDivider: {
+    height: 1,
+  },
+  aladhanRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  aladhanText: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  aladhanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.full,
+  },
+  aladhanBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
 });
